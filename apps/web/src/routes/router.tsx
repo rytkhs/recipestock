@@ -6,6 +6,7 @@ import {
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
+import { LoginRoute } from "./login";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -48,6 +49,12 @@ const recipesRoute = createRoute({
   ),
 });
 
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: LoginRoute,
+});
+
 const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import",
@@ -68,7 +75,13 @@ const settingsRoute = createRoute({
   ),
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, recipesRoute, importRoute, settingsRoute]);
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  recipesRoute,
+  importRoute,
+  settingsRoute,
+]);
 
 const router = createRouter({ routeTree });
 

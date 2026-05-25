@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { recipeContentSchema } from "./recipe";
 
 describe("recipeContentSchema", () => {
-  it("accepts a minimal saved recipe content shape", () => {
+  it("最小構成の保存済みレシピ本文を受け入れる", () => {
     const result = recipeContentSchema.safeParse({
       title: "Tomato pasta",
       ingredientGroups: [{ ingredients: [{ text: "200g pasta" }] }],
