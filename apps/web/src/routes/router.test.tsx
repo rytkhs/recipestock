@@ -38,6 +38,7 @@ describe("AppRouter", () => {
     );
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
       provider: "google",
+      disableRedirect: true,
     });
   });
 
