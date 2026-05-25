@@ -62,3 +62,56 @@ nav a.active {
   max-width: 560px;
   color: #525a55;
 }
+
+.login-page {
+  max-width: 480px;
+}
+
+.login-panel,
+.login-form {
+  display: grid;
+  gap: 16px;
+}
+
+.login-panel {
+  margin-top: 24px;
+}
+
+.login-form {
+  gap: 10px;
+}
+
+.login-form label {
+  font-weight: 600;
+}
+
+.login-form input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #b9b6ad;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 44px;
+  border: 1px solid #256f5a;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary-button {
+  color: #ffffff;
+  background: #256f5a;
+}
+
+.secondary-button {
+  color: #256f5a;
+  background: #ffffff;
+}
