@@ -1,5 +1,7 @@
 .agents/
 .codex/
+.antigravitycli/
+storage/
 docs/*
 !docs/agents/
 !docs/agents/**
