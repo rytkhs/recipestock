@@ -139,8 +139,8 @@ Shared project configuration.
 Put these here:
 
 - tsconfig presets
-- eslint config
-- prettier config
+- Biome config guidance
+- any supplemental lint config if Biome is not enough for a specific rule family
 
 ## Worker Routing
 
@@ -164,6 +164,7 @@ Cloudflare Worker
 - Business logic shared by API and web belongs in `packages/shared`.
 - Cloudflare binding code, Stripe server code, R2 signing, Resend calls, and AI calls belong in `apps/api`.
 - UI state, route loaders, forms, and visual components belong in `apps/web`.
-- Repo-wide lint, format, and TypeScript config belong in `packages/config`.
+- Repo-wide lint, format, and TypeScript config guidance belongs in `packages/config`.
+- The default lint / format tool is Biome. Keep root-level tool config such as `biome.json` thin and aligned with shared guidance in `packages/config`.
 
 If a file seems to fit in multiple places, choose the narrowest package that can own it without importing from a higher-level app.

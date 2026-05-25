@@ -40,6 +40,9 @@ Browser / PWA
 | AI | Vercel AI SDK + Cloudflare AI Gateway |
 | PWA | Web App Manifest + Service Worker |
 | Monorepo | pnpm workspace + Turborepo |
+| Lint / Format | Biome |
+| Unit / Component / Request tests | Vitest + Testing Library |
+| E2E tests | Deferred for the initial setup |
 
 ## Dependency Guidance
 
@@ -50,6 +53,11 @@ Browser / PWA
 - Use Drizzle for database schema and migrations.
 - Use TanStack Query for server state in the frontend.
 - Use React Hook Form + Zod for forms.
+- Use Biome for repository-wide formatting and baseline linting.
+- Use Vitest for unit tests, component tests, and request-level API tests.
+- Use Testing Library with Vitest for React component behavior tests.
+- Do not set up E2E testing in the initial project setup. Add Playwright later only when end-to-end coverage becomes necessary.
+- Add ESLint only if a concrete rule need appears that Biome does not cover, such as advanced React Hooks or type-aware linting.
 
 Before adding, replacing, or bypassing a major stack choice, explain the reason, affected docs, migration cost, and implementation impact.
 
