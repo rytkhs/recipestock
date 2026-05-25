@@ -1,0 +1,7 @@
+.agents/
+.codex/
+docs/*
+!docs/agents/
+!docs/agents/**
+scripts/
+tmp/
