@@ -1,0 +1,10 @@
+{
+  "name": "@recipestock/config",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tsconfig/base": "./tsconfig/base.json",
+    "./tsconfig/react": "./tsconfig/react.json",
+    "./tsconfig/worker": "./tsconfig/worker.json"
+  }
+}

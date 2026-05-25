@@ -1,0 +1,29 @@
+{
+  "name": "recipestock",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "scripts": {
+    "build": "turbo build",
+    "db:generate": "pnpm --filter @recipestock/db db:generate",
+    "db:migrate": "pnpm --filter @recipestock/db db:migrate",
+    "deploy": "pnpm --filter @recipestock/web build && pnpm --filter @recipestock/api deploy",
+    "dev": "turbo dev",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.8",
+    "turbo": "^2.6.3",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
+  }
+}

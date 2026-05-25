@@ -5,3 +5,14 @@ docs/*
 !docs/agents/**
 scripts/
 tmp/
+node_modules
+dist
+build
+coverage
+.turbo
+.wrangler
+.dev.vars
+.env
+.env.*
+!.env.example
+!.dev.vars.example

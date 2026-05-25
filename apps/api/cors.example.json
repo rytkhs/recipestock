@@ -1,0 +1,11 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["http://localhost:5173"],
+        "methods": ["GET", "PUT", "HEAD"],
+        "headers": ["content-type"]
+      }
+    }
+  ]
+}
