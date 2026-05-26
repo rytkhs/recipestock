@@ -10,6 +10,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
+import { api, parseApiResponse } from "../lib/api";
 
 const recipeFormSchema = z.object({
   title: z.string().min(1),
@@ -78,54 +79,32 @@ const buildCreateRecipeRequest = (values: RecipeFormValues) => {
 };
 
 const postRecipe = async (values: RecipeFormValues) => {
-  const response = await fetch("/api/recipes", {
-    method: "POST",
-    credentials: "include",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(buildCreateRecipeRequest(values)),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to save recipe.");
-  }
-
-  return (await response.json()) as CreateRecipeResponse;
+  return parseApiResponse<CreateRecipeResponse>(
+    api.api.recipes.$post({
+      json: buildCreateRecipeRequest(values),
+    }),
+  );
 };
 
 const fetchRecipe = async (recipeId: string) => {
-  const response = await fetch(`/api/recipes/${recipeId}`, {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to load recipe.");
-  }
-
-  const body = (await response.json()) as { recipe: RecipeDetail };
+  const body = await parseApiResponse<{ recipe: RecipeDetail }>(
+    api.api.recipes[":recipeId"].$get({
+      param: { recipeId },
+    }),
+  );
   return body.recipe;
 };
 
 const fetchRecipes = async ({ cursor, query }: { cursor?: string | null; query?: string }) => {
-  const params = new URLSearchParams();
-  params.set("limit", "20");
-
-  if (query) {
-    params.set("q", query);
-  }
-
-  if (cursor) {
-    params.set("cursor", cursor);
-  }
-
-  const response = await fetch(`/api/recipes?${params.toString()}`, {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to load recipes.");
-  }
-
-  return (await response.json()) as ListRecipesResponse;
+  return parseApiResponse<ListRecipesResponse>(
+    api.api.recipes.$get({
+      query: {
+        limit: "20",
+        ...(query ? { q: query } : {}),
+        ...(cursor ? { cursor } : {}),
+      },
+    }),
+  );
 };
 
 const IngredientGroupFields = ({

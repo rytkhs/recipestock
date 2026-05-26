@@ -233,9 +233,13 @@ describe("AppRouter", () => {
     await userEvent.click(screen.getByRole("button", { name: "検索" }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith("/api/recipes?limit=20&q=tomato", {
-        credentials: "include",
-      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/recipes?limit=20&q=tomato",
+        expect.objectContaining({
+          credentials: "include",
+          method: "GET",
+        }),
+      );
     });
   });
 
@@ -306,9 +310,13 @@ describe("AppRouter", () => {
     await expect(
       screen.findByRole("heading", { name: "Potato salad" }),
     ).resolves.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith("/api/recipes?limit=20&cursor=cursor_2", {
-      credentials: "include",
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/recipes?limit=20&cursor=cursor_2",
+      expect.objectContaining({
+        credentials: "include",
+        method: "GET",
+      }),
+    );
     expect(nextPageRequests).toBe(2);
   });
 
