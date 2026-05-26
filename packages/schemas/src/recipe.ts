@@ -100,6 +100,27 @@ export const createRecipeResponseSchema = z.object({
   recipe: recipeDetailSchema,
 });
 
+export const listRecipesQuerySchema = z.object({
+  q: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: z.string().optional(),
+});
+
+export const recipeListItemSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  coverImageUrl: z.string().nullable(),
+  sourceName: z.string().nullable(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+  locked: z.boolean(),
+});
+
+export const listRecipesResponseSchema = z.object({
+  items: z.array(recipeListItemSchema),
+  nextCursor: z.string().nullable().optional(),
+});
+
 export const getRecipeResponseSchema = createRecipeResponseSchema;
 
 export type SourceType = z.infer<typeof sourceTypeSchema>;
@@ -116,3 +137,6 @@ export type RecipeSource = z.infer<typeof recipeSourceSchema>;
 export type RecipeDetail = z.infer<typeof recipeDetailSchema>;
 export type CreateRecipeRequest = z.infer<typeof createRecipeRequestSchema>;
 export type CreateRecipeResponse = z.infer<typeof createRecipeResponseSchema>;
+export type ListRecipesQuery = z.infer<typeof listRecipesQuerySchema>;
+export type RecipeListItem = z.infer<typeof recipeListItemSchema>;
+export type ListRecipesResponse = z.infer<typeof listRecipesResponseSchema>;

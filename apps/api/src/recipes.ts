@@ -3,13 +3,14 @@ import {
   type RecipeContent,
   type RecipeDetail,
   type RecipeDraftContent,
+  type RecipeListItem,
   type RecipeSourceDraft,
   recipeContentSchema,
   type SourcePlatform,
   type SourceType,
 } from "@recipestock/schemas";
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
 
 export type RecipeRecord = {
   id: string;
@@ -36,6 +37,18 @@ export type CreateRecipeResult =
   | {
       status: "limitExceeded";
     };
+
+export type ListRecipesParams = {
+  userId: string;
+  searchTerms: string[];
+  limit: number;
+  cursor: string | null;
+};
+
+export type ListRecipesResult = {
+  items: RecipeRecord[];
+  nextCursor: string | null;
+};
 
 type LockedAppUser = {
   userId: string;
@@ -67,6 +80,7 @@ export type RecipeWriteSession = {
 export type RecipeRepository = {
   createRecipeEnforcingPlanLimit(recipe: NewRecipeRecord): Promise<CreateRecipeResult>;
   getRecipe(userId: string, recipeId: string): Promise<RecipeRecord | null>;
+  listRecipes(params: ListRecipesParams): Promise<ListRecipesResult>;
 };
 
 export type NormalizedRecipeSource = {
@@ -138,12 +152,21 @@ export const buildRecipeSearchText = ({
   buildSearchText({
     title: content.title,
     sourceName,
-    ingredientTexts: content.ingredientGroups.flatMap((group) =>
-      group.ingredients.map((ingredient) => `${ingredient.name} ${ingredient.amount}`),
+    ingredientNames: content.ingredientGroups.flatMap((group) =>
+      group.ingredients.map((ingredient) => ingredient.name),
     ),
-    stepTexts: content.steps.map((step) => step.text),
     note: content.note,
   });
+
+export const toRecipeListItem = (recipe: RecipeRecord): RecipeListItem => ({
+  id: recipe.id,
+  title: recipe.title,
+  coverImageUrl: null,
+  sourceName: recipe.sourceName,
+  createdAt: recipe.createdAt.toISOString(),
+  updatedAt: recipe.updatedAt.toISOString(),
+  locked: false,
+});
 
 export const toRecipeDetail = (recipe: RecipeRecord): RecipeDetail => ({
   id: recipe.id,
@@ -160,6 +183,31 @@ export const toRecipeDetail = (recipe: RecipeRecord): RecipeDetail => ({
   updatedAt: recipe.updatedAt.toISOString(),
   locked: false,
 });
+
+type RecipeListCursor = {
+  updatedAt: string;
+  id: string;
+};
+
+const encodeRecipeListCursor = (cursor: RecipeListCursor) => btoa(JSON.stringify(cursor));
+
+const decodeRecipeListCursor = (cursor: string): RecipeListCursor => {
+  const parsed = JSON.parse(atob(cursor)) as RecipeListCursor;
+
+  if (typeof parsed.updatedAt !== "string" || typeof parsed.id !== "string") {
+    throw new Error("Invalid recipe list cursor.");
+  }
+
+  return parsed;
+};
+
+export const normalizeRecipeSearchTerms = (query?: string) =>
+  query
+    ?.toLowerCase()
+    .normalize("NFKC")
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter(Boolean) ?? [];
 
 export const createRecipeWithPlanLimitInSession = async (
   session: RecipeWriteSession,
@@ -280,6 +328,43 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
       .limit(1);
 
     return row ? mapRecipeRow(row) : null;
+  },
+  async listRecipes({ userId, searchTerms, limit, cursor }) {
+    const decodedCursor = cursor ? decodeRecipeListCursor(cursor) : null;
+    const cursorUpdatedAt = decodedCursor ? new Date(decodedCursor.updatedAt) : null;
+    const whereConditions = [
+      eq(recipes.userId, userId),
+      ...searchTerms.map((term) => ilike(recipes.searchText, `%${term}%`)),
+    ];
+
+    if (decodedCursor && cursorUpdatedAt) {
+      whereConditions.push(
+        or(
+          lt(recipes.updatedAt, cursorUpdatedAt),
+          and(eq(recipes.updatedAt, cursorUpdatedAt), lt(recipes.id, decodedCursor.id)),
+        ) ?? sql`false`,
+      );
+    }
+
+    const rows = await db
+      .select()
+      .from(recipes)
+      .where(and(...whereConditions))
+      .orderBy(desc(recipes.updatedAt), desc(recipes.id))
+      .limit(limit + 1);
+    const pageRows = rows.slice(0, limit);
+    const lastRecipe = pageRows.at(-1);
+
+    return {
+      items: pageRows.map(mapRecipeRow),
+      nextCursor:
+        rows.length > limit && lastRecipe
+          ? encodeRecipeListCursor({
+              updatedAt: lastRecipe.updatedAt.toISOString(),
+              id: lastRecipe.id,
+            })
+          : null,
+    };
   },
 });
 

@@ -86,6 +86,68 @@ describe("AppRouter", () => {
     });
   });
 
+  it("レシピ一覧を表示して検索できる", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (input === "/api/recipes?limit=20") {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (input === "/api/recipes?limit=20&q=tomato") {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+    window.history.pushState({}, "", "/recipes");
+    await renderApp();
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("Example Kitchen")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("検索"), "tomato");
+    await userEvent.click(screen.getByRole("button", { name: "検索" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/recipes?limit=20&q=tomato", {
+        credentials: "include",
+      });
+    });
+  });
+
   it("新規レシピを保存して詳細画面で閲覧する", async () => {
     const recipeResponse = {
       recipe: {

@@ -2,11 +2,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   type CreateRecipeResponse,
   createRecipeRequestSchema,
+  type ListRecipesResponse,
   type RecipeDetail,
 } from "@recipestock/schemas";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -104,6 +105,29 @@ const fetchRecipe = async (recipeId: string) => {
   return body.recipe;
 };
 
+const fetchRecipes = async ({ cursor, query }: { cursor?: string | null; query?: string }) => {
+  const params = new URLSearchParams();
+  params.set("limit", "20");
+
+  if (query) {
+    params.set("q", query);
+  }
+
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+
+  const response = await fetch(`/api/recipes?${params.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to load recipes.");
+  }
+
+  return (await response.json()) as ListRecipesResponse;
+};
+
 const IngredientGroupFields = ({
   control,
   register,
@@ -166,16 +190,87 @@ const IngredientGroupFields = ({
   );
 };
 
-export const RecipesIndexRoute = () => (
-  <section className="page">
-    <div className="page-heading">
-      <h1>Recipes</h1>
-      <Link className="primary-button" to="/recipes/new">
-        新規作成
-      </Link>
-    </div>
-  </section>
-);
+export const RecipesIndexRoute = () => {
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadedPages, setLoadedPages] = useState<ListRecipesResponse[]>([]);
+  const { data, error, isFetching } = useQuery({
+    queryKey: ["recipes", query, cursor],
+    queryFn: () => fetchRecipes({ query, cursor }),
+  });
+  const activePages = cursor ? loadedPages.concat(data ? [data] : []) : data ? [data] : [];
+  const recipes = activePages.flatMap((page) => page.items);
+  const nextCursor = activePages.at(-1)?.nextCursor ?? null;
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoadedPages([]);
+    setCursor(null);
+    setQuery(searchInput.trim());
+  };
+
+  const loadNextPage = () => {
+    if (!data?.nextCursor) {
+      return;
+    }
+
+    setLoadedPages((pages) => pages.concat(data));
+    setCursor(data.nextCursor);
+  };
+
+  return (
+    <section className="page">
+      <div className="page-heading">
+        <h1>Recipes</h1>
+        <Link className="primary-button" to="/recipes/new">
+          新規作成
+        </Link>
+      </div>
+
+      <form className="inline-fields" onSubmit={submitSearch}>
+        <label htmlFor="recipe-search">検索</label>
+        <input
+          id="recipe-search"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+        />
+        <button className="secondary-button" type="submit">
+          検索
+        </button>
+      </form>
+
+      {error ? <p role="alert">レシピ一覧を読み込めませんでした。</p> : null}
+      {isFetching && recipes.length === 0 ? <p>読み込み中</p> : null}
+      {!isFetching && recipes.length === 0 && !error ? <p>レシピがありません。</p> : null}
+
+      <div className="stack">
+        {recipes.map((recipe) => (
+          <article className="recipe-list-item" key={recipe.id}>
+            <h2>
+              <Link to="/recipes/$recipeId" params={{ recipeId: recipe.id }}>
+                {recipe.title}
+              </Link>
+            </h2>
+            {recipe.sourceName ? <p>{recipe.sourceName}</p> : null}
+            <p>{new Date(recipe.updatedAt).toLocaleDateString("ja-JP")}</p>
+          </article>
+        ))}
+      </div>
+
+      {nextCursor ? (
+        <button
+          className="secondary-button"
+          disabled={isFetching}
+          type="button"
+          onClick={loadNextPage}
+        >
+          もっと見る
+        </button>
+      ) : null}
+    </section>
+  );
+};
 
 export const NewRecipeRoute = () => {
   const navigate = useNavigate();

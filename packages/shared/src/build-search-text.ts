@@ -1,19 +1,20 @@
 type RecipeSearchInput = {
   title: string;
   sourceName?: string | null;
-  ingredientTexts?: string[];
+  ingredientNames?: string[];
+  ingredientAmounts?: string[];
   stepTexts?: string[];
   note?: string | null;
+  sourceUrl?: string | null;
 };
 
 export const buildSearchText = ({
   title,
   sourceName,
-  ingredientTexts = [],
-  stepTexts = [],
+  ingredientNames = [],
   note,
 }: RecipeSearchInput) => {
-  return [title, sourceName, ...ingredientTexts, ...stepTexts, note]
+  return [title, sourceName, ...ingredientNames, note]
     .filter((value): value is string => Boolean(value?.trim()))
     .join(" ")
     .toLowerCase()

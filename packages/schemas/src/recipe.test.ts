@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createRecipeRequestSchema,
   createRecipeResponseSchema,
+  listRecipesQuerySchema,
+  listRecipesResponseSchema,
   recipeContentSchema,
   recipeDraftContentSchema,
   recipeSourceDraftSchema,
@@ -118,5 +120,38 @@ describe("createRecipeResponseSchema", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("listRecipesSchema", () => {
+  it("一覧クエリとcursorページレスポンスを受け入れる", () => {
+    expect(
+      listRecipesQuerySchema.parse({
+        q: "tomato kitchen",
+        limit: "10",
+        cursor: "cursor_123",
+      }),
+    ).toEqual({
+      q: "tomato kitchen",
+      limit: 10,
+      cursor: "cursor_123",
+    });
+
+    expect(
+      listRecipesResponseSchema.safeParse({
+        items: [
+          {
+            id: "recipe_123",
+            title: "Tomato pasta",
+            coverImageUrl: null,
+            sourceName: "Example Kitchen",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-26T00:00:00.000Z",
+            locked: false,
+          },
+        ],
+        nextCursor: null,
+      }).success,
+    ).toBe(true);
   });
 });
