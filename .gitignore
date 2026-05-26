@@ -5,6 +5,8 @@ storage/
 docs/*
 !docs/agents/
 !docs/agents/**
+!docs/adr/
+!docs/adr/**
 scripts/
 tmp/
 node_modules

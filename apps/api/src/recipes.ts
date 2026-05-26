@@ -1,4 +1,4 @@
-import { appUsers, type DbClient, recipes } from "@recipestock/db";
+import { type DbClient, recipes } from "@recipestock/db";
 import {
   type RecipeContent,
   type RecipeDetail,
@@ -9,7 +9,7 @@ import {
   type SourceType,
 } from "@recipestock/schemas";
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
-import { and, count, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 export type RecipeRecord = {
   id: string;
@@ -40,6 +40,21 @@ export type CreateRecipeResult =
 type LockedAppUser = {
   userId: string;
   plan: Plan;
+};
+
+type RecipeSqlRow = {
+  id: string;
+  userId: string;
+  title: string;
+  content: unknown;
+  sourceType: string;
+  sourcePlatform: string | null;
+  sourceUrl: string | null;
+  normalizedSourceUrl: string | null;
+  sourceName: string | null;
+  searchText: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 };
 
 export type RecipeWriteSession = {
@@ -174,62 +189,88 @@ export const createRecipeWithPlanLimitInSession = async (
 
 export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
   async createRecipeEnforcingPlanLimit(recipe) {
-    return db.transaction(async (tx) => {
-      return createRecipeWithPlanLimitInSession(
-        {
-          async ensureAppUser(userId) {
-            await tx.insert(appUsers).values({ userId }).onConflictDoNothing();
-          },
-          async lockAppUser(userId) {
-            const [appUser] = await tx
-              .select({
-                userId: appUsers.userId,
-                plan: appUsers.plan,
-              })
-              .from(appUsers)
-              .where(eq(appUsers.userId, userId))
-              .for("update")
-              .limit(1);
+    const result = await db.execute<RecipeSqlRow>(sql`
+      with ensured_user as (
+        insert into app_users (user_id)
+        values (${recipe.userId})
+        on conflict (user_id) do nothing
+        returning plan
+      ),
+      selected_user as (
+        select ensured_user.plan
+        from ensured_user
+        union all
+        select app_users.plan
+        from app_users
+        where app_users.user_id = ${recipe.userId}
+        limit 1
+      ),
+      inserted_recipe as (
+        insert into recipes (
+          id,
+          user_id,
+          title,
+          content,
+          source_type,
+          source_platform,
+          source_url,
+          normalized_source_url,
+          source_name,
+          search_text,
+          created_at,
+          updated_at
+        )
+        select
+          ${recipe.id},
+          ${recipe.userId},
+          ${recipe.title},
+          ${JSON.stringify(recipe.content)}::jsonb,
+          ${recipe.sourceType},
+          ${recipe.sourcePlatform},
+          ${recipe.sourceUrl},
+          ${recipe.normalizedSourceUrl},
+          ${recipe.sourceName},
+          ${recipe.searchText},
+          ${recipe.createdAt.toISOString()}::timestamptz,
+          ${recipe.updatedAt.toISOString()}::timestamptz
+        from selected_user
+        where selected_user.plan = 'pro'
+          or (
+            selected_user.plan = 'free'
+            and (
+              select count(*)
+              from recipes
+              where recipes.user_id = ${recipe.userId}
+            ) < ${PLAN_LIMITS.free.savedRecipes}
+          )
+        returning
+          id,
+          user_id as "userId",
+          title,
+          content,
+          source_type as "sourceType",
+          source_platform as "sourcePlatform",
+          source_url as "sourceUrl",
+          normalized_source_url as "normalizedSourceUrl",
+          source_name as "sourceName",
+          search_text as "searchText",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
+      )
+      select *
+      from inserted_recipe
+    `);
 
-            return appUser ?? null;
-          },
-          async countRecipes(userId) {
-            const [recipeCount] = await tx
-              .select({ value: count() })
-              .from(recipes)
-              .where(eq(recipes.userId, userId));
+    const row = result.rows[0];
 
-            return recipeCount?.value ?? 0;
-          },
-          async insertRecipe(recipeToInsert) {
-            const [row] = await tx
-              .insert(recipes)
-              .values({
-                id: recipeToInsert.id,
-                userId: recipeToInsert.userId,
-                title: recipeToInsert.title,
-                content: recipeToInsert.content,
-                sourceType: recipeToInsert.sourceType,
-                sourcePlatform: recipeToInsert.sourcePlatform,
-                sourceUrl: recipeToInsert.sourceUrl,
-                normalizedSourceUrl: recipeToInsert.normalizedSourceUrl,
-                sourceName: recipeToInsert.sourceName,
-                searchText: recipeToInsert.searchText,
-                createdAt: recipeToInsert.createdAt,
-                updatedAt: recipeToInsert.updatedAt,
-              })
-              .returning();
+    if (!row) {
+      return { status: "limitExceeded" };
+    }
 
-            if (!row) {
-              throw new Error("Failed to create recipe.");
-            }
-
-            return mapRecipeRow(row);
-          },
-        },
-        recipe,
-      );
-    });
+    return {
+      status: "created",
+      recipe: mapRecipeSqlRow(row),
+    };
   },
   async getRecipe(userId, recipeId) {
     const [row] = await db
@@ -240,6 +281,21 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
 
     return row ? mapRecipeRow(row) : null;
   },
+});
+
+const mapRecipeSqlRow = (row: RecipeSqlRow): RecipeRecord => ({
+  id: row.id,
+  userId: row.userId,
+  title: row.title,
+  content: recipeContentSchema.parse(row.content),
+  sourceType: (row.sourceType ?? "other") as SourceType,
+  sourcePlatform: row.sourcePlatform as SourcePlatform | null,
+  sourceUrl: row.sourceUrl,
+  normalizedSourceUrl: row.normalizedSourceUrl,
+  sourceName: row.sourceName,
+  searchText: row.searchText,
+  createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
+  updatedAt: row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt),
 });
 
 const mapRecipeRow = (row: typeof recipes.$inferSelect): RecipeRecord => ({

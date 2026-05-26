@@ -1,30 +1,35 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createMemoryHistory } from "@tanstack/react-router";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AppRouter } from "./router";
+import { AppRouter, createAppRouter } from "./router";
 
-const renderApp = async () => {
+const renderApp = async (initialPath = "/") => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
     },
   });
+  const appRouter = createAppRouter({
+    history: createMemoryHistory({ initialEntries: [initialPath] }),
+  });
 
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <AppRouter />
+      <AppRouter appRouter={appRouter} />
     </QueryClientProvider>,
   );
 
-  await act(async () => {});
+  await act(async () => {
+    await appRouter.load();
+  });
   return view;
 };
 
 describe("AppRouter", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    window.history.pushState({}, "", "/");
   });
 
   it("初期ルートを表示する", async () => {
@@ -42,8 +47,7 @@ describe("AppRouter", () => {
         headers: { "content-type": "application/json" },
       }),
     );
-    window.history.pushState({}, "", "/login");
-    await renderApp();
+    await renderApp("/login");
 
     await userEvent.click(await screen.findByRole("button", { name: "Googleでログイン" }));
 
@@ -64,8 +68,7 @@ describe("AppRouter", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
-    window.history.pushState({}, "", "/login");
-    await renderApp();
+    await renderApp("/login");
 
     await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
     await userEvent.click(screen.getByRole("button", { name: "コードを送信" }));
@@ -125,8 +128,7 @@ describe("AppRouter", () => {
       return new Response(null, { status: 404 });
     });
 
-    window.history.pushState({}, "", "/recipes/new");
-    await renderApp();
+    await renderApp("/recipes/new");
 
     await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
     await userEvent.type(screen.getByLabelText("人数"), "2人分");

@@ -94,7 +94,12 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
 ]);
 
-const router = createRouter({ routeTree });
+type AppRouterOptions = Omit<Parameters<typeof createRouter>[0], "routeTree">;
+
+export const createAppRouter = (options?: AppRouterOptions) =>
+  createRouter({ routeTree, ...options });
+
+const router = createAppRouter();
 
 declare module "@tanstack/react-router" {
   interface Register {
@@ -102,4 +107,6 @@ declare module "@tanstack/react-router" {
   }
 }
 
-export const AppRouter = () => <RouterProvider router={router} />;
+export const AppRouter = ({ appRouter = router }: { appRouter?: typeof router }) => (
+  <RouterProvider router={appRouter} />
+);

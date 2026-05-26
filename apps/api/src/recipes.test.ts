@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  createRecipeRepository,
   createRecipeWithPlanLimitInSession,
   type NewRecipeRecord,
   normalizeRecipeSource,
@@ -107,5 +108,38 @@ describe("createRecipeWithPlanLimitInSession", () => {
       recipe,
     });
     expect(calls).toEqual(["ensure:user_123", "lock:user_123", "insert:recipe_123"]);
+  });
+});
+
+describe("createRecipeRepository", () => {
+  it("単一SQLで保存できた行をcreatedとして返す", async () => {
+    const recipe = createRecipe();
+    const execute = vi.fn(async () => ({
+      rows: [
+        {
+          ...recipe,
+          content: recipe.content,
+          createdAt: recipe.createdAt.toISOString(),
+          updatedAt: recipe.updatedAt.toISOString(),
+        },
+      ],
+    }));
+    const repository = createRecipeRepository({ execute } as never);
+
+    await expect(repository.createRecipeEnforcingPlanLimit(recipe)).resolves.toEqual({
+      status: "created",
+      recipe,
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("単一SQLが行を返さなければlimitExceededとして返す", async () => {
+    const execute = vi.fn(async () => ({ rows: [] }));
+    const repository = createRecipeRepository({ execute } as never);
+
+    await expect(repository.createRecipeEnforcingPlanLimit(createRecipe())).resolves.toEqual({
+      status: "limitExceeded",
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });
