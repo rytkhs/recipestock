@@ -8,6 +8,13 @@
       "when": 1779724750874,
       "tag": "0000_outgoing_green_goblin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779769721427,
+      "tag": "0001_closed_malice",
+      "breakpoints": true
     }
   ]
 }

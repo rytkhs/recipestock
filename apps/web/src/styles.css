@@ -63,6 +63,13 @@ nav a.active {
   color: #525a55;
 }
 
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .login-page {
   max-width: 480px;
 }
@@ -114,4 +121,80 @@ nav a.active {
 .secondary-button {
   color: #256f5a;
   background: #ffffff;
+}
+
+.recipe-form-page {
+  max-width: 720px;
+}
+
+.recipe-form,
+.form-section,
+.stack {
+  display: grid;
+  gap: 12px;
+}
+
+.recipe-form {
+  margin-top: 24px;
+}
+
+.recipe-form label,
+.form-section legend {
+  font-weight: 700;
+}
+
+.recipe-form input,
+.recipe-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #b9b6ad;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.recipe-form textarea {
+  resize: vertical;
+}
+
+.form-section {
+  min-width: 0;
+  border: 1px solid #dedbd2;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.inline-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 180px) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.recipe-detail {
+  max-width: 720px;
+}
+
+.recipe-detail section {
+  margin-top: 28px;
+}
+
+.recipe-detail h2 {
+  margin-bottom: 10px;
+  font-size: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .top-bar,
+  .page-heading,
+  .inline-fields {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .top-bar,
+  .page-heading {
+    flex-direction: column;
+  }
 }
