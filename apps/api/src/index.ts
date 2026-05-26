@@ -1,13 +1,29 @@
 import { createDb } from "@recipestock/db";
-import { getMeResponseSchema } from "@recipestock/schemas";
+import {
+  createRecipeRequestSchema,
+  createRecipeResponseSchema,
+  getMeResponseSchema,
+  getRecipeResponseSchema,
+} from "@recipestock/schemas";
 import { Hono } from "hono";
 import { type AuthService, authService } from "./auth";
 import { type Bindings } from "./env";
 import { buildMeResponse, createMeRepository, getCurrentJstMonth, type MeRepository } from "./me";
+import {
+  buildRecipeSearchText,
+  createRecipeId as createDefaultRecipeId,
+  createRecipeRepository,
+  normalizeRecipeSource,
+  type RecipeRepository,
+  toRecipeContent,
+  toRecipeDetail,
+} from "./recipes";
 
 type AppDependencies = {
   auth?: AuthService;
   meRepository?: MeRepository;
+  recipeRepository?: RecipeRepository;
+  createRecipeId?: () => string;
   getCurrentMonth?: () => string;
 };
 
@@ -20,6 +36,18 @@ const unauthorizedResponse = () =>
       },
     },
     { status: 401 },
+  );
+
+const validationFailedResponse = (details: unknown) =>
+  Response.json(
+    {
+      error: {
+        code: "validation_failed",
+        message: "Request validation failed.",
+        details,
+      },
+    },
+    { status: 400 },
   );
 
 export const createApp = (dependencies: AppDependencies = {}) => {
@@ -63,6 +91,90 @@ export const createApp = (dependencies: AppDependencies = {}) => {
           }),
         ),
       );
+    })
+    .post("/recipes", async (c) => {
+      const auth = dependencies.auth ?? authService;
+      const session = await auth.getSession(c.req.raw, c.env);
+
+      if (!session) {
+        return unauthorizedResponse();
+      }
+
+      const rawBody = await c.req.json().catch(() => null);
+      const request = createRecipeRequestSchema.safeParse(rawBody);
+
+      if (!request.success) {
+        return validationFailedResponse(request.error.flatten());
+      }
+
+      const db =
+        dependencies.meRepository || dependencies.recipeRepository
+          ? null
+          : createDb(c.env.DATABASE_URL);
+      const meRepository =
+        dependencies.meRepository ?? createMeRepository(db ?? createDb(c.env.DATABASE_URL));
+      const appUser = await meRepository.getOrCreateAppUser(session.user.id);
+      const recipeCount = await meRepository.countRecipes(session.user.id);
+
+      if (appUser.plan === "free" && recipeCount >= 5) {
+        return Response.json(
+          {
+            error: {
+              code: "recipe_limit_exceeded",
+              message: "Recipe limit exceeded.",
+            },
+          },
+          { status: 403 },
+        );
+      }
+
+      const repository =
+        dependencies.recipeRepository ?? createRecipeRepository(db ?? createDb(c.env.DATABASE_URL));
+      const content = toRecipeContent(request.data.content);
+      const source = normalizeRecipeSource(request.data.source);
+      const now = new Date();
+      const recipe = await repository.createRecipe({
+        id: dependencies.createRecipeId?.() ?? createDefaultRecipeId(),
+        userId: session.user.id,
+        title: content.title,
+        content,
+        sourceType: source.sourceType,
+        sourcePlatform: source.sourcePlatform,
+        sourceUrl: source.sourceUrl,
+        normalizedSourceUrl: source.normalizedSourceUrl,
+        sourceName: source.sourceName,
+        searchText: buildRecipeSearchText({ content, sourceName: source.sourceName }),
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      return c.json(createRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }), 201);
+    })
+    .get("/recipes/:recipeId", async (c) => {
+      const auth = dependencies.auth ?? authService;
+      const session = await auth.getSession(c.req.raw, c.env);
+
+      if (!session) {
+        return unauthorizedResponse();
+      }
+
+      const repository =
+        dependencies.recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      const recipe = await repository.getRecipe(session.user.id, c.req.param("recipeId"));
+
+      if (!recipe) {
+        return Response.json(
+          {
+            error: {
+              code: "not_found",
+              message: "Recipe was not found.",
+            },
+          },
+          { status: 404 },
+        );
+      }
+
+      return c.json(getRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }));
     });
 
   return routes;

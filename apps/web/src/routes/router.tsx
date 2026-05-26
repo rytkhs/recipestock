@@ -7,6 +7,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { LoginRoute } from "./login";
+import { NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -42,11 +43,19 @@ const indexRoute = createRoute({
 const recipesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/recipes",
-  component: () => (
-    <section className="page">
-      <h1>Recipes</h1>
-    </section>
-  ),
+  component: RecipesIndexRoute,
+});
+
+const newRecipeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recipes/new",
+  component: NewRecipeRoute,
+});
+
+const recipeDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recipes/$recipeId",
+  component: RecipeDetailRoute,
 });
 
 const loginRoute = createRoute({
@@ -79,6 +88,8 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   recipesRoute,
+  newRecipeRoute,
+  recipeDetailRoute,
   importRoute,
   settingsRoute,
 ]);

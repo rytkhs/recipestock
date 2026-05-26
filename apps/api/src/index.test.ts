@@ -88,4 +88,212 @@ describe("API", () => {
     });
     expect(calls).toEqual(["ensure:user_123", "recipes:user_123", "ai:user_123:2026-05"]);
   });
+
+  it("ログイン済みユーザーがタイトルだけでレシピを保存できる", async () => {
+    const savedRecipes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      meRepository: {
+        getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
+        countRecipes: async () => 0,
+        getAiUsage: async () => null,
+      },
+      recipeRepository: {
+        createRecipe: async (recipe) => {
+          savedRecipes.push(recipe);
+          return {
+            ...recipe,
+            createdAt: new Date("2026-05-26T00:00:00.000Z"),
+            updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+          };
+        },
+        getRecipe: async () => null,
+      },
+      createRecipeId: () => "recipe_123",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: { title: "Tomato pasta" },
+          source: { sourceType: "manual" },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          ingredientGroups: [],
+          steps: [],
+        },
+        source: {
+          sourceType: "manual",
+          sourcePlatform: null,
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    });
+    expect(savedRecipes).toEqual([
+      expect.objectContaining({
+        id: "recipe_123",
+        userId: "user_123",
+        title: "Tomato pasta",
+        searchText: "tomato pasta",
+      }),
+    ]);
+  });
+
+  it("任意項目と出典情報をRecipeContentとSource metadataとして保存する", async () => {
+    const savedRecipes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      meRepository: {
+        getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
+        countRecipes: async () => 0,
+        getAiUsage: async () => null,
+      },
+      recipeRepository: {
+        createRecipe: async (recipe) => {
+          savedRecipes.push(recipe);
+          return {
+            ...recipe,
+            createdAt: new Date("2026-05-26T00:00:00.000Z"),
+            updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+          };
+        },
+        getRecipe: async () => null,
+      },
+      createRecipeId: () => "recipe_123",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            servingsText: "2人分",
+            ingredientGroups: [
+              { label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] },
+            ],
+            steps: [{ text: "煮詰める" }],
+            note: "仕上げにオリーブオイル。",
+          },
+          source: {
+            sourceType: "web",
+            sourceName: "Example Kitchen",
+            sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
+          },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(savedRecipes).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({
+          servingsText: "2人分",
+          note: "仕上げにオリーブオイル。",
+        }),
+        sourceType: "web",
+        sourceName: "Example Kitchen",
+        sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
+        normalizedSourceUrl: "https://example.com/recipes/tomato",
+        searchText: expect.stringContaining("example kitchen"),
+      }),
+    ]);
+    expect(savedRecipes[0]).toEqual(
+      expect.objectContaining({
+        searchText: expect.stringContaining("トマト缶 1缶"),
+      }),
+    );
+  });
+
+  it("保存済みレシピを詳細画面用に取得できる", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipe: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async (userId, recipeId) => ({
+          id: recipeId,
+          userId,
+          title: "Tomato pasta",
+          content: {
+            title: "Tomato pasta",
+            servingsText: "2人分",
+            ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+            steps: [{ text: "煮詰める" }],
+            note: "仕上げにオリーブオイル。",
+          },
+          sourceType: "web",
+          sourcePlatform: null,
+          sourceUrl: "https://example.com/recipes/tomato",
+          normalizedSourceUrl: "https://example.com/recipes/tomato",
+          sourceName: "Example Kitchen",
+          searchText: "tomato pasta",
+          createdAt: new Date("2026-05-26T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+        }),
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/recipe_123", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          servingsText: "2人分",
+        },
+        source: {
+          sourceType: "web",
+          sourceName: "Example Kitchen",
+        },
+        locked: false,
+      },
+    });
+  });
 });

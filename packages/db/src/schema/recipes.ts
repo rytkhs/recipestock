@@ -9,7 +9,7 @@ export const recipes = pgTable(
     content: jsonb("content").notNull(),
     sourceUrl: text("source_url"),
     normalizedSourceUrl: text("normalized_source_url"),
-    sourceType: text("source_type"),
+    sourceType: text("source_type").notNull(),
     sourcePlatform: text("source_platform"),
     sourceName: text("source_name"),
     searchText: text("search_text").notNull(),
