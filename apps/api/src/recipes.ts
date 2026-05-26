@@ -27,6 +27,11 @@ export type RecipeRecord = {
   updatedAt: Date;
 };
 
+export type RecipeListRecord = Pick<
+  RecipeRecord,
+  "id" | "title" | "sourceName" | "createdAt" | "updatedAt"
+>;
+
 export type NewRecipeRecord = RecipeRecord;
 
 export type CreateRecipeResult =
@@ -46,7 +51,7 @@ export type ListRecipesParams = {
 };
 
 export type ListRecipesResult = {
-  items: RecipeRecord[];
+  items: RecipeListRecord[];
   nextCursor: string | null;
 };
 
@@ -158,7 +163,7 @@ export const buildRecipeSearchText = ({
     note: content.note,
   });
 
-export const toRecipeListItem = (recipe: RecipeRecord): RecipeListItem => ({
+export const toRecipeListItem = (recipe: RecipeListRecord): RecipeListItem => ({
   id: recipe.id,
   title: recipe.title,
   coverImageUrl: null,
@@ -370,7 +375,13 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
     }
 
     const rows = await db
-      .select()
+      .select({
+        id: recipes.id,
+        title: recipes.title,
+        sourceName: recipes.sourceName,
+        createdAt: recipes.createdAt,
+        updatedAt: recipes.updatedAt,
+      })
       .from(recipes)
       .where(and(...whereConditions))
       .orderBy(desc(recipes.updatedAt), desc(recipes.id))
@@ -379,7 +390,7 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
     const lastRecipe = pageRows.at(-1);
 
     return {
-      items: pageRows.map(mapRecipeRow),
+      items: pageRows,
       nextCursor:
         rows.length > limit && lastRecipe
           ? encodeRecipeListCursor({

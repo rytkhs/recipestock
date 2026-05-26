@@ -428,19 +428,8 @@ describe("API", () => {
             items: [
               {
                 id: "recipe_123",
-                userId: "user_123",
                 title: "Tomato pasta",
-                content: {
-                  title: "Tomato pasta",
-                  ingredientGroups: [],
-                  steps: [],
-                },
-                sourceType: "web",
-                sourcePlatform: null,
-                sourceUrl: "https://example.com/recipes/tomato",
-                normalizedSourceUrl: "https://example.com/recipes/tomato",
                 sourceName: "Example Kitchen",
-                searchText: "tomato pasta example kitchen",
                 createdAt: new Date("2026-05-25T00:00:00.000Z"),
                 updatedAt: new Date("2026-05-26T00:00:00.000Z"),
               },
