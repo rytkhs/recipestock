@@ -4,6 +4,8 @@ import {
   createRecipeResponseSchema,
   getMeResponseSchema,
   getRecipeResponseSchema,
+  listRecipesQuerySchema,
+  listRecipesResponseSchema,
 } from "@recipestock/schemas";
 import { Hono } from "hono";
 import { type AuthService, authService } from "./auth";
@@ -13,10 +15,14 @@ import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
   createRecipeRepository,
+  InvalidRecipeListCursorError,
+  type ListRecipesResult,
+  normalizeRecipeSearchTerms,
   normalizeRecipeSource,
   type RecipeRepository,
   toRecipeContent,
   toRecipeDetail,
+  toRecipeListItem,
 } from "./recipes";
 
 type AppDependencies = {
@@ -142,6 +148,51 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       const recipe = result.recipe;
 
       return c.json(createRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }), 201);
+    })
+    .get("/recipes", async (c) => {
+      const auth = dependencies.auth ?? authService;
+      const session = await auth.getSession(c.req.raw, c.env);
+
+      if (!session) {
+        return unauthorizedResponse();
+      }
+
+      const query = listRecipesQuerySchema.safeParse(c.req.query());
+
+      if (!query.success) {
+        return validationFailedResponse(query.error.flatten());
+      }
+
+      const repository =
+        dependencies.recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      let result: ListRecipesResult;
+
+      try {
+        result = await repository.listRecipes({
+          userId: session.user.id,
+          searchTerms: normalizeRecipeSearchTerms(query.data.q),
+          limit: query.data.limit,
+          cursor: query.data.cursor ?? null,
+        });
+      } catch (error) {
+        if (error instanceof InvalidRecipeListCursorError) {
+          return validationFailedResponse({
+            fieldErrors: {
+              cursor: [error.message],
+            },
+            formErrors: [],
+          });
+        }
+
+        throw error;
+      }
+
+      return c.json(
+        listRecipesResponseSchema.parse({
+          items: result.items.map(toRecipeListItem),
+          nextCursor: result.nextCursor,
+        }),
+      );
     })
     .get("/recipes/:recipeId", async (c) => {
       const auth = dependencies.auth ?? authService;
