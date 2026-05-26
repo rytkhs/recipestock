@@ -29,6 +29,19 @@ Large changes include new features, database changes, API contract changes, bill
 
 Small changes may be implemented directly. Examples include typo fixes, narrow documentation edits, focused tests, and obvious local bug fixes.
 
+## Basic Policy
+
+* Prioritize clean implementation.
+* When editing, do not preserve backward compatibility; assume breaking changes.
+* Process only within the instructed scope.
+* Do not add unnecessary implementations.
+* Ask for confirmation when there are unclear points or important decisions to make.
+
+## Fallbacks
+
+* Do not implement redundant fallbacks.
+* If implementing a fallback, clearly state the reason for doing so.
+
 ## Architecture Guardrails
 
 Follow the architecture in `/docs/agents/tech-stack.md`.
@@ -63,14 +76,48 @@ Before adding, replacing, or bypassing these choices, explain the reason, affect
 
 ## Testing And Verification
 
-After changes, run the relevant package checks when available:
+After making changes, run the relevant package checks and verification scripts:
 
-- typecheck
-- lint
-- tests
-- focused manual or browser verification for UI flows
+### Key Commands
+
+- Typecheck:
+  ```bash
+  pnpm typecheck
+  ```
+- Lint & Formatting:
+  ```bash
+  pnpm lint
+  ```
+  ```bash
+  pnpm lint:fix
+  ```
+- Tests:
+  ```bash
+  pnpm test
+  ```
+- Build Validation:
+  ```bash
+  pnpm build
+  ```
+- Development Server:
+  ```bash
+  pnpm dev
+  ```
 
 If the commands are not set up yet or cannot be run, say that explicitly in the final report.
+
+### Database Commands (Drizzle ORM)
+
+If you modify the database schema or need to run migrations:
+
+- Generate migrations:
+  ```bash
+  pnpm db:generate
+  ```
+- Apply migrations:
+  ```bash
+  pnpm db:migrate
+  ```
 
 Prefer unit tests around shared logic and boundary-heavy behavior:
 
