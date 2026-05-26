@@ -5,6 +5,69 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppRouter, createAppRouter } from "./router";
 
+const authenticatedSession = {
+  session: {
+    id: "session_123",
+    userId: "user_123",
+  },
+  user: {
+    id: "user_123",
+    email: "chef@example.com",
+    name: "chef",
+  },
+};
+
+const getRequestPath = (input: RequestInfo | URL) => {
+  const toPath = (urlValue: string) => {
+    try {
+      const url = new URL(urlValue, window.location.origin);
+      return `${url.pathname}${url.search}`;
+    } catch {
+      return urlValue;
+    }
+  };
+
+  if (typeof input === "string") {
+    return toPath(input);
+  }
+
+  if (input instanceof URL) {
+    return `${input.pathname}${input.search}`;
+  }
+
+  return toPath(input.url);
+};
+
+const jsonResponse = (body: unknown, init?: ResponseInit) =>
+  new Response(JSON.stringify(body), {
+    headers: { "content-type": "application/json" },
+    ...init,
+  });
+
+const createSessionResponse = (authenticated: boolean) =>
+  jsonResponse(authenticated ? authenticatedSession : null);
+
+const mockFetch = (
+  handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> | Response,
+  { authenticated = false }: { authenticated?: boolean } = {},
+) =>
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    if (getRequestPath(input).endsWith("/get-session")) {
+      return createSessionResponse(authenticated);
+    }
+
+    return handler(input, init);
+  });
+
+type FetchMock = {
+  mock: {
+    calls: [RequestInfo | URL, RequestInit?][];
+  };
+};
+
+const findFetchCall = (fetchMock: FetchMock, path: string) =>
+  fetchMock.mock.calls.find(([input]) => getRequestPath(input) === path);
+
 const renderApp = async (initialPath = "/") => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -24,7 +87,7 @@ const renderApp = async (initialPath = "/") => {
   await act(async () => {
     await appRouter.load();
   });
-  return view;
+  return { ...view, appRouter, queryClient };
 };
 
 describe("AppRouter", () => {
@@ -33,6 +96,7 @@ describe("AppRouter", () => {
   });
 
   it("初期ルートを表示する", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }));
     await renderApp();
 
     await expect(
@@ -40,57 +104,93 @@ describe("AppRouter", () => {
     ).resolves.toBeInTheDocument();
   });
 
+  it("未ログインで認証必須ルートに入るとログインへ遷移する", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }));
+    await renderApp("/recipes");
+
+    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+  });
+
+  it("ログイン済みでログインルートに入るとレシピ一覧へ遷移する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/login");
+
+    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+  });
+
+  it("ログイン済みで初期ルートに入るとレシピ一覧へ遷移する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/");
+
+    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+  });
+
   it("ログインルートからGoogleログインを開始する", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ url: "https://accounts.google.com/o/oauth2/v2/auth" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = mockFetch(async () =>
+      jsonResponse({ url: "https://accounts.google.com/o/oauth2/v2/auth" }),
     );
     await renderApp("/login");
 
     await userEvent.click(await screen.findByRole("button", { name: "Googleでログイン" }));
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    const signInCall = findFetchCall(fetchMock, "/api/auth/sign-in/social");
+    expect(signInCall).toEqual([
       "/api/auth/sign-in/social",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
       }),
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    ]);
+    expect(JSON.parse(String(signInCall?.[1]?.body))).toMatchObject({
       provider: "google",
       disableRedirect: true,
     });
   });
 
   it("ログインルートからメールとパスワードでログインする", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify({ token: "session_token" }), { status: 200 }));
+    const fetchMock = mockFetch(async () => jsonResponse({ token: "session_token" }));
     await renderApp("/login");
 
     await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
     await userEvent.type(screen.getByLabelText("パスワード"), "password123");
     await userEvent.click(screen.getByRole("button", { name: "ログイン" }));
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    const signInCall = findFetchCall(fetchMock, "/api/auth/sign-in/email");
+    expect(signInCall).toEqual([
       "/api/auth/sign-in/email",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
       }),
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    ]);
+    expect(JSON.parse(String(signInCall?.[1]?.body))).toMatchObject({
       email: "chef@example.com",
       password: "password123",
     });
   });
 
   it("ログインルートから新規登録してOTP検証に進む", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify({ token: null }), { status: 200 }));
+    const fetchMock = mockFetch(async () => jsonResponse({ token: null }));
     await renderApp("/login");
 
     await userEvent.click(await screen.findByRole("button", { name: "アカウントを作成" }));
@@ -98,14 +198,15 @@ describe("AppRouter", () => {
     await userEvent.type(screen.getByLabelText("パスワード"), "password123");
     await userEvent.click(screen.getByRole("button", { name: "登録してコードを送信" }));
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    const signUpCall = findFetchCall(fetchMock, "/api/auth/sign-up/email");
+    expect(signUpCall).toEqual([
       "/api/auth/sign-up/email",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
       }),
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    ]);
+    expect(JSON.parse(String(signUpCall?.[1]?.body))).toMatchObject({
       name: "chef",
       email: "chef@example.com",
       password: "password123",
@@ -114,9 +215,7 @@ describe("AppRouter", () => {
   });
 
   it("ログインルートで登録OTPを検証する", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    const fetchMock = mockFetch(async () => jsonResponse({ success: true }));
     await renderApp("/login");
 
     await userEvent.click(await screen.findByRole("button", { name: "アカウントを作成" }));
@@ -126,23 +225,22 @@ describe("AppRouter", () => {
     await userEvent.type(await screen.findByLabelText("確認コード"), "123456");
     await userEvent.click(screen.getByRole("button", { name: "登録を完了" }));
 
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    const verifyCall = findFetchCall(fetchMock, "/api/auth/email-otp/verify-email");
+    expect(verifyCall).toEqual([
       "/api/auth/email-otp/verify-email",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
       }),
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+    ]);
+    expect(JSON.parse(String(verifyCall?.[1]?.body))).toEqual({
       email: "chef@example.com",
       otp: "123456",
     });
   });
 
   it("ログインルートでOTP方式のパスワードリセットを実行する", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    const fetchMock = mockFetch(async () => jsonResponse({ success: true }));
     await renderApp("/login");
 
     await userEvent.click(await screen.findByRole("button", { name: "パスワードを忘れた場合" }));
@@ -152,26 +250,26 @@ describe("AppRouter", () => {
     await userEvent.type(screen.getByLabelText("新しいパスワード"), "newpassword123");
     await userEvent.click(screen.getByRole("button", { name: "パスワードを再設定" }));
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
+    const requestResetCall = findFetchCall(fetchMock, "/api/auth/email-otp/request-password-reset");
+    expect(requestResetCall).toEqual([
       "/api/auth/email-otp/request-password-reset",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
       }),
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    ]);
+    expect(JSON.parse(String(requestResetCall?.[1]?.body))).toEqual({
       email: "chef@example.com",
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+    const resetPasswordCall = findFetchCall(fetchMock, "/api/auth/email-otp/reset-password");
+    expect(resetPasswordCall).toEqual([
       "/api/auth/email-otp/reset-password",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
       }),
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+    ]);
+    expect(JSON.parse(String(resetPasswordCall?.[1]?.body))).toEqual({
       email: "chef@example.com",
       otp: "123456",
       password: "newpassword123",
@@ -179,10 +277,10 @@ describe("AppRouter", () => {
   });
 
   it("レシピ一覧を表示して検索できる", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (input === "/api/recipes?limit=20") {
-        return new Response(
-          JSON.stringify({
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
             items: [
               {
                 id: "recipe_123",
@@ -195,14 +293,11 @@ describe("AppRouter", () => {
               },
             ],
             nextCursor: null,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
+          });
+        }
 
-      if (input === "/api/recipes?limit=20&q=tomato") {
-        return new Response(
-          JSON.stringify({
+        if (input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({
             items: [
               {
                 id: "recipe_123",
@@ -215,13 +310,13 @@ describe("AppRouter", () => {
               },
             ],
             nextCursor: null,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
+          });
+        }
 
-      return new Response(null, { status: 404 });
-    });
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
     await renderApp("/recipes");
 
     await expect(
@@ -245,10 +340,10 @@ describe("AppRouter", () => {
 
   it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {
     let nextPageRequests = 0;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (input === "/api/recipes?limit=20") {
-        return new Response(
-          JSON.stringify({
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({
             items: [
               {
                 id: "recipe_123",
@@ -261,20 +356,17 @@ describe("AppRouter", () => {
               },
             ],
             nextCursor: "cursor_2",
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      if (input === "/api/recipes?limit=20&cursor=cursor_2") {
-        nextPageRequests += 1;
-
-        if (nextPageRequests === 1) {
-          return new Response(null, { status: 500 });
+          });
         }
 
-        return new Response(
-          JSON.stringify({
+        if (getRequestPath(input) === "/api/recipes?limit=20&cursor=cursor_2") {
+          nextPageRequests += 1;
+
+          if (nextPageRequests === 1) {
+            return new Response(null, { status: 500 });
+          }
+
+          return jsonResponse({
             items: [
               {
                 id: "recipe_456",
@@ -287,13 +379,13 @@ describe("AppRouter", () => {
               },
             ],
             nextCursor: null,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
+          });
+        }
 
-      return new Response(null, { status: 404 });
-    });
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
     await renderApp("/recipes");
 
     await expect(
@@ -344,23 +436,20 @@ describe("AppRouter", () => {
         locked: false,
       },
     };
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      if (input === "/api/recipes" && init?.method === "POST") {
-        return new Response(JSON.stringify(recipeResponse), {
-          status: 201,
-          headers: { "content-type": "application/json" },
-        });
-      }
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes" && init?.method === "POST") {
+          return jsonResponse(recipeResponse, { status: 201 });
+        }
 
-      if (input === "/api/recipes/recipe_123") {
-        return new Response(JSON.stringify(recipeResponse), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(recipeResponse);
+        }
 
-      return new Response(null, { status: 404 });
-    });
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
 
     await renderApp("/recipes/new");
 
@@ -383,7 +472,8 @@ describe("AppRouter", () => {
         }),
       );
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    const createRecipeCall = findFetchCall(fetchMock, "/api/recipes");
+    expect(JSON.parse(String(createRecipeCall?.[1]?.body))).toMatchObject({
       content: {
         title: "Tomato pasta",
         servingsText: "2人分",
@@ -402,5 +492,45 @@ describe("AppRouter", () => {
     ).resolves.toBeInTheDocument();
     expect(screen.getByText("トマト缶 1缶")).toBeInTheDocument();
     expect(screen.getByText("煮詰める")).toBeInTheDocument();
+  });
+
+  it("ログアウトするとユーザー依存キャッシュを消してログインへ遷移する", async () => {
+    let authenticated = true;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+
+      if (path === "/api/auth/sign-out" && init?.method === "POST") {
+        authenticated = false;
+        return jsonResponse({ success: true });
+      }
+
+      if (path === "/api/recipes?limit=20") {
+        return jsonResponse({ items: [], nextCursor: null });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+    const { queryClient } = await renderApp("/recipes");
+    queryClient.setQueryData(["recipes", "", null], { items: [], nextCursor: null });
+    queryClient.setQueryData(["recipe", "recipe_123"], { id: "recipe_123" });
+    queryClient.setQueryData(["me"], { userId: "user_123" });
+
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+
+    expect(findFetchCall(fetchMock, "/api/auth/sign-out")).toEqual([
+      "/api/auth/sign-out",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
+    ]);
+    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+    expect(queryClient.getQueryData(["recipes", "", null])).toBeUndefined();
+    expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
+    expect(queryClient.getQueryData(["me"])).toBeUndefined();
   });
 });

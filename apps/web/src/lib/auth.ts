@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { emailOTPClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
@@ -14,7 +15,7 @@ const sameOriginPath = (input: RequestInfo | URL) => {
   return input;
 };
 
-const authClient = createAuthClient({
+export const authClient = createAuthClient({
   baseURL: new URL("/api/auth", window.location.origin).toString(),
   fetchOptions: {
     customFetchImpl: (input, init) => fetch(sameOriginPath(input), init),
@@ -53,6 +54,34 @@ export const signInWithEmailPassword = async (email: string, password: string) =
     callbackURL: "/recipes",
   });
   assertAuthSuccess(result);
+};
+
+export const signOut = async () => {
+  const result = await authClient.signOut();
+  assertAuthSuccess(result);
+};
+
+export const authSessionQueryKey = ["authSession"] as const;
+
+export const useSession = () => {
+  const query = useQuery({
+    queryKey: authSessionQueryKey,
+    queryFn: async () => {
+      const result = await authClient.getSession();
+
+      if (result.error) {
+        throw new Error("auth_session_request_failed");
+      }
+
+      return result.data;
+    },
+    retry: false,
+  });
+
+  return {
+    ...query,
+    isPending: query.isPending,
+  };
 };
 
 export const signUpWithEmailPassword = async (email: string, password: string) => {
