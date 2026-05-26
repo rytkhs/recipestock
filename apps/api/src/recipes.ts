@@ -189,16 +189,39 @@ type RecipeListCursor = {
   id: string;
 };
 
+export class InvalidRecipeListCursorError extends Error {
+  constructor() {
+    super("Invalid recipe list cursor.");
+    this.name = "InvalidRecipeListCursorError";
+  }
+}
+
 const encodeRecipeListCursor = (cursor: RecipeListCursor) => btoa(JSON.stringify(cursor));
 
 const decodeRecipeListCursor = (cursor: string): RecipeListCursor => {
-  const parsed = JSON.parse(atob(cursor)) as RecipeListCursor;
+  let parsed: unknown;
 
-  if (typeof parsed.updatedAt !== "string" || typeof parsed.id !== "string") {
-    throw new Error("Invalid recipe list cursor.");
+  try {
+    parsed = JSON.parse(atob(cursor));
+  } catch {
+    throw new InvalidRecipeListCursorError();
   }
 
-  return parsed;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new InvalidRecipeListCursorError();
+  }
+
+  const { updatedAt, id } = parsed as Record<string, unknown>;
+
+  if (typeof updatedAt !== "string" || typeof id !== "string" || id.length === 0) {
+    throw new InvalidRecipeListCursorError();
+  }
+
+  if (Number.isNaN(new Date(updatedAt).getTime())) {
+    throw new InvalidRecipeListCursorError();
+  }
+
+  return { updatedAt, id };
 };
 
 export const normalizeRecipeSearchTerms = (query?: string) =>

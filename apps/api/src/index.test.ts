@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import app, { createApp } from "./index";
+import { InvalidRecipeListCursorError } from "./recipes";
 
 const unusedListRecipes = async () => {
   throw new Error("should not list recipes");
@@ -476,6 +477,44 @@ describe("API", () => {
         },
       ],
       nextCursor: "next_cursor",
+    });
+  });
+
+  it("一覧cursorが不正な場合はvalidation_failedを返す", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: async () => {
+          throw new InvalidRecipeListCursorError();
+        },
+      },
+    });
+
+    const response = await testApp.request("/api/recipes?cursor=not-base64", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "validation_failed",
+        message: "Request validation failed.",
+        details: {
+          fieldErrors: {
+            cursor: ["Invalid recipe list cursor."],
+          },
+          formErrors: [],
+        },
+      },
     });
   });
 

@@ -15,6 +15,8 @@ import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
   createRecipeRepository,
+  InvalidRecipeListCursorError,
+  type ListRecipesResult,
   normalizeRecipeSearchTerms,
   normalizeRecipeSource,
   type RecipeRepository,
@@ -163,12 +165,27 @@ export const createApp = (dependencies: AppDependencies = {}) => {
 
       const repository =
         dependencies.recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
-      const result = await repository.listRecipes({
-        userId: session.user.id,
-        searchTerms: normalizeRecipeSearchTerms(query.data.q),
-        limit: query.data.limit,
-        cursor: query.data.cursor ?? null,
-      });
+      let result: ListRecipesResult;
+
+      try {
+        result = await repository.listRecipes({
+          userId: session.user.id,
+          searchTerms: normalizeRecipeSearchTerms(query.data.q),
+          limit: query.data.limit,
+          cursor: query.data.cursor ?? null,
+        });
+      } catch (error) {
+        if (error instanceof InvalidRecipeListCursorError) {
+          return validationFailedResponse({
+            fieldErrors: {
+              cursor: [error.message],
+            },
+            formErrors: [],
+          });
+        }
+
+        throw error;
+      }
 
       return c.json(
         listRecipesResponseSchema.parse({

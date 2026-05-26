@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createRecipeRepository,
   createRecipeWithPlanLimitInSession,
+  InvalidRecipeListCursorError,
   type NewRecipeRecord,
   normalizeRecipeSource,
   type RecipeWriteSession,
@@ -112,6 +113,19 @@ describe("createRecipeWithPlanLimitInSession", () => {
 });
 
 describe("createRecipeRepository", () => {
+  it("不正な一覧cursorはDBに問い合わせる前に入力エラーとして扱う", async () => {
+    const repository = createRecipeRepository({} as never);
+
+    await expect(
+      repository.listRecipes({
+        userId: "user_123",
+        searchTerms: [],
+        limit: 20,
+        cursor: "not-base64",
+      }),
+    ).rejects.toThrow(InvalidRecipeListCursorError);
+  });
+
   it("単一SQLで保存できた行をcreatedとして返す", async () => {
     const recipe = createRecipe();
     const execute = vi.fn(async () => ({
