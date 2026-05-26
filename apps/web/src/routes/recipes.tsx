@@ -195,7 +195,7 @@ export const RecipesIndexRoute = () => {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadedPages, setLoadedPages] = useState<ListRecipesResponse[]>([]);
-  const { data, error, isFetching } = useQuery({
+  const { data, error, isFetching, refetch } = useQuery({
     queryKey: ["recipes", query, cursor],
     queryFn: () => fetchRecipes({ query, cursor }),
   });
@@ -211,12 +211,15 @@ export const RecipesIndexRoute = () => {
   };
 
   const loadNextPage = () => {
-    if (!data?.nextCursor) {
+    if (data?.nextCursor) {
+      setLoadedPages((pages) => pages.concat(data));
+      setCursor(data.nextCursor);
       return;
     }
 
-    setLoadedPages((pages) => pages.concat(data));
-    setCursor(data.nextCursor);
+    if (nextCursor) {
+      void refetch();
+    }
   };
 
   return (

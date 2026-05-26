@@ -130,8 +130,7 @@ describe("AppRouter", () => {
 
       return new Response(null, { status: 404 });
     });
-    window.history.pushState({}, "", "/recipes");
-    await renderApp();
+    await renderApp("/recipes");
 
     await expect(
       screen.findByRole("heading", { name: "Tomato pasta" }),
@@ -146,6 +145,79 @@ describe("AppRouter", () => {
         credentials: "include",
       });
     });
+  });
+
+  it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {
+    let nextPageRequests = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (input === "/api/recipes?limit=20") {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: "cursor_2",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (input === "/api/recipes?limit=20&cursor=cursor_2") {
+        nextPageRequests += 1;
+
+        if (nextPageRequests === 1) {
+          return new Response(null, { status: 500 });
+        }
+
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "recipe_456",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+    await renderApp("/recipes");
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "もっと見る" }));
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "レシピ一覧を読み込めませんでした。",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "もっと見る" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Potato salad" }),
+    ).resolves.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/recipes?limit=20&cursor=cursor_2", {
+      credentials: "include",
+    });
+    expect(nextPageRequests).toBe(2);
   });
 
   it("新規レシピを保存して詳細画面で閲覧する", async () => {
