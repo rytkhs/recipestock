@@ -19,6 +19,7 @@ export const startGoogleLogin = async () => {
   const data = await postJson("/api/auth/sign-in/social", {
     provider: "google",
     callbackURL: `${window.location.origin}/recipes`,
+    disableRedirect: true,
   });
 
   if (
