@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+const webUrlSchema = z.url().refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "http:" || protocol === "https:";
+});
+
 export const sourceTypeSchema = z.enum(["web", "youtube", "sns", "image", "manual", "other"]);
 
 export const sourcePlatformSchema = z.enum([
@@ -68,8 +73,8 @@ export const recipeDraftContentSchema = z.object({
 export const recipeSourceDraftSchema = z.object({
   sourceType: sourceTypeSchema,
   sourcePlatform: sourcePlatformSchema.optional().nullable(),
-  sourceUrl: z.url().optional().nullable(),
-  normalizedSourceUrl: z.url().optional().nullable(),
+  sourceUrl: webUrlSchema.optional().nullable(),
+  normalizedSourceUrl: webUrlSchema.optional().nullable(),
   sourceName: z.string().optional().nullable(),
 });
 

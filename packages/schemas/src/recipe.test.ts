@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createRecipeRequestSchema, recipeContentSchema, recipeDraftContentSchema } from "./recipe";
+import {
+  createRecipeRequestSchema,
+  recipeContentSchema,
+  recipeDraftContentSchema,
+  recipeSourceDraftSchema,
+} from "./recipe";
 
 describe("recipeContentSchema", () => {
   it("タイトルだけの保存済みレシピ本文を受け入れる", () => {
@@ -50,5 +55,40 @@ describe("recipeDraftContentSchema", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("recipeSourceDraftSchema", () => {
+  it("出典URLはhttp/httpsだけを受け入れる", () => {
+    expect(
+      recipeSourceDraftSchema.safeParse({
+        sourceType: "web",
+        sourceUrl: "https://example.com/recipes/tomato",
+        normalizedSourceUrl: "http://example.com/recipes/tomato",
+      }).success,
+    ).toBe(true);
+
+    for (const sourceUrl of [
+      "javascript:alert(1)",
+      "data:text/html,<svg onload=alert(1)>",
+      "ftp://example.com/recipes/tomato",
+      "mailto:recipe@example.com",
+    ]) {
+      expect(
+        recipeSourceDraftSchema.safeParse({
+          sourceType: "web",
+          sourceUrl,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("正規化済み出典URLもhttp/httpsだけを受け入れる", () => {
+    const result = recipeSourceDraftSchema.safeParse({
+      sourceType: "web",
+      normalizedSourceUrl: "javascript:alert(1)",
+    });
+
+    expect(result.success).toBe(false);
   });
 });
