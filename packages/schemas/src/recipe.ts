@@ -74,15 +74,18 @@ export const recipeSourceDraftSchema = z.object({
   sourceType: sourceTypeSchema,
   sourcePlatform: sourcePlatformSchema.optional().nullable(),
   sourceUrl: webUrlSchema.optional().nullable(),
-  normalizedSourceUrl: webUrlSchema.optional().nullable(),
   sourceName: z.string().optional().nullable(),
+});
+
+export const recipeSourceSchema = recipeSourceDraftSchema.extend({
+  normalizedSourceUrl: webUrlSchema.optional().nullable(),
 });
 
 export const recipeDetailSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   content: recipeContentSchema,
-  source: recipeSourceDraftSchema,
+  source: recipeSourceSchema,
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
   locked: z.literal(false),
@@ -109,6 +112,7 @@ export type RecipeDraftStep = z.infer<typeof recipeDraftStepSchema>;
 export type RecipeContent = z.infer<typeof recipeContentSchema>;
 export type RecipeDraftContent = z.infer<typeof recipeDraftContentSchema>;
 export type RecipeSourceDraft = z.infer<typeof recipeSourceDraftSchema>;
+export type RecipeSource = z.infer<typeof recipeSourceSchema>;
 export type RecipeDetail = z.infer<typeof recipeDetailSchema>;
 export type CreateRecipeRequest = z.infer<typeof createRecipeRequestSchema>;
 export type CreateRecipeResponse = z.infer<typeof createRecipeResponseSchema>;

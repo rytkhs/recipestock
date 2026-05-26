@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createRecipeRequestSchema,
+  createRecipeResponseSchema,
   recipeContentSchema,
   recipeDraftContentSchema,
   recipeSourceDraftSchema,
@@ -35,7 +36,6 @@ describe("recipeDraftContentSchema", () => {
         sourceType: "web",
         sourceName: "Example Kitchen",
         sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter",
-        normalizedSourceUrl: "https://example.com/recipes/tomato",
       },
     });
 
@@ -64,7 +64,6 @@ describe("recipeSourceDraftSchema", () => {
       recipeSourceDraftSchema.safeParse({
         sourceType: "web",
         sourceUrl: "https://example.com/recipes/tomato",
-        normalizedSourceUrl: "http://example.com/recipes/tomato",
       }).success,
     ).toBe(true);
 
@@ -83,12 +82,41 @@ describe("recipeSourceDraftSchema", () => {
     }
   });
 
-  it("正規化済み出典URLもhttp/httpsだけを受け入れる", () => {
+  it("保存リクエストの正規化済み出典URLは入力として採用しない", () => {
     const result = recipeSourceDraftSchema.safeParse({
       sourceType: "web",
       normalizedSourceUrl: "javascript:alert(1)",
     });
 
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ sourceType: "web" });
+  });
+});
+
+describe("createRecipeResponseSchema", () => {
+  it("保存済みレシピの正規化済み出典URLを返せる", () => {
+    const result = createRecipeResponseSchema.safeParse({
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          ingredientGroups: [],
+          steps: [],
+        },
+        source: {
+          sourceType: "web",
+          sourcePlatform: null,
+          sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter",
+          normalizedSourceUrl: "https://example.com/recipes/tomato",
+          sourceName: "Example Kitchen",
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    });
+
+    expect(result.success).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { type DbClient, recipes } from "@recipestock/db";
+import { appUsers, type DbClient, recipes } from "@recipestock/db";
 import {
   type RecipeContent,
   type RecipeDetail,
@@ -8,8 +8,8 @@ import {
   type SourcePlatform,
   type SourceType,
 } from "@recipestock/schemas";
-import { buildSearchText, normalizeUrl } from "@recipestock/shared";
-import { and, eq } from "drizzle-orm";
+import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
+import { and, count, eq } from "drizzle-orm";
 
 export type RecipeRecord = {
   id: string;
@@ -28,8 +28,29 @@ export type RecipeRecord = {
 
 export type NewRecipeRecord = RecipeRecord;
 
+export type CreateRecipeResult =
+  | {
+      status: "created";
+      recipe: RecipeRecord;
+    }
+  | {
+      status: "limitExceeded";
+    };
+
+type LockedAppUser = {
+  userId: string;
+  plan: Plan;
+};
+
+export type RecipeWriteSession = {
+  ensureAppUser(userId: string): Promise<void>;
+  lockAppUser(userId: string): Promise<LockedAppUser | null>;
+  countRecipes(userId: string): Promise<number>;
+  insertRecipe(recipe: NewRecipeRecord): Promise<RecipeRecord>;
+};
+
 export type RecipeRepository = {
-  createRecipe(recipe: NewRecipeRecord): Promise<RecipeRecord>;
+  createRecipeEnforcingPlanLimit(recipe: NewRecipeRecord): Promise<CreateRecipeResult>;
   getRecipe(userId: string, recipeId: string): Promise<RecipeRecord | null>;
 };
 
@@ -87,7 +108,7 @@ export const normalizeRecipeSource = (source: RecipeSourceDraft): NormalizedReci
     sourceType: source.sourceType,
     sourcePlatform: source.sourcePlatform ?? null,
     sourceUrl,
-    normalizedSourceUrl: source.normalizedSourceUrl ?? (sourceUrl ? normalizeUrl(sourceUrl) : null),
+    normalizedSourceUrl: sourceUrl ? normalizeUrl(sourceUrl) : null,
     sourceName: source.sourceName ?? null,
   };
 };
@@ -125,31 +146,90 @@ export const toRecipeDetail = (recipe: RecipeRecord): RecipeDetail => ({
   locked: false,
 });
 
-export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
-  async createRecipe(recipe) {
-    const [row] = await db
-      .insert(recipes)
-      .values({
-        id: recipe.id,
-        userId: recipe.userId,
-        title: recipe.title,
-        content: recipe.content,
-        sourceType: recipe.sourceType,
-        sourcePlatform: recipe.sourcePlatform,
-        sourceUrl: recipe.sourceUrl,
-        normalizedSourceUrl: recipe.normalizedSourceUrl,
-        sourceName: recipe.sourceName,
-        searchText: recipe.searchText,
-        createdAt: recipe.createdAt,
-        updatedAt: recipe.updatedAt,
-      })
-      .returning();
+export const createRecipeWithPlanLimitInSession = async (
+  session: RecipeWriteSession,
+  recipe: NewRecipeRecord,
+): Promise<CreateRecipeResult> => {
+  await session.ensureAppUser(recipe.userId);
 
-    if (!row) {
-      throw new Error("Failed to create recipe.");
+  const appUser = await session.lockAppUser(recipe.userId);
+
+  if (!appUser) {
+    throw new Error(`App user was not created for ${recipe.userId}`);
+  }
+
+  if (appUser.plan === "free") {
+    const recipeCount = await session.countRecipes(recipe.userId);
+
+    if (recipeCount >= PLAN_LIMITS.free.savedRecipes) {
+      return { status: "limitExceeded" };
     }
+  }
 
-    return mapRecipeRow(row);
+  return {
+    status: "created",
+    recipe: await session.insertRecipe(recipe),
+  };
+};
+
+export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
+  async createRecipeEnforcingPlanLimit(recipe) {
+    return db.transaction(async (tx) => {
+      return createRecipeWithPlanLimitInSession(
+        {
+          async ensureAppUser(userId) {
+            await tx.insert(appUsers).values({ userId }).onConflictDoNothing();
+          },
+          async lockAppUser(userId) {
+            const [appUser] = await tx
+              .select({
+                userId: appUsers.userId,
+                plan: appUsers.plan,
+              })
+              .from(appUsers)
+              .where(eq(appUsers.userId, userId))
+              .for("update")
+              .limit(1);
+
+            return appUser ?? null;
+          },
+          async countRecipes(userId) {
+            const [recipeCount] = await tx
+              .select({ value: count() })
+              .from(recipes)
+              .where(eq(recipes.userId, userId));
+
+            return recipeCount?.value ?? 0;
+          },
+          async insertRecipe(recipeToInsert) {
+            const [row] = await tx
+              .insert(recipes)
+              .values({
+                id: recipeToInsert.id,
+                userId: recipeToInsert.userId,
+                title: recipeToInsert.title,
+                content: recipeToInsert.content,
+                sourceType: recipeToInsert.sourceType,
+                sourcePlatform: recipeToInsert.sourcePlatform,
+                sourceUrl: recipeToInsert.sourceUrl,
+                normalizedSourceUrl: recipeToInsert.normalizedSourceUrl,
+                sourceName: recipeToInsert.sourceName,
+                searchText: recipeToInsert.searchText,
+                createdAt: recipeToInsert.createdAt,
+                updatedAt: recipeToInsert.updatedAt,
+              })
+              .returning();
+
+            if (!row) {
+              throw new Error("Failed to create recipe.");
+            }
+
+            return mapRecipeRow(row);
+          },
+        },
+        recipe,
+      );
+    });
   },
   async getRecipe(userId, recipeId) {
     const [row] = await db

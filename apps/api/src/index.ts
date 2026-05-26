@@ -107,33 +107,12 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         return validationFailedResponse(request.error.flatten());
       }
 
-      const db =
-        dependencies.meRepository || dependencies.recipeRepository
-          ? null
-          : createDb(c.env.DATABASE_URL);
-      const meRepository =
-        dependencies.meRepository ?? createMeRepository(db ?? createDb(c.env.DATABASE_URL));
-      const appUser = await meRepository.getOrCreateAppUser(session.user.id);
-      const recipeCount = await meRepository.countRecipes(session.user.id);
-
-      if (appUser.plan === "free" && recipeCount >= 5) {
-        return Response.json(
-          {
-            error: {
-              code: "recipe_limit_exceeded",
-              message: "Recipe limit exceeded.",
-            },
-          },
-          { status: 403 },
-        );
-      }
-
       const repository =
-        dependencies.recipeRepository ?? createRecipeRepository(db ?? createDb(c.env.DATABASE_URL));
+        dependencies.recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
       const content = toRecipeContent(request.data.content);
       const source = normalizeRecipeSource(request.data.source);
       const now = new Date();
-      const recipe = await repository.createRecipe({
+      const result = await repository.createRecipeEnforcingPlanLimit({
         id: dependencies.createRecipeId?.() ?? createDefaultRecipeId(),
         userId: session.user.id,
         title: content.title,
@@ -147,6 +126,20 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         createdAt: now,
         updatedAt: now,
       });
+
+      if (result.status === "limitExceeded") {
+        return Response.json(
+          {
+            error: {
+              code: "recipe_limit_exceeded",
+              message: "Recipe limit exceeded.",
+            },
+          },
+          { status: 403 },
+        );
+      }
+
+      const recipe = result.recipe;
 
       return c.json(createRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }), 201);
     })

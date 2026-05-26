@@ -104,12 +104,15 @@ describe("API", () => {
         getAiUsage: async () => null,
       },
       recipeRepository: {
-        createRecipe: async (recipe) => {
+        createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
           return {
-            ...recipe,
-            createdAt: new Date("2026-05-26T00:00:00.000Z"),
-            updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            status: "created",
+            recipe: {
+              ...recipe,
+              createdAt: new Date("2026-05-26T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            },
           };
         },
         getRecipe: async () => null,
@@ -179,12 +182,15 @@ describe("API", () => {
         getAiUsage: async () => null,
       },
       recipeRepository: {
-        createRecipe: async (recipe) => {
+        createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
           return {
-            ...recipe,
-            createdAt: new Date("2026-05-26T00:00:00.000Z"),
-            updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            status: "created",
+            recipe: {
+              ...recipe,
+              createdAt: new Date("2026-05-26T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            },
           };
         },
         getRecipe: async () => null,
@@ -240,6 +246,153 @@ describe("API", () => {
     );
   });
 
+  it("正規化済み出典URLが送られてもsourceUrlから再計算して保存する", async () => {
+    const savedRecipes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async (recipe) => {
+          savedRecipes.push(recipe);
+          return {
+            status: "created",
+            recipe: {
+              ...recipe,
+              createdAt: new Date("2026-05-26T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            },
+          };
+        },
+        getRecipe: async () => null,
+      },
+      createRecipeId: () => "recipe_123",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: { title: "Tomato pasta" },
+          source: {
+            sourceType: "web",
+            sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
+            normalizedSourceUrl: "https://attacker.example/wrong",
+          },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(savedRecipes).toEqual([
+      expect.objectContaining({
+        sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
+        normalizedSourceUrl: "https://example.com/recipes/tomato",
+      }),
+    ]);
+    await expect(response.json()).resolves.toMatchObject({
+      recipe: {
+        source: {
+          normalizedSourceUrl: "https://example.com/recipes/tomato",
+        },
+      },
+    });
+  });
+
+  it("Freeユーザーが保存上限到達済みならレシピを保存しない", async () => {
+    const savedRecipes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => ({ status: "limitExceeded" }),
+        getRecipe: async () => null,
+      },
+      createRecipeId: () => "recipe_123",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: { title: "Tomato pasta" },
+          source: { sourceType: "manual" },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "recipe_limit_exceeded",
+        message: "Recipe limit exceeded.",
+      },
+    });
+    expect(savedRecipes).toEqual([]);
+  });
+
+  it("上限付き保存処理が成功した場合は保存済みレシピを返す", async () => {
+    const savedRecipes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async (recipe) => {
+          savedRecipes.push(recipe);
+          return {
+            status: "created",
+            recipe: {
+              ...recipe,
+              createdAt: new Date("2026-05-26T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            },
+          };
+        },
+        getRecipe: async () => null,
+      },
+      createRecipeId: () => "recipe_123",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: { title: "Tomato pasta" },
+          source: { sourceType: "manual" },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(savedRecipes).toHaveLength(1);
+  });
+
   it("保存済みレシピを詳細画面用に取得できる", async () => {
     const testApp = createApp({
       auth: {
@@ -249,7 +402,7 @@ describe("API", () => {
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },
       recipeRepository: {
-        createRecipe: async () => {
+        createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
         },
         getRecipe: async (userId, recipeId) => ({
