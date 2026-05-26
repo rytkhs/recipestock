@@ -102,6 +102,28 @@ nav a.active {
   font: inherit;
 }
 
+.login-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.text-button {
+  border: 0;
+  padding: 0;
+  color: #256f5a;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.success-message {
+  color: #256f5a;
+  font-weight: 600;
+}
+
 .primary-button,
 .secondary-button {
   min-height: 44px;

@@ -33,16 +33,45 @@ export const startGoogleLogin = async () => {
   }
 };
 
-export const sendEmailLoginCode = async (email: string) => {
-  await postJson("/api/auth/email-otp/send-verification-otp", {
+const buildInternalName = (email: string) => {
+  const localPart = email.split("@")[0]?.trim();
+  return localPart && localPart.length > 0 ? localPart : "user";
+};
+
+export const signInWithEmailPassword = async (email: string, password: string) => {
+  await postJson("/api/auth/sign-in/email", {
     email,
-    type: "sign-in",
+    password,
+    callbackURL: `${window.location.origin}/recipes`,
   });
 };
 
-export const signInWithEmailCode = async (email: string, otp: string) => {
-  await postJson("/api/auth/sign-in/email-otp", {
+export const signUpWithEmailPassword = async (email: string, password: string) => {
+  await postJson("/api/auth/sign-up/email", {
+    name: buildInternalName(email),
+    email,
+    password,
+    callbackURL: `${window.location.origin}/recipes`,
+  });
+};
+
+export const verifySignUpOtp = async (email: string, otp: string) => {
+  await postJson("/api/auth/email-otp/verify-email", {
     email,
     otp,
+  });
+};
+
+export const requestPasswordResetOtp = async (email: string) => {
+  await postJson("/api/auth/email-otp/request-password-reset", {
+    email,
+  });
+};
+
+export const resetPasswordWithOtp = async (email: string, otp: string, password: string) => {
+  await postJson("/api/auth/email-otp/reset-password", {
+    email,
+    otp,
+    password,
   });
 };

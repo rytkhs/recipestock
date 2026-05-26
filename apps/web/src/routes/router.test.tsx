@@ -64,17 +64,97 @@ describe("AppRouter", () => {
     });
   });
 
-  it("ログインルートからメールコードログインを開始する", async () => {
+  it("ログインルートからメールとパスワードでログインする", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ token: "session_token" }), { status: 200 }));
+    await renderApp("/login");
+
+    await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
+    await userEvent.type(screen.getByLabelText("パスワード"), "password123");
+    await userEvent.click(screen.getByRole("button", { name: "ログイン" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/sign-in/email",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      email: "chef@example.com",
+      password: "password123",
+    });
+  });
+
+  it("ログインルートから新規登録してOTP検証に進む", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ token: null }), { status: 200 }));
+    await renderApp("/login");
+
+    await userEvent.click(await screen.findByRole("button", { name: "アカウントを作成" }));
+    await userEvent.type(screen.getByLabelText("メールアドレス"), "chef@example.com");
+    await userEvent.type(screen.getByLabelText("パスワード"), "password123");
+    await userEvent.click(screen.getByRole("button", { name: "登録してコードを送信" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/sign-up/email",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      name: "chef",
+      email: "chef@example.com",
+      password: "password123",
+    });
+    await expect(screen.findByLabelText("確認コード")).resolves.toBeInTheDocument();
+  });
+
+  it("ログインルートで登録OTPを検証する", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     await renderApp("/login");
 
-    await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
-    await userEvent.click(screen.getByRole("button", { name: "コードを送信" }));
+    await userEvent.click(await screen.findByRole("button", { name: "アカウントを作成" }));
+    await userEvent.type(screen.getByLabelText("メールアドレス"), "chef@example.com");
+    await userEvent.type(screen.getByLabelText("パスワード"), "password123");
+    await userEvent.click(screen.getByRole("button", { name: "登録してコードを送信" }));
+    await userEvent.type(await screen.findByLabelText("確認コード"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: "登録を完了" }));
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/auth/email-otp/send-verification-otp",
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/auth/email-otp/verify-email",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      email: "chef@example.com",
+      otp: "123456",
+    });
+  });
+
+  it("ログインルートでOTP方式のパスワードリセットを実行する", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    await renderApp("/login");
+
+    await userEvent.click(await screen.findByRole("button", { name: "パスワードを忘れた場合" }));
+    await userEvent.type(screen.getByLabelText("メールアドレス"), "chef@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "再設定コードを送信" }));
+    await userEvent.type(await screen.findByLabelText("確認コード"), "123456");
+    await userEvent.type(screen.getByLabelText("新しいパスワード"), "newpassword123");
+    await userEvent.click(screen.getByRole("button", { name: "パスワードを再設定" }));
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/auth/email-otp/request-password-reset",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -82,7 +162,19 @@ describe("AppRouter", () => {
     );
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       email: "chef@example.com",
-      type: "sign-in",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/auth/email-otp/reset-password",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      email: "chef@example.com",
+      otp: "123456",
+      password: "newpassword123",
     });
   });
 

@@ -29,6 +29,16 @@ const createAuth = (env: Bindings) => {
       provider: "pg",
       schema,
     }),
+    emailAndPassword: {
+      enabled: true,
+      requireEmailVerification: true,
+      minPasswordLength: 8,
+      maxPasswordLength: 128,
+      revokeSessionsOnPasswordReset: true,
+    },
+    emailVerification: {
+      autoSignInAfterVerification: true,
+    },
     socialProviders:
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
         ? {
@@ -41,12 +51,15 @@ const createAuth = (env: Bindings) => {
     plugins: [
       emailOTP({
         otpLength: 6,
+        overrideDefaultEmailVerification: true,
         async sendVerificationOTP({ email, otp, type }) {
           await resend.emails.send({
             from: env.AUTH_EMAIL_FROM,
             to: email,
             subject:
-              type === "sign-in" ? "Recipe Stock login code" : "Recipe Stock verification code",
+              type === "forget-password"
+                ? "Recipe Stock password reset code"
+                : "Recipe Stock verification code",
             text: `Your Recipe Stock code is ${otp}.`,
           });
         },
