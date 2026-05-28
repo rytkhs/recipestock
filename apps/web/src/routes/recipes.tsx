@@ -1,192 +1,46 @@
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   type CreateRecipeResponse,
-  createRecipeRequestSchema,
   type ListRecipesResponse,
   type RecipeDetail,
 } from "@recipestock/schemas";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
-import { z } from "zod";
+import {
+  createEmptyRecipeDraftFormValues,
+  formValuesToCreateRecipeRequest,
+  RecipeDraftForm,
+  type RecipeDraftFormValues,
+} from "../features/recipe-draft";
+import { recipesQueryKeys } from "../features/recipes";
+import { ApiClientError, api, parseApiResponse } from "../lib/api";
 
-const recipeFormSchema = z.object({
-  title: z.string().min(1),
-  servingsText: z.string().optional(),
-  sourceName: z.string().optional(),
-  sourceUrl: z.string().optional(),
-  note: z.string().optional(),
-  ingredientGroups: z.array(
-    z.object({
-      label: z.string().optional(),
-      ingredients: z.array(
-        z.object({
-          name: z.string().optional(),
-          amount: z.string().optional(),
-        }),
-      ),
+const postRecipe = async (values: RecipeDraftFormValues) => {
+  return parseApiResponse<CreateRecipeResponse>(
+    api.api.recipes.$post({
+      json: formValuesToCreateRecipeRequest(values),
     }),
-  ),
-  steps: z.array(z.object({ text: z.string().optional() })),
-});
-
-type RecipeFormValues = z.infer<typeof recipeFormSchema>;
-
-const emptyIngredientGroup = {
-  label: "",
-  ingredients: [{ name: "", amount: "" }],
-};
-
-const emptyStep = { text: "" };
-
-const compactText = (value?: string) => {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const buildCreateRecipeRequest = (values: RecipeFormValues) => {
-  const sourceUrl = compactText(values.sourceUrl);
-  const sourceName = compactText(values.sourceName);
-
-  return createRecipeRequestSchema.parse({
-    content: {
-      title: values.title.trim(),
-      servingsText: compactText(values.servingsText),
-      ingredientGroups: values.ingredientGroups
-        .map((group) => ({
-          label: compactText(group.label),
-          ingredients: group.ingredients
-            .map((ingredient) => ({
-              name: ingredient.name?.trim() ?? "",
-              amount: ingredient.amount?.trim() ?? "",
-            }))
-            .filter((ingredient) => ingredient.name),
-        }))
-        .filter((group) => group.label || group.ingredients.length > 0),
-      steps: values.steps
-        .map((step) => ({ text: step.text?.trim() ?? "" }))
-        .filter((step) => step.text),
-      note: compactText(values.note),
-    },
-    source: {
-      sourceType: sourceUrl ? "web" : sourceName ? "other" : "manual",
-      sourceName,
-      sourceUrl,
-    },
-  });
-};
-
-const postRecipe = async (values: RecipeFormValues) => {
-  const response = await fetch("/api/recipes", {
-    method: "POST",
-    credentials: "include",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(buildCreateRecipeRequest(values)),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to save recipe.");
-  }
-
-  return (await response.json()) as CreateRecipeResponse;
+  );
 };
 
 const fetchRecipe = async (recipeId: string) => {
-  const response = await fetch(`/api/recipes/${recipeId}`, {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to load recipe.");
-  }
-
-  const body = (await response.json()) as { recipe: RecipeDetail };
+  const body = await parseApiResponse<{ recipe: RecipeDetail }>(
+    api.api.recipes[":recipeId"].$get({
+      param: { recipeId },
+    }),
+  );
   return body.recipe;
 };
 
 const fetchRecipes = async ({ cursor, query }: { cursor?: string | null; query?: string }) => {
-  const params = new URLSearchParams();
-  params.set("limit", "20");
-
-  if (query) {
-    params.set("q", query);
-  }
-
-  if (cursor) {
-    params.set("cursor", cursor);
-  }
-
-  const response = await fetch(`/api/recipes?${params.toString()}`, {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to load recipes.");
-  }
-
-  return (await response.json()) as ListRecipesResponse;
-};
-
-const IngredientGroupFields = ({
-  control,
-  register,
-  groupIndex,
-}: {
-  control: ReturnType<typeof useForm<RecipeFormValues>>["control"];
-  register: ReturnType<typeof useForm<RecipeFormValues>>["register"];
-  groupIndex: number;
-}) => {
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: `ingredientGroups.${groupIndex}.ingredients`,
-  });
-
-  return (
-    <fieldset className="form-section">
-      <legend>材料グループ</legend>
-      <label htmlFor={`ingredient-group-${groupIndex}-label`}>グループ名</label>
-      <input
-        id={`ingredient-group-${groupIndex}-label`}
-        {...register(`ingredientGroups.${groupIndex}.label`)}
-      />
-
-      <div className="stack">
-        {fields.map((field, ingredientIndex) => (
-          <div className="inline-fields" key={field.id}>
-            <label>
-              材料名
-              <input
-                {...register(`ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.name`)}
-              />
-            </label>
-            <label>
-              分量
-              <input
-                {...register(
-                  `ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.amount`,
-                )}
-              />
-            </label>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => remove(ingredientIndex)}
-            >
-              削除
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <button
-        className="secondary-button"
-        type="button"
-        onClick={() => append({ name: "", amount: "" })}
-      >
-        材料を追加
-      </button>
-    </fieldset>
+  return parseApiResponse<ListRecipesResponse>(
+    api.api.recipes.$get({
+      query: {
+        limit: "20",
+        ...(query ? { q: query } : {}),
+        ...(cursor ? { cursor } : {}),
+      },
+    }),
   );
 };
 
@@ -196,7 +50,7 @@ export const RecipesIndexRoute = () => {
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadedPages, setLoadedPages] = useState<ListRecipesResponse[]>([]);
   const { data, error, isFetching, refetch } = useQuery({
-    queryKey: ["recipes", query, cursor],
+    queryKey: recipesQueryKeys.list(query, cursor),
     queryFn: () => fetchRecipes({ query, cursor }),
   });
   const activePages = cursor ? loadedPages.concat(data ? [data] : []) : data ? [data] : [];
@@ -278,102 +132,31 @@ export const RecipesIndexRoute = () => {
 export const NewRecipeRoute = () => {
   const navigate = useNavigate();
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const { control, formState, handleSubmit, register } = useForm<RecipeFormValues>({
-    resolver: zodResolver(recipeFormSchema),
-    defaultValues: {
-      title: "",
-      servingsText: "",
-      sourceName: "",
-      sourceUrl: "",
-      note: "",
-      ingredientGroups: [emptyIngredientGroup],
-      steps: [emptyStep],
-    },
-  });
-  const ingredientGroups = useFieldArray({ control, name: "ingredientGroups" });
-  const steps = useFieldArray({ control, name: "steps" });
 
-  const onSubmit = handleSubmit(async (values) => {
+  const onSubmit = async (values: RecipeDraftFormValues) => {
     setSubmitError(null);
 
     try {
       const response = await postRecipe(values);
       await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
-    } catch {
-      setSubmitError("レシピを保存できませんでした。");
+    } catch (error) {
+      setSubmitError(
+        error instanceof ApiClientError && error.code === "recipe_limit_exceeded"
+          ? "保存できるレシピ数の上限に達しています。"
+          : "レシピを保存できませんでした。",
+      );
     }
-  });
+  };
 
   return (
     <section className="page recipe-form-page">
       <h1>レシピ作成</h1>
-      <form className="recipe-form" onSubmit={(event) => void onSubmit(event)}>
-        <label htmlFor="recipe-title">タイトル</label>
-        <input id="recipe-title" required {...register("title")} />
-
-        <label htmlFor="recipe-servings">人数</label>
-        <input id="recipe-servings" {...register("servingsText")} />
-
-        {ingredientGroups.fields.map((field, groupIndex) => (
-          <IngredientGroupFields
-            control={control}
-            groupIndex={groupIndex}
-            key={field.id}
-            register={register}
-          />
-        ))}
-
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={() => ingredientGroups.append(emptyIngredientGroup)}
-        >
-          グループを追加
-        </button>
-
-        <fieldset className="form-section">
-          <legend>手順</legend>
-          <div className="stack">
-            {steps.fields.map((field, stepIndex) => (
-              <div className="inline-fields" key={field.id}>
-                <label>
-                  手順
-                  <textarea rows={3} {...register(`steps.${stepIndex}.text`)} />
-                </label>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => steps.remove(stepIndex)}
-                >
-                  削除
-                </button>
-              </div>
-            ))}
-          </div>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => steps.append(emptyStep)}
-          >
-            手順を追加
-          </button>
-        </fieldset>
-
-        <label htmlFor="recipe-note">メモ</label>
-        <textarea id="recipe-note" rows={4} {...register("note")} />
-
-        <label htmlFor="recipe-source-name">出典名</label>
-        <input id="recipe-source-name" {...register("sourceName")} />
-
-        <label htmlFor="recipe-source-url">元URL</label>
-        <input id="recipe-source-url" inputMode="url" type="url" {...register("sourceUrl")} />
-
-        <button className="primary-button" disabled={formState.isSubmitting} type="submit">
-          保存
-        </button>
-
-        {submitError ? <p role="alert">{submitError}</p> : null}
-      </form>
+      <RecipeDraftForm
+        defaultValues={createEmptyRecipeDraftFormValues()}
+        submitError={submitError}
+        submitLabel="保存"
+        onSubmit={onSubmit}
+      />
     </section>
   );
 };
@@ -385,7 +168,7 @@ export const RecipeDetailRoute = () => {
     error,
     isLoading,
   } = useQuery({
-    queryKey: ["recipe", recipeId],
+    queryKey: recipesQueryKeys.detail(recipeId),
     queryFn: () => fetchRecipe(recipeId),
   });
 
