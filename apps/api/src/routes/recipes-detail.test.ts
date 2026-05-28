@@ -1,0 +1,123 @@
+import { describe, expect, it } from "vitest";
+import { createApp } from "../index";
+import { unusedListRecipes } from "./test-helpers";
+
+describe("Recipe detail routes", () => {
+  it("レシピ詳細取得で未ログイン時にunauthorizedを返す", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => null,
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => {
+          throw new Error("should not get a recipe without a session");
+        },
+        listRecipes: unusedListRecipes,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/recipe_123", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "unauthorized",
+        message: "Authentication is required.",
+      },
+    });
+  });
+
+  it("保存済みレシピを詳細画面用に取得できる", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async (userId, recipeId) => ({
+          id: recipeId,
+          userId,
+          title: "Tomato pasta",
+          content: {
+            title: "Tomato pasta",
+            servingsText: "2人分",
+            ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+            steps: [{ text: "煮詰める" }],
+            note: "仕上げにオリーブオイル。",
+          },
+          sourceType: "web",
+          sourcePlatform: null,
+          sourceUrl: "https://example.com/recipes/tomato",
+          normalizedSourceUrl: "https://example.com/recipes/tomato",
+          sourceName: "Example Kitchen",
+          searchText: "tomato pasta",
+          createdAt: new Date("2026-05-26T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+        }),
+        listRecipes: unusedListRecipes,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/recipe_123", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          servingsText: "2人分",
+        },
+        source: {
+          sourceType: "web",
+          sourceName: "Example Kitchen",
+        },
+        locked: false,
+      },
+    });
+  });
+
+  it("保存済みレシピが存在しない場合はnot_foundを返す", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/missing_recipe", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "not_found",
+        message: "Recipe was not found.",
+      },
+    });
+  });
+});
