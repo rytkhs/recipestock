@@ -1,6 +1,6 @@
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useFieldArray, useForm } from "react-hook-form";
+import { type FieldPathByValue, useController, useFieldArray, useForm } from "react-hook-form";
 import {
   createEmptyIngredientGroup,
   createEmptyStep,
@@ -16,15 +16,68 @@ type RecipeDraftFormProps = {
 };
 
 type RecipeDraftFormControl = ReturnType<typeof useForm<RecipeDraftFormValues>>["control"];
-type RecipeDraftFormRegister = ReturnType<typeof useForm<RecipeDraftFormValues>>["register"];
+type RecipeDraftTextFieldPath = FieldPathByValue<RecipeDraftFormValues, string | undefined>;
+
+const FormInput = ({
+  control,
+  isRequired,
+  label,
+  name,
+}: {
+  control: RecipeDraftFormControl;
+  isRequired?: boolean;
+  label: string;
+  name: RecipeDraftTextFieldPath;
+}) => {
+  const { field } = useController({ control, name });
+
+  return (
+    <TextField isRequired={isRequired}>
+      <Label>{label}</Label>
+      <Input
+        name={field.name}
+        ref={field.ref}
+        value={field.value ?? ""}
+        onBlur={field.onBlur}
+        onChange={(event) => field.onChange(event.target.value)}
+      />
+    </TextField>
+  );
+};
+
+const FormTextArea = ({
+  control,
+  label,
+  name,
+  rows,
+}: {
+  control: RecipeDraftFormControl;
+  label: string;
+  name: RecipeDraftTextFieldPath;
+  rows: number;
+}) => {
+  const { field } = useController({ control, name });
+
+  return (
+    <TextField>
+      <Label>{label}</Label>
+      <TextArea
+        name={field.name}
+        ref={field.ref}
+        rows={rows}
+        value={field.value ?? ""}
+        onBlur={field.onBlur}
+        onChange={(event) => field.onChange(event.target.value)}
+      />
+    </TextField>
+  );
+};
 
 const IngredientGroupFields = ({
   control,
-  register,
   groupIndex,
 }: {
   control: RecipeDraftFormControl;
-  register: RecipeDraftFormRegister;
   groupIndex: number;
 }) => {
   const { fields, append, remove } = useFieldArray({
@@ -35,10 +88,11 @@ const IngredientGroupFields = ({
   return (
     <fieldset className="grid min-w-0 gap-4 rounded-lg border border-border bg-surface p-4">
       <legend className="px-1 font-semibold">材料グループ</legend>
-      <TextField>
-        <Label>グループ名</Label>
-        <Input {...register(`ingredientGroups.${groupIndex}.label`)} />
-      </TextField>
+      <FormInput
+        control={control}
+        label="グループ名"
+        name={`ingredientGroups.${groupIndex}.label`}
+      />
 
       <div className="grid gap-3">
         {fields.map((field, ingredientIndex) => (
@@ -46,20 +100,16 @@ const IngredientGroupFields = ({
             className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)_auto] sm:items-end"
             key={field.id}
           >
-            <TextField>
-              <Label>材料名</Label>
-              <Input
-                {...register(`ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.name`)}
-              />
-            </TextField>
-            <TextField>
-              <Label>分量</Label>
-              <Input
-                {...register(
-                  `ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.amount`,
-                )}
-              />
-            </TextField>
+            <FormInput
+              control={control}
+              label="材料名"
+              name={`ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.name`}
+            />
+            <FormInput
+              control={control}
+              label="分量"
+              name={`ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.amount`}
+            />
             <Button variant="secondary" onPress={() => remove(ingredientIndex)}>
               削除
             </Button>
@@ -84,7 +134,7 @@ export const RecipeDraftForm = ({
   submitError,
   onSubmit,
 }: RecipeDraftFormProps) => {
-  const { control, formState, handleSubmit, register } = useForm<RecipeDraftFormValues>({
+  const { control, formState, handleSubmit } = useForm<RecipeDraftFormValues>({
     resolver: zodResolver(recipeDraftFormSchema),
     defaultValues,
   });
@@ -94,23 +144,12 @@ export const RecipeDraftForm = ({
 
   return (
     <form className="mt-6 grid gap-4" onSubmit={(event) => void handleFormSubmit(event)}>
-      <TextField isRequired>
-        <Label>タイトル</Label>
-        <Input {...register("title")} />
-      </TextField>
+      <FormInput control={control} isRequired label="タイトル" name="title" />
 
-      <TextField>
-        <Label>人数</Label>
-        <Input {...register("servingsText")} />
-      </TextField>
+      <FormInput control={control} label="人数" name="servingsText" />
 
       {ingredientGroups.fields.map((field, groupIndex) => (
-        <IngredientGroupFields
-          control={control}
-          groupIndex={groupIndex}
-          key={field.id}
-          register={register}
-        />
+        <IngredientGroupFields control={control} groupIndex={groupIndex} key={field.id} />
       ))}
 
       <Button
@@ -129,10 +168,12 @@ export const RecipeDraftForm = ({
               className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
               key={field.id}
             >
-              <TextField>
-                <Label>手順</Label>
-                <TextArea rows={3} {...register(`steps.${stepIndex}.text`)} />
-              </TextField>
+              <FormTextArea
+                control={control}
+                label="手順"
+                name={`steps.${stepIndex}.text`}
+                rows={3}
+              />
               <Button variant="secondary" onPress={() => steps.remove(stepIndex)}>
                 削除
               </Button>
@@ -148,20 +189,7 @@ export const RecipeDraftForm = ({
         </Button>
       </fieldset>
 
-      <TextField>
-        <Label>メモ</Label>
-        <TextArea rows={4} {...register("note")} />
-      </TextField>
-
-      <TextField>
-        <Label>出典名</Label>
-        <Input {...register("sourceName")} />
-      </TextField>
-
-      <TextField type="url">
-        <Label>元URL</Label>
-        <Input inputMode="url" {...register("sourceUrl")} />
-      </TextField>
+      <FormTextArea control={control} label="メモ" name="note" rows={4} />
 
       <Button isDisabled={formState.isSubmitting} type="submit" variant="primary">
         {submitLabel}

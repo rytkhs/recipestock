@@ -15,7 +15,7 @@ import { signOut, useAuthSession } from "../lib/auth";
 import { clearUserScopedCache } from "../lib/query-cache";
 import { useViewer } from "../lib/viewer";
 import { LoginRoute } from "./login";
-import { NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
+import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
 
 const LoadingPage = () => (
   <section className="mx-auto w-full max-w-5xl px-6 py-10">
@@ -173,6 +173,16 @@ const recipeDetailRoute = createRoute({
   ),
 });
 
+const editRecipeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recipes/$recipeId/edit",
+  component: () => (
+    <RequireViewer>
+      <EditRecipeRoute />
+    </RequireViewer>
+  ),
+});
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
@@ -213,6 +223,7 @@ const routeTree = rootRoute.addChildren([
   recipesRoute,
   newRecipeRoute,
   recipeDetailRoute,
+  editRecipeRoute,
   importRoute,
   settingsRoute,
 ]);

@@ -165,9 +165,9 @@ describe("RecipesRoute", () => {
         source: {
           sourceType: "manual",
           sourcePlatform: null,
-          sourceUrl: "https://example.com/recipes/tomato",
-          normalizedSourceUrl: "https://example.com/recipes/tomato",
-          sourceName: "Example Kitchen",
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
@@ -197,8 +197,6 @@ describe("RecipesRoute", () => {
     await userEvent.type(screen.getByLabelText("分量"), "1缶");
     await userEvent.type(screen.getByLabelText("手順"), "煮詰める");
     await userEvent.type(screen.getByLabelText("メモ"), "仕上げにオリーブオイル。");
-    await userEvent.type(screen.getByLabelText("出典名"), "Example Kitchen");
-    await userEvent.type(screen.getByLabelText("元URL"), "https://example.com/recipes/tomato");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
@@ -221,8 +219,6 @@ describe("RecipesRoute", () => {
       },
       source: {
         sourceType: "manual",
-        sourceName: "Example Kitchen",
-        sourceUrl: "https://example.com/recipes/tomato",
       },
     });
     await expect(
@@ -230,6 +226,160 @@ describe("RecipesRoute", () => {
     ).resolves.toBeInTheDocument();
     expect(screen.getByText("トマト缶 1缶")).toBeInTheDocument();
     expect(screen.getByText("煮詰める")).toBeInTheDocument();
+  });
+
+  it("詳細画面から編集して本文だけを更新できる", async () => {
+    const recipeResponse = {
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          servingsText: "2人分",
+          ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+          steps: [{ text: "煮詰める" }],
+          note: "仕上げにオリーブオイル。",
+        },
+        source: {
+          sourceType: "web",
+          sourcePlatform: null,
+          sourceUrl: "https://example.com/recipes/tomato",
+          normalizedSourceUrl: "https://example.com/recipes/tomato",
+          sourceName: "Example Kitchen",
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    };
+    const updatedRecipeResponse = {
+      recipe: {
+        ...recipeResponse.recipe,
+        title: "Potato salad",
+        content: {
+          ...recipeResponse.recipe.content,
+          title: "Potato salad",
+          servingsText: "3人分",
+        },
+        updatedAt: "2026-05-27T00:00:00.000Z",
+      },
+    };
+    let currentRecipeResponse = recipeResponse;
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT") {
+          currentRecipeResponse = updatedRecipeResponse;
+          return jsonResponse(updatedRecipeResponse);
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(currentRecipeResponse);
+        }
+
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123");
+    await userEvent.click(await screen.findByRole("link", { name: "編集" }));
+    await expect(screen.findByRole("heading", { name: "レシピ編集" })).resolves.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Tomato pasta")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("2人分")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("トマト缶")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("1缶")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("煮詰める")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("仕上げにオリーブオイル。")).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText("タイトル"));
+    await userEvent.type(screen.getByLabelText("タイトル"), "Potato salad");
+    await userEvent.clear(screen.getByLabelText("人数"));
+    await userEvent.type(screen.getByLabelText("人数"), "3人分");
+    await userEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/recipes/recipe_123",
+        expect.objectContaining({
+          method: "PUT",
+          credentials: "include",
+        }),
+      );
+    });
+    const updateRecipeCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(updateRecipeCall?.[1]?.body))).toMatchObject({
+      content: {
+        title: "Potato salad",
+        servingsText: "3人分",
+      },
+    });
+    await expect(
+      screen.findByRole("heading", { name: "Potato salad" }),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("詳細画面から削除すると一覧に戻る", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const recipeResponse = {
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          ingredientGroups: [],
+          steps: [],
+        },
+        source: {
+          sourceType: "manual",
+          sourcePlatform: null,
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    };
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "DELETE") {
+          return jsonResponse({ ok: true });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(recipeResponse);
+        }
+
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123");
+    await userEvent.click(await screen.findByRole("button", { name: "削除" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/recipes/recipe_123",
+        expect.objectContaining({
+          method: "DELETE",
+          credentials: "include",
+        }),
+      );
+    });
+    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
   });
 
   it("レシピ保存上限に達している場合は専用メッセージを表示する", async () => {

@@ -4,7 +4,7 @@ import {
   type ApiErrorResponse,
   apiErrorResponseSchema,
 } from "@recipestock/schemas";
-import { type ClientResponse, hc, parseResponse } from "hono/client";
+import { hc } from "hono/client";
 
 export const api = hc<AppType>("/", {
   init: {
@@ -33,7 +33,13 @@ export class ApiClientError extends Error {
   }
 }
 
-const parseErrorResponse = async (response: ClientResponse<unknown>): Promise<ApiErrorResponse> => {
+type ApiResponseLike = {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+};
+
+const parseErrorResponse = async (response: ApiResponseLike): Promise<ApiErrorResponse> => {
   const body = await response.json().catch(() => null);
   const result = apiErrorResponseSchema.safeParse(body);
 
@@ -49,7 +55,7 @@ const parseErrorResponse = async (response: ClientResponse<unknown>): Promise<Ap
   return result.data;
 };
 
-export const parseApiResponse = async <T>(response: Promise<ClientResponse<unknown>>) => {
+export const parseApiResponse = async <T>(response: Promise<ApiResponseLike>) => {
   const resolvedResponse = await response;
 
   if (!resolvedResponse.ok) {
@@ -62,5 +68,5 @@ export const parseApiResponse = async <T>(response: Promise<ClientResponse<unkno
     });
   }
 
-  return (await parseResponse(resolvedResponse)) as T;
+  return (await resolvedResponse.json()) as T;
 };

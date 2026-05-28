@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formValuesToCreateRecipeRequest } from "./create-recipe-request";
+import { formValuesToCreateRecipeRequest, recipeDetailToFormValues } from "./create-recipe-request";
 import {
   createEmptyRecipeDraftFormValues,
   type RecipeDraftFormValues,
@@ -21,8 +21,6 @@ describe("formValuesToCreateRecipeRequest", () => {
           title: "  Tomato pasta  ",
           servingsText: "  2人分  ",
           note: "  仕上げにオリーブオイル。  ",
-          sourceName: "  Example Kitchen  ",
-          sourceUrl: "  https://example.com/recipes/tomato  ",
           ingredientGroups: [
             {
               label: "  ソース  ",
@@ -47,8 +45,6 @@ describe("formValuesToCreateRecipeRequest", () => {
       },
       source: {
         sourceType: "manual",
-        sourceName: "Example Kitchen",
-        sourceUrl: "https://example.com/recipes/tomato",
       },
     });
   });
@@ -81,36 +77,43 @@ describe("formValuesToCreateRecipeRequest", () => {
     });
   });
 
-  it("出典名と元URLがあってもsourceTypeはmanualにする", () => {
-    expect(
-      formValuesToCreateRecipeRequest(
-        createValues({
-          sourceName: "Example Kitchen",
-          sourceUrl: "https://example.com/recipes/tomato",
-        }),
-      ).source,
-    ).toEqual({
-      sourceType: "manual",
-      sourceName: "Example Kitchen",
-      sourceUrl: "https://example.com/recipes/tomato",
-    });
-  });
-
-  it("出典入力なしでもsourceTypeはmanualにする", () => {
+  it("手動作成ではsourceTypeだけをmanualにする", () => {
     expect(formValuesToCreateRecipeRequest(createValues()).source).toEqual({
       sourceType: "manual",
-      sourceName: undefined,
-      sourceUrl: undefined,
     });
   });
 
-  it("不正なURLはcreateRecipeRequestSchemaで失敗する", () => {
-    expect(() =>
-      formValuesToCreateRecipeRequest(
-        createValues({
-          sourceUrl: "not-a-url",
-        }),
-      ),
-    ).toThrow();
+  it("保存済みレシピ本文をフォーム値に戻す", () => {
+    expect(
+      recipeDetailToFormValues({
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          servingsText: "2人分",
+          ingredientGroups: [
+            { label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] },
+          ],
+          steps: [{ text: "煮詰める" }],
+          note: "仕上げにオリーブオイル。",
+        },
+        source: {
+          sourceType: "web",
+          sourcePlatform: null,
+          sourceUrl: "https://example.com/recipes/tomato",
+          normalizedSourceUrl: "https://example.com/recipes/tomato",
+          sourceName: "Example Kitchen",
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      }),
+    ).toEqual({
+      title: "Tomato pasta",
+      servingsText: "2人分",
+      note: "仕上げにオリーブオイル。",
+      ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      steps: [{ text: "煮詰める" }],
+    });
   });
 });
