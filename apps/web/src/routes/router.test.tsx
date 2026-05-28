@@ -494,6 +494,36 @@ describe("AppRouter", () => {
     expect(screen.getByText("煮詰める")).toBeInTheDocument();
   });
 
+  it("レシピ保存上限に達している場合は専用メッセージを表示する", async () => {
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes" && init?.method === "POST") {
+          return jsonResponse(
+            {
+              error: {
+                code: "recipe_limit_exceeded",
+                message: "Recipe limit exceeded.",
+              },
+            },
+            { status: 403 },
+          );
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/new");
+
+    await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "保存できるレシピ数の上限に達しています。",
+    );
+  });
+
   it("ログアウトするとユーザー依存キャッシュを消してログインへ遷移する", async () => {
     let authenticated = true;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {

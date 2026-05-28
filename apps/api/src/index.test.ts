@@ -173,6 +173,79 @@ describe("API", () => {
     ]);
   });
 
+  it("レシピ一覧取得で未ログイン時にunauthorizedを返す", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => null,
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "unauthorized",
+        message: "Authentication is required.",
+      },
+    });
+  });
+
+  it("レシピ保存リクエストが不正な場合はvalidation_failedとdetailsを返す", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+      },
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: { title: "" },
+          source: { sourceType: "manual" },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "validation_failed",
+        message: "Request validation failed.",
+        details: {
+          fieldErrors: {},
+          formErrors: [],
+        },
+      },
+    });
+  });
+
   it("任意項目と出典情報をRecipeContentとSource metadataとして保存する", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createApp({
@@ -469,7 +542,7 @@ describe("API", () => {
     });
   });
 
-  it("一覧cursorが不正な場合はvalidation_failedを返す", async () => {
+  it("一覧cursorが不正な場合はinvalid_recipe_list_cursorを返す", async () => {
     const testApp = createApp({
       auth: {
         getSession: async () => ({
@@ -495,14 +568,8 @@ describe("API", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: {
-        code: "validation_failed",
-        message: "Request validation failed.",
-        details: {
-          fieldErrors: {
-            cursor: ["Invalid recipe list cursor."],
-          },
-          formErrors: [],
-        },
+        code: "invalid_recipe_list_cursor",
+        message: "Recipe list cursor is invalid.",
       },
     });
   });
@@ -561,6 +628,36 @@ describe("API", () => {
           sourceName: "Example Kitchen",
         },
         locked: false,
+      },
+    });
+  });
+
+  it("保存済みレシピが存在しない場合はnot_foundを返す", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/missing_recipe", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "not_found",
+        message: "Recipe was not found.",
       },
     });
   });

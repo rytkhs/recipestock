@@ -8,6 +8,13 @@ import {
   listRecipesResponseSchema,
 } from "@recipestock/schemas";
 import { Hono } from "hono";
+import {
+  invalidRecipeListCursorResponse,
+  notFoundResponse,
+  recipeLimitExceededResponse,
+  unauthorizedResponse,
+  validationFailedResponse,
+} from "./api-error";
 import { type AuthService, authService } from "./auth";
 import { type Bindings } from "./env";
 import { buildMeResponse, createMeRepository, getCurrentJstMonth, type MeRepository } from "./me";
@@ -32,29 +39,6 @@ type AppDependencies = {
   createRecipeId?: () => string;
   getCurrentMonth?: () => string;
 };
-
-const unauthorizedResponse = () =>
-  Response.json(
-    {
-      error: {
-        code: "unauthorized",
-        message: "Authentication is required.",
-      },
-    },
-    { status: 401 },
-  );
-
-const validationFailedResponse = (details: unknown) =>
-  Response.json(
-    {
-      error: {
-        code: "validation_failed",
-        message: "Request validation failed.",
-        details,
-      },
-    },
-    { status: 400 },
-  );
 
 export const createApp = (dependencies: AppDependencies = {}) => {
   const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
@@ -134,15 +118,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       });
 
       if (result.status === "limitExceeded") {
-        return Response.json(
-          {
-            error: {
-              code: "recipe_limit_exceeded",
-              message: "Recipe limit exceeded.",
-            },
-          },
-          { status: 403 },
-        );
+        return recipeLimitExceededResponse();
       }
 
       const recipe = result.recipe;
@@ -176,12 +152,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         });
       } catch (error) {
         if (error instanceof InvalidRecipeListCursorError) {
-          return validationFailedResponse({
-            fieldErrors: {
-              cursor: [error.message],
-            },
-            formErrors: [],
-          });
+          return invalidRecipeListCursorResponse();
         }
 
         throw error;
@@ -207,15 +178,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       const recipe = await repository.getRecipe(session.user.id, c.req.param("recipeId"));
 
       if (!recipe) {
-        return Response.json(
-          {
-            error: {
-              code: "not_found",
-              message: "Recipe was not found.",
-            },
-          },
-          { status: 404 },
-        );
+        return notFoundResponse("Recipe was not found.");
       }
 
       return c.json(getRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }));

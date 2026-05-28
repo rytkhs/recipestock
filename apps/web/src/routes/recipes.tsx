@@ -10,7 +10,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
-import { api, parseApiResponse } from "../lib/api";
+import { ApiClientError, api, parseApiResponse } from "../lib/api";
 
 const recipeFormSchema = z.object({
   title: z.string().min(1),
@@ -278,8 +278,12 @@ export const NewRecipeRoute = () => {
     try {
       const response = await postRecipe(values);
       await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
-    } catch {
-      setSubmitError("レシピを保存できませんでした。");
+    } catch (error) {
+      setSubmitError(
+        error instanceof ApiClientError && error.code === "recipe_limit_exceeded"
+          ? "保存できるレシピ数の上限に達しています。"
+          : "レシピを保存できませんでした。",
+      );
     }
   });
 
