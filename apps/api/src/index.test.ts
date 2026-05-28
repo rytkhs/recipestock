@@ -19,6 +19,39 @@ describe("API", () => {
     });
   });
 
+  it("Auth APIは認証middlewareを通さずBetter Authへ委譲する", async () => {
+    let getSessionCalls = 0;
+    const testApp = createApp({
+      auth: {
+        getSession: async () => {
+          getSessionCalls += 1;
+          return null;
+        },
+        handleAuthRequest: async () =>
+          Response.json(
+            {
+              ok: true,
+            },
+            { status: 202 },
+          ),
+      },
+    });
+
+    const response = await testApp.request(
+      "/api/auth/sign-out",
+      {
+        method: "POST",
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(getSessionCalls).toBe(0);
+  });
+
   it("現在ユーザー取得で未ログイン時に統一形式のunauthorizedを返す", async () => {
     const testApp = createApp({
       auth: {
@@ -189,6 +222,36 @@ describe("API", () => {
     });
 
     const response = await testApp.request("/api/recipes", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "unauthorized",
+        message: "Authentication is required.",
+      },
+    });
+  });
+
+  it("レシピ詳細取得で未ログイン時にunauthorizedを返す", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => null,
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => {
+          throw new Error("should not get a recipe without a session");
+        },
+        listRecipes: unusedListRecipes,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/recipe_123", undefined, {
       APP_ENV: "development",
     });
 

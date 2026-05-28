@@ -12,12 +12,12 @@ import {
   invalidRecipeListCursorResponse,
   notFoundResponse,
   recipeLimitExceededResponse,
-  unauthorizedResponse,
   validationFailedResponse,
 } from "./api-error";
 import { type AuthService, authService } from "./auth";
-import { type Bindings } from "./env";
+import { type ApiEnv } from "./context";
 import { buildMeResponse, createMeRepository, getCurrentJstMonth, type MeRepository } from "./me";
+import { requireAuth } from "./middleware/auth";
 import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
@@ -41,7 +41,8 @@ type AppDependencies = {
 };
 
 export const createApp = (dependencies: AppDependencies = {}) => {
-  const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
+  const app = new Hono<ApiEnv>().basePath("/api");
+  const auth = dependencies.auth ?? authService;
 
   const routes = app
     .get("/health", (c) => {
@@ -51,30 +52,23 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       });
     })
     .on(["GET", "POST"], "/auth/*", (c) => {
-      const auth = dependencies.auth ?? authService;
       return auth.handleAuthRequest(c.req.raw, c.env);
     })
-    .get("/me", async (c) => {
-      const auth = dependencies.auth ?? authService;
-      const session = await auth.getSession(c.req.raw, c.env);
-
-      if (!session) {
-        return unauthorizedResponse();
-      }
-
+    .get("/me", requireAuth(auth), async (c) => {
+      const userId = c.get("userId");
       const repository =
         dependencies.meRepository ?? createMeRepository(createDb(c.env.DATABASE_URL));
       const month = dependencies.getCurrentMonth?.() ?? getCurrentJstMonth();
-      const appUser = await repository.getOrCreateAppUser(session.user.id);
+      const appUser = await repository.getOrCreateAppUser(userId);
       const [recipeCount, storedAiUsage] = await Promise.all([
-        repository.countRecipes(session.user.id),
-        repository.getAiUsage(session.user.id, month),
+        repository.countRecipes(userId),
+        repository.getAiUsage(userId, month),
       ]);
 
       return c.json(
         getMeResponseSchema.parse(
           buildMeResponse({
-            userId: session.user.id,
+            userId,
             plan: appUser.plan,
             recipeCount,
             aiUsage: storedAiUsage ?? { month, count: 0 },
@@ -82,14 +76,8 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         ),
       );
     })
-    .post("/recipes", async (c) => {
-      const auth = dependencies.auth ?? authService;
-      const session = await auth.getSession(c.req.raw, c.env);
-
-      if (!session) {
-        return unauthorizedResponse();
-      }
-
+    .post("/recipes", requireAuth(auth), async (c) => {
+      const userId = c.get("userId");
       const rawBody = await c.req.json().catch(() => null);
       const request = createRecipeRequestSchema.safeParse(rawBody);
 
@@ -104,7 +92,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       const now = new Date();
       const result = await repository.createRecipeEnforcingPlanLimit({
         id: dependencies.createRecipeId?.() ?? createDefaultRecipeId(),
-        userId: session.user.id,
+        userId,
         title: content.title,
         content,
         sourceType: source.sourceType,
@@ -125,14 +113,8 @@ export const createApp = (dependencies: AppDependencies = {}) => {
 
       return c.json(createRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }), 201);
     })
-    .get("/recipes", async (c) => {
-      const auth = dependencies.auth ?? authService;
-      const session = await auth.getSession(c.req.raw, c.env);
-
-      if (!session) {
-        return unauthorizedResponse();
-      }
-
+    .get("/recipes", requireAuth(auth), async (c) => {
+      const userId = c.get("userId");
       const query = listRecipesQuerySchema.safeParse(c.req.query());
 
       if (!query.success) {
@@ -145,7 +127,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
 
       try {
         result = await repository.listRecipes({
-          userId: session.user.id,
+          userId,
           searchTerms: normalizeRecipeSearchTerms(query.data.q),
           limit: query.data.limit,
           cursor: query.data.cursor ?? null,
@@ -165,17 +147,11 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         }),
       );
     })
-    .get("/recipes/:recipeId", async (c) => {
-      const auth = dependencies.auth ?? authService;
-      const session = await auth.getSession(c.req.raw, c.env);
-
-      if (!session) {
-        return unauthorizedResponse();
-      }
-
+    .get("/recipes/:recipeId", requireAuth(auth), async (c) => {
+      const userId = c.get("userId");
       const repository =
         dependencies.recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
-      const recipe = await repository.getRecipe(session.user.id, c.req.param("recipeId"));
+      const recipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
       if (!recipe) {
         return notFoundResponse("Recipe was not found.");
