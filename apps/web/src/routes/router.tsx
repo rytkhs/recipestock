@@ -9,11 +9,12 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
-import { authSessionQueryKey, signOut, useSession } from "../lib/auth";
+import { ApiClientError } from "../lib/api";
+import { signOut, useAuthSession } from "../lib/auth";
+import { clearUserScopedCache } from "../lib/query-cache";
+import { useViewer } from "../lib/viewer";
 import { LoginRoute } from "./login";
 import { NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
-
-const userScopedQueryKeys = new Set(["me", "recipe", "recipes"]);
 
 const LoadingPage = () => (
   <section className="page">
@@ -21,8 +22,10 @@ const LoadingPage = () => (
   </section>
 );
 
-const RequireAuth = ({ children }: { children: ReactNode }) => {
-  const session = useSession();
+const RequireViewer = ({ children }: { children: ReactNode }) => {
+  const queryClient = useQueryClient();
+  const session = useAuthSession();
+  const viewer = useViewer({ enabled: Boolean(session.data) });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -31,11 +34,22 @@ const RequireAuth = ({ children }: { children: ReactNode }) => {
     }
   }, [navigate, session.data, session.isPending]);
 
-  if (session.isPending) {
+  useEffect(() => {
+    if (!(viewer.error instanceof ApiClientError) || viewer.error.code !== "unauthorized") {
+      return;
+    }
+
+    clearUserScopedCache(queryClient);
+    void session.refetch().finally(() => {
+      void navigate({ to: "/login", replace: true });
+    });
+  }, [navigate, queryClient, session, viewer.error]);
+
+  if (session.isPending || (session.data && viewer.isPending)) {
     return <LoadingPage />;
   }
 
-  if (!session.data) {
+  if (!session.data || !viewer.data) {
     return null;
   }
 
@@ -43,8 +57,9 @@ const RequireAuth = ({ children }: { children: ReactNode }) => {
 };
 
 const RedirectAuthenticated = ({ children }: { children: ReactNode }) => {
-  const session = useSession();
+  const session = useAuthSession();
   const navigate = useNavigate();
+  const isInitialPending = session.isPending && !session.isRefetching;
 
   useEffect(() => {
     if (!session.isPending && session.data) {
@@ -52,7 +67,7 @@ const RedirectAuthenticated = ({ children }: { children: ReactNode }) => {
     }
   }, [navigate, session.data, session.isPending]);
 
-  if (session.isPending || session.data) {
+  if (isInitialPending || session.data) {
     return <LoadingPage />;
   }
 
@@ -62,15 +77,13 @@ const RedirectAuthenticated = ({ children }: { children: ReactNode }) => {
 const RootLayout = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const session = useSession();
+  const session = useAuthSession();
 
   const handleSignOut = async () => {
     await signOut();
-    queryClient.setQueryData(authSessionQueryKey, null);
+    clearUserScopedCache(queryClient);
+    await session.refetch();
     await navigate({ to: "/login" });
-    queryClient.removeQueries({
-      predicate: (query) => userScopedQueryKeys.has(String(query.queryKey[0])),
-    });
   };
 
   return (
@@ -120,9 +133,9 @@ const recipesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/recipes",
   component: () => (
-    <RequireAuth>
+    <RequireViewer>
       <RecipesIndexRoute />
-    </RequireAuth>
+    </RequireViewer>
   ),
 });
 
@@ -130,9 +143,9 @@ const newRecipeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/recipes/new",
   component: () => (
-    <RequireAuth>
+    <RequireViewer>
       <NewRecipeRoute />
-    </RequireAuth>
+    </RequireViewer>
   ),
 });
 
@@ -140,9 +153,9 @@ const recipeDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/recipes/$recipeId",
   component: () => (
-    <RequireAuth>
+    <RequireViewer>
       <RecipeDetailRoute />
-    </RequireAuth>
+    </RequireViewer>
   ),
 });
 
@@ -160,11 +173,11 @@ const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import",
   component: () => (
-    <RequireAuth>
+    <RequireViewer>
       <section className="page">
         <h1>Import</h1>
       </section>
-    </RequireAuth>
+    </RequireViewer>
   ),
 });
 
@@ -172,11 +185,11 @@ const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
   component: () => (
-    <RequireAuth>
+    <RequireViewer>
       <section className="page">
         <h1>Settings</h1>
       </section>
-    </RequireAuth>
+    </RequireViewer>
   ),
 });
 

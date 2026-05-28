@@ -3,6 +3,7 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { authClient } from "../lib/auth";
 import { AppRouter, createAppRouter } from "./router";
 
 const authenticatedSession = {
@@ -14,6 +15,20 @@ const authenticatedSession = {
     id: "user_123",
     email: "chef@example.com",
     name: "chef",
+  },
+};
+
+const viewerResponse = {
+  userId: "user_123",
+  plan: "free",
+  recipeCount: 0,
+  recipeLimit: 5,
+  isRecipeLimitReached: false,
+  aiUsage: {
+    month: "2026-05",
+    count: 0,
+    limit: 10,
+    remaining: 10,
   },
 };
 
@@ -52,8 +67,14 @@ const mockFetch = (
   { authenticated = false }: { authenticated?: boolean } = {},
 ) =>
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-    if (getRequestPath(input).endsWith("/get-session")) {
+    const path = getRequestPath(input);
+
+    if (path.endsWith("/get-session")) {
       return createSessionResponse(authenticated);
+    }
+
+    if (path === "/api/me" && authenticated) {
+      return jsonResponse(viewerResponse);
     }
 
     return handler(input, init);
@@ -68,12 +89,30 @@ type FetchMock = {
 const findFetchCall = (fetchMock: FetchMock, path: string) =>
   fetchMock.mock.calls.find(([input]) => getRequestPath(input) === path);
 
-const renderApp = async (initialPath = "/") => {
+const resetAuthSessionStore = () => {
+  const sessionAtom = authClient.$store.atoms.session;
+  const currentSession = sessionAtom.get();
+
+  sessionAtom.set({
+    data: null,
+    error: null,
+    isPending: true,
+    isRefetching: false,
+    refetch: currentSession.refetch,
+  });
+};
+
+const renderApp = async (
+  initialPath = "/",
+  setupQueryClient?: (queryClient: QueryClient) => void,
+) => {
+  resetAuthSessionStore();
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
     },
   });
+  setupQueryClient?.(queryClient);
   const appRouter = createAppRouter({
     history: createMemoryHistory({ initialEntries: [initialPath] }),
   });
@@ -83,6 +122,8 @@ const renderApp = async (initialPath = "/") => {
       <AppRouter appRouter={appRouter} />
     </QueryClientProvider>,
   );
+
+  authClient.$store.notify("$sessionSignal");
 
   await act(async () => {
     await appRouter.load();
@@ -128,6 +169,65 @@ describe("AppRouter", () => {
     await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
   });
 
+  it("ログイン済みで認証必須ルートに入るとviewerを取得してから画面を表示する", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+    expect(findFetchCall(fetchMock, "/api/me")).toEqual([
+      "/api/me",
+      expect.objectContaining({
+        credentials: "include",
+        method: "GET",
+      }),
+    ]);
+  });
+
+  it("/api/meがunauthorizedを返すとユーザー依存キャッシュを消してログインへ遷移する", async () => {
+    let authenticated = true;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+
+      if (path === "/api/me") {
+        authenticated = false;
+        return jsonResponse(
+          {
+            error: {
+              code: "unauthorized",
+              message: "Authentication is required.",
+            },
+          },
+          { status: 401 },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+    const { queryClient } = await renderApp("/recipes", (queryClient) => {
+      queryClient.setQueryData(["viewer"], viewerResponse);
+      queryClient.setQueryData(["recipes", "", null], { items: [], nextCursor: null });
+    });
+
+    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+    expect(findFetchCall(fetchMock, "/api/me")).toBeDefined();
+    expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
+    expect(queryClient.getQueryData(["recipes", "", null])).toBeUndefined();
+  });
+
   it("ログイン済みで初期ルートに入るとレシピ一覧へ遷移する", async () => {
     mockFetch(
       async (input) => {
@@ -168,7 +268,29 @@ describe("AppRouter", () => {
   });
 
   it("ログインルートからメールとパスワードでログインする", async () => {
-    const fetchMock = mockFetch(async () => jsonResponse({ token: "session_token" }));
+    let authenticated = false;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+
+      if (path === "/api/auth/sign-in/email" && init?.method === "POST") {
+        authenticated = true;
+        return jsonResponse({ token: "session_token" });
+      }
+
+      if (path === "/api/me" && authenticated) {
+        return jsonResponse(viewerResponse);
+      }
+
+      if (path === "/api/recipes?limit=20") {
+        return jsonResponse({ items: [], nextCursor: null });
+      }
+
+      return new Response(null, { status: 404 });
+    });
     await renderApp("/login");
 
     await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
@@ -187,6 +309,8 @@ describe("AppRouter", () => {
       email: "chef@example.com",
       password: "password123",
     });
+    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+    expect(findFetchCall(fetchMock, "/api/me")).toBeDefined();
   });
 
   it("ログインルートから新規登録してOTP検証に進む", async () => {
@@ -215,7 +339,13 @@ describe("AppRouter", () => {
   });
 
   it("ログインルートで登録OTPを検証する", async () => {
-    const fetchMock = mockFetch(async () => jsonResponse({ success: true }));
+    const fetchMock = mockFetch(async (input) => {
+      if (getRequestPath(input) === "/api/auth/sign-up/email") {
+        return jsonResponse({ token: null });
+      }
+
+      return jsonResponse({ success: true });
+    });
     await renderApp("/login");
 
     await userEvent.click(await screen.findByRole("button", { name: "アカウントを作成" }));
@@ -533,6 +663,10 @@ describe("AppRouter", () => {
         return createSessionResponse(authenticated);
       }
 
+      if (path === "/api/me" && authenticated) {
+        return jsonResponse(viewerResponse);
+      }
+
       if (path === "/api/auth/sign-out" && init?.method === "POST") {
         authenticated = false;
         return jsonResponse({ success: true });
@@ -547,7 +681,7 @@ describe("AppRouter", () => {
     const { queryClient } = await renderApp("/recipes");
     queryClient.setQueryData(["recipes", "", null], { items: [], nextCursor: null });
     queryClient.setQueryData(["recipe", "recipe_123"], { id: "recipe_123" });
-    queryClient.setQueryData(["me"], { userId: "user_123" });
+    queryClient.setQueryData(["viewer"], viewerResponse);
 
     await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
 
@@ -561,6 +695,6 @@ describe("AppRouter", () => {
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
     expect(queryClient.getQueryData(["recipes", "", null])).toBeUndefined();
     expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
-    expect(queryClient.getQueryData(["me"])).toBeUndefined();
+    expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
   });
 });

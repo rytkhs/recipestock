@@ -1,13 +1,12 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import {
-  authSessionQueryKey,
   requestPasswordResetOtp,
   resetPasswordWithOtp,
   signInWithEmailPassword,
   signUpWithEmailPassword,
   startGoogleLogin,
+  useAuthSession,
   verifySignUpOtp,
 } from "../lib/auth";
 
@@ -15,7 +14,7 @@ type LoginMode = "signIn" | "signUp" | "verifySignUp" | "requestReset" | "resetP
 
 export const LoginRoute = () => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const session = useAuthSession();
   const [mode, setMode] = useState<LoginMode>("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,7 +36,7 @@ export const LoginRoute = () => {
 
     try {
       await signInWithEmailPassword(email, password);
-      await queryClient.invalidateQueries({ queryKey: authSessionQueryKey });
+      await session.refetch();
       await navigate({ to: "/recipes" });
     } catch {
       setError("メールアドレスまたはパスワードが正しくありません。");
@@ -66,7 +65,7 @@ export const LoginRoute = () => {
 
     try {
       await verifySignUpOtp(email, otp);
-      await queryClient.invalidateQueries({ queryKey: authSessionQueryKey });
+      await session.refetch();
       await navigate({ to: "/recipes" });
     } catch {
       setError("確認コードを検証できませんでした。");

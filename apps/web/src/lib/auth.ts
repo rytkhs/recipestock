@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { emailOTPClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
@@ -61,28 +60,7 @@ export const signOut = async () => {
   assertAuthSuccess(result);
 };
 
-export const authSessionQueryKey = ["authSession"] as const;
-
-export const useSession = () => {
-  const query = useQuery({
-    queryKey: authSessionQueryKey,
-    queryFn: async () => {
-      const result = await authClient.getSession();
-
-      if (result.error) {
-        throw new Error("auth_session_request_failed");
-      }
-
-      return result.data;
-    },
-    retry: false,
-  });
-
-  return {
-    ...query,
-    isPending: query.isPending,
-  };
-};
+export const useAuthSession = () => authClient.useSession();
 
 export const signUpWithEmailPassword = async (email: string, password: string) => {
   const result = await authClient.signUp.email({
