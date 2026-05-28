@@ -1,3 +1,4 @@
+import { Button, Input, Label, TextField } from "@heroui/react";
 import {
   type CreateRecipeResponse,
   type ListRecipesResponse,
@@ -77,53 +78,68 @@ export const RecipesIndexRoute = () => {
   };
 
   return (
-    <section className="page">
-      <div className="page-heading">
-        <h1>Recipes</h1>
-        <Link className="primary-button" to="/recipes/new">
+    <section className="mx-auto w-full max-w-5xl px-6 py-10">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-semibold text-3xl">Recipes</h1>
+        <Link
+          className="inline-flex min-h-10 items-center justify-center rounded-lg bg-accent px-4 font-semibold text-accent-foreground text-sm"
+          to="/recipes/new"
+        >
           新規作成
         </Link>
       </div>
 
-      <form className="inline-fields" onSubmit={submitSearch}>
-        <label htmlFor="recipe-search">検索</label>
-        <input
-          id="recipe-search"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-        />
-        <button className="secondary-button" type="submit">
+      <form
+        className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+        onSubmit={submitSearch}
+      >
+        <TextField>
+          <Label>検索</Label>
+          <Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />
+        </TextField>
+        <Button type="submit" variant="secondary">
           検索
-        </button>
+        </Button>
       </form>
 
-      {error ? <p role="alert">レシピ一覧を読み込めませんでした。</p> : null}
-      {isFetching && recipes.length === 0 ? <p>読み込み中</p> : null}
-      {!isFetching && recipes.length === 0 && !error ? <p>レシピがありません。</p> : null}
+      {error ? (
+        <p className="mt-6 text-danger" role="alert">
+          レシピ一覧を読み込めませんでした。
+        </p>
+      ) : null}
+      {isFetching && recipes.length === 0 ? (
+        <p className="mt-6 text-default-600">読み込み中</p>
+      ) : null}
+      {!isFetching && recipes.length === 0 && !error ? (
+        <p className="mt-6 text-default-600">レシピがありません。</p>
+      ) : null}
 
-      <div className="stack">
+      <div className="mt-6 grid gap-3">
         {recipes.map((recipe) => (
-          <article className="recipe-list-item" key={recipe.id}>
-            <h2>
-              <Link to="/recipes/$recipeId" params={{ recipeId: recipe.id }}>
+          <article className="rounded-lg border border-border bg-surface p-4" key={recipe.id}>
+            <h2 className="font-semibold text-xl">
+              <Link
+                className="hover:text-accent"
+                params={{ recipeId: recipe.id }}
+                to="/recipes/$recipeId"
+              >
                 {recipe.title}
               </Link>
             </h2>
-            {recipe.sourceName ? <p>{recipe.sourceName}</p> : null}
-            <p>{new Date(recipe.updatedAt).toLocaleDateString("ja-JP")}</p>
+            {recipe.sourceName ? (
+              <p className="mt-2 text-default-600">{recipe.sourceName}</p>
+            ) : null}
+            <p className="mt-1 text-default-500 text-sm">
+              {new Date(recipe.updatedAt).toLocaleDateString("ja-JP")}
+            </p>
           </article>
         ))}
       </div>
 
       {nextCursor ? (
-        <button
-          className="secondary-button"
-          disabled={isFetching}
-          type="button"
-          onClick={loadNextPage}
-        >
+        <Button className="mt-6" isDisabled={isFetching} variant="secondary" onPress={loadNextPage}>
           もっと見る
-        </button>
+        </Button>
       ) : null}
     </section>
   );
@@ -149,8 +165,8 @@ export const NewRecipeRoute = () => {
   };
 
   return (
-    <section className="page recipe-form-page">
-      <h1>レシピ作成</h1>
+    <section className="mx-auto w-full max-w-3xl px-6 py-10">
+      <h1 className="font-semibold text-3xl">レシピ作成</h1>
       <RecipeDraftForm
         defaultValues={createEmptyRecipeDraftFormValues()}
         submitError={submitError}
@@ -174,30 +190,33 @@ export const RecipeDetailRoute = () => {
 
   if (isLoading) {
     return (
-      <section className="page">
-        <p>読み込み中</p>
+      <section className="mx-auto w-full max-w-5xl px-6 py-10">
+        <p className="text-default-600">読み込み中</p>
       </section>
     );
   }
 
   if (error || !recipe) {
     return (
-      <section className="page">
-        <h1>レシピを表示できません</h1>
+      <section className="mx-auto w-full max-w-5xl px-6 py-10">
+        <h1 className="font-semibold text-3xl">レシピを表示できません</h1>
       </section>
     );
   }
 
   return (
-    <article className="page recipe-detail">
-      <h1>{recipe.title}</h1>
-      {recipe.content.servingsText ? <p>{recipe.content.servingsText}</p> : null}
+    <article className="mx-auto w-full max-w-3xl px-6 py-10">
+      <h1 className="font-semibold text-3xl">{recipe.title}</h1>
+      {recipe.content.servingsText ? (
+        <p className="mt-3 text-default-600">{recipe.content.servingsText}</p>
+      ) : null}
 
       {recipe.content.ingredientGroups.length > 0 ? (
-        <section>
-          <h2>材料</h2>
+        <section className="mt-8">
+          <h2 className="font-semibold text-xl">材料</h2>
           {recipe.content.ingredientGroups.map((group) => (
             <div
+              className="mt-4"
               key={
                 group.label ??
                 group.ingredients
@@ -205,8 +224,8 @@ export const RecipeDetailRoute = () => {
                   .join("|")
               }
             >
-              {group.label ? <h3>{group.label}</h3> : null}
-              <ul>
+              {group.label ? <h3 className="font-medium">{group.label}</h3> : null}
+              <ul className="mt-2 list-disc space-y-1 pl-5">
                 {group.ingredients.map((ingredient) => (
                   <li key={`${ingredient.name}:${ingredient.amount}`}>
                     {ingredient.name}
@@ -220,9 +239,9 @@ export const RecipeDetailRoute = () => {
       ) : null}
 
       {recipe.content.steps.length > 0 ? (
-        <section>
-          <h2>手順</h2>
-          <ol>
+        <section className="mt-8">
+          <h2 className="font-semibold text-xl">手順</h2>
+          <ol className="mt-3 list-decimal space-y-2 pl-5">
             {recipe.content.steps.map((step) => (
               <li key={step.text}>{step.text}</li>
             ))}
@@ -231,18 +250,20 @@ export const RecipeDetailRoute = () => {
       ) : null}
 
       {recipe.content.note ? (
-        <section>
-          <h2>メモ</h2>
-          <p>{recipe.content.note}</p>
+        <section className="mt-8">
+          <h2 className="font-semibold text-xl">メモ</h2>
+          <p className="mt-3 whitespace-pre-wrap text-default-700">{recipe.content.note}</p>
         </section>
       ) : null}
 
       {recipe.source.sourceName || recipe.source.sourceUrl ? (
-        <section>
-          <h2>出典</h2>
-          {recipe.source.sourceName ? <p>{recipe.source.sourceName}</p> : null}
+        <section className="mt-8">
+          <h2 className="font-semibold text-xl">出典</h2>
+          {recipe.source.sourceName ? <p className="mt-3">{recipe.source.sourceName}</p> : null}
           {recipe.source.sourceUrl ? (
-            <a href={recipe.source.sourceUrl}>{recipe.source.sourceUrl}</a>
+            <a className="break-all text-accent" href={recipe.source.sourceUrl}>
+              {recipe.source.sourceUrl}
+            </a>
           ) : null}
         </section>
       ) : null}

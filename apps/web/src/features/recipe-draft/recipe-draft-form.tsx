@@ -1,3 +1,4 @@
+import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm } from "react-hook-form";
 import {
@@ -32,49 +33,47 @@ const IngredientGroupFields = ({
   });
 
   return (
-    <fieldset className="form-section">
-      <legend>材料グループ</legend>
-      <label htmlFor={`ingredient-group-${groupIndex}-label`}>グループ名</label>
-      <input
-        id={`ingredient-group-${groupIndex}-label`}
-        {...register(`ingredientGroups.${groupIndex}.label`)}
-      />
+    <fieldset className="grid min-w-0 gap-4 rounded-lg border border-border bg-surface p-4">
+      <legend className="px-1 font-semibold">材料グループ</legend>
+      <TextField>
+        <Label>グループ名</Label>
+        <Input {...register(`ingredientGroups.${groupIndex}.label`)} />
+      </TextField>
 
-      <div className="stack">
+      <div className="grid gap-3">
         {fields.map((field, ingredientIndex) => (
-          <div className="inline-fields" key={field.id}>
-            <label>
-              材料名
-              <input
+          <div
+            className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)_auto] sm:items-end"
+            key={field.id}
+          >
+            <TextField>
+              <Label>材料名</Label>
+              <Input
                 {...register(`ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.name`)}
               />
-            </label>
-            <label>
-              分量
-              <input
+            </TextField>
+            <TextField>
+              <Label>分量</Label>
+              <Input
                 {...register(
                   `ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.amount`,
                 )}
               />
-            </label>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => remove(ingredientIndex)}
-            >
+            </TextField>
+            <Button variant="secondary" onPress={() => remove(ingredientIndex)}>
               削除
-            </button>
+            </Button>
           </div>
         ))}
       </div>
 
-      <button
-        className="secondary-button"
-        type="button"
-        onClick={() => append({ name: "", amount: "" })}
+      <Button
+        className="justify-self-start"
+        variant="secondary"
+        onPress={() => append({ name: "", amount: "" })}
       >
         材料を追加
-      </button>
+      </Button>
     </fieldset>
   );
 };
@@ -94,12 +93,16 @@ export const RecipeDraftForm = ({
   const handleFormSubmit = handleSubmit(onSubmit);
 
   return (
-    <form className="recipe-form" onSubmit={(event) => void handleFormSubmit(event)}>
-      <label htmlFor="recipe-title">タイトル</label>
-      <input id="recipe-title" required {...register("title")} />
+    <form className="mt-6 grid gap-4" onSubmit={(event) => void handleFormSubmit(event)}>
+      <TextField isRequired>
+        <Label>タイトル</Label>
+        <Input {...register("title")} />
+      </TextField>
 
-      <label htmlFor="recipe-servings">人数</label>
-      <input id="recipe-servings" {...register("servingsText")} />
+      <TextField>
+        <Label>人数</Label>
+        <Input {...register("servingsText")} />
+      </TextField>
 
       {ingredientGroups.fields.map((field, groupIndex) => (
         <IngredientGroupFields
@@ -110,56 +113,65 @@ export const RecipeDraftForm = ({
         />
       ))}
 
-      <button
-        className="secondary-button"
-        type="button"
-        onClick={() => ingredientGroups.append(createEmptyIngredientGroup())}
+      <Button
+        className="justify-self-start"
+        variant="secondary"
+        onPress={() => ingredientGroups.append(createEmptyIngredientGroup())}
       >
         グループを追加
-      </button>
+      </Button>
 
-      <fieldset className="form-section">
-        <legend>手順</legend>
-        <div className="stack">
+      <fieldset className="grid min-w-0 gap-4 rounded-lg border border-border bg-surface p-4">
+        <legend className="px-1 font-semibold">手順</legend>
+        <div className="grid gap-3">
           {steps.fields.map((field, stepIndex) => (
-            <div className="inline-fields" key={field.id}>
-              <label>
-                手順
-                <textarea rows={3} {...register(`steps.${stepIndex}.text`)} />
-              </label>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => steps.remove(stepIndex)}
-              >
+            <div
+              className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+              key={field.id}
+            >
+              <TextField>
+                <Label>手順</Label>
+                <TextArea rows={3} {...register(`steps.${stepIndex}.text`)} />
+              </TextField>
+              <Button variant="secondary" onPress={() => steps.remove(stepIndex)}>
                 削除
-              </button>
+              </Button>
             </div>
           ))}
         </div>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={() => steps.append(createEmptyStep())}
+        <Button
+          className="justify-self-start"
+          variant="secondary"
+          onPress={() => steps.append(createEmptyStep())}
         >
           手順を追加
-        </button>
+        </Button>
       </fieldset>
 
-      <label htmlFor="recipe-note">メモ</label>
-      <textarea id="recipe-note" rows={4} {...register("note")} />
+      <TextField>
+        <Label>メモ</Label>
+        <TextArea rows={4} {...register("note")} />
+      </TextField>
 
-      <label htmlFor="recipe-source-name">出典名</label>
-      <input id="recipe-source-name" {...register("sourceName")} />
+      <TextField>
+        <Label>出典名</Label>
+        <Input {...register("sourceName")} />
+      </TextField>
 
-      <label htmlFor="recipe-source-url">元URL</label>
-      <input id="recipe-source-url" inputMode="url" type="url" {...register("sourceUrl")} />
+      <TextField type="url">
+        <Label>元URL</Label>
+        <Input inputMode="url" {...register("sourceUrl")} />
+      </TextField>
 
-      <button className="primary-button" disabled={formState.isSubmitting} type="submit">
+      <Button isDisabled={formState.isSubmitting} type="submit" variant="primary">
         {submitLabel}
-      </button>
+      </Button>
 
-      {submitError ? <p role="alert">{submitError}</p> : null}
+      {submitError ? (
+        <p className="text-danger" role="alert">
+          {submitError}
+        </p>
+      ) : null}
     </form>
   );
 };
