@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../index";
 import { InvalidRecipeListCursorError } from "../recipes";
-import { unusedListRecipes } from "./test-helpers";
+import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe list routes", () => {
   it("レシピ一覧取得で未ログイン時にunauthorizedを返す", async () => {
@@ -16,6 +16,8 @@ describe("Recipe list routes", () => {
         },
         getRecipe: async () => null,
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
     });
 
@@ -61,6 +63,8 @@ describe("Recipe list routes", () => {
             nextCursor: "next_cursor",
           };
         },
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
     });
 
@@ -109,6 +113,8 @@ describe("Recipe list routes", () => {
         listRecipes: async () => {
           throw new InvalidRecipeListCursorError();
         },
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
     });
 

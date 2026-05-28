@@ -34,6 +34,15 @@ export type RecipeListRecord = Pick<
 
 export type NewRecipeRecord = RecipeRecord;
 
+export type UpdateRecipeRecord = {
+  userId: string;
+  recipeId: string;
+  title: string;
+  content: RecipeContent;
+  searchText: string;
+  updatedAt: Date;
+};
+
 export type CreateRecipeResult =
   | {
       status: "created";
@@ -86,6 +95,8 @@ export type RecipeRepository = {
   createRecipeEnforcingPlanLimit(recipe: NewRecipeRecord): Promise<CreateRecipeResult>;
   getRecipe(userId: string, recipeId: string): Promise<RecipeRecord | null>;
   listRecipes(params: ListRecipesParams): Promise<ListRecipesResult>;
+  updateRecipe(recipe: UpdateRecipeRecord): Promise<RecipeRecord | null>;
+  deleteRecipe(userId: string, recipeId: string): Promise<boolean>;
 };
 
 export type NormalizedRecipeSource = {
@@ -399,6 +410,28 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
             })
           : null,
     };
+  },
+  async updateRecipe({ userId, recipeId, title, content, searchText, updatedAt }) {
+    const [row] = await db
+      .update(recipes)
+      .set({
+        title,
+        content,
+        searchText,
+        updatedAt,
+      })
+      .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
+      .returning();
+
+    return row ? mapRecipeRow(row) : null;
+  },
+  async deleteRecipe(userId, recipeId) {
+    const deletedRows = await db
+      .delete(recipes)
+      .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
+      .returning({ id: recipes.id });
+
+    return deletedRows.length > 0;
   },
 });
 

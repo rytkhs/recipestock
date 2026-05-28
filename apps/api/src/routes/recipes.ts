@@ -2,9 +2,12 @@ import { createDb } from "@recipestock/db";
 import {
   createRecipeRequestSchema,
   createRecipeResponseSchema,
+  deleteRecipeResponseSchema,
   getRecipeResponseSchema,
   listRecipesQuerySchema,
   listRecipesResponseSchema,
+  updateRecipeRequestSchema,
+  updateRecipeResponseSchema,
 } from "@recipestock/schemas";
 import { Hono } from "hono";
 import {
@@ -123,5 +126,51 @@ export const createRecipeRoutes = ({
       }
 
       return c.json(getRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }));
+    })
+    .put("/:recipeId", requireAuth(auth), async (c) => {
+      const userId = c.get("userId");
+      const rawBody = await c.req.json().catch(() => null);
+      const request = updateRecipeRequestSchema.safeParse(rawBody);
+
+      if (!request.success) {
+        return validationFailedResponse(request.error.flatten());
+      }
+
+      const repository = recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
+
+      if (!existingRecipe) {
+        return notFoundResponse("Recipe was not found.");
+      }
+
+      const content = toRecipeContent(request.data.content);
+      const recipe = await repository.updateRecipe({
+        userId,
+        recipeId: existingRecipe.id,
+        title: content.title,
+        content,
+        searchText: buildRecipeSearchText({
+          content,
+          sourceName: existingRecipe.sourceName,
+        }),
+        updatedAt: new Date(),
+      });
+
+      if (!recipe) {
+        return notFoundResponse("Recipe was not found.");
+      }
+
+      return c.json(updateRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }));
+    })
+    .delete("/:recipeId", requireAuth(auth), async (c) => {
+      const userId = c.get("userId");
+      const repository = recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      const deleted = await repository.deleteRecipe(userId, c.req.param("recipeId"));
+
+      if (!deleted) {
+        return notFoundResponse("Recipe was not found.");
+      }
+
+      return c.json(deleteRecipeResponseSchema.parse({ ok: true }));
     });
 };

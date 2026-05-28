@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../index";
-import { unusedListRecipes } from "./test-helpers";
+import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe create routes", () => {
   it("ログイン済みユーザーがタイトルだけでレシピを保存できる", async () => {
@@ -31,6 +31,8 @@ describe("Recipe create routes", () => {
         },
         getRecipe: async () => null,
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
       createRecipeId: () => "recipe_123",
     });
@@ -96,6 +98,8 @@ describe("Recipe create routes", () => {
         },
         getRecipe: async () => null,
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
     });
 
@@ -155,6 +159,8 @@ describe("Recipe create routes", () => {
         },
         getRecipe: async () => null,
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
       createRecipeId: () => "recipe_123",
     });
@@ -235,6 +241,8 @@ describe("Recipe create routes", () => {
         },
         getRecipe: async () => null,
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
       createRecipeId: () => "recipe_123",
     });
@@ -287,6 +295,8 @@ describe("Recipe create routes", () => {
         createRecipeEnforcingPlanLimit: async () => ({ status: "limitExceeded" }),
         getRecipe: async () => null,
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
       createRecipeId: () => "recipe_123",
     });
@@ -339,6 +349,8 @@ describe("Recipe create routes", () => {
         },
         getRecipe: async () => null,
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
       createRecipeId: () => "recipe_123",
     });

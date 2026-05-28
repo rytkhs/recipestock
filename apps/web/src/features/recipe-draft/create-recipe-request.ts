@@ -1,4 +1,10 @@
-import { type CreateRecipeRequest, createRecipeRequestSchema } from "@recipestock/schemas";
+import {
+  type CreateRecipeRequest,
+  createRecipeRequestSchema,
+  type RecipeDetail,
+  type RecipeDraftContent,
+  recipeDraftContentSchema,
+} from "@recipestock/schemas";
 import { type RecipeDraftFormValues } from "./recipe-draft-form-values";
 
 const compactText = (value?: string) => {
@@ -9,33 +15,57 @@ const compactText = (value?: string) => {
 export const formValuesToCreateRecipeRequest = (
   values: RecipeDraftFormValues,
 ): CreateRecipeRequest => {
-  const sourceUrl = compactText(values.sourceUrl);
-  const sourceName = compactText(values.sourceName);
-
   return createRecipeRequestSchema.parse({
-    content: {
-      title: values.title.trim(),
-      servingsText: compactText(values.servingsText),
-      ingredientGroups: values.ingredientGroups
-        .map((group) => ({
-          label: compactText(group.label),
-          ingredients: group.ingredients
-            .map((ingredient) => ({
-              name: ingredient.name?.trim() ?? "",
-              amount: ingredient.amount?.trim() ?? "",
-            }))
-            .filter((ingredient) => ingredient.name),
-        }))
-        .filter((group) => group.label || group.ingredients.length > 0),
-      steps: values.steps
-        .map((step) => ({ text: step.text?.trim() ?? "" }))
-        .filter((step) => step.text),
-      note: compactText(values.note),
-    },
+    content: formValuesToRecipeDraftContent(values),
     source: {
       sourceType: "manual",
-      sourceName,
-      sourceUrl,
     },
   });
 };
+
+export const formValuesToRecipeDraftContent = (
+  values: RecipeDraftFormValues,
+): RecipeDraftContent => {
+  return recipeDraftContentSchema.parse({
+    title: values.title.trim(),
+    servingsText: compactText(values.servingsText),
+    ingredientGroups: values.ingredientGroups
+      .map((group) => ({
+        label: compactText(group.label),
+        ingredients: group.ingredients
+          .map((ingredient) => ({
+            name: ingredient.name?.trim() ?? "",
+            amount: ingredient.amount?.trim() ?? "",
+          }))
+          .filter((ingredient) => ingredient.name),
+      }))
+      .filter((group) => group.label || group.ingredients.length > 0),
+    steps: values.steps
+      .map((step) => ({ text: step.text?.trim() ?? "" }))
+      .filter((step) => step.text),
+    note: compactText(values.note),
+  });
+};
+
+export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormValues => ({
+  title: recipe.content.title,
+  servingsText: recipe.content.servingsText ?? "",
+  note: recipe.content.note ?? "",
+  ingredientGroups:
+    recipe.content.ingredientGroups.length > 0
+      ? recipe.content.ingredientGroups.map((group) => ({
+          label: group.label ?? "",
+          ingredients:
+            group.ingredients.length > 0
+              ? group.ingredients.map((ingredient) => ({
+                  name: ingredient.name,
+                  amount: ingredient.amount,
+                }))
+              : [{ name: "", amount: "" }],
+        }))
+      : [{ label: "", ingredients: [{ name: "", amount: "" }] }],
+  steps:
+    recipe.content.steps.length > 0
+      ? recipe.content.steps.map((step) => ({ text: step.text }))
+      : [{ text: "" }],
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../index";
-import { unusedListRecipes } from "./test-helpers";
+import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe detail routes", () => {
   it("レシピ詳細取得で未ログイン時にunauthorizedを返す", async () => {
@@ -17,6 +17,8 @@ describe("Recipe detail routes", () => {
           throw new Error("should not get a recipe without a session");
         },
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
     });
 
@@ -66,6 +68,8 @@ describe("Recipe detail routes", () => {
           updatedAt: new Date("2026-05-26T00:00:00.000Z"),
         }),
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
     });
 
@@ -105,6 +109,8 @@ describe("Recipe detail routes", () => {
         },
         getRecipe: async () => null,
         listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
       },
     });
 

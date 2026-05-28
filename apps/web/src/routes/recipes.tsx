@@ -1,17 +1,21 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
 import {
   type CreateRecipeResponse,
+  type DeleteRecipeResponse,
   type ListRecipesResponse,
   type RecipeDetail,
+  type UpdateRecipeResponse,
 } from "@recipestock/schemas";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import {
   createEmptyRecipeDraftFormValues,
   formValuesToCreateRecipeRequest,
+  formValuesToRecipeDraftContent,
   RecipeDraftForm,
   type RecipeDraftFormValues,
+  recipeDetailToFormValues,
 } from "../features/recipe-draft";
 import { recipesQueryKeys } from "../features/recipes";
 import { ApiClientError, api, parseApiResponse } from "../lib/api";
@@ -20,6 +24,26 @@ const postRecipe = async (values: RecipeDraftFormValues) => {
   return parseApiResponse<CreateRecipeResponse>(
     api.api.recipes.$post({
       json: formValuesToCreateRecipeRequest(values),
+    }),
+  );
+};
+
+const putRecipe = async (recipeId: string, values: RecipeDraftFormValues) => {
+  return parseApiResponse<UpdateRecipeResponse>(
+    fetch(`/api/recipes/${encodeURIComponent(recipeId)}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: formValuesToRecipeDraftContent(values) }),
+    }),
+  );
+};
+
+const deleteRecipe = async (recipeId: string) => {
+  return parseApiResponse<DeleteRecipeResponse>(
+    fetch(`/api/recipes/${encodeURIComponent(recipeId)}`, {
+      method: "DELETE",
+      credentials: "include",
     }),
   );
 };
@@ -147,6 +171,7 @@ export const RecipesIndexRoute = () => {
 
 export const NewRecipeRoute = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const onSubmit = async (values: RecipeDraftFormValues) => {
@@ -154,6 +179,7 @@ export const NewRecipeRoute = () => {
 
     try {
       const response = await postRecipe(values);
+      await queryClient.invalidateQueries({ queryKey: ["recipes"] });
       await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
     } catch (error) {
       setSubmitError(
@@ -179,6 +205,16 @@ export const NewRecipeRoute = () => {
 
 export const RecipeDetailRoute = () => {
   const { recipeId } = useParams({ from: "/recipes/$recipeId" });
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteRecipe(recipeId),
+    onSuccess: async () => {
+      queryClient.removeQueries({ queryKey: recipesQueryKeys.detail(recipeId) });
+      await queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      await navigate({ to: "/recipes" });
+    },
+  });
   const {
     data: recipe,
     error,
@@ -187,6 +223,12 @@ export const RecipeDetailRoute = () => {
     queryKey: recipesQueryKeys.detail(recipeId),
     queryFn: () => fetchRecipe(recipeId),
   });
+
+  const confirmDelete = () => {
+    if (window.confirm("このレシピを削除しますか？")) {
+      deleteMutation.mutate();
+    }
+  };
 
   if (isLoading) {
     return (
@@ -206,7 +248,26 @@ export const RecipeDetailRoute = () => {
 
   return (
     <article className="mx-auto w-full max-w-3xl px-6 py-10">
-      <h1 className="font-semibold text-3xl">{recipe.title}</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <h1 className="font-semibold text-3xl">{recipe.title}</h1>
+        <div className="flex gap-2">
+          <Link
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border px-4 font-semibold text-sm"
+            params={{ recipeId }}
+            to="/recipes/$recipeId/edit"
+          >
+            編集
+          </Link>
+          <Button isDisabled={deleteMutation.isPending} variant="danger" onPress={confirmDelete}>
+            削除
+          </Button>
+        </div>
+      </div>
+      {deleteMutation.error ? (
+        <p className="mt-4 text-danger" role="alert">
+          レシピを削除できませんでした。
+        </p>
+      ) : null}
       {recipe.content.servingsText ? (
         <p className="mt-3 text-default-600">{recipe.content.servingsText}</p>
       ) : null}
@@ -268,5 +329,62 @@ export const RecipeDetailRoute = () => {
         </section>
       ) : null}
     </article>
+  );
+};
+
+export const EditRecipeRoute = () => {
+  const { recipeId } = useParams({ from: "/recipes/$recipeId/edit" });
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const {
+    data: recipe,
+    error,
+    isLoading,
+  } = useQuery({
+    queryKey: recipesQueryKeys.detail(recipeId),
+    queryFn: () => fetchRecipe(recipeId),
+  });
+
+  const onSubmit = async (values: RecipeDraftFormValues) => {
+    setSubmitError(null);
+
+    try {
+      const response = await putRecipe(recipeId, values);
+      queryClient.setQueryData(recipesQueryKeys.detail(recipeId), response.recipe);
+      await queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
+    } catch {
+      setSubmitError("レシピを更新できませんでした。");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <section className="mx-auto w-full max-w-3xl px-6 py-10">
+        <p className="text-default-600">読み込み中</p>
+      </section>
+    );
+  }
+
+  if (error || !recipe) {
+    return (
+      <section className="mx-auto w-full max-w-3xl px-6 py-10">
+        <h1 className="font-semibold text-3xl">レシピを編集できません</h1>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mx-auto w-full max-w-3xl px-6 py-10">
+      <h1 className="font-semibold text-3xl">レシピ編集</h1>
+      <RecipeDraftForm
+        key={recipe.id}
+        defaultValues={recipeDetailToFormValues(recipe)}
+        submitError={submitError}
+        submitLabel="更新"
+        onSubmit={onSubmit}
+      />
+    </section>
   );
 };
