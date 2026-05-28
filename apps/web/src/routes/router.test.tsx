@@ -555,7 +555,7 @@ describe("AppRouter", () => {
           note: "仕上げにオリーブオイル。",
         },
         source: {
-          sourceType: "web",
+          sourceType: "manual",
           sourcePlatform: null,
           sourceUrl: "https://example.com/recipes/tomato",
           normalizedSourceUrl: "https://example.com/recipes/tomato",
@@ -612,7 +612,7 @@ describe("AppRouter", () => {
         note: "仕上げにオリーブオイル。",
       },
       source: {
-        sourceType: "web",
+        sourceType: "manual",
         sourceName: "Example Kitchen",
         sourceUrl: "https://example.com/recipes/tomato",
       },
