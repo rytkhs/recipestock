@@ -12,6 +12,7 @@ import {
   RecipeDraftForm,
   type RecipeDraftFormValues,
 } from "../features/recipe-draft";
+import { recipesQueryKeys } from "../features/recipes";
 import { ApiClientError, api, parseApiResponse } from "../lib/api";
 
 const postRecipe = async (values: RecipeDraftFormValues) => {
@@ -49,7 +50,7 @@ export const RecipesIndexRoute = () => {
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadedPages, setLoadedPages] = useState<ListRecipesResponse[]>([]);
   const { data, error, isFetching, refetch } = useQuery({
-    queryKey: ["recipes", query, cursor],
+    queryKey: recipesQueryKeys.list(query, cursor),
     queryFn: () => fetchRecipes({ query, cursor }),
   });
   const activePages = cursor ? loadedPages.concat(data ? [data] : []) : data ? [data] : [];
@@ -167,7 +168,7 @@ export const RecipeDetailRoute = () => {
     error,
     isLoading,
   } = useQuery({
-    queryKey: ["recipe", recipeId],
+    queryKey: recipesQueryKeys.detail(recipeId),
     queryFn: () => fetchRecipe(recipeId),
   });
 
