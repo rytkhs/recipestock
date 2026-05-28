@@ -42,7 +42,7 @@ importers:
         specifier: ^3.1.3
         version: 3.1.3(@ai-sdk/openai-compatible@2.0.48(zod@4.4.3))(@ai-sdk/provider-utils@4.0.27(zod@4.4.3))(@ai-sdk/provider@3.0.10)(ai@5.0.192(zod@4.4.3))(zod@4.4.3)
       better-auth:
-        specifier: ^1.4.4
+        specifier: ^1.6.11
         version: 1.6.11(@cloudflare/workers-types@4.20260524.1)(@opentelemetry/api@1.9.0)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260524.1)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.0)(kysely@0.28.17))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.7(@opentelemetry/api@1.9.0)(@types/node@22.19.19)(jsdom@27.4.0(@noble/hashes@2.2.0))(vite@7.3.3(@types/node@22.19.19)(tsx@4.22.3)))
       drizzle-orm:
         specifier: ^0.45.1
