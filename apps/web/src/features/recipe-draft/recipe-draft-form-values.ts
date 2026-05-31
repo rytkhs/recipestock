@@ -1,8 +1,10 @@
+import { draftImageRefSchema } from "@recipestock/schemas";
 import { z } from "zod";
 
 export const recipeDraftFormSchema = z.object({
   title: z.string().min(1),
   servingsText: z.string().optional(),
+  coverImage: draftImageRefSchema.optional(),
   note: z.string().optional(),
   ingredientGroups: z.array(
     z.object({
@@ -15,7 +17,7 @@ export const recipeDraftFormSchema = z.object({
       ),
     }),
   ),
-  steps: z.array(z.object({ text: z.string().optional() })),
+  steps: z.array(z.object({ text: z.string().optional(), image: draftImageRefSchema.optional() })),
 });
 
 export type RecipeDraftFormValues = z.infer<typeof recipeDraftFormSchema>;

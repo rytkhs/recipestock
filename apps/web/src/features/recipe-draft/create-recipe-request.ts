@@ -29,6 +29,7 @@ export const formValuesToRecipeDraftContent = (
   return recipeDraftContentSchema.parse({
     title: values.title.trim(),
     servingsText: compactText(values.servingsText),
+    coverImage: values.coverImage,
     ingredientGroups: values.ingredientGroups
       .map((group) => ({
         label: compactText(group.label),
@@ -41,8 +42,8 @@ export const formValuesToRecipeDraftContent = (
       }))
       .filter((group) => group.label || group.ingredients.length > 0),
     steps: values.steps
-      .map((step) => ({ text: step.text?.trim() ?? "" }))
-      .filter((step) => step.text),
+      .map((step) => ({ text: compactText(step.text), image: step.image }))
+      .filter((step) => step.text || step.image),
     note: compactText(values.note),
   });
 };
@@ -50,6 +51,9 @@ export const formValuesToRecipeDraftContent = (
 export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormValues => ({
   title: recipe.content.title,
   servingsText: recipe.content.servingsText ?? "",
+  coverImage: recipe.content.coverImageKey
+    ? { type: "existingObjectKey", key: recipe.content.coverImageKey }
+    : undefined,
   note: recipe.content.note ?? "",
   ingredientGroups:
     recipe.content.ingredientGroups.length > 0
@@ -66,6 +70,9 @@ export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormV
       : [{ label: "", ingredients: [{ name: "", amount: "" }] }],
   steps:
     recipe.content.steps.length > 0
-      ? recipe.content.steps.map((step) => ({ text: step.text }))
+      ? recipe.content.steps.map((step) => ({
+          text: step.text ?? "",
+          image: step.imageKey ? { type: "existingObjectKey", key: step.imageKey } : undefined,
+        }))
       : [{ text: "" }],
 });

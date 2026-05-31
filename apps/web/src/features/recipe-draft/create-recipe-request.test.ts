@@ -77,6 +77,29 @@ describe("formValuesToCreateRecipeRequest", () => {
     });
   });
 
+  it("画像だけの手順を保存対象にする", () => {
+    expect(
+      formValuesToCreateRecipeRequest(
+        createValues({
+          steps: [
+            {
+              text: "  ",
+              image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      content: {
+        steps: [
+          {
+            image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+          },
+        ],
+      },
+    });
+  });
+
   it("手動作成ではsourceTypeだけをmanualにする", () => {
     expect(formValuesToCreateRecipeRequest(createValues()).source).toEqual({
       sourceType: "manual",

@@ -7,6 +7,11 @@ export const apiErrorCodeSchema = z.enum([
   "unexpected_response",
   "recipe_limit_exceeded",
   "invalid_recipe_list_cursor",
+  "invalid_image_type",
+  "image_too_large",
+  "image_finalize_failed",
+  "forbidden",
+  "unknown",
 ]);
 
 export const apiErrorResponseSchema = z.object({
