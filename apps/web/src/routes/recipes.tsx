@@ -48,6 +48,22 @@ const deleteRecipe = async (recipeId: string) => {
   );
 };
 
+const recipeMutationErrorMessage = (error: unknown, fallback: string) => {
+  if (!(error instanceof ApiClientError)) {
+    return fallback;
+  }
+
+  if (error.code === "recipe_limit_exceeded") {
+    return "保存できるレシピ数の上限に達しています。";
+  }
+
+  if (error.code === "image_finalize_failed") {
+    return "画像を保存できませんでした。再度アップロードしてください。";
+  }
+
+  return fallback;
+};
+
 const fetchRecipe = async (recipeId: string) => {
   const body = await parseApiResponse<{ recipe: RecipeDetail }>(
     api.api.recipes[":recipeId"].$get({
@@ -182,11 +198,7 @@ export const NewRecipeRoute = () => {
       await queryClient.invalidateQueries({ queryKey: ["recipes"] });
       await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
     } catch (error) {
-      setSubmitError(
-        error instanceof ApiClientError && error.code === "recipe_limit_exceeded"
-          ? "保存できるレシピ数の上限に達しています。"
-          : "レシピを保存できませんでした。",
-      );
+      setSubmitError(recipeMutationErrorMessage(error, "レシピを保存できませんでした。"));
     }
   };
 
@@ -272,6 +284,14 @@ export const RecipeDetailRoute = () => {
         <p className="mt-3 text-default-600">{recipe.content.servingsText}</p>
       ) : null}
 
+      {recipe.content.coverImageUrl ? (
+        <img
+          alt={recipe.title}
+          className="mt-6 aspect-video w-full rounded-lg object-cover"
+          src={recipe.content.coverImageUrl}
+        />
+      ) : null}
+
       {recipe.content.ingredientGroups.length > 0 ? (
         <section className="mt-8">
           <h2 className="font-semibold text-xl">材料</h2>
@@ -302,9 +322,18 @@ export const RecipeDetailRoute = () => {
       {recipe.content.steps.length > 0 ? (
         <section className="mt-8">
           <h2 className="font-semibold text-xl">手順</h2>
-          <ol className="mt-3 list-decimal space-y-2 pl-5">
-            {recipe.content.steps.map((step) => (
-              <li key={step.text}>{step.text}</li>
+          <ol className="mt-3 list-decimal space-y-4 pl-5">
+            {recipe.content.steps.map((step, stepIndex) => (
+              <li key={step.imageKey ?? step.imageUrl ?? step.text}>
+                {step.text ? <p>{step.text}</p> : null}
+                {step.imageUrl ? (
+                  <img
+                    alt={`手順${stepIndex + 1}`}
+                    className="mt-3 aspect-video w-full rounded-lg object-cover"
+                    src={step.imageUrl}
+                  />
+                ) : null}
+              </li>
             ))}
           </ol>
         </section>
@@ -349,14 +378,17 @@ export const EditRecipeRoute = () => {
   const onSubmit = async (values: RecipeDraftFormValues) => {
     setSubmitError(null);
 
+    let response: UpdateRecipeResponse;
     try {
-      const response = await putRecipe(recipeId, values);
-      queryClient.setQueryData(recipesQueryKeys.detail(recipeId), response.recipe);
-      await queryClient.invalidateQueries({ queryKey: ["recipes"] });
-      await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
-    } catch {
-      setSubmitError("レシピを更新できませんでした。");
+      response = await putRecipe(recipeId, values);
+    } catch (error) {
+      setSubmitError(recipeMutationErrorMessage(error, "レシピを更新できませんでした。"));
+      return;
     }
+
+    void queryClient.invalidateQueries({ queryKey: ["recipes"] });
+    queryClient.removeQueries({ queryKey: recipesQueryKeys.detail(recipeId) });
+    await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
   };
 
   if (isLoading) {

@@ -15,6 +15,9 @@ export type Bindings = {
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_PRO_PRICE_ID: string;
   CLOUDFLARE_ACCOUNT_ID: string;
+  R2_BUCKET_NAME: string;
+  R2_ACCESS_KEY_ID: string;
+  R2_SECRET_ACCESS_KEY: string;
   CF_AIG_TOKEN: string;
   AI_GATEWAY_NAME: string;
   AI_TEXT_MODEL: string;

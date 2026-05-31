@@ -95,6 +95,77 @@ describe("Recipe detail routes", () => {
     });
   });
 
+  it("保存済みレシピの画像に表示用URLを付与する", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async (userId, recipeId) => ({
+          id: recipeId,
+          userId,
+          title: "Tomato pasta",
+          content: {
+            title: "Tomato pasta",
+            coverImageKey: "recipes/user_123/recipe_123/cover.webp",
+            ingredientGroups: [],
+            steps: [{ text: "煮詰める", imageKey: "recipes/user_123/recipe_123/step.webp" }],
+          },
+          sourceType: "manual",
+          sourcePlatform: null,
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+          searchText: "tomato pasta",
+          createdAt: new Date("2026-05-26T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+        }),
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async ({ objectKey }) => ({
+          url: `https://images.example/${objectKey}`,
+          expiresAt: new Date("2026-05-31T00:15:00.000Z"),
+        }),
+        copyObject: async () => {
+          throw new Error("should not copy an object");
+        },
+        deleteObject: async () => undefined,
+        deletePrefixBestEffort: async () => undefined,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/recipe_123", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      recipe: {
+        content: {
+          coverImageUrl: "https://images.example/recipes/user_123/recipe_123/cover.webp",
+          steps: [
+            {
+              text: "煮詰める",
+              imageUrl: "https://images.example/recipes/user_123/recipe_123/step.webp",
+            },
+          ],
+        },
+      },
+    });
+  });
+
   it("保存済みレシピが存在しない場合はnot_foundを返す", async () => {
     const testApp = createApp({
       auth: {

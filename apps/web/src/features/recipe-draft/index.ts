@@ -3,6 +3,7 @@ export {
   formValuesToRecipeDraftContent,
   recipeDetailToFormValues,
 } from "./create-recipe-request";
+export { RecipeImageUploadError, uploadRecipeImage } from "./image-upload";
 export { RecipeDraftForm } from "./recipe-draft-form";
 export {
   createEmptyRecipeDraftFormValues,

@@ -23,9 +23,11 @@ Required local secrets:
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRO_PRICE_ID`
 - `CLOUDFLARE_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
 - `CF_AIG_TOKEN`
 
-Non-secret Worker vars such as `APP_ENV`, `IMPORT_TIMEOUT_MS`, and AI model names live in `wrangler.jsonc`.
+Non-secret Worker vars such as `APP_ENV`, `IMPORT_TIMEOUT_MS`, `R2_BUCKET_NAME`, and AI model names live in `wrangler.jsonc`.
 
 ## R2 setup
 
@@ -33,10 +35,14 @@ Create the development R2 bucket after Cloudflare login:
 
 ```bash
 pnpm --filter @recipestock/api exec wrangler r2 bucket create recipestock-images-dev
-pnpm --filter @recipestock/api exec wrangler r2 bucket cors set recipestock-images-dev --file apps/api/cors.example.json
+pnpm --filter @recipestock/api exec wrangler r2 bucket cors set recipestock-images-dev --file apps/api/r2-cors.dev.json
 ```
 
-The Worker binding name is `RECIPE_IMAGES`.
+The Worker binding name is `RECIPE_IMAGES`. Direct browser uploads also require R2 S3 API credentials in `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
+
+`wrangler.jsonc` sets the `RECIPE_IMAGES` binding to `remote: true` in development. This keeps direct browser PUT uploads and Worker-side copy/delete/list operations pointed at the same R2 bucket.
+
+Do not start the API with `wrangler dev --local` when testing image uploads. The `--local` flag disables remote bindings, which makes Worker-side R2 operations read from local storage while browser PUT uploads write to the remote bucket.
 
 ## Development
 
@@ -88,6 +94,8 @@ pnpm --filter @recipestock/api exec wrangler secret put STRIPE_SECRET_KEY
 pnpm --filter @recipestock/api exec wrangler secret put STRIPE_WEBHOOK_SECRET
 pnpm --filter @recipestock/api exec wrangler secret put STRIPE_PRO_PRICE_ID
 pnpm --filter @recipestock/api exec wrangler secret put CLOUDFLARE_ACCOUNT_ID
+pnpm --filter @recipestock/api exec wrangler secret put R2_ACCESS_KEY_ID
+pnpm --filter @recipestock/api exec wrangler secret put R2_SECRET_ACCESS_KEY
 pnpm --filter @recipestock/api exec wrangler secret put CF_AIG_TOKEN
 ```
 

@@ -54,3 +54,38 @@ export const notFoundResponse = (message = "Resource was not found.") =>
     code: "not_found",
     message,
   });
+
+export const forbiddenResponse = (message = "Access is forbidden.") =>
+  apiErrorResponse({
+    status: 403,
+    code: "forbidden",
+    message,
+  });
+
+export const invalidImageTypeResponse = () =>
+  apiErrorResponse({
+    status: 400,
+    code: "invalid_image_type",
+    message: "Image type is not supported.",
+  });
+
+export const imageTooLargeResponse = () =>
+  apiErrorResponse({
+    status: 400,
+    code: "image_too_large",
+    message: "Image is too large.",
+  });
+
+export const imageFinalizeFailedResponse = () =>
+  apiErrorResponse({
+    status: 422,
+    code: "image_finalize_failed",
+    message: "Image could not be saved.",
+  });
+
+export const unknownResponse = () =>
+  apiErrorResponse({
+    status: 500,
+    code: "unknown",
+    message: "Unexpected error occurred.",
+  });

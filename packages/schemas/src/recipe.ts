@@ -42,15 +42,19 @@ export const ingredientGroupSchema = z.object({
   ingredients: z.array(ingredientSchema).default([]),
 });
 
-export const recipeStepSchema = z.object({
-  text: z.string().min(1),
-  imageKey: z.string().min(1).optional(),
-});
+export const recipeStepSchema = z
+  .object({
+    text: z.string().min(1).optional(),
+    imageKey: z.string().min(1).optional(),
+  })
+  .refine((step) => step.text || step.imageKey);
 
-export const recipeDraftStepSchema = z.object({
-  text: z.string().min(1),
-  image: draftImageRefSchema.optional(),
-});
+export const recipeDraftStepSchema = z
+  .object({
+    text: z.string().min(1).optional(),
+    image: draftImageRefSchema.optional(),
+  })
+  .refine((step) => step.text || step.image);
 
 export const recipeContentSchema = z.object({
   title: z.string().min(1),
@@ -59,6 +63,15 @@ export const recipeContentSchema = z.object({
   ingredientGroups: z.array(ingredientGroupSchema).default([]),
   steps: z.array(recipeStepSchema).default([]),
   note: z.string().optional(),
+});
+
+export const recipeStepWithUrlSchema = recipeStepSchema.extend({
+  imageUrl: z.string().optional(),
+});
+
+export const recipeContentWithUrlsSchema = recipeContentSchema.extend({
+  coverImageUrl: z.string().optional(),
+  steps: z.array(recipeStepWithUrlSchema).default([]),
 });
 
 export const recipeDraftContentSchema = z.object({
@@ -84,7 +97,7 @@ export const recipeSourceSchema = recipeSourceDraftSchema.extend({
 export const recipeDetailSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
-  content: recipeContentSchema,
+  content: recipeContentWithUrlsSchema,
   source: recipeSourceSchema,
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
@@ -141,8 +154,10 @@ export type DraftImageRef = z.infer<typeof draftImageRefSchema>;
 export type Ingredient = z.infer<typeof ingredientSchema>;
 export type IngredientGroup = z.infer<typeof ingredientGroupSchema>;
 export type RecipeStep = z.infer<typeof recipeStepSchema>;
+export type RecipeStepWithUrl = z.infer<typeof recipeStepWithUrlSchema>;
 export type RecipeDraftStep = z.infer<typeof recipeDraftStepSchema>;
 export type RecipeContent = z.infer<typeof recipeContentSchema>;
+export type RecipeContentWithUrls = z.infer<typeof recipeContentWithUrlsSchema>;
 export type RecipeDraftContent = z.infer<typeof recipeDraftContentSchema>;
 export type RecipeSourceDraft = z.infer<typeof recipeSourceDraftSchema>;
 export type RecipeSource = z.infer<typeof recipeSourceSchema>;

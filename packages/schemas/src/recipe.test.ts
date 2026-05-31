@@ -58,6 +58,19 @@ describe("recipeDraftContentSchema", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("画像だけの手順を受け入れる", () => {
+    const result = recipeDraftContentSchema.safeParse({
+      title: "Tomato pasta",
+      steps: [
+        {
+          image: { type: "tmpObjectKey", key: "tmp/user/step.webp" },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("recipeSourceDraftSchema", () => {

@@ -13,12 +13,14 @@
   "r2_buckets": [
     {
       "binding": "RECIPE_IMAGES",
-      "bucket_name": "recipestock-images-dev"
+      "bucket_name": "recipestock-images-dev",
+      "remote": true
     }
   ],
   "vars": {
     "APP_ENV": "development",
     "IMPORT_TIMEOUT_MS": "30000",
+    "R2_BUCKET_NAME": "recipestock-images-dev",
     "AI_GATEWAY_NAME": "recipestock",
     "AI_TEXT_MODEL": "openai/gpt-5.2",
     "AI_VISION_MODEL": "openai/gpt-5.2"
