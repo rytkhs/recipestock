@@ -48,6 +48,13 @@ export const recipeLimitExceededResponse = () =>
     message: "Recipe limit exceeded.",
   });
 
+export const lockedRecipeResponse = () =>
+  apiErrorResponse({
+    status: 403,
+    code: "locked_recipe",
+    message: "Recipe is locked.",
+  });
+
 export const notFoundResponse = (message = "Resource was not found.") =>
   apiErrorResponse({
     status: 404,

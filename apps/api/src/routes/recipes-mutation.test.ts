@@ -223,6 +223,84 @@ describe("Recipe mutation routes", () => {
     });
   });
 
+  it("ロック中Recipeは更新できず画像確定もDB更新も実行しない", async () => {
+    const updates: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async (userId, recipeId) =>
+          baseRecipe({
+            id: recipeId,
+            userId,
+            locked: true,
+          }),
+        listRecipes: unusedListRecipes,
+        updateRecipe: async (recipe) => {
+          updates.push(recipe);
+          return baseRecipe();
+        },
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        getObjectSize: async () => {
+          throw new Error("should not inspect an object");
+        },
+        copyObject: async () => {
+          throw new Error("should not copy an object");
+        },
+        deleteObject: async () => {
+          throw new Error("should not delete an object");
+        },
+        deletePrefixBestEffort: async () => undefined,
+      },
+    });
+
+    const response = await testApp.request(
+      "/api/recipes/recipe_123",
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Potato salad",
+            steps: [
+              {
+                text: "盛り付ける",
+                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+              },
+            ],
+          },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(403);
+    expect(updates).toEqual([]);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "locked_recipe",
+        message: "Recipe is locked.",
+      },
+    });
+  });
+
   it("レシピ更新で既存画像を保持し、新しいtmp画像を確定し、不要画像を削除対象にする", async () => {
     const copies: unknown[] = [];
     const deletes: unknown[] = [];

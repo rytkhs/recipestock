@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createRecipeRequestSchema,
   createRecipeResponseSchema,
+  getRecipeResponseSchema,
   listRecipesQuerySchema,
   listRecipesResponseSchema,
   recipeContentSchema,
@@ -129,6 +130,19 @@ describe("createRecipeResponseSchema", () => {
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
         locked: false,
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("getRecipeResponseSchema", () => {
+  it("ロック中Recipe詳細はidとlockedだけを返せる", () => {
+    const result = getRecipeResponseSchema.safeParse({
+      recipe: {
+        id: "recipe_123",
+        locked: true,
       },
     });
 

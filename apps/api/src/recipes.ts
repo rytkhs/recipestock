@@ -1,5 +1,6 @@
-import { type DbClient, recipes } from "@recipestock/db";
+import { appUsers, type DbClient, recipes } from "@recipestock/db";
 import {
+  type LockedRecipeDetail,
   type RecipeContent,
   type RecipeDetail,
   type RecipeDraftContent,
@@ -25,12 +26,15 @@ export type RecipeRecord = {
   searchText: string;
   createdAt: Date;
   updatedAt: Date;
+  locked?: boolean;
 };
 
 export type RecipeListRecord = Pick<
   RecipeRecord,
   "id" | "title" | "sourceName" | "createdAt" | "updatedAt"
->;
+> & {
+  locked?: boolean;
+};
 
 export type NewRecipeRecord = RecipeRecord;
 
@@ -181,7 +185,7 @@ export const toRecipeListItem = (recipe: RecipeListRecord): RecipeListItem => ({
   sourceName: recipe.sourceName,
   createdAt: recipe.createdAt.toISOString(),
   updatedAt: recipe.updatedAt.toISOString(),
-  locked: false,
+  locked: recipe.locked ?? false,
 });
 
 export const toRecipeDetail = (recipe: RecipeRecord): RecipeDetail => ({
@@ -199,6 +203,21 @@ export const toRecipeDetail = (recipe: RecipeRecord): RecipeDetail => ({
   updatedAt: recipe.updatedAt.toISOString(),
   locked: false,
 });
+
+export const toLockedRecipeDetail = (recipe: Pick<RecipeRecord, "id">): LockedRecipeDetail => ({
+  id: recipe.id,
+  locked: true,
+});
+
+export const isRecipeLockedForPlan = ({
+  plan,
+  recipeId,
+  unlockedRecipeIds,
+}: {
+  plan: Plan;
+  recipeId: string;
+  unlockedRecipeIds: ReadonlySet<string>;
+}) => plan === "free" && !unlockedRecipeIds.has(recipeId);
 
 type RecipeListCursor = {
   updatedAt: string;
@@ -366,7 +385,19 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
       .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
       .limit(1);
 
-    return row ? mapRecipeRow(row) : null;
+    if (!row) {
+      return null;
+    }
+
+    const plan = await getAppUserPlan(db, userId);
+    const unlockedRecipeIds =
+      plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
+    const recipe = mapRecipeRow(row);
+
+    return {
+      ...recipe,
+      locked: isRecipeLockedForPlan({ plan, recipeId: recipe.id, unlockedRecipeIds }),
+    };
   },
   async listRecipes({ userId, searchTerms, limit, cursor }) {
     const decodedCursor = cursor ? decodeRecipeListCursor(cursor) : null;
@@ -385,6 +416,9 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
       );
     }
 
+    const plan = await getAppUserPlan(db, userId);
+    const unlockedRecipeIds =
+      plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
     const rows = await db
       .select({
         id: recipes.id,
@@ -401,7 +435,10 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
     const lastRecipe = pageRows.at(-1);
 
     return {
-      items: pageRows,
+      items: pageRows.map((recipe) => ({
+        ...recipe,
+        locked: isRecipeLockedForPlan({ plan, recipeId: recipe.id, unlockedRecipeIds }),
+      })),
       nextCursor:
         rows.length > limit && lastRecipe
           ? encodeRecipeListCursor({
@@ -434,6 +471,33 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
     return deletedRows.length > 0;
   },
 });
+
+const getAppUserPlan = async (db: DbClient, userId: string): Promise<Plan> => {
+  await db.insert(appUsers).values({ userId }).onConflictDoNothing();
+
+  const [appUser] = await db
+    .select({ plan: appUsers.plan })
+    .from(appUsers)
+    .where(eq(appUsers.userId, userId))
+    .limit(1);
+
+  if (!appUser) {
+    throw new Error(`App user was not created for ${userId}`);
+  }
+
+  return appUser.plan;
+};
+
+const getUnlockedRecipeIdSet = async (db: DbClient, userId: string): Promise<Set<string>> => {
+  const rows = await db
+    .select({ id: recipes.id })
+    .from(recipes)
+    .where(eq(recipes.userId, userId))
+    .orderBy(desc(recipes.updatedAt), desc(recipes.id))
+    .limit(PLAN_LIMITS.free.savedRecipes);
+
+  return new Set(rows.map((row) => row.id));
+};
 
 const mapRecipeSqlRow = (row: RecipeSqlRow): RecipeRecord => ({
   id: row.id,

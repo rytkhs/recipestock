@@ -76,6 +76,40 @@ describe("RecipesRoute", () => {
     });
   });
 
+  it("ロック中Recipeは一覧で詳細リンクにしない", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_locked",
+                title: "Locked pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: "2026-05-20T00:00:00.000Z",
+                updatedAt: "2026-05-20T00:00:00.000Z",
+                locked: true,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(
+      screen.findByRole("heading", { name: "Locked pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("ロック中")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Locked pasta" })).not.toBeInTheDocument();
+  });
+
   it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {
     let nextPageRequests = 0;
     const fetchMock = mockFetch(
@@ -389,6 +423,58 @@ describe("RecipesRoute", () => {
       "src",
       "https://images.example/step-only.webp",
     );
+  });
+
+  it("ロック中Recipe詳細に直接アクセスしても本文と編集リンクを表示しない", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_locked") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_locked",
+              locked: true,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_locked");
+
+    await expect(
+      screen.findByRole("heading", { name: "ロック中のレシピ" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("このレシピの詳細は現在表示できません。")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "編集" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "材料" })).not.toBeInTheDocument();
+  });
+
+  it("ロック中Recipe編集に直接アクセスしてもフォームを表示しない", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_locked") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_locked",
+              locked: true,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_locked/edit");
+
+    await expect(
+      screen.findByRole("heading", { name: "レシピを編集できません" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更新" })).not.toBeInTheDocument();
   });
 
   it("詳細画面から編集して本文だけを更新できる", async () => {

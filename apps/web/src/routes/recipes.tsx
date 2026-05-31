@@ -2,8 +2,8 @@ import { Button, Input, Label, TextField } from "@heroui/react";
 import {
   type CreateRecipeResponse,
   type DeleteRecipeResponse,
+  type GetRecipeResponse,
   type ListRecipesResponse,
-  type RecipeDetail,
   type UpdateRecipeResponse,
 } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -65,7 +65,7 @@ const recipeMutationErrorMessage = (error: unknown, fallback: string) => {
 };
 
 const fetchRecipe = async (recipeId: string) => {
-  const body = await parseApiResponse<{ recipe: RecipeDetail }>(
+  const body = await parseApiResponse<GetRecipeResponse>(
     api.api.recipes[":recipeId"].$get({
       param: { recipeId },
     }),
@@ -157,15 +157,26 @@ export const RecipesIndexRoute = () => {
       <div className="mt-6 grid gap-3">
         {recipes.map((recipe) => (
           <article className="rounded-lg border border-border bg-surface p-4" key={recipe.id}>
-            <h2 className="font-semibold text-xl">
-              <Link
-                className="hover:text-accent"
-                params={{ recipeId: recipe.id }}
-                to="/recipes/$recipeId"
-              >
-                {recipe.title}
-              </Link>
-            </h2>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <h2 className="font-semibold text-xl">
+                {recipe.locked ? (
+                  <span>{recipe.title}</span>
+                ) : (
+                  <Link
+                    className="hover:text-accent"
+                    params={{ recipeId: recipe.id }}
+                    to="/recipes/$recipeId"
+                  >
+                    {recipe.title}
+                  </Link>
+                )}
+              </h2>
+              {recipe.locked ? (
+                <span className="inline-flex w-fit rounded-md border border-border px-2 py-1 font-medium text-default-600 text-xs">
+                  ロック中
+                </span>
+              ) : null}
+            </div>
             {recipe.sourceName ? (
               <p className="mt-2 text-default-600">{recipe.sourceName}</p>
             ) : null}
@@ -255,6 +266,15 @@ export const RecipeDetailRoute = () => {
       <section className="mx-auto w-full max-w-5xl px-6 py-10">
         <h1 className="font-semibold text-3xl">レシピを表示できません</h1>
       </section>
+    );
+  }
+
+  if (recipe.locked) {
+    return (
+      <article className="mx-auto w-full max-w-3xl px-6 py-10">
+        <h1 className="font-semibold text-3xl">ロック中のレシピ</h1>
+        <p className="mt-4 text-default-600">このレシピの詳細は現在表示できません。</p>
+      </article>
     );
   }
 
@@ -399,7 +419,7 @@ export const EditRecipeRoute = () => {
     );
   }
 
-  if (error || !recipe) {
+  if (error || !recipe || recipe.locked) {
     return (
       <section className="mx-auto w-full max-w-3xl px-6 py-10">
         <h1 className="font-semibold text-3xl">レシピを編集できません</h1>

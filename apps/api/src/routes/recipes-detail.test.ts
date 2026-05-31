@@ -166,6 +166,69 @@ describe("Recipe detail routes", () => {
     });
   });
 
+  it("ロック中Recipe詳細は本文を返さない", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async (userId, recipeId) => ({
+          id: recipeId,
+          userId,
+          title: "Locked pasta",
+          content: {
+            title: "Locked pasta",
+            ingredientGroups: [{ ingredients: [{ name: "秘密の材料", amount: "1つ" }] }],
+            steps: [{ text: "煮る" }],
+          },
+          sourceType: "web",
+          sourcePlatform: null,
+          sourceUrl: "https://example.com/locked",
+          normalizedSourceUrl: "https://example.com/locked",
+          sourceName: "Example Kitchen",
+          searchText: "locked pasta",
+          createdAt: new Date("2026-05-20T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-20T00:00:00.000Z"),
+          locked: true,
+        }),
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL for locked recipe");
+        },
+        copyObject: async () => {
+          throw new Error("should not copy an object");
+        },
+        deleteObject: async () => undefined,
+        deletePrefixBestEffort: async () => undefined,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/recipe_locked", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      recipe: {
+        id: "recipe_locked",
+        locked: true,
+      },
+    });
+  });
+
   it("保存済みレシピが存在しない場合はnot_foundを返す", async () => {
     const testApp = createApp({
       auth: {

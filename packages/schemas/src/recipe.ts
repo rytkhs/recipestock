@@ -104,6 +104,11 @@ export const recipeDetailSchema = z.object({
   locked: z.literal(false),
 });
 
+export const lockedRecipeDetailSchema = z.strictObject({
+  id: z.string().min(1),
+  locked: z.literal(true),
+});
+
 export const createRecipeRequestSchema = z.object({
   content: recipeDraftContentSchema,
   source: recipeSourceDraftSchema,
@@ -146,7 +151,9 @@ export const listRecipesResponseSchema = z.object({
   nextCursor: z.string().nullable().optional(),
 });
 
-export const getRecipeResponseSchema = createRecipeResponseSchema;
+export const getRecipeResponseSchema = z.object({
+  recipe: z.discriminatedUnion("locked", [recipeDetailSchema, lockedRecipeDetailSchema]),
+});
 
 export type SourceType = z.infer<typeof sourceTypeSchema>;
 export type SourcePlatform = z.infer<typeof sourcePlatformSchema>;
@@ -162,6 +169,7 @@ export type RecipeDraftContent = z.infer<typeof recipeDraftContentSchema>;
 export type RecipeSourceDraft = z.infer<typeof recipeSourceDraftSchema>;
 export type RecipeSource = z.infer<typeof recipeSourceSchema>;
 export type RecipeDetail = z.infer<typeof recipeDetailSchema>;
+export type LockedRecipeDetail = z.infer<typeof lockedRecipeDetailSchema>;
 export type CreateRecipeRequest = z.infer<typeof createRecipeRequestSchema>;
 export type CreateRecipeResponse = z.infer<typeof createRecipeResponseSchema>;
 export type UpdateRecipeRequest = z.infer<typeof updateRecipeRequestSchema>;
@@ -170,3 +178,4 @@ export type DeleteRecipeResponse = z.infer<typeof deleteRecipeResponseSchema>;
 export type ListRecipesQuery = z.infer<typeof listRecipesQuerySchema>;
 export type RecipeListItem = z.infer<typeof recipeListItemSchema>;
 export type ListRecipesResponse = z.infer<typeof listRecipesResponseSchema>;
+export type GetRecipeResponse = z.infer<typeof getRecipeResponseSchema>;
