@@ -22,5 +22,7 @@ export type Bindings = {
   AI_GATEWAY_NAME: string;
   AI_TEXT_MODEL: string;
   AI_VISION_MODEL: string;
+  FREE_AI_MONTHLY_LIMIT?: string;
+  PRO_AI_MONTHLY_LIMIT?: string;
   IMPORT_TIMEOUT_MS: string;
 };

@@ -23,6 +23,8 @@
     "R2_BUCKET_NAME": "recipestock-images-dev",
     "AI_GATEWAY_NAME": "recipestock",
     "AI_TEXT_MODEL": "openai/gpt-5.2",
-    "AI_VISION_MODEL": "openai/gpt-5.2"
+    "AI_VISION_MODEL": "openai/gpt-5.2",
+    "FREE_AI_MONTHLY_LIMIT": "10",
+    "PRO_AI_MONTHLY_LIMIT": "300"
   }
 }

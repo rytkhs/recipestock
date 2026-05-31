@@ -1,6 +1,7 @@
 import { aiUsageMonthly, appUsers, type DbClient, recipes } from "@recipestock/db";
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, count, eq } from "drizzle-orm";
+import { getNextJstMonthResetAtForMonth } from "./usage";
 
 export type AppUserSummary = {
   userId: string;
@@ -9,7 +10,7 @@ export type AppUserSummary = {
 
 export type AiUsageSummary = {
   month: string;
-  count: number;
+  used: number;
 };
 
 export type MeRepository = {
@@ -44,7 +45,7 @@ export const createMeRepository = (db: DbClient): MeRepository => ({
     const [row] = await db
       .select({
         month: aiUsageMonthly.month,
-        count: aiUsageMonthly.count,
+        used: aiUsageMonthly.count,
       })
       .from(aiUsageMonthly)
       .where(and(eq(aiUsageMonthly.userId, userId), eq(aiUsageMonthly.month, month)))
@@ -54,36 +55,20 @@ export const createMeRepository = (db: DbClient): MeRepository => ({
   },
 });
 
-export const getCurrentJstMonth = (date = new Date()) => {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(date);
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-
-  if (!year || !month) {
-    throw new Error("Failed to format current JST month.");
-  }
-
-  return `${year}-${month}`;
-};
-
 export const buildMeResponse = ({
   userId,
   plan,
   recipeCount,
   aiUsage,
+  aiUsageLimit,
 }: {
   userId: string;
   plan: Plan;
   recipeCount: number;
   aiUsage: AiUsageSummary;
+  aiUsageLimit: number;
 }) => {
   const planLimits = PLAN_LIMITS[plan];
-  const remaining = Math.max(planLimits.monthlyAiImports - aiUsage.count, 0);
 
   return {
     userId,
@@ -94,9 +79,9 @@ export const buildMeResponse = ({
       planLimits.savedRecipes === null ? false : recipeCount >= planLimits.savedRecipes,
     aiUsage: {
       month: aiUsage.month,
-      count: aiUsage.count,
-      limit: planLimits.monthlyAiImports,
-      remaining,
+      used: aiUsage.used,
+      limit: aiUsageLimit,
+      resetAt: getNextJstMonthResetAtForMonth(aiUsage.month),
     },
   };
 };

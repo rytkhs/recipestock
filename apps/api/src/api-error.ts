@@ -48,6 +48,13 @@ export const recipeLimitExceededResponse = () =>
     message: "Recipe limit exceeded.",
   });
 
+export const aiUsageLimitExceededResponse = () =>
+  apiErrorResponse({
+    status: 429,
+    code: "ai_usage_limit_exceeded",
+    message: "AI usage limit exceeded.",
+  });
+
 export const lockedRecipeResponse = () =>
   apiErrorResponse({
     status: 403,

@@ -19,6 +19,7 @@ describe("Me routes", () => {
 
     const response = await testApp.request("/api/me", undefined, {
       APP_ENV: "development",
+      FREE_AI_MONTHLY_LIMIT: "17",
     });
 
     expect(response.status).toBe(401);
@@ -50,7 +51,7 @@ describe("Me routes", () => {
         },
         getAiUsage: async (userId, month) => {
           calls.push(`ai:${userId}:${month}`);
-          return { month, count: 3 };
+          return { month, used: 3 };
         },
       },
       getCurrentMonth: () => "2026-05",
@@ -58,6 +59,7 @@ describe("Me routes", () => {
 
     const response = await testApp.request("/api/me", undefined, {
       APP_ENV: "development",
+      FREE_AI_MONTHLY_LIMIT: "17",
     });
 
     expect(response.status).toBe(200);
@@ -69,9 +71,9 @@ describe("Me routes", () => {
       isRecipeLimitReached: true,
       aiUsage: {
         month: "2026-05",
-        count: 3,
-        limit: 10,
-        remaining: 7,
+        used: 3,
+        limit: 17,
+        resetAt: "2026-05-31T15:00:00.000Z",
       },
     });
     expect(calls).toEqual(["ensure:user_123", "recipes:user_123", "ai:user_123:2026-05"]);
