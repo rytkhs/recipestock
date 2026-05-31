@@ -24,7 +24,6 @@ export type UsageRepository = {
     userId: string;
     month: string;
     limit: number;
-    usageId: string;
   }): Promise<ConsumeAiUsageResult>;
 };
 
@@ -33,13 +32,11 @@ export const consumeAiUsage = async ({
   env,
   repository,
   now = new Date(),
-  createUsageId = createAiUsageId,
 }: {
   userId: string;
   env: Partial<Bindings>;
   repository: UsageRepository;
   now?: Date;
-  createUsageId?: () => string;
 }): Promise<ConsumeAiUsageResult> => {
   const appUser = await repository.getOrCreateAppUser(userId);
   const month = getCurrentJstMonth(now);
@@ -53,26 +50,7 @@ export const consumeAiUsage = async ({
     userId,
     month,
     limit,
-    usageId: createUsageId(),
   });
-};
-
-const crockfordBase32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-export const createAiUsageId = (now = Date.now()) => {
-  let time = now;
-  let encodedTime = "";
-
-  for (let i = 0; i < 10; i += 1) {
-    encodedTime = crockfordBase32[time % 32] + encodedTime;
-    time = Math.floor(time / 32);
-  }
-
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  const encodedRandom = Array.from(bytes, (byte) => crockfordBase32[byte & 31]).join("");
-
-  return `${encodedTime}${encodedRandom}`;
 };
 
 export const createUsageRepository = (db: DbClient): UsageRepository => ({
@@ -102,17 +80,16 @@ export const createUsageRepository = (db: DbClient): UsageRepository => ({
 
     return row ?? null;
   },
-  async consumeAiUsage({ userId, month, limit, usageId }) {
+  async consumeAiUsage({ userId, month, limit }) {
     const result = await db.execute<{ month: string; used: number }>(sql`
       insert into ai_usage_monthly (
-        id,
         user_id,
         month,
         count,
         created_at,
         updated_at
       )
-      values (${usageId}, ${userId}, ${month}, 1, now(), now())
+      values (${userId}, ${month}, 1, now(), now())
       on conflict (user_id, month)
       do update set
         count = ai_usage_monthly.count + 1,

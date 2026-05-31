@@ -44,7 +44,6 @@ describe("AI usage", () => {
           consumeAiUsage: consume,
         },
         now: new Date("2026-05-15T00:00:00.000Z"),
-        createUsageId: () => "usage_123",
       }),
     ).resolves.toEqual({
       status: "consumed",
@@ -55,7 +54,6 @@ describe("AI usage", () => {
       userId: "user_123",
       month: "2026-05",
       limit: 300,
-      usageId: "usage_123",
     });
   });
 
@@ -77,7 +75,6 @@ describe("AI usage", () => {
           consumeAiUsage: consume,
         },
         now: new Date("2026-05-15T00:00:00.000Z"),
-        createUsageId: () => "usage_123",
       }),
     ).resolves.toEqual({
       status: "limitExceeded",
@@ -105,7 +102,6 @@ describe("AI usage", () => {
           },
         },
         now: new Date("2026-05-15T00:00:00.000Z"),
-        createUsageId: () => "usage_1",
       }),
       consumeAiUsage({
         userId: "user_123",
@@ -122,7 +118,6 @@ describe("AI usage", () => {
           },
         },
         now: new Date("2026-05-15T00:00:00.000Z"),
-        createUsageId: () => "usage_2",
       }),
     ]);
 
@@ -141,7 +136,6 @@ describe("AI usage", () => {
         userId: "user_123",
         month: "2026-05",
         limit: 10,
-        usageId: "usage_123",
       }),
     ).resolves.toEqual({ status: "limitExceeded" });
     expect(execute).toHaveBeenCalledTimes(1);
