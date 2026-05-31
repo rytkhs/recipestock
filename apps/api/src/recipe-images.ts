@@ -132,45 +132,52 @@ export const finalizeRecipeDraftImages = async ({
 }: FinalizeRecipeDraftImagesParams): Promise<FinalizedRecipeImages> => {
   const copiedKeys: string[] = [];
   const tmpKeys: string[] = [];
-  const existingKeys = existingContent ? getRecipeImageKeys(existingContent) : new Set<string>();
-  const coverImageKey = await resolveImageRef({
-    image: draft.coverImage,
-    userId,
-    recipeId,
-    imageService,
-    existingKeys,
-    createImageId,
-    copiedKeys,
-    tmpKeys,
-  });
-  const steps = await Promise.all(
-    draft.steps.map(async (step) => ({
-      text: step.text,
-      imageKey: await resolveImageRef({
-        image: step.image,
-        userId,
-        recipeId,
-        imageService,
-        existingKeys,
-        createImageId,
-        copiedKeys,
-        tmpKeys,
-      }),
-    })),
-  );
+  try {
+    const existingKeys = existingContent ? getRecipeImageKeys(existingContent) : new Set<string>();
+    const coverImageKey = await resolveImageRef({
+      image: draft.coverImage,
+      userId,
+      recipeId,
+      imageService,
+      existingKeys,
+      createImageId,
+      copiedKeys,
+      tmpKeys,
+    });
+    const steps: RecipeContent["steps"] = [];
 
-  return {
-    content: recipeContentSchema.parse({
-      title: draft.title,
-      servingsText: draft.servingsText,
-      coverImageKey,
-      ingredientGroups: draft.ingredientGroups,
-      steps,
-      note: draft.note,
-    }),
-    copiedKeys,
-    tmpKeys,
-  };
+    for (const step of draft.steps) {
+      steps.push({
+        text: step.text,
+        imageKey: await resolveImageRef({
+          image: step.image,
+          userId,
+          recipeId,
+          imageService,
+          existingKeys,
+          createImageId,
+          copiedKeys,
+          tmpKeys,
+        }),
+      });
+    }
+
+    return {
+      content: recipeContentSchema.parse({
+        title: draft.title,
+        servingsText: draft.servingsText,
+        coverImageKey,
+        ingredientGroups: draft.ingredientGroups,
+        steps,
+        note: draft.note,
+      }),
+      copiedKeys,
+      tmpKeys,
+    };
+  } catch (error) {
+    await deleteObjectsBestEffort(imageService, copiedKeys);
+    throw error;
+  }
 };
 
 export const deleteObjectsBestEffort = async (

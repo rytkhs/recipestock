@@ -470,6 +470,88 @@ describe("Recipe mutation routes", () => {
     });
   });
 
+  it("複数tmp画像の確定途中で失敗したらcopy済み確定画像を削除対象にする", async () => {
+    const updates: unknown[] = [];
+    const copies: unknown[] = [];
+    const deletes: unknown[] = [];
+    const existing = baseRecipe();
+    const imageIds = ["cover", "step"];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => existing,
+        listRecipes: unusedListRecipes,
+        updateRecipe: async (recipe) => {
+          updates.push(recipe);
+          return existing;
+        },
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        getObjectSize: async (objectKey) =>
+          objectKey === "tmp/user_123/step.webp" ? MAX_IMAGE_UPLOAD_SIZE_BYTES + 1 : 1024,
+        copyObject: async (sourceKey, destinationKey) => {
+          copies.push({ sourceKey, destinationKey });
+        },
+        deleteObject: async (objectKey) => {
+          deletes.push(objectKey);
+        },
+        deletePrefixBestEffort: async () => undefined,
+      },
+      createImageId: () => imageIds.shift() ?? "extra",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes/recipe_123",
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            coverImage: { type: "tmpObjectKey", key: "tmp/user_123/cover.webp" },
+            steps: [
+              {
+                text: "盛り付ける",
+                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+              },
+            ],
+          },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(422);
+    expect(copies).toEqual([
+      {
+        sourceKey: "tmp/user_123/cover.webp",
+        destinationKey: "recipes/user_123/recipe_123/cover.webp",
+      },
+    ]);
+    expect(deletes).toEqual(["recipes/user_123/recipe_123/cover.webp"]);
+    expect(updates).toEqual([]);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "image_finalize_failed" },
+    });
+  });
+
   it("tmp画像の実サイズが上限を超える場合はレシピを更新しない", async () => {
     const updates: unknown[] = [];
     const copies: unknown[] = [];
