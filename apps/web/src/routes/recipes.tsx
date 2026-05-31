@@ -380,8 +380,11 @@ export const EditRecipeRoute = () => {
 
     try {
       const response = await putRecipe(recipeId, values);
-      queryClient.setQueryData(recipesQueryKeys.detail(recipeId), response.recipe);
       await queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      await queryClient.fetchQuery({
+        queryKey: recipesQueryKeys.detail(recipeId),
+        queryFn: () => fetchRecipe(recipeId),
+      });
       await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
     } catch (error) {
       setSubmitError(recipeMutationErrorMessage(error, "レシピを更新できませんでした。"));

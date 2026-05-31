@@ -1,3 +1,4 @@
+import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../index";
 import { type RecipeRecord } from "../recipes";
@@ -267,6 +268,7 @@ describe("Recipe mutation routes", () => {
         createSignedGetUrl: async () => {
           throw new Error("should not create a signed GET URL");
         },
+        getObjectSize: async () => 1024,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
         },
@@ -359,6 +361,7 @@ describe("Recipe mutation routes", () => {
         createSignedGetUrl: async () => {
           throw new Error("should not create a signed GET URL");
         },
+        getObjectSize: async () => 1024,
         copyObject: async () => undefined,
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
@@ -426,6 +429,7 @@ describe("Recipe mutation routes", () => {
         createSignedGetUrl: async () => {
           throw new Error("should not create a signed GET URL");
         },
+        getObjectSize: async () => 1024,
         copyObject: async () => {
           throw new Error("copy failed");
         },
@@ -460,6 +464,78 @@ describe("Recipe mutation routes", () => {
     );
 
     expect(response.status).toBe(422);
+    expect(updates).toEqual([]);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "image_finalize_failed" },
+    });
+  });
+
+  it("tmp画像の実サイズが上限を超える場合はレシピを更新しない", async () => {
+    const updates: unknown[] = [];
+    const copies: unknown[] = [];
+    const existing = baseRecipe();
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => existing,
+        listRecipes: unusedListRecipes,
+        updateRecipe: async (recipe) => {
+          updates.push(recipe);
+          return existing;
+        },
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        getObjectSize: async () => MAX_IMAGE_UPLOAD_SIZE_BYTES + 1,
+        copyObject: async (sourceKey, destinationKey) => {
+          copies.push({ sourceKey, destinationKey });
+        },
+        deleteObject: async () => {
+          throw new Error("should not delete an object");
+        },
+        deletePrefixBestEffort: async () => undefined,
+      },
+      createImageId: () => "new-step",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes/recipe_123",
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            steps: [
+              {
+                text: "盛り付ける",
+                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+              },
+            ],
+          },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(422);
+    expect(copies).toEqual([]);
     expect(updates).toEqual([]);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "image_finalize_failed" },

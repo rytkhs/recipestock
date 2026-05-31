@@ -1,5 +1,6 @@
 import {
   type DraftImageRef,
+  MAX_IMAGE_UPLOAD_SIZE_BYTES,
   type RecipeContent,
   type RecipeContentWithUrls,
   type RecipeDraftContent,
@@ -46,6 +47,21 @@ const destinationObjectKey = ({
   sourceKey: string;
   createImageId: () => string;
 }) => `recipes/${userId}/${recipeId}/${createImageId()}.${extensionFromObjectKey(sourceKey)}`;
+
+const assertImageObjectSizeAllowed = async (
+  imageService: RecipeImageService,
+  objectKey: string,
+) => {
+  const size = await imageService.getObjectSize?.(objectKey);
+
+  if (size === null || size === undefined) {
+    throw new RecipeImageFinalizeError("Temporary image object was not found.");
+  }
+
+  if (size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+    throw new RecipeImageFinalizeError("Temporary image object is too large.");
+  }
+};
 
 const resolveImageRef = async ({
   image,
@@ -94,6 +110,7 @@ const resolveImageRef = async ({
   });
 
   try {
+    await assertImageObjectSizeAllowed(imageService, image.key);
     await imageService.copyObject(image.key, destinationKey);
     copiedKeys.push(destinationKey);
     tmpKeys.push(image.key);

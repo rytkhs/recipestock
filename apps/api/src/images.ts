@@ -1,4 +1,8 @@
-import { IMAGE_UPLOAD_URL_EXPIRES_IN_SECONDS, type ImageContentType } from "@recipestock/schemas";
+import {
+  IMAGE_UPLOAD_URL_EXPIRES_IN_SECONDS,
+  type ImageContentType,
+  MAX_IMAGE_UPLOAD_SIZE_BYTES,
+} from "@recipestock/schemas";
 import { AwsClient } from "aws4fetch";
 import { type Bindings } from "./env";
 
@@ -19,6 +23,7 @@ export type CreateSignedGetUrlParams = {
 export type RecipeImageService = {
   createUploadUrl(params: CreateUploadUrlParams): Promise<ImageUrlResult>;
   createSignedGetUrl(params: CreateSignedGetUrlParams): Promise<ImageUrlResult>;
+  getObjectSize?(objectKey: string): Promise<number | null>;
   copyObject(sourceKey: string, destinationKey: string): Promise<void>;
   deleteObject(objectKey: string): Promise<void>;
   deletePrefixBestEffort(prefix: string): Promise<void>;
@@ -78,11 +83,19 @@ export const createRecipeImageService = (env: Bindings): RecipeImageService => (
       expiresAt: addSeconds(new Date(), IMAGE_UPLOAD_URL_EXPIRES_IN_SECONDS),
     };
   },
+  async getObjectSize(objectKey) {
+    const object = await env.RECIPE_IMAGES.head(objectKey);
+    return object?.size ?? null;
+  },
   async copyObject(sourceKey, destinationKey) {
     const sourceObject = await env.RECIPE_IMAGES.get(sourceKey);
 
     if (!sourceObject?.body) {
       throw new Error(`R2 object was not found: ${sourceKey}`);
+    }
+
+    if (sourceObject.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+      throw new Error(`R2 object is too large: ${sourceKey}`);
     }
 
     await env.RECIPE_IMAGES.put(destinationKey, sourceObject.body, {

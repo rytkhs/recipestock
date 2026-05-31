@@ -159,8 +159,15 @@ describe("RecipesRoute", () => {
           title: "Tomato pasta",
           servingsText: "2人分",
           coverImageKey: "recipes/user_123/recipe_123/cover.webp",
+          coverImageUrl: "https://images.example/cover.webp",
           ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-          steps: [{ text: "煮詰める", imageKey: "recipes/user_123/recipe_123/step.webp" }],
+          steps: [
+            {
+              text: "煮詰める",
+              imageKey: "recipes/user_123/recipe_123/step.webp",
+              imageUrl: "https://images.example/step.webp",
+            },
+          ],
           note: "仕上げにオリーブオイル。",
         },
         source: {
@@ -393,8 +400,15 @@ describe("RecipesRoute", () => {
           title: "Tomato pasta",
           servingsText: "2人分",
           coverImageKey: "recipes/user_123/recipe_123/cover.webp",
+          coverImageUrl: "https://images.example/cover.webp",
           ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-          steps: [{ text: "煮詰める", imageKey: "recipes/user_123/recipe_123/step.webp" }],
+          steps: [
+            {
+              text: "煮詰める",
+              imageKey: "recipes/user_123/recipe_123/step.webp",
+              imageUrl: "https://images.example/step.webp",
+            },
+          ],
           note: "仕上げにオリーブオイル。",
         },
         source: {
@@ -409,7 +423,27 @@ describe("RecipesRoute", () => {
         locked: false,
       },
     };
-    const updatedRecipeResponse = {
+    const updatedRecipeMutationResponse = {
+      recipe: {
+        ...recipeResponse.recipe,
+        title: "Potato salad",
+        content: {
+          title: "Potato salad",
+          servingsText: "3人分",
+          coverImageKey: "recipes/user_123/recipe_123/cover.webp",
+          ingredientGroups: recipeResponse.recipe.content.ingredientGroups,
+          steps: [
+            {
+              text: "煮詰める",
+              imageKey: "recipes/user_123/recipe_123/step.webp",
+            },
+          ],
+          note: "仕上げにオリーブオイル。",
+        },
+        updatedAt: "2026-05-27T00:00:00.000Z",
+      },
+    };
+    const updatedRecipeDetailResponse = {
       recipe: {
         ...recipeResponse.recipe,
         title: "Potato salad",
@@ -425,8 +459,8 @@ describe("RecipesRoute", () => {
     const fetchMock = mockFetch(
       async (input, init) => {
         if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT") {
-          currentRecipeResponse = updatedRecipeResponse;
-          return jsonResponse(updatedRecipeResponse);
+          currentRecipeResponse = updatedRecipeDetailResponse;
+          return jsonResponse(updatedRecipeMutationResponse);
         }
 
         if (getRequestPath(input) === "/api/recipes/recipe_123") {
@@ -493,6 +527,11 @@ describe("RecipesRoute", () => {
     await expect(
       screen.findByRole("heading", { name: "Potato salad" }),
     ).resolves.toBeInTheDocument();
+    await expect(screen.findByAltText("Potato salad")).resolves.toHaveAttribute(
+      "src",
+      "https://images.example/cover.webp",
+    );
+    expect(screen.getByAltText("手順1")).toHaveAttribute("src", "https://images.example/step.webp");
   });
 
   it("詳細画面から削除すると一覧に戻る", async () => {
