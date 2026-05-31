@@ -97,6 +97,75 @@ describe("Recipe list routes", () => {
     });
   });
 
+  it("Freeユーザーは最新5件以外のレシピがlockedとして一覧に表示される", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: async () => ({
+          items: [
+            {
+              id: "recipe_5",
+              title: "Unlocked recipe",
+              sourceName: null,
+              createdAt: new Date("2026-05-25T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-30T00:00:00.000Z"),
+              locked: false,
+            },
+            {
+              id: "recipe_6",
+              title: "Locked recipe",
+              sourceName: "Example Kitchen",
+              createdAt: new Date("2026-05-24T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-24T00:00:00.000Z"),
+              locked: true,
+            },
+          ],
+          nextCursor: null,
+        }),
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      items: [
+        {
+          id: "recipe_5",
+          title: "Unlocked recipe",
+          coverImageUrl: null,
+          sourceName: null,
+          createdAt: "2026-05-25T00:00:00.000Z",
+          updatedAt: "2026-05-30T00:00:00.000Z",
+          locked: false,
+        },
+        {
+          id: "recipe_6",
+          title: "Locked recipe",
+          coverImageUrl: null,
+          sourceName: "Example Kitchen",
+          createdAt: "2026-05-24T00:00:00.000Z",
+          updatedAt: "2026-05-24T00:00:00.000Z",
+          locked: true,
+        },
+      ],
+      nextCursor: null,
+    });
+  });
+
   it("一覧cursorが不正な場合はinvalid_recipe_list_cursorを返す", async () => {
     const testApp = createApp({
       auth: {

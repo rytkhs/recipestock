@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import {
   imageFinalizeFailedResponse,
   invalidRecipeListCursorResponse,
+  lockedRecipeResponse,
   notFoundResponse,
   recipeLimitExceededResponse,
   validationFailedResponse,
@@ -37,6 +38,7 @@ import {
   normalizeRecipeSearchTerms,
   normalizeRecipeSource,
   type RecipeRepository,
+  toLockedRecipeDetail,
   toRecipeDetail,
   toRecipeListItem,
 } from "../recipes";
@@ -166,6 +168,10 @@ export const createRecipeRoutes = ({
         return notFoundResponse("Recipe was not found.");
       }
 
+      if (recipe.locked) {
+        return c.json(getRecipeResponseSchema.parse({ recipe: toLockedRecipeDetail(recipe) }));
+      }
+
       const images = imageService ?? createRecipeImageService(c.env);
       const detail = toRecipeDetail(recipe);
 
@@ -192,6 +198,10 @@ export const createRecipeRoutes = ({
 
       if (!existingRecipe) {
         return notFoundResponse("Recipe was not found.");
+      }
+
+      if (existingRecipe.locked) {
+        return lockedRecipeResponse();
       }
 
       const images = imageService ?? createRecipeImageService(c.env);

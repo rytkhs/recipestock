@@ -3,6 +3,7 @@ import {
   createRecipeRepository,
   createRecipeWithPlanLimitInSession,
   InvalidRecipeListCursorError,
+  isRecipeLockedForPlan,
   type NewRecipeRecord,
   normalizeRecipeSource,
   type RecipeWriteSession,
@@ -109,6 +110,28 @@ describe("createRecipeWithPlanLimitInSession", () => {
       recipe,
     });
     expect(calls).toEqual(["ensure:user_123", "lock:user_123", "insert:recipe_123"]);
+  });
+});
+
+describe("isRecipeLockedForPlan", () => {
+  it("Freeユーザーは最新5件に含まれないRecipeをロックする", () => {
+    expect(
+      isRecipeLockedForPlan({
+        plan: "free",
+        recipeId: "recipe_6",
+        unlockedRecipeIds: new Set(["recipe_1", "recipe_2", "recipe_3", "recipe_4", "recipe_5"]),
+      }),
+    ).toBe(true);
+  });
+
+  it("Proユーザーは保存件数にかかわらずRecipeをロックしない", () => {
+    expect(
+      isRecipeLockedForPlan({
+        plan: "pro",
+        recipeId: "recipe_6",
+        unlockedRecipeIds: new Set(),
+      }),
+    ).toBe(false);
   });
 });
 
