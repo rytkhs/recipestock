@@ -6,6 +6,7 @@ export const apiErrorCodeSchema = z.enum([
   "not_found",
   "unexpected_response",
   "recipe_limit_exceeded",
+  "ai_usage_limit_exceeded",
   "locked_recipe",
   "invalid_recipe_list_cursor",
   "invalid_image_type",

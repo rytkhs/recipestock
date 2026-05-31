@@ -3,8 +3,9 @@ import { getMeResponseSchema } from "@recipestock/schemas";
 import { Hono } from "hono";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
-import { buildMeResponse, createMeRepository, getCurrentJstMonth, type MeRepository } from "../me";
+import { buildMeResponse, createMeRepository, type MeRepository } from "../me";
 import { requireAuth } from "../middleware/auth";
+import { getCurrentJstMonth, resolveAiMonthlyLimit } from "../usage";
 
 type MeRouteDependencies = {
   auth: AuthService;
@@ -31,7 +32,8 @@ export const createMeRoutes = ({ auth, meRepository, getCurrentMonth }: MeRouteD
           userId,
           plan: appUser.plan,
           recipeCount,
-          aiUsage: storedAiUsage ?? { month, count: 0 },
+          aiUsage: storedAiUsage ?? { month, used: 0 },
+          aiUsageLimit: resolveAiMonthlyLimit(appUser.plan, c.env),
         }),
       ),
     );

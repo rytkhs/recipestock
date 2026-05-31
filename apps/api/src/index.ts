@@ -10,15 +10,19 @@ import { createHealthRoutes } from "./routes/health";
 import { createImageRoutes } from "./routes/images";
 import { createMeRoutes } from "./routes/me";
 import { createRecipeRoutes } from "./routes/recipes";
+import { createUsageRoutes } from "./routes/usage";
+import { type UsageRepository } from "./usage";
 
 type AppDependencies = {
   auth?: AuthService;
   meRepository?: MeRepository;
+  usageRepository?: UsageRepository;
   recipeRepository?: RecipeRepository;
   imageService?: RecipeImageService;
   createRecipeId?: () => string;
   createImageId?: () => string;
   getCurrentMonth?: () => string;
+  getCurrentDate?: () => Date;
 };
 
 export const createApp = (dependencies: AppDependencies = {}) => {
@@ -45,6 +49,14 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         auth,
         meRepository: dependencies.meRepository,
         getCurrentMonth: dependencies.getCurrentMonth,
+      }),
+    )
+    .route(
+      "/usage",
+      createUsageRoutes({
+        auth,
+        usageRepository: dependencies.usageRepository,
+        getCurrentDate: dependencies.getCurrentDate,
       }),
     )
     .route(

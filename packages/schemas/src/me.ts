@@ -8,9 +8,9 @@ export const getMeResponseSchema = z.object({
   isRecipeLimitReached: z.boolean(),
   aiUsage: z.object({
     month: z.string(),
-    count: z.number().int().nonnegative(),
-    limit: z.number().int().positive(),
-    remaining: z.number().int().nonnegative(),
+    used: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative(),
+    resetAt: z.string().datetime(),
   }),
 });
 

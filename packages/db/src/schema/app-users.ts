@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -63,12 +63,11 @@ export const appUsers = pgTable("app_users", {
 export const aiUsageMonthly = pgTable(
   "ai_usage_monthly",
   {
-    id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     month: text("month").notNull(),
     count: integer("count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("ai_usage_monthly_user_id_month_idx").on(table.userId, table.month)],
+  (table) => [primaryKey({ columns: [table.userId, table.month] })],
 );

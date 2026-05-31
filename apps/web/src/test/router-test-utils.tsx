@@ -25,9 +25,9 @@ export const viewerResponse = {
   isRecipeLimitReached: false,
   aiUsage: {
     month: "2026-05",
-    count: 0,
+    used: 0,
     limit: 10,
-    remaining: 10,
+    resetAt: "2026-05-31T15:00:00.000Z",
   },
 };
 

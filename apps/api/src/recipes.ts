@@ -12,6 +12,7 @@ import {
 } from "@recipestock/schemas";
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
+import { ulid } from "ulid";
 
 export type RecipeRecord = {
   id: string;
@@ -111,23 +112,7 @@ export type NormalizedRecipeSource = {
   sourceName: string | null;
 };
 
-const crockfordBase32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-export const createRecipeId = (now = Date.now()) => {
-  let time = now;
-  let encodedTime = "";
-
-  for (let i = 0; i < 10; i += 1) {
-    encodedTime = crockfordBase32[time % 32] + encodedTime;
-    time = Math.floor(time / 32);
-  }
-
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  const encodedRandom = Array.from(bytes, (byte) => crockfordBase32[byte & 31]).join("");
-
-  return `${encodedTime}${encodedRandom}`;
-};
+export const createRecipeId = () => ulid();
 
 const objectKeyFromDraftImage = (image: RecipeDraftContent["coverImage"]) => {
   if (!image) {
