@@ -378,17 +378,17 @@ export const EditRecipeRoute = () => {
   const onSubmit = async (values: RecipeDraftFormValues) => {
     setSubmitError(null);
 
+    let response: UpdateRecipeResponse;
     try {
-      const response = await putRecipe(recipeId, values);
-      await queryClient.invalidateQueries({ queryKey: ["recipes"] });
-      await queryClient.fetchQuery({
-        queryKey: recipesQueryKeys.detail(recipeId),
-        queryFn: () => fetchRecipe(recipeId),
-      });
-      await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
+      response = await putRecipe(recipeId, values);
     } catch (error) {
       setSubmitError(recipeMutationErrorMessage(error, "レシピを更新できませんでした。"));
+      return;
     }
+
+    void queryClient.invalidateQueries({ queryKey: ["recipes"] });
+    queryClient.removeQueries({ queryKey: recipesQueryKeys.detail(recipeId) });
+    await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
   };
 
   if (isLoading) {

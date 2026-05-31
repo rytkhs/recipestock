@@ -534,6 +534,82 @@ describe("RecipesRoute", () => {
     expect(screen.getByAltText("手順1")).toHaveAttribute("src", "https://images.example/step.webp");
   });
 
+  it("更新成功後の詳細再取得に失敗しても更新失敗として扱わない", async () => {
+    const recipeResponse = {
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          servingsText: "2人分",
+          ingredientGroups: [],
+          steps: [{ text: "煮詰める" }],
+        },
+        source: {
+          sourceType: "manual",
+          sourcePlatform: null,
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    };
+    let detailRequests = 0;
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT") {
+          return jsonResponse({
+            recipe: {
+              ...recipeResponse.recipe,
+              title: "Potato salad",
+              content: {
+                ...recipeResponse.recipe.content,
+                title: "Potato salad",
+              },
+              updatedAt: "2026-05-27T00:00:00.000Z",
+            },
+          });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          detailRequests += 1;
+
+          if (detailRequests === 1) {
+            return jsonResponse(recipeResponse);
+          }
+
+          return new Response(null, { status: 500 });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await userEvent.clear(await screen.findByLabelText("タイトル"));
+    await userEvent.type(screen.getByLabelText("タイトル"), "Potato salad");
+    await userEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/recipes/recipe_123",
+        expect.objectContaining({
+          method: "PUT",
+          credentials: "include",
+        }),
+      );
+    });
+    await expect(
+      screen.findByRole("heading", { name: "レシピを表示できません" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByText("レシピを更新できませんでした。")).not.toBeInTheDocument();
+  });
+
   it("詳細画面から削除すると一覧に戻る", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const recipeResponse = {
