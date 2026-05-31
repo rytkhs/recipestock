@@ -59,6 +59,9 @@ importers:
       stripe:
         specifier: ^20.0.0
         version: 20.4.1(@types/node@22.19.19)
+      ulid:
+        specifier: ^3.0.2
+        version: 3.0.2
       zod:
         specifier: ^4.2.1
         version: 4.4.3
@@ -3651,6 +3654,10 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  ulid@3.0.2:
+    resolution: {integrity: sha512-yu26mwteFYzBAot7KVMqFGCVpsF6g8wXfJzQUHvu1no3+rRRSFcSV2nKeYvNPLD2J4b08jYBDhHUjeH0ygIl9w==}
+    hasBin: true
+
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
@@ -5788,8 +5795,7 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
-  aws4fetch@1.0.20:
-    optional: true
+  aws4fetch@1.0.20: {}
 
   base64-js@1.5.1:
     optional: true
@@ -6780,6 +6786,8 @@ snapshots:
   tw-animate-css@1.4.0: {}
 
   typescript@5.9.3: {}
+
+  ulid@3.0.2: {}
 
   undici-types@6.21.0: {}
 
