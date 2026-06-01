@@ -74,13 +74,13 @@ export type RecipeImportConverterResult =
     };
 
 export type RecipeImportConverter = {
-  convert(page: FetchedImportPage): RecipeImportConverterResult;
+  convert(page: FetchedImportPage): Promise<RecipeImportConverterResult>;
 };
 
 export type FetchedImportPage = {
   finalUrl: string;
   contentType: string;
-  html: string;
+  body: Response | string;
 };
 
 export type RecipeImportFetcher = (
@@ -108,7 +108,7 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs }) =
     return {
       finalUrl: response.url || url,
       contentType: response.headers.get("content-type") ?? "",
-      html: await response.text(),
+      body: response,
     };
   } catch (error) {
     if (error instanceof RecipeImportError) {
@@ -122,19 +122,17 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs }) =
 };
 
 export const genericHtmlImportConverter: RecipeImportConverter = {
-  convert(page) {
+  async convert(page) {
     if (page.contentType && !/html/i.test(page.contentType)) {
       throw new RecipeImportError("unsupported_page", "Import URL is not an HTML page.");
     }
 
     const normalizedUrl = normalizeUrl(page.finalUrl);
-    const title = firstMatch(page.html, /<title[^>]*>([\s\S]*?)<\/title>/i);
+    const extraction = await extractHtmlImportData(page);
     const sourceName =
-      metaContent(page.html, "og:site_name") ??
-      new URL(normalizedUrl).hostname.replace(/^www\./, "");
-    const description =
-      metaContent(page.html, "description") ?? metaContent(page.html, "og:description");
-    const text = extractReadableText(page.html);
+      extraction.meta["og:site_name"] ?? new URL(normalizedUrl).hostname.replace(/^www\./, "");
+    const description = extraction.meta.description ?? extraction.meta["og:description"];
+    const text = normalizeReadableText(extraction.text);
 
     if (text.length < 40 && !description) {
       throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
@@ -145,11 +143,11 @@ export const genericHtmlImportConverter: RecipeImportConverter = {
       input: {
         sourceUrl: normalizedUrl,
         sourceName,
-        title: title ? decodeHtml(stripTags(title)).trim() : undefined,
+        title: normalizeReadableText(extraction.title) || undefined,
         description,
         text,
-        jsonLd: extractJsonLd(page.html),
-        imageCandidates: extractImageCandidates(page.html, normalizedUrl),
+        jsonLd: extraction.jsonLd,
+        imageCandidates: resolveImageCandidates(extraction.imageCandidates, normalizedUrl),
       },
       source: {
         sourceType: "web",
@@ -192,7 +190,7 @@ export const importRecipeFromUrl = async ({
   const page = await fetcher(normalizedUrl, {
     timeoutMs: resolveImportTimeoutMs(env),
   });
-  const conversion = convertImportPage(page, converters);
+  const conversion = await convertImportPage(page, converters);
 
   if (conversion.type === "deterministic") {
     return conversion;
@@ -237,7 +235,7 @@ export const importRecipeFromUrl = async ({
 const convertImportPage = (
   page: FetchedImportPage,
   converters: RecipeImportConverter[],
-): RecipeImportConverterResult => {
+): Promise<RecipeImportConverterResult> => {
   for (const converter of converters) {
     return converter.convert(page);
   }
@@ -332,22 +330,158 @@ const detectSourcePlatform = (urlValue: string): SourcePlatform | null => {
   return "other";
 };
 
-const extractReadableText = (html: string) => {
-  const withoutNoise = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ");
+type HtmlRewriterElement = Parameters<
+  NonNullable<HTMLRewriterElementContentHandlers["element"]>
+>[0];
 
-  return decodeHtml(stripTags(withoutNoise)).replace(/\s+/g, " ").trim().slice(0, 24_000);
+type ExtractedImageCandidate = {
+  rawUrl: string;
+  kind: "cover" | "content";
+  alt?: string;
 };
 
-const extractJsonLd = (html: string) =>
-  [...html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
-    .map((match) => decodeHtml(match[1] ?? "").trim())
-    .filter(Boolean)
-    .slice(0, 5);
+type HtmlImportExtraction = {
+  title: string;
+  meta: Record<string, string | undefined>;
+  text: string;
+  jsonLd: string[];
+  imageCandidates: ExtractedImageCandidate[];
+};
 
-const extractImageCandidates = (html: string, baseUrl: string): RecipeImportImageCandidate[] => {
+const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImportExtraction> => {
+  const extraction: HtmlImportExtraction = {
+    title: "",
+    meta: {},
+    text: "",
+    jsonLd: [],
+    imageCandidates: [],
+  };
+  let ignoredTextDepth = 0;
+  let jsonLdText: string | null = null;
+
+  const response = importPageBodyToResponse(page);
+  const ignoreElementText = {
+    element(element: HtmlRewriterElement) {
+      ignoredTextDepth += 1;
+      element.onEndTag(() => {
+        ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
+      });
+    },
+  };
+
+  await new HTMLRewriter()
+    .on("title", {
+      text(text) {
+        extraction.title += text.text;
+      },
+    })
+    .on("meta", {
+      element(element) {
+        const key = normalizeMetaKey(
+          element.getAttribute("property") ?? element.getAttribute("name"),
+        );
+        const content = element.getAttribute("content");
+        if (!key || !content || extraction.meta[key]) return;
+
+        extraction.meta[key] = normalizeReadableText(content);
+        if (key === "og:image" || key === "twitter:image") {
+          extraction.imageCandidates.push({ rawUrl: content, kind: "cover" });
+        }
+      },
+    })
+    .on("script", {
+      element(element) {
+        ignoredTextDepth += 1;
+        const type = element.getAttribute("type")?.toLowerCase().replace(/\s+/g, "");
+        jsonLdText = type === "application/ld+json" && extraction.jsonLd.length < 5 ? "" : null;
+        if (type !== "application/ld+json" || extraction.jsonLd.length >= 5) {
+          element.onEndTag(() => {
+            ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
+          });
+          return;
+        }
+
+        element.onEndTag(() => {
+          ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
+          const normalizedJsonLd = normalizeReadableText(jsonLdText ?? "");
+          if (normalizedJsonLd && extraction.jsonLd.length < 5) {
+            extraction.jsonLd.push(normalizedJsonLd);
+          }
+          jsonLdText = null;
+        });
+      },
+      text(text) {
+        if (jsonLdText === null) return;
+        jsonLdText += text.text;
+      },
+    })
+    .on("style", ignoreElementText)
+    .on("noscript", ignoreElementText)
+    .on("svg", ignoreElementText)
+    .on("img", {
+      element(element) {
+        if (extraction.imageCandidates.length >= 20) return;
+
+        const rawUrl = element.getAttribute("src") ?? element.getAttribute("data-src");
+        if (!rawUrl) return;
+
+        extraction.imageCandidates.push({
+          rawUrl,
+          kind: "content",
+          alt: element.getAttribute("alt") ?? undefined,
+        });
+      },
+    })
+    .onDocument({
+      text(text) {
+        if (ignoredTextDepth > 0) return;
+        extraction.text += ` ${text.text}`;
+      },
+    })
+    .transform(response)
+    .text();
+
+  return {
+    ...extraction,
+    jsonLd: extraction.jsonLd.filter(Boolean).slice(0, 5),
+    imageCandidates: extraction.imageCandidates.slice(0, 20),
+  };
+};
+
+const importPageBodyToResponse = (page: FetchedImportPage) => {
+  if (typeof page.body !== "string") {
+    return page.body;
+  }
+
+  return new Response(page.body, {
+    headers: page.contentType ? { "content-type": page.contentType } : undefined,
+  });
+};
+
+const normalizeMetaKey = (key: string | null) => {
+  if (!key) return undefined;
+
+  const normalizedKey = key.toLowerCase();
+  if (
+    normalizedKey === "description" ||
+    normalizedKey === "og:description" ||
+    normalizedKey === "og:site_name" ||
+    normalizedKey === "og:image" ||
+    normalizedKey === "twitter:image"
+  ) {
+    return normalizedKey;
+  }
+
+  return undefined;
+};
+
+const normalizeReadableText = (value: string) =>
+  decodeHtml(value).replace(/\s+/g, " ").trim().slice(0, 24_000);
+
+const resolveImageCandidates = (
+  extractedCandidates: ExtractedImageCandidate[],
+  baseUrl: string,
+): RecipeImportImageCandidate[] => {
   const candidates: RecipeImportImageCandidate[] = [];
   const pushCandidate = (rawUrl: string | undefined, kind: "cover" | "content", alt?: string) => {
     if (!rawUrl) return;
@@ -361,47 +495,13 @@ const extractImageCandidates = (html: string, baseUrl: string): RecipeImportImag
     }
   };
 
-  pushCandidate(metaContent(html, "og:image"), "cover");
-  pushCandidate(metaContent(html, "twitter:image"), "cover");
-
-  for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
-    const tag = match[0];
-    pushCandidate(
-      attributeValue(tag, "src") ?? attributeValue(tag, "data-src"),
-      "content",
-      attributeValue(tag, "alt"),
-    );
+  for (const candidate of extractedCandidates) {
+    pushCandidate(candidate.rawUrl, candidate.kind, candidate.alt);
     if (candidates.length >= 20) break;
   }
 
   return candidates;
 };
-
-const metaContent = (html: string, name: string) => {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const propertyFirst = new RegExp(
-    `<meta\\b(?=[^>]*(?:property|name)=["']${escaped}["'])(?=[^>]*content=["']([^"']+)["'])[^>]*>`,
-    "i",
-  );
-  const contentFirst = new RegExp(
-    `<meta\\b(?=[^>]*content=["']([^"']+)["'])(?=[^>]*(?:property|name)=["']${escaped}["'])[^>]*>`,
-    "i",
-  );
-
-  return (
-    decodeHtml(firstMatch(html, propertyFirst) ?? firstMatch(html, contentFirst) ?? "").trim() ||
-    undefined
-  );
-};
-
-const attributeValue = (tag: string, name: string) => {
-  const match = tag.match(new RegExp(`\\b${name}=["']([^"']+)["']`, "i"));
-  return match?.[1];
-};
-
-const stripTags = (value: string) => value.replace(/<[^>]+>/g, " ");
-
-const firstMatch = (value: string, pattern: RegExp) => value.match(pattern)?.[1];
 
 const decodeHtml = (value: string) =>
   value

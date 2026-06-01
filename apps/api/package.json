@@ -27,12 +27,12 @@
     "hono": "^4.10.7",
     "resend": "^6.6.0",
     "stripe": "^20.0.0",
-    "workers-ai-provider": "^3.1.14",
     "ulid": "^3.0.2",
+    "workers-ai-provider": "^3.1.14",
     "zod": "^4.2.1"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.10.2",
+    "@cloudflare/vitest-pool-workers": "^0.16.10",
     "@cloudflare/workers-types": "^4.20251209.0",
     "vitest": "^4.0.14",
     "wrangler": "^4.55.0"

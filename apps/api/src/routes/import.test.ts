@@ -49,7 +49,7 @@ describe("Import routes", () => {
       importFetcher: async (url) => ({
         finalUrl: url,
         contentType: "text/html; charset=utf-8",
-        html: htmlPage,
+        body: htmlPage,
       }),
       importAIProvider: {
         normalize: async (input) => {
@@ -120,6 +120,85 @@ describe("Import routes", () => {
     ]);
   });
 
+  it("HTMLRewriterで属性順に依存せずmetadataと本文候補を抽出する", async () => {
+    const providerInputs: unknown[] = [];
+    const htmlWithReorderedAttributes = `<!doctype html>
+<html>
+  <head>
+    <title> Chunky soup </title>
+    <meta content="Swapped Kitchen" property="og:site_name">
+    <meta content="具だくさんスープの説明です。" name="description">
+    <meta content="/images/cover.jpg" property="og:image">
+    <script type="application/ld+json">
+      {"@type":"Recipe","name":"Chunky soup"}
+    </script>
+    <script>const noise = "このscript本文は混ざらない";</script>
+    <style>.noise::before { content: "このstyle本文も混ざらない"; }</style>
+  </head>
+  <body>
+    <main>
+      <p>玉ねぎとにんじんを炒めて、スープでじっくり煮込みます。仕上げに塩で味を調えます。</p>
+      <img data-src="../steps/simmer.jpg" alt="煮込む">
+    </main>
+  </body>
+</html>`;
+
+    const testApp = createApp({
+      auth,
+      usageRepository: createUsageRepository(),
+      importFetcher: async () => ({
+        finalUrl: "https://example.com/recipes/soup/index.html",
+        contentType: "text/html",
+        body: htmlWithReorderedAttributes,
+      }),
+      importAIProvider: {
+        normalize: async (input) => {
+          providerInputs.push(input);
+          return {
+            title: "Chunky soup",
+            ingredientGroups: [],
+            steps: [{ text: "煮込む" }],
+          };
+        },
+      },
+    });
+
+    const response = await testApp.request(
+      "/api/import/url",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/recipes/soup" }),
+      },
+      { APP_ENV: "development", FREE_AI_MONTHLY_LIMIT: "10", IMPORT_TIMEOUT_MS: "1000" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(providerInputs).toEqual([
+      expect.objectContaining({
+        sourceName: "Swapped Kitchen",
+        title: "Chunky soup",
+        description: "具だくさんスープの説明です。",
+        jsonLd: ['{"@type":"Recipe","name":"Chunky soup"}'],
+        imageCandidates: expect.arrayContaining([
+          expect.objectContaining({
+            url: "https://example.com/images/cover.jpg",
+            kind: "cover",
+          }),
+          expect.objectContaining({
+            url: "https://example.com/recipes/steps/simmer.jpg",
+            kind: "content",
+            alt: "煮込む",
+          }),
+        ]),
+      }),
+    ]);
+    const [providerInput] = providerInputs as [{ text: string }];
+    expect(providerInput.text).toContain("玉ねぎとにんじんを炒めて");
+    expect(providerInput.text).not.toContain("このscript本文は混ざらない");
+    expect(providerInput.text).not.toContain("このstyle本文も混ざらない");
+  });
+
   it("URL形式が不正な場合はinvalid_urlを返す", async () => {
     const testApp = createApp({
       auth,
@@ -180,7 +259,7 @@ describe("Import routes", () => {
       importFetcher: async (url) => ({
         finalUrl: url,
         contentType: "application/pdf",
-        html: "%PDF",
+        body: "%PDF",
       }),
     });
 
@@ -210,7 +289,7 @@ describe("Import routes", () => {
       importFetcher: async (url) => ({
         finalUrl: url,
         contentType: "text/html",
-        html: "<html><body><nav>menu</nav></body></html>",
+        body: "<html><body><nav>menu</nav></body></html>",
       }),
     });
 
@@ -242,7 +321,7 @@ describe("Import routes", () => {
       importFetcher: async (url) => ({
         finalUrl: url,
         contentType: "text/html",
-        html: htmlPage,
+        body: htmlPage,
       }),
     });
 
@@ -269,7 +348,7 @@ describe("Import routes", () => {
       importFetcher: async (url) => ({
         finalUrl: url,
         contentType: "text/html",
-        html: htmlPage,
+        body: htmlPage,
       }),
       importAIProvider: {
         normalize: async () => ({
@@ -318,7 +397,7 @@ describe("Import routes", () => {
         importFetcher: async (url) => ({
           finalUrl: url,
           contentType: "text/html",
-          html: htmlPage,
+          body: htmlPage,
         }),
         importAIProvider: {
           normalize: async () => {
