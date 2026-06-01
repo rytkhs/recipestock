@@ -7,7 +7,6 @@ import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-
 import { type MeRepository } from "./me";
 import { type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
-import { createHealthRoutes } from "./routes/health";
 import { createImageRoutes } from "./routes/images";
 import { createImportRoutes } from "./routes/import";
 import { createMeRoutes } from "./routes/me";
@@ -36,7 +35,6 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   app.onError(() => unknownResponse());
 
   return app
-    .route("/health", createHealthRoutes())
     .route("/auth", createAuthRoutes({ auth }))
     .route(
       "/images",

@@ -54,16 +54,6 @@ pnpm --filter @recipestock/api dev
 Default local URL:
 
 - API: http://localhost:8787/
-- Health check: http://localhost:8787/api/health
-
-The health check should return:
-
-```json
-{
-  "ok": true,
-  "environment": "development"
-}
-```
 
 ## Verification
 
