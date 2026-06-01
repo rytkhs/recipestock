@@ -25,7 +25,6 @@ Required local secrets:
 - `CLOUDFLARE_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
-- `CF_AIG_TOKEN`
 
 Non-secret Worker vars such as `APP_ENV`, `IMPORT_TIMEOUT_MS`, `R2_BUCKET_NAME`, and AI model names live in `wrangler.jsonc`.
 
@@ -96,7 +95,6 @@ pnpm --filter @recipestock/api exec wrangler secret put STRIPE_PRO_PRICE_ID
 pnpm --filter @recipestock/api exec wrangler secret put CLOUDFLARE_ACCOUNT_ID
 pnpm --filter @recipestock/api exec wrangler secret put R2_ACCESS_KEY_ID
 pnpm --filter @recipestock/api exec wrangler secret put R2_SECRET_ACCESS_KEY
-pnpm --filter @recipestock/api exec wrangler secret put CF_AIG_TOKEN
 ```
 
 Do not commit `.dev.vars` or other secret files.

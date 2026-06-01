@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 export type Bindings = {
+  AI: Ai;
   APP_ENV: "development" | "staging" | "production";
   ASSETS: Fetcher;
   DATABASE_URL: string;
@@ -18,7 +19,6 @@ export type Bindings = {
   R2_BUCKET_NAME: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
-  CF_AIG_TOKEN: string;
   AI_GATEWAY_NAME: string;
   AI_TEXT_MODEL: string;
   AI_VISION_MODEL: string;

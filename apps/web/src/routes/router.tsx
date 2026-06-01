@@ -14,6 +14,7 @@ import { ApiClientError } from "../lib/api";
 import { signOut, useAuthSession } from "../lib/auth";
 import { clearUserScopedCache } from "../lib/query-cache";
 import { useViewer } from "../lib/viewer";
+import { ImportConfirmRoute, ImportIndexRoute, ImportUrlRoute } from "./import";
 import { LoginRoute } from "./login";
 import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
 
@@ -198,9 +199,27 @@ const importRoute = createRoute({
   path: "/import",
   component: () => (
     <RequireViewer>
-      <section className="mx-auto w-full max-w-5xl px-6 py-10">
-        <h1 className="font-semibold text-3xl">Import</h1>
-      </section>
+      <ImportIndexRoute />
+    </RequireViewer>
+  ),
+});
+
+const importUrlRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/import/url",
+  component: () => (
+    <RequireViewer>
+      <ImportUrlRoute />
+    </RequireViewer>
+  ),
+});
+
+const importConfirmRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/import/confirm",
+  component: () => (
+    <RequireViewer>
+      <ImportConfirmRoute />
     </RequireViewer>
   ),
 });
@@ -225,6 +244,8 @@ const routeTree = rootRoute.addChildren([
   recipeDetailRoute,
   editRecipeRoute,
   importRoute,
+  importUrlRoute,
+  importConfirmRoute,
   settingsRoute,
 ]);
 

@@ -3,6 +3,7 @@ import {
   createRecipeRequestSchema,
   type RecipeDetail,
   type RecipeDraftContent,
+  type RecipeSourceDraft,
   recipeDraftContentSchema,
 } from "@recipestock/schemas";
 import { type RecipeDraftFormValues } from "./recipe-draft-form-values";
@@ -14,12 +15,11 @@ const compactText = (value?: string) => {
 
 export const formValuesToCreateRecipeRequest = (
   values: RecipeDraftFormValues,
+  source: RecipeSourceDraft = { sourceType: "manual" },
 ): CreateRecipeRequest => {
   return createRecipeRequestSchema.parse({
     content: formValuesToRecipeDraftContent(values),
-    source: {
-      sourceType: "manual",
-    },
+    source,
   });
 };
 
@@ -73,6 +73,35 @@ export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormV
       ? recipe.content.steps.map((step) => ({
           text: step.text ?? "",
           image: step.imageKey ? { type: "existingObjectKey", key: step.imageKey } : undefined,
+        }))
+      : [{ text: "" }],
+});
+
+export const recipeDraftContentToFormValues = (
+  draft: RecipeDraftContent,
+): RecipeDraftFormValues => ({
+  title: draft.title,
+  servingsText: draft.servingsText ?? "",
+  coverImage: draft.coverImage,
+  note: draft.note ?? "",
+  ingredientGroups:
+    draft.ingredientGroups.length > 0
+      ? draft.ingredientGroups.map((group) => ({
+          label: group.label ?? "",
+          ingredients:
+            group.ingredients.length > 0
+              ? group.ingredients.map((ingredient) => ({
+                  name: ingredient.name,
+                  amount: ingredient.amount,
+                }))
+              : [{ name: "", amount: "" }],
+        }))
+      : [{ label: "", ingredients: [{ name: "", amount: "" }] }],
+  steps:
+    draft.steps.length > 0
+      ? draft.steps.map((step) => ({
+          text: step.text ?? "",
+          image: step.image,
         }))
       : [{ text: "" }],
 });

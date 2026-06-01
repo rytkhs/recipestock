@@ -3,11 +3,13 @@ import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
 import { type ApiEnv } from "./context";
 import { type RecipeImageService } from "./images";
+import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
 import { type MeRepository } from "./me";
 import { type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
 import { createHealthRoutes } from "./routes/health";
 import { createImageRoutes } from "./routes/images";
+import { createImportRoutes } from "./routes/import";
 import { createMeRoutes } from "./routes/me";
 import { createRecipeRoutes } from "./routes/recipes";
 import { createUsageRoutes } from "./routes/usage";
@@ -19,6 +21,8 @@ type AppDependencies = {
   usageRepository?: UsageRepository;
   recipeRepository?: RecipeRepository;
   imageService?: RecipeImageService;
+  importAIProvider?: RecipeImportAIProvider;
+  importFetcher?: RecipeImportFetcher;
   createRecipeId?: () => string;
   createImageId?: () => string;
   getCurrentMonth?: () => string;
@@ -41,6 +45,16 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         recipeRepository: dependencies.recipeRepository,
         imageService: dependencies.imageService,
         createImageId: dependencies.createImageId,
+      }),
+    )
+    .route(
+      "/import",
+      createImportRoutes({
+        auth,
+        usageRepository: dependencies.usageRepository,
+        aiProvider: dependencies.importAIProvider,
+        fetcher: dependencies.importFetcher,
+        getCurrentDate: dependencies.getCurrentDate,
       }),
     )
     .route(

@@ -16,7 +16,7 @@ Browser / PWA
             -> Better Auth
             -> Resend
             -> Stripe
-            -> Vercel AI SDK + Cloudflare AI Gateway
+            -> Vercel AI SDK + Workers AI + Cloudflare AI Gateway
 ```
 
 ## Chosen Technologies
@@ -37,7 +37,7 @@ Browser / PWA
 | Auth | Better Auth |
 | Email | Resend |
 | Billing | Stripe |
-| AI | Vercel AI SDK + Cloudflare AI Gateway |
+| AI | Vercel AI SDK + workers-ai-provider + Cloudflare Workers AI + Cloudflare AI Gateway |
 | PWA | Web App Manifest + Service Worker |
 | Monorepo | pnpm workspace + Turborepo |
 | Lint / Format | Biome |

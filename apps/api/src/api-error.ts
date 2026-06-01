@@ -48,11 +48,53 @@ export const recipeLimitExceededResponse = () =>
     message: "Recipe limit exceeded.",
   });
 
+export const invalidUrlResponse = () =>
+  apiErrorResponse({
+    status: 400,
+    code: "invalid_url",
+    message: "Import URL is invalid.",
+  });
+
+export const fetchFailedResponse = () =>
+  apiErrorResponse({
+    status: 502,
+    code: "fetch_failed",
+    message: "Import URL could not be fetched.",
+  });
+
+export const unsupportedPageResponse = () =>
+  apiErrorResponse({
+    status: 422,
+    code: "unsupported_page",
+    message: "Import page is not supported.",
+  });
+
+export const extractionFailedResponse = () =>
+  apiErrorResponse({
+    status: 422,
+    code: "extraction_failed",
+    message: "Recipe text could not be extracted.",
+  });
+
 export const aiUsageLimitExceededResponse = () =>
   apiErrorResponse({
     status: 429,
     code: "ai_usage_limit_exceeded",
     message: "AI usage limit exceeded.",
+  });
+
+export const aiTimeoutResponse = () =>
+  apiErrorResponse({
+    status: 504,
+    code: "ai_timeout",
+    message: "AI normalization timed out.",
+  });
+
+export const aiSchemaInvalidResponse = () =>
+  apiErrorResponse({
+    status: 502,
+    code: "ai_schema_invalid",
+    message: "AI response schema was invalid.",
   });
 
 export const lockedRecipeResponse = () =>

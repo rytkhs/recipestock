@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formValuesToCreateRecipeRequest, recipeDetailToFormValues } from "./create-recipe-request";
+import {
+  formValuesToCreateRecipeRequest,
+  recipeDetailToFormValues,
+  recipeDraftContentToFormValues,
+} from "./create-recipe-request";
 import {
   createEmptyRecipeDraftFormValues,
   type RecipeDraftFormValues,
@@ -106,6 +110,22 @@ describe("formValuesToCreateRecipeRequest", () => {
     });
   });
 
+  it("URL取り込みのsource metadataを保存リクエストに使える", () => {
+    expect(
+      formValuesToCreateRecipeRequest(createValues(), {
+        sourceType: "web",
+        sourcePlatform: "cookpad",
+        sourceUrl: "https://cookpad.com/recipe/123",
+        sourceName: "Cookpad",
+      }).source,
+    ).toEqual({
+      sourceType: "web",
+      sourcePlatform: "cookpad",
+      sourceUrl: "https://cookpad.com/recipe/123",
+      sourceName: "Cookpad",
+    });
+  });
+
   it("保存済みレシピ本文をフォーム値に戻す", () => {
     expect(
       recipeDetailToFormValues({
@@ -137,6 +157,36 @@ describe("formValuesToCreateRecipeRequest", () => {
       note: "仕上げにオリーブオイル。",
       ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ text: "煮詰める" }],
+    });
+  });
+
+  it("取り込みdraftをフォーム値に戻す", () => {
+    expect(
+      recipeDraftContentToFormValues({
+        title: "Tomato pasta",
+        servingsText: "2人分",
+        coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
+        ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+        steps: [
+          {
+            text: "煮詰める",
+            image: { type: "externalImageUrl", url: "https://example.com/step.jpg" },
+          },
+        ],
+        note: "仕上げにオリーブオイル。",
+      }),
+    ).toEqual({
+      title: "Tomato pasta",
+      servingsText: "2人分",
+      coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
+      note: "仕上げにオリーブオイル。",
+      ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      steps: [
+        {
+          text: "煮詰める",
+          image: { type: "externalImageUrl", url: "https://example.com/step.jpg" },
+        },
+      ],
     });
   });
 });
