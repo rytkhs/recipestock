@@ -4,9 +4,9 @@ Hono API running on Cloudflare Workers.
 
 This Worker serves `/api/*` routes and, in production, also serves the built web app from `apps/web/dist` through the `ASSETS` binding.
 
-## Local secrets
+## Local environment variables
 
-Copy the local Worker secret template:
+Copy the local Worker environment template:
 
 ```bash
 cp apps/api/.dev.vars.example apps/api/.dev.vars
@@ -25,8 +25,6 @@ Required local secrets:
 - `CLOUDFLARE_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
-
-Non-secret Worker vars such as `APP_ENV`, `IMPORT_TIMEOUT_MS`, `R2_BUCKET_NAME`, and AI model names live in `wrangler.jsonc`.
 
 ## R2 setup
 
