@@ -148,7 +148,6 @@ pnpm --filter @recipestock/api exec wrangler deploy --dry-run
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRO_PRICE_ID`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `CF_AIG_TOKEN`
 - `AI_GATEWAY_NAME`
 - `AI_TEXT_MODEL`
 - `AI_VISION_MODEL`
