@@ -25,4 +25,6 @@ export type Bindings = {
   FREE_AI_MONTHLY_LIMIT?: string;
   PRO_AI_MONTHLY_LIMIT?: string;
   IMPORT_TIMEOUT_MS: string;
+  IMPORT_MAX_HTML_BYTES: string;
+  IMPORT_AI_TIMEOUT_MS: string;
 };

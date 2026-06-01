@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { type RecipeImportAIProvider, RecipeImportError } from "../import-url";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fetchImportPage, type RecipeImportAIProvider, RecipeImportError } from "../import-url";
 import { createApp } from "../index";
 import { type UsageRepository } from "../usage";
 
@@ -40,6 +40,10 @@ const createUsageRepository = (calls: string[] = []): UsageRepository => ({
 });
 
 describe("Import routes", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("URLからRecipeDraftContentとsource metadataを生成する", async () => {
     const usageCalls: string[] = [];
     const providerInputs: unknown[] = [];
@@ -308,6 +312,77 @@ describe("Import routes", () => {
       error: { code: "extraction_failed" },
     });
     expect(usageCalls).toEqual([]);
+  });
+
+  it("HTMLサイズ上限を超えたページはunsupported_pageを返しAI利用回数を消費しない", async () => {
+    const usageCalls: string[] = [];
+    const testApp = createApp({
+      auth,
+      usageRepository: createUsageRepository(usageCalls),
+      importAIProvider: unusedProvider,
+      importFetcher: async (url, { maxBytes }) => {
+        if (new TextEncoder().encode(htmlPage).byteLength > maxBytes) {
+          throw new RecipeImportError("unsupported_page", "too large");
+        }
+
+        return {
+          finalUrl: url,
+          contentType: "text/html",
+          body: htmlPage,
+        };
+      },
+    });
+
+    const response = await testApp.request(
+      "/api/import/url",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/recipe" }),
+      },
+      {
+        APP_ENV: "development",
+        IMPORT_TIMEOUT_MS: "1000",
+        IMPORT_MAX_HTML_BYTES: "10",
+      },
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "unsupported_page" },
+    });
+    expect(usageCalls).toEqual([]);
+  });
+
+  it("取得したHTML本文がサイズ上限を超えた場合はunsupported_pageにする", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(htmlPage, { headers: { "content-type": "text/html" } })),
+    );
+
+    await expect(
+      fetchImportPage("https://example.com/recipe", { timeoutMs: 1000, maxBytes: 10 }),
+    ).rejects.toMatchObject({
+      code: "unsupported_page",
+    });
+  });
+
+  it("content-lengthがサイズ上限を超える場合は本文を読まずにunsupported_pageにする", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(htmlPage, {
+            headers: { "content-type": "text/html", "content-length": "100" },
+          }),
+      ),
+    );
+
+    await expect(
+      fetchImportPage("https://example.com/recipe", { timeoutMs: 1000, maxBytes: 10 }),
+    ).rejects.toMatchObject({
+      code: "unsupported_page",
+    });
   });
 
   it("AI利用上限に達した場合はai_usage_limit_exceededを返す", async () => {

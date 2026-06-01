@@ -1,6 +1,10 @@
 import { recipeDraftContentSchema } from "@recipestock/schemas";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createDefaultRecipeImportAIProvider, type RecipeImportAIInput } from "./import-url";
+import {
+  createDefaultRecipeImportAIProvider,
+  type RecipeImportAIInput,
+  type RecipeImportError,
+} from "./import-url";
 
 const mocks = vi.hoisted(() => {
   const model = { provider: "workers-ai", modelId: "@cf/openai/gpt-oss-120b" };
@@ -40,6 +44,7 @@ const input: RecipeImportAIInput = {
 describe("default recipe import AI provider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("Workers AI bindingとAI Gateway経由でRecipeDraftContentを生成する", async () => {
@@ -64,12 +69,58 @@ describe("default recipe import AI provider", () => {
     expect(mocks.createWorkersAI.mock.results[0]?.value).toHaveBeenCalledWith(
       "@cf/openai/gpt-oss-120b",
     );
-    expect(mocks.generateObject).toHaveBeenCalledWith({
-      model: { provider: "workers-ai", modelId: "@cf/openai/gpt-oss-120b" },
-      schema: recipeDraftContentSchema,
-      prompt: expect.stringContaining("https://example.com/recipes/tomato"),
-      temperature: 0,
-      maxRetries: 0,
+    expect(mocks.generateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: { provider: "workers-ai", modelId: "@cf/openai/gpt-oss-120b" },
+        schema: recipeDraftContentSchema,
+        prompt: expect.stringContaining("https://example.com/recipes/tomato"),
+        temperature: 0,
+        maxRetries: 0,
+        abortSignal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it("AI SDKのschema失敗をai_schema_invalidへ変換する", async () => {
+    const schemaError = Object.assign(new Error("No object generated: schema validation failed"), {
+      name: "NoObjectGeneratedError",
     });
+    mocks.generateObject.mockRejectedValueOnce(schemaError);
+
+    const provider = createDefaultRecipeImportAIProvider({
+      AI: { run: vi.fn() } as unknown as Ai,
+      AI_GATEWAY_NAME: "recipestock",
+      AI_TEXT_MODEL: "@cf/openai/gpt-oss-120b",
+      IMPORT_AI_TIMEOUT_MS: "1000",
+    } as never);
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_schema_invalid",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("AI変換がタイムアウトした場合はai_timeoutへ変換する", async () => {
+    vi.useFakeTimers();
+    mocks.generateObject.mockImplementationOnce(
+      ({ abortSignal }: { abortSignal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          abortSignal.addEventListener("abort", () => {
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          });
+        }),
+    );
+
+    const provider = createDefaultRecipeImportAIProvider({
+      AI: { run: vi.fn() } as unknown as Ai,
+      AI_GATEWAY_NAME: "recipestock",
+      AI_TEXT_MODEL: "@cf/openai/gpt-oss-120b",
+      IMPORT_AI_TIMEOUT_MS: "10",
+    } as never);
+
+    const result = expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_timeout",
+    } satisfies Partial<RecipeImportError>);
+    await vi.advanceTimersByTimeAsync(10);
+    await result;
   });
 });

@@ -85,10 +85,10 @@ export type FetchedImportPage = {
 
 export type RecipeImportFetcher = (
   url: string,
-  options: { timeoutMs: number },
+  options: { timeoutMs: number; maxBytes: number },
 ) => Promise<FetchedImportPage>;
 
-export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs }) => {
+export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, maxBytes }) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -105,10 +105,12 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs }) =
       throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
     }
 
+    assertContentLengthAllowed(response, maxBytes);
+
     return {
       finalUrl: response.url || url,
       contentType: response.headers.get("content-type") ?? "",
-      body: response,
+      body: await readResponseTextWithLimit(response, maxBytes),
     };
   } catch (error) {
     if (error instanceof RecipeImportError) {
@@ -189,6 +191,7 @@ export const importRecipeFromUrl = async ({
 
   const page = await fetcher(normalizedUrl, {
     timeoutMs: resolveImportTimeoutMs(env),
+    maxBytes: resolveImportMaxHtmlBytes(env),
   });
   const conversion = await convertImportPage(page, converters);
 
@@ -249,15 +252,37 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
       binding: env.AI,
       gateway: { id: env.AI_GATEWAY_NAME },
     });
-    const result = await generateObject({
-      model: workersai(env.AI_TEXT_MODEL as never) as never,
-      schema: recipeDraftContentSchema,
-      prompt: buildImportPrompt(input),
-      temperature: 0,
-      maxRetries: 0,
-    });
+    const controller = new AbortController();
+    let didTimeout = false;
+    const timeout = setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, resolveImportAiTimeoutMs(env));
 
-    return result.object;
+    try {
+      const result = await generateObject({
+        model: workersai(env.AI_TEXT_MODEL as never) as never,
+        schema: recipeDraftContentSchema,
+        prompt: buildImportPrompt(input),
+        temperature: 0,
+        maxRetries: 0,
+        abortSignal: controller.signal,
+      });
+
+      return result.object;
+    } catch (error) {
+      if (didTimeout || isAbortError(error)) {
+        throw new RecipeImportError("ai_timeout", "AI normalization timed out.");
+      }
+
+      if (isAiSchemaError(error)) {
+        throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   },
 });
 
@@ -288,6 +313,93 @@ ${input.text}`;
 const resolveImportTimeoutMs = (env: Partial<Bindings>) => {
   const value = Number(env.IMPORT_TIMEOUT_MS ?? 10_000);
   return Number.isInteger(value) && value > 0 ? value : 10_000;
+};
+
+const resolveImportMaxHtmlBytes = (env: Partial<Bindings>) => {
+  const value = Number(env.IMPORT_MAX_HTML_BYTES ?? 2_000_000);
+  return Number.isInteger(value) && value > 0 ? value : 2_000_000;
+};
+
+const resolveImportAiTimeoutMs = (env: Partial<Bindings>) => {
+  const value = Number(env.IMPORT_AI_TIMEOUT_MS ?? 60_000);
+  return Number.isInteger(value) && value > 0 ? value : 60_000;
+};
+
+const assertContentLengthAllowed = (response: Response, maxBytes: number) => {
+  const contentLengthHeader = response.headers.get("content-length");
+  if (!contentLengthHeader) return;
+
+  const contentLength = Number(contentLengthHeader);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw new RecipeImportError("unsupported_page", "Import page is too large.");
+  }
+};
+
+const readResponseTextWithLimit = async (response: Response, maxBytes: number) => {
+  if (!response.body) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new RecipeImportError("unsupported_page", "Import page is too large.");
+    }
+
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        throw new RecipeImportError("unsupported_page", "Import page is too large.");
+      }
+
+      text += decoder.decode(value, { stream: true });
+    }
+
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+};
+
+const errorName = (error: unknown) =>
+  typeof error === "object" && error !== null && "name" in error
+    ? String((error as { name?: unknown }).name)
+    : "";
+
+const errorMessage = (error: unknown) =>
+  typeof error === "object" && error !== null && "message" in error
+    ? String((error as { message?: unknown }).message)
+    : "";
+
+const isAbortError = (error: unknown) => {
+  const name = errorName(error);
+  return name === "AbortError" || name === "TimeoutError";
+};
+
+const isAiSchemaError = (error: unknown) => {
+  if (error instanceof z.ZodError) return true;
+
+  const name = errorName(error);
+  if (
+    name === "NoObjectGeneratedError" ||
+    name === "TypeValidationError" ||
+    name === "AI_TypeValidationError"
+  ) {
+    return true;
+  }
+
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("schema") || message.includes("type validation");
 };
 
 const filterDraftImages = (
