@@ -253,12 +253,13 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
       binding: env.AI,
       gateway: { id: env.AI_GATEWAY_NAME },
     });
+    const timeoutMs = resolveImportAiTimeoutMs(env);
     const controller = new AbortController();
     let didTimeout = false;
     const timeout = setTimeout(() => {
       didTimeout = true;
       controller.abort();
-    }, resolveImportAiTimeoutMs(env));
+    }, timeoutMs);
 
     try {
       const result = await generateObject({
@@ -267,12 +268,13 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
         prompt: buildImportPrompt(input),
         temperature: 0,
         maxRetries: 0,
+        timeout: timeoutMs,
         abortSignal: controller.signal,
       });
 
       return result.object;
     } catch (error) {
-      if (didTimeout || isAbortError(error)) {
+      if (didTimeout || isAiTimeoutError(error)) {
         throw new RecipeImportError("ai_timeout", "AI normalization timed out.");
       }
 
@@ -396,12 +398,44 @@ const isAbortError = (error: unknown) => {
   return name === "AbortError" || name === "TimeoutError";
 };
 
+const errorCause = (error: unknown) =>
+  typeof error === "object" && error !== null && "cause" in error
+    ? (error as { cause?: unknown }).cause
+    : undefined;
+
+const errorStatusCode = (error: unknown) =>
+  typeof error === "object" && error !== null && "statusCode" in error
+    ? Number((error as { statusCode?: unknown }).statusCode)
+    : undefined;
+
+const isAiTimeoutError = (error: unknown): boolean => {
+  if (isAbortError(error)) return true;
+
+  const name = errorName(error).toLowerCase();
+  const message = errorMessage(error).toLowerCase();
+  const statusCode = errorStatusCode(error);
+
+  if (statusCode === 408 || statusCode === 504) return true;
+  if (name.includes("abort") || name.includes("timeout")) return true;
+  if (
+    message.includes("abort") ||
+    message.includes("timeout") ||
+    message.includes("timed out")
+  ) {
+    return true;
+  }
+
+  const cause = errorCause(error);
+  return cause ? isAiTimeoutError(cause) : false;
+};
+
 const isAiSchemaError = (error: unknown) => {
   if (error instanceof z.ZodError) return true;
 
   const name = errorName(error);
   if (
     name === "NoObjectGeneratedError" ||
+    name === "AI_NoObjectGeneratedError" ||
     name === "TypeValidationError" ||
     name === "AI_TypeValidationError"
   ) {

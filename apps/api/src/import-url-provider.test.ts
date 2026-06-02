@@ -7,7 +7,7 @@ import {
 } from "./import-url";
 
 const mocks = vi.hoisted(() => {
-  const model = { provider: "workers-ai", modelId: "@cf/openai/gpt-oss-120b" };
+  const model = { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" };
 
   return {
     generateObject: vi.fn(),
@@ -58,7 +58,7 @@ describe("default recipe import AI provider", () => {
     const provider = createDefaultRecipeImportAIProvider({
       AI: { run: vi.fn() } as unknown as Ai,
       AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/openai/gpt-oss-120b",
+      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
     } as never);
 
     await expect(provider.normalize(input)).resolves.toEqual(draft);
@@ -67,15 +67,16 @@ describe("default recipe import AI provider", () => {
       gateway: { id: "recipestock" },
     });
     expect(mocks.createWorkersAI.mock.results[0]?.value).toHaveBeenCalledWith(
-      "@cf/openai/gpt-oss-120b",
+      "@cf/zai-org/glm-4.7-flash",
     );
     expect(mocks.generateObject).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: { provider: "workers-ai", modelId: "@cf/openai/gpt-oss-120b" },
+        model: { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" },
         schema: recipeDraftContentSchema,
         prompt: expect.stringContaining("https://example.com/recipes/tomato"),
         temperature: 0,
         maxRetries: 0,
+        timeout: 60000,
         abortSignal: expect.any(AbortSignal),
       }),
     );
@@ -90,7 +91,25 @@ describe("default recipe import AI provider", () => {
     const provider = createDefaultRecipeImportAIProvider({
       AI: { run: vi.fn() } as unknown as Ai,
       AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/openai/gpt-oss-120b",
+      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
+      IMPORT_AI_TIMEOUT_MS: "1000",
+    } as never);
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_schema_invalid",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("AI SDK v6のschema失敗名をai_schema_invalidへ変換する", async () => {
+    const schemaError = Object.assign(new Error("No object generated"), {
+      name: "AI_NoObjectGeneratedError",
+    });
+    mocks.generateObject.mockRejectedValueOnce(schemaError);
+
+    const provider = createDefaultRecipeImportAIProvider({
+      AI: { run: vi.fn() } as unknown as Ai,
+      AI_GATEWAY_NAME: "recipestock",
+      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
       IMPORT_AI_TIMEOUT_MS: "1000",
     } as never);
 
@@ -128,7 +147,7 @@ describe("default recipe import AI provider", () => {
     const provider = createDefaultRecipeImportAIProvider({
       AI: { run: vi.fn() } as unknown as Ai,
       AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/openai/gpt-oss-120b",
+      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
       IMPORT_AI_TIMEOUT_MS: "10",
     } as never);
 
@@ -137,5 +156,24 @@ describe("default recipe import AI provider", () => {
     } satisfies Partial<RecipeImportError>);
     await vi.advanceTimersByTimeAsync(10);
     await result;
+  });
+
+  it("AI SDKやGateway由来のtimeout系エラーをai_timeoutへ変換する", async () => {
+    const timeoutError = Object.assign(new Error("request timed out"), {
+      name: "AI_APICallError",
+      statusCode: 504,
+    });
+    mocks.generateObject.mockRejectedValueOnce(timeoutError);
+
+    const provider = createDefaultRecipeImportAIProvider({
+      AI: { run: vi.fn() } as unknown as Ai,
+      AI_GATEWAY_NAME: "recipestock",
+      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
+      IMPORT_AI_TIMEOUT_MS: "1000",
+    } as never);
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_timeout",
+    } satisfies Partial<RecipeImportError>);
   });
 });
