@@ -78,9 +78,9 @@ const importErrorMessage = (error: unknown) => {
     case "ai_usage_limit_exceeded":
       return "今月のAI利用回数の上限に達しています。";
     case "ai_timeout":
-      return "AI変換がタイムアウトしました。";
+      return "タイムアウトしました。";
     case "ai_schema_invalid":
-      return "AI変換結果を読み取れませんでした。";
+      return "結果を読み取れませんでした。";
     default:
       return "URLを取り込めませんでした。";
   }
