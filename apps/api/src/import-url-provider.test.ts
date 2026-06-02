@@ -99,6 +99,21 @@ describe("default recipe import AI provider", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
+  it("AI_TEXT_MODELが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
+    const provider = createDefaultRecipeImportAIProvider({
+      AI: { run: vi.fn() } as unknown as Ai,
+      AI_GATEWAY_NAME: "recipestock",
+      AI_TEXT_MODEL: "",
+    } as never);
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "unknown",
+      message: "AI text model is not configured.",
+    } satisfies Partial<RecipeImportError>);
+    expect(mocks.createWorkersAI).not.toHaveBeenCalled();
+    expect(mocks.generateObject).not.toHaveBeenCalled();
+  });
+
   it("AI変換がタイムアウトした場合はai_timeoutへ変換する", async () => {
     vi.useFakeTimers();
     mocks.generateObject.mockImplementationOnce(

@@ -248,6 +248,7 @@ const convertImportPage = (
 
 export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImportAIProvider => ({
   async normalize(input) {
+    const model = resolveImportAiTextModel(env);
     const workersai = createWorkersAI({
       binding: env.AI,
       gateway: { id: env.AI_GATEWAY_NAME },
@@ -261,7 +262,7 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
 
     try {
       const result = await generateObject({
-        model: workersai(env.AI_TEXT_MODEL as never) as never,
+        model: workersai(model as never) as never,
         schema: recipeDraftContentSchema,
         prompt: buildImportPrompt(input),
         temperature: 0,
@@ -323,6 +324,15 @@ const resolveImportMaxHtmlBytes = (env: Partial<Bindings>) => {
 const resolveImportAiTimeoutMs = (env: Partial<Bindings>) => {
   const value = Number(env.IMPORT_AI_TIMEOUT_MS ?? 60_000);
   return Number.isInteger(value) && value > 0 ? value : 60_000;
+};
+
+const resolveImportAiTextModel = (env: Partial<Bindings>) => {
+  const model = env.AI_TEXT_MODEL?.trim();
+  if (!model) {
+    throw new RecipeImportError("unknown", "AI text model is not configured.");
+  }
+
+  return model;
 };
 
 const assertContentLengthAllowed = (response: Response, maxBytes: number) => {
