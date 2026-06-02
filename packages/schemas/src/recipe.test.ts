@@ -60,6 +60,29 @@ describe("recipeDraftContentSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("外部画像URLはhttp/httpsだけを受け入れる", () => {
+    expect(
+      recipeDraftContentSchema.safeParse({
+        title: "Tomato pasta",
+        coverImage: { type: "externalImageUrl", url: "https://example.com/image.jpg" },
+      }).success,
+    ).toBe(true);
+
+    for (const url of [
+      "javascript:alert(1)",
+      "data:image/svg+xml,<svg></svg>",
+      "ftp://example.com/image.jpg",
+      "mailto:recipe@example.com",
+    ]) {
+      expect(
+        recipeDraftContentSchema.safeParse({
+          title: "Tomato pasta",
+          coverImage: { type: "externalImageUrl", url },
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it("画像だけの手順を受け入れる", () => {
     const result = recipeDraftContentSchema.safeParse({
       title: "Tomato pasta",

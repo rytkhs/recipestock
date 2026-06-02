@@ -1,6 +1,7 @@
 import {
   IMAGE_UPLOAD_URL_EXPIRES_IN_SECONDS,
   type ImageContentType,
+  imageContentTypeSchema,
   MAX_IMAGE_UPLOAD_SIZE_BYTES,
 } from "@recipestock/schemas";
 import { AwsClient } from "aws4fetch";
@@ -20,14 +21,22 @@ export type CreateSignedGetUrlParams = {
   objectKey: string;
 };
 
+export type CopyExternalImageUrlParams = {
+  sourceUrl: string;
+  destinationKeyPrefix: string;
+};
+
 export type RecipeImageService = {
   createUploadUrl(params: CreateUploadUrlParams): Promise<ImageUrlResult>;
   createSignedGetUrl(params: CreateSignedGetUrlParams): Promise<ImageUrlResult>;
   getObjectSize?(objectKey: string): Promise<number | null>;
   copyObject(sourceKey: string, destinationKey: string): Promise<void>;
+  copyExternalImageUrl?(params: CopyExternalImageUrlParams): Promise<{ objectKey: string }>;
   deleteObject(objectKey: string): Promise<void>;
   deletePrefixBestEffort(prefix: string): Promise<void>;
 };
+
+const EXTERNAL_IMAGE_FETCH_TIMEOUT_MS = 10_000;
 
 const addSeconds = (date: Date, seconds: number) => new Date(date.getTime() + seconds * 1000);
 
@@ -70,6 +79,121 @@ const createR2PresignedUrl = async ({
   return signed.url;
 };
 
+const normalizeImageContentType = (contentType: string | null): ImageContentType => {
+  const normalized = contentType?.split(";").at(0)?.trim().toLowerCase();
+  const parsed = imageContentTypeSchema.safeParse(normalized);
+
+  if (!parsed.success) {
+    throw new Error("External image content type is not supported.");
+  }
+
+  return parsed.data;
+};
+
+const parseIpv4Address = (hostname: string) => {
+  const parts = hostname.split(".");
+
+  if (parts.length !== 4) {
+    return null;
+  }
+
+  const octets = parts.map((part) => {
+    if (!/^\d+$/.test(part)) {
+      return null;
+    }
+
+    const value = Number(part);
+    return value >= 0 && value <= 255 ? value : null;
+  });
+
+  return octets.every((octet) => octet !== null) ? (octets as number[]) : null;
+};
+
+const isBlockedExternalImageHostname = (hostname: string) => {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  if (normalized === "localhost" || normalized.endsWith(".localhost")) {
+    return true;
+  }
+
+  const ipv4 = parseIpv4Address(normalized);
+  if (ipv4) {
+    const [first, second] = ipv4;
+    return (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168)
+    );
+  }
+
+  return (
+    normalized === "::1" ||
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    normalized.startsWith("fe80:")
+  );
+};
+
+const assertExternalImageUrlAllowed = (sourceUrl: string) => {
+  const url = new URL(sourceUrl);
+
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    isBlockedExternalImageHostname(url.hostname)
+  ) {
+    throw new Error("External image URL is not allowed.");
+  }
+};
+
+const assertExternalImageContentLengthAllowed = (contentLength: string | null) => {
+  if (!contentLength) {
+    return;
+  }
+
+  const size = Number(contentLength);
+  if (Number.isFinite(size) && size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+    throw new Error("External image is too large.");
+  }
+};
+
+const readResponseBodyWithinLimit = async (response: Response) => {
+  if (!response.body) {
+    throw new Error("External image response body was empty.");
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+
+  while (true) {
+    const result = await reader.read();
+
+    if (result.done) {
+      break;
+    }
+
+    totalSize += result.value.byteLength;
+    if (totalSize > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+      throw new Error("External image is too large.");
+    }
+
+    chunks.push(result.value);
+  }
+
+  const body = new Uint8Array(totalSize);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return body;
+};
+
 export const createRecipeImageService = (env: Bindings): RecipeImageService => ({
   async createUploadUrl({ objectKey, contentType }) {
     return {
@@ -102,6 +226,37 @@ export const createRecipeImageService = (env: Bindings): RecipeImageService => (
       httpMetadata: sourceObject.httpMetadata,
       customMetadata: sourceObject.customMetadata,
     });
+  },
+  async copyExternalImageUrl({ sourceUrl, destinationKeyPrefix }) {
+    assertExternalImageUrlAllowed(sourceUrl);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), EXTERNAL_IMAGE_FETCH_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(sourceUrl, {
+        redirect: "follow",
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error("External image fetch failed.");
+      }
+
+      const contentType = normalizeImageContentType(response.headers.get("content-type"));
+      assertExternalImageContentLengthAllowed(response.headers.get("content-length"));
+
+      const objectKey = `${destinationKeyPrefix}.${imageExtensionFromContentType(contentType)}`;
+      const body = await readResponseBodyWithinLimit(response);
+
+      await env.RECIPE_IMAGES.put(objectKey, body, {
+        httpMetadata: { contentType },
+      });
+
+      return { objectKey };
+    } finally {
+      clearTimeout(timeout);
+    }
   },
   async deleteObject(objectKey) {
     await env.RECIPE_IMAGES.delete(objectKey);
