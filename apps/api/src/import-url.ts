@@ -334,8 +334,8 @@ const resolveImportMaxHtmlBytes = (env: Partial<Bindings>) => {
 };
 
 const resolveImportAiTimeoutMs = (env: Partial<Bindings>) => {
-  const value = Number(env.IMPORT_AI_TIMEOUT_MS ?? 60_000);
-  return Number.isInteger(value) && value > 0 ? value : 60_000;
+  const value = Number(env.IMPORT_AI_TIMEOUT_MS ?? 180_000);
+  return Number.isInteger(value) && value > 0 ? value : 180_000;
 };
 
 const resolveImportAiTextModel = (env: Partial<Bindings>) => {
