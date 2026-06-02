@@ -259,6 +259,7 @@ const convertImportPage = (
 export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImportAIProvider => ({
   async normalize(input) {
     const model = resolveImportAiTextModel(env);
+    const system = resolveImportRecipeSystemPrompt(env);
     const workersai = createWorkersAI({
       binding: env.AI,
       gateway: { id: env.AI_GATEWAY_NAME },
@@ -275,7 +276,8 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
       const result = await generateObject({
         model: workersai(model as never) as never,
         schema: recipeDraftContentSchema,
-        prompt: buildImportPrompt(input),
+        system,
+        prompt: buildImportUserPrompt(input),
         temperature: 0,
         maxRetries: 0,
         timeout: timeoutMs,
@@ -299,17 +301,7 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
   },
 });
 
-const buildImportPrompt = (
-  input: RecipeImportAIInput,
-) => `URLから抽出した情報をRecipeDraftContentに正規化してください。
-
-制約:
-- 入力にない内容は推測しない。
-- 画像を使う場合は imageCandidates の url だけを externalImageUrl として使う。
-- coverImage は料理全体を示す候補がある場合だけ設定する。
-- steps[].image は該当手順に対応する候補がある場合だけ設定する。
-
-sourceUrl: ${input.sourceUrl}
+const buildImportUserPrompt = (input: RecipeImportAIInput) => `sourceUrl: ${input.sourceUrl}
 sourceName: ${input.sourceName ?? ""}
 title: ${input.title ?? ""}
 description: ${input.description ?? ""}
@@ -345,6 +337,15 @@ const resolveImportAiTextModel = (env: Partial<Bindings>) => {
   }
 
   return model;
+};
+
+const resolveImportRecipeSystemPrompt = (env: Partial<Bindings>) => {
+  const prompt = env.IMPORT_RECIPE_SYSTEM_PROMPT?.trim();
+  if (!prompt) {
+    throw new RecipeImportError("unknown", "Import recipe system prompt is not configured.");
+  }
+
+  return prompt;
 };
 
 const assertContentLengthAllowed = (response: Response, maxBytes: number) => {
@@ -427,11 +428,7 @@ const isAiTimeoutError = (error: unknown): boolean => {
 
   if (statusCode === 408 || statusCode === 504) return true;
   if (name.includes("abort") || name.includes("timeout")) return true;
-  if (
-    message.includes("abort") ||
-    message.includes("timeout") ||
-    message.includes("timed out")
-  ) {
+  if (message.includes("abort") || message.includes("timeout") || message.includes("timed out")) {
     return true;
   }
 

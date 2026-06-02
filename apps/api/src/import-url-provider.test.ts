@@ -41,6 +41,16 @@ const input: RecipeImportAIInput = {
   ],
 };
 
+const createEnv = (overrides: Record<string, unknown> = {}) =>
+  ({
+    AI: { run: vi.fn() } as unknown as Ai,
+    AI_GATEWAY_NAME: "recipestock",
+    AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
+    IMPORT_RECIPE_SYSTEM_PROMPT:
+      "URLから抽出した情報をRecipeDraftContentに正規化してください。入力にない内容は推測しない。",
+    ...overrides,
+  }) as never;
+
 describe("default recipe import AI provider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -55,11 +65,7 @@ describe("default recipe import AI provider", () => {
     };
     mocks.generateObject.mockResolvedValueOnce({ object: draft });
 
-    const provider = createDefaultRecipeImportAIProvider({
-      AI: { run: vi.fn() } as unknown as Ai,
-      AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
-    } as never);
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
 
     await expect(provider.normalize(input)).resolves.toEqual(draft);
     expect(mocks.createWorkersAI).toHaveBeenCalledWith({
@@ -73,10 +79,11 @@ describe("default recipe import AI provider", () => {
       expect.objectContaining({
         model: { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" },
         schema: recipeDraftContentSchema,
+        system: expect.stringContaining("RecipeDraftContent"),
         prompt: expect.stringContaining("https://example.com/recipes/tomato"),
         temperature: 0,
         maxRetries: 0,
-        timeout: 60000,
+        timeout: 180000,
         abortSignal: expect.any(AbortSignal),
       }),
     );
@@ -88,12 +95,9 @@ describe("default recipe import AI provider", () => {
     });
     mocks.generateObject.mockRejectedValueOnce(schemaError);
 
-    const provider = createDefaultRecipeImportAIProvider({
-      AI: { run: vi.fn() } as unknown as Ai,
-      AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
-      IMPORT_AI_TIMEOUT_MS: "1000",
-    } as never);
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+    );
 
     await expect(provider.normalize(input)).rejects.toMatchObject({
       code: "ai_schema_invalid",
@@ -106,12 +110,9 @@ describe("default recipe import AI provider", () => {
     });
     mocks.generateObject.mockRejectedValueOnce(schemaError);
 
-    const provider = createDefaultRecipeImportAIProvider({
-      AI: { run: vi.fn() } as unknown as Ai,
-      AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
-      IMPORT_AI_TIMEOUT_MS: "1000",
-    } as never);
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+    );
 
     await expect(provider.normalize(input)).rejects.toMatchObject({
       code: "ai_schema_invalid",
@@ -128,12 +129,9 @@ describe("default recipe import AI provider", () => {
     });
     mocks.generateObject.mockRejectedValueOnce(wrappedError);
 
-    const provider = createDefaultRecipeImportAIProvider({
-      AI: { run: vi.fn() } as unknown as Ai,
-      AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
-      IMPORT_AI_TIMEOUT_MS: "1000",
-    } as never);
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+    );
 
     await expect(provider.normalize(input)).rejects.toMatchObject({
       code: "ai_schema_invalid",
@@ -141,15 +139,24 @@ describe("default recipe import AI provider", () => {
   });
 
   it("AI_TEXT_MODELが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
-    const provider = createDefaultRecipeImportAIProvider({
-      AI: { run: vi.fn() } as unknown as Ai,
-      AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "",
-    } as never);
+    const provider = createDefaultRecipeImportAIProvider(createEnv({ AI_TEXT_MODEL: "" }));
 
     await expect(provider.normalize(input)).rejects.toMatchObject({
       code: "unknown",
       message: "AI text model is not configured.",
+    } satisfies Partial<RecipeImportError>);
+    expect(mocks.createWorkersAI).not.toHaveBeenCalled();
+    expect(mocks.generateObject).not.toHaveBeenCalled();
+  });
+
+  it("IMPORT_RECIPE_SYSTEM_PROMPTが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_RECIPE_SYSTEM_PROMPT: "" }),
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "unknown",
+      message: "Import recipe system prompt is not configured.",
     } satisfies Partial<RecipeImportError>);
     expect(mocks.createWorkersAI).not.toHaveBeenCalled();
     expect(mocks.generateObject).not.toHaveBeenCalled();
@@ -166,12 +173,7 @@ describe("default recipe import AI provider", () => {
         }),
     );
 
-    const provider = createDefaultRecipeImportAIProvider({
-      AI: { run: vi.fn() } as unknown as Ai,
-      AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
-      IMPORT_AI_TIMEOUT_MS: "10",
-    } as never);
+    const provider = createDefaultRecipeImportAIProvider(createEnv({ IMPORT_AI_TIMEOUT_MS: "10" }));
 
     const result = expect(provider.normalize(input)).rejects.toMatchObject({
       code: "ai_timeout",
@@ -187,12 +189,9 @@ describe("default recipe import AI provider", () => {
     });
     mocks.generateObject.mockRejectedValueOnce(timeoutError);
 
-    const provider = createDefaultRecipeImportAIProvider({
-      AI: { run: vi.fn() } as unknown as Ai,
-      AI_GATEWAY_NAME: "recipestock",
-      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
-      IMPORT_AI_TIMEOUT_MS: "1000",
-    } as never);
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+    );
 
     await expect(provider.normalize(input)).rejects.toMatchObject({
       code: "ai_timeout",
