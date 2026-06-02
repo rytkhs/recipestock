@@ -458,6 +458,118 @@ describe("Import routes", () => {
     });
   });
 
+  it("AIがCookpadレスポンス相当のRecipeDraftContentを返した場合は成功する", async () => {
+    const testApp = createApp({
+      auth,
+      usageRepository: createUsageRepository(),
+      importFetcher: async () => ({
+        finalUrl: "https://cookpad.com/jp/recipes/25844291",
+        contentType: "text/html",
+        body: `<!doctype html>
+<html>
+  <head>
+    <title>簡単ノンフライヤーで揚げポテト（お弁当）</title>
+    <meta property="og:site_name" content="Cookpad">
+    <meta property="og:image" content="https://og-image.cookpad.com/global/jp/recipe/25844291?t=1780359344">
+  </head>
+  <body>
+    <main>
+      <p>じゃがいもを使ったノンフライヤーの揚げポテトです。お弁当にも使える一品です。</p>
+      <img src="https://img-global-jp.cpcdn.com/steps/15457bb8e196264d/160x128cq80/step-1.jpg" alt="作り方1写真">
+    </main>
+  </body>
+</html>`,
+      }),
+      importAIProvider: {
+        normalize: async () => ({
+          title: "簡単ノンフライヤーで揚げポテト（お弁当）",
+          coverImage: {
+            type: "externalImageUrl",
+            url: "https://og-image.cookpad.com/global/jp/recipe/25844291?t=1780359344",
+          },
+          ingredientGroups: [],
+          steps: [
+            {
+              text: "じゃがいもを皮付きで食べやすい大きさにカットし、面取りする。",
+              image: {
+                type: "externalImageUrl",
+                url: "https://img-global-jp.cpcdn.com/steps/15457bb8e196264d/160x128cq80/step-1.jpg",
+              },
+            },
+            {
+              text: "数分水にさらしてアク抜きし、キッチンペーパーで水気を取る。",
+            },
+          ],
+          note: "面取りをすると、コロンと美味しそうに仕上がります。",
+        }),
+      },
+    });
+
+    const response = await testApp.request(
+      "/api/import/url",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://cookpad.com/jp/recipes/25844291" }),
+      },
+      { APP_ENV: "development", FREE_AI_MONTHLY_LIMIT: "10", IMPORT_TIMEOUT_MS: "1000" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "簡単ノンフライヤーで揚げポテト（お弁当）",
+        ingredientGroups: [],
+        steps: [
+          {
+            text: "じゃがいもを皮付きで食べやすい大きさにカットし、面取りする。",
+          },
+          {
+            text: "数分水にさらしてアク抜きし、キッチンペーパーで水気を取る。",
+          },
+        ],
+      },
+    });
+  });
+
+  it("AIが候補外画像だけの手順を返した場合はai_schema_invalidを返す", async () => {
+    const testApp = createApp({
+      auth,
+      usageRepository: createUsageRepository(),
+      importFetcher: async (url) => ({
+        finalUrl: url,
+        contentType: "text/html",
+        body: htmlPage,
+      }),
+      importAIProvider: {
+        normalize: async () => ({
+          title: "Tomato pasta",
+          ingredientGroups: [],
+          steps: [
+            {
+              image: { type: "externalImageUrl", url: "https://cdn.example.net/outside.jpg" },
+            },
+          ],
+        }),
+      },
+    });
+
+    const response = await testApp.request(
+      "/api/import/url",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/recipe" }),
+      },
+      { APP_ENV: "development", FREE_AI_MONTHLY_LIMIT: "10", IMPORT_TIMEOUT_MS: "1000" },
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "ai_schema_invalid" },
+    });
+  });
+
   it("AI失敗を段階別エラーに変換する", async () => {
     const cases = [
       { error: new RecipeImportError("ai_timeout", "timeout"), status: 504, code: "ai_timeout" },

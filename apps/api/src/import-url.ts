@@ -226,7 +226,17 @@ export const importRecipeFromUrl = async ({
     throw new RecipeImportError("unknown" as ImportErrorCode, "AI normalization failed.");
   }
 
-  const imageResult = filterDraftImages(draft, conversion.input.imageCandidates);
+  let imageResult: { draft: RecipeDraftContent; warnings: string[] };
+
+  try {
+    imageResult = filterDraftImages(draft, conversion.input.imageCandidates);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
+    }
+
+    throw new RecipeImportError("unknown" as ImportErrorCode, "AI normalization failed.");
+  }
 
   return {
     recipeDraftContent: imageResult.draft,
@@ -429,7 +439,7 @@ const isAiTimeoutError = (error: unknown): boolean => {
   return cause ? isAiTimeoutError(cause) : false;
 };
 
-const isAiSchemaError = (error: unknown) => {
+const isAiSchemaError = (error: unknown): boolean => {
   if (error instanceof z.ZodError) return true;
 
   const name = errorName(error);
@@ -443,7 +453,12 @@ const isAiSchemaError = (error: unknown) => {
   }
 
   const message = errorMessage(error).toLowerCase();
-  return message.includes("schema") || message.includes("type validation");
+  if (message.includes("schema") || message.includes("type validation")) {
+    return true;
+  }
+
+  const cause = errorCause(error);
+  return cause ? isAiSchemaError(cause) : false;
 };
 
 const filterDraftImages = (

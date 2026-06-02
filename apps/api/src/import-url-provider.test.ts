@@ -118,6 +118,28 @@ describe("default recipe import AI provider", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
+  it("AI SDKのschema失敗がcauseに入っていてもai_schema_invalidへ変換する", async () => {
+    const schemaCause = Object.assign(new Error("type validation failed"), {
+      name: "AI_TypeValidationError",
+    });
+    const wrappedError = Object.assign(new Error("provider failed"), {
+      name: "ProviderError",
+      cause: schemaCause,
+    });
+    mocks.generateObject.mockRejectedValueOnce(wrappedError);
+
+    const provider = createDefaultRecipeImportAIProvider({
+      AI: { run: vi.fn() } as unknown as Ai,
+      AI_GATEWAY_NAME: "recipestock",
+      AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
+      IMPORT_AI_TIMEOUT_MS: "1000",
+    } as never);
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_schema_invalid",
+    } satisfies Partial<RecipeImportError>);
+  });
+
   it("AI_TEXT_MODELが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
     const provider = createDefaultRecipeImportAIProvider({
       AI: { run: vi.fn() } as unknown as Ai,
