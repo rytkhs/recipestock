@@ -81,6 +81,9 @@ describe("default recipe import AI provider", () => {
     });
     expect(mocks.createWorkersAI.mock.results[0]?.value).toHaveBeenCalledWith(
       "@cf/zai-org/glm-4.7-flash",
+      {
+        extraHeaders: { "cf-aig-request-timeout": "180000" },
+      },
     );
     expect(mocks.generateObject).toHaveBeenCalledWith(
       expect.objectContaining({
