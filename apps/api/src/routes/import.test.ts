@@ -124,7 +124,7 @@ describe("Import routes", () => {
           { kind: "siteName", value: "Example Kitchen" },
           { kind: "jsonLdRecipeName", value: "Tomato pasta" },
         ]),
-        structuredContent: expect.stringContaining("# Tomato pasta"),
+        structuredContent: expect.stringContaining("<h1>Tomato pasta</h1>"),
         jsonLdDocuments: ['{"@type":"Recipe","name":"Tomato pasta"}'],
         imageCandidates: expect.arrayContaining([
           expect.objectContaining({
@@ -232,10 +232,14 @@ describe("Import routes", () => {
       }),
     ]);
     const [providerInput] = providerInputs as [{ structuredContent: string }];
-    expect(providerInput.structuredContent).toContain("## 材料");
-    expect(providerInput.structuredContent).toContain("- 玉ねぎ 1個");
-    expect(providerInput.structuredContent).toContain("玉ねぎとにんじんを炒めて");
-    expect(providerInput.structuredContent).toContain('[image:img_2 alt="煮込む"]');
+    expect(providerInput.structuredContent).toContain("<main>");
+    expect(providerInput.structuredContent).toContain("<h2>材料</h2>");
+    expect(providerInput.structuredContent).toContain("<ul>");
+    expect(providerInput.structuredContent).toContain("<li>玉ねぎ 1個</li>");
+    expect(providerInput.structuredContent).toContain(
+      "<p>玉ねぎとにんじんを炒めて、スープでじっくり煮込みます。仕上げに塩で味を調えます。</p>",
+    );
+    expect(providerInput.structuredContent).toContain('<img data-image-id="img_2" alt="煮込む">');
     expect(providerInput.structuredContent).not.toContain("このscript本文は混ざらない");
     expect(providerInput.structuredContent).not.toContain("このstyle本文も混ざらない");
   });

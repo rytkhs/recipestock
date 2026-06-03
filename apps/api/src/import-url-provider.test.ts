@@ -34,7 +34,8 @@ const input: RecipeImportAIInput = {
     { kind: "htmlTitle", value: "Tomato pasta" },
     { kind: "metaDescription", value: "Simple tomato pasta" },
   ],
-  structuredContent: "トマト缶とオリーブオイルで作るパスタです。",
+  structuredContent:
+    '<main><h1>Tomato pasta</h1><p>トマト缶とオリーブオイルで作るパスタです。</p><img data-image-id="img_1" alt="Tomato pasta"></main>',
   jsonLdDocuments: ['{"@type":"Recipe","name":"Tomato pasta"}'],
   imageCandidates: [
     {
@@ -97,6 +98,8 @@ describe("default recipe import AI provider", () => {
       "https://example.com/recipes/tomato",
     );
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("structuredContent");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("sanitized semantic HTML");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain('data-image-id="img_1"');
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("imageCandidates");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("jsonLdDocuments");
   });
