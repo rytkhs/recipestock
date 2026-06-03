@@ -1,3 +1,4 @@
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
   type RecipeDraftContent,
   type RecipeSourceDraft,
@@ -279,14 +280,12 @@ const convertImportPage = (
   throw new RecipeImportError("unsupported_page", "No import converter is available.");
 };
 
+type ImportAiProviderKind = "workers-ai" | "openrouter";
+
 export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImportAIProvider => ({
   async normalize(input) {
-    const model = resolveImportAiTextModel(env);
+    const providerKind = resolveImportAiProvider(env);
     const system = resolveImportRecipeSystemPrompt(env);
-    const workersai = createWorkersAI({
-      binding: env.AI,
-      gateway: { id: env.AI_GATEWAY_NAME },
-    });
     const timeoutMs = resolveImportAiTimeoutMs(env);
     const controller = new AbortController();
     let didTimeout = false;
@@ -297,7 +296,7 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
 
     try {
       const result = await generateObject({
-        model: workersai(model as never) as never,
+        model: createImportLanguageModel(env, providerKind, timeoutMs),
         schema: recipeDraftContentSchema,
         system,
         prompt: buildImportUserPrompt(input),
@@ -309,6 +308,13 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
 
       return result.object;
     } catch (error) {
+      logImportAiFailure(error, {
+        env,
+        input,
+        providerKind,
+        timeoutMs,
+      });
+
       if (didTimeout || isAiTimeoutError(error)) {
         throw new RecipeImportError("ai_timeout", "AI normalization timed out.");
       }
@@ -323,6 +329,40 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
     }
   },
 });
+
+const createImportLanguageModel = (
+  env: Bindings,
+  providerKind: ImportAiProviderKind,
+  timeoutMs: number,
+) => {
+  if (providerKind === "openrouter") {
+    const model = resolveOpenRouterTextModel(env);
+    const openrouter = createOpenRouter({
+      apiKey: resolveOpenRouterApiKey(env),
+      appName: "Recipe Stock",
+      baseURL: resolveOpenRouterGatewayBaseUrl(env),
+      headers: resolveAiGatewayAuthHeaders(env),
+    });
+
+    return openrouter.chat(model, {
+      provider: {
+        allow_fallbacks: false,
+        require_parameters: true,
+      },
+      structuredOutputs: { strict: true },
+    }) as never;
+  }
+
+  const model = resolveImportAiTextModel(env);
+  const workersai = createWorkersAI({
+    binding: env.AI,
+    gateway: { id: env.AI_GATEWAY_NAME },
+  });
+
+  return workersai(model as never, {
+    extraHeaders: { "cf-aig-request-timeout": String(timeoutMs) },
+  }) as never;
+};
 
 const buildImportUserPrompt = (
   input: RecipeImportAIInput,
@@ -370,6 +410,135 @@ const resolveImportAiTextModel = (env: Partial<Bindings>) => {
   }
 
   return model;
+};
+
+const resolveImportAiProvider = (env: Partial<Bindings>): ImportAiProviderKind => {
+  const provider = env.IMPORT_AI_PROVIDER?.trim() || "workers-ai";
+  if (provider === "workers-ai" || provider === "openrouter") {
+    return provider;
+  }
+
+  throw new RecipeImportError("unknown", "Import AI provider is not configured.");
+};
+
+const resolveOpenRouterApiKey = (env: Partial<Bindings>) => {
+  const apiKey = env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    throw new RecipeImportError("unknown", "OpenRouter API key is not configured.");
+  }
+
+  return apiKey;
+};
+
+const resolveOpenRouterTextModel = (env: Partial<Bindings>) => {
+  const model = env.OPENROUTER_TEXT_MODEL?.trim();
+  if (!model) {
+    throw new RecipeImportError("unknown", "OpenRouter text model is not configured.");
+  }
+
+  return model;
+};
+
+const resolveOpenRouterGatewayBaseUrl = (env: Partial<Bindings>) => {
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
+  const gatewayName = env.AI_GATEWAY_NAME?.trim();
+  if (!accountId || !gatewayName) {
+    throw new RecipeImportError("unknown", "Cloudflare AI Gateway is not configured.");
+  }
+
+  return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(
+    accountId,
+  )}/${encodeURIComponent(gatewayName)}/openrouter`;
+};
+
+const resolveAiGatewayAuthHeaders = (env: Partial<Bindings>) => {
+  const token = env.CF_AIG_TOKEN?.trim();
+  if (!token) {
+    throw new RecipeImportError("unknown", "Cloudflare AI Gateway token is not configured.");
+  }
+
+  return {
+    "cf-aig-authorization": `Bearer ${token}`,
+  };
+};
+
+const logImportAiFailure = (
+  error: unknown,
+  {
+    env,
+    input,
+    providerKind,
+    timeoutMs,
+  }: {
+    env: Partial<Bindings>;
+    input: RecipeImportAIInput;
+    providerKind: ImportAiProviderKind;
+    timeoutMs: number;
+  },
+) => {
+  const model =
+    providerKind === "openrouter"
+      ? env.OPENROUTER_TEXT_MODEL?.trim()
+      : env.AI_TEXT_MODEL?.trim();
+
+  console.error("[recipe-import-ai] AI normalization failed", {
+    provider: providerKind,
+    model: model || undefined,
+    timeoutMs,
+    sourceHost: input.source.host,
+    sourceUrl: input.source.finalUrl,
+    gatewayBaseUrl:
+      providerKind === "openrouter" ? resolveOpenRouterGatewayBaseUrlForLog(env) : undefined,
+    gatewayName: env.AI_GATEWAY_NAME?.trim() || undefined,
+    gatewayAuthConfigured:
+      providerKind === "openrouter" ? Boolean(env.CF_AIG_TOKEN?.trim()) : undefined,
+    error: sanitizeErrorDetails(error),
+  });
+};
+
+const resolveOpenRouterGatewayBaseUrlForLog = (env: Partial<Bindings>) => {
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
+  const gatewayName = env.AI_GATEWAY_NAME?.trim();
+  if (!accountId || !gatewayName) return undefined;
+
+  return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(
+    accountId,
+  )}/${encodeURIComponent(gatewayName)}/openrouter`;
+};
+
+const sanitizeErrorDetails = (error: unknown, depth = 0): unknown => {
+  if (depth > 2) return undefined;
+  if (error instanceof Error) {
+    const record = error as Error & {
+      cause?: unknown;
+      statusCode?: unknown;
+      status?: unknown;
+      url?: unknown;
+      responseBody?: unknown;
+    };
+
+    return {
+      name: error.name,
+      message: error.message,
+      statusCode: record.statusCode ?? record.status,
+      url: typeof record.url === "string" ? record.url : undefined,
+      responseBody:
+        typeof record.responseBody === "string"
+          ? record.responseBody.slice(0, 1_000)
+          : undefined,
+      cause: record.cause ? sanitizeErrorDetails(record.cause, depth + 1) : undefined,
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    return Object.fromEntries(
+      Object.entries(error as Record<string, unknown>)
+        .filter(([key]) => !/key|token|secret|authorization/i.test(key))
+        .map(([key, value]) => [key, typeof value === "string" ? value.slice(0, 1_000) : value]),
+    );
+  }
+
+  return error;
 };
 
 const resolveImportRecipeSystemPrompt = (env: Partial<Bindings>) => {

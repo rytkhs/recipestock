@@ -17,6 +17,7 @@
   "dependencies": {
     "@hono/zod-validator": "^0.7.5",
     "@neondatabase/serverless": "^1.0.2",
+    "@openrouter/ai-sdk-provider": "^2.9.0",
     "@recipestock/db": "workspace:*",
     "@recipestock/schemas": "workspace:*",
     "@recipestock/shared": "workspace:*",

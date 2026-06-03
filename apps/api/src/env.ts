@@ -20,8 +20,12 @@ export type Bindings = {
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
   AI_GATEWAY_NAME: string;
+  CF_AIG_TOKEN?: string;
   AI_TEXT_MODEL: string;
   AI_VISION_MODEL: string;
+  IMPORT_AI_PROVIDER?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_TEXT_MODEL?: string;
   FREE_AI_MONTHLY_LIMIT?: string;
   PRO_AI_MONTHLY_LIMIT?: string;
   IMPORT_TIMEOUT_MS: string;
