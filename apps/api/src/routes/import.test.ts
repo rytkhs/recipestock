@@ -114,11 +114,29 @@ describe("Import routes", () => {
     expect(usageCalls).toEqual(["ensure:user_123", "consume:user_123:2026-05:10"]);
     expect(providerInputs).toEqual([
       expect.objectContaining({
-        sourceUrl: "https://example.com/recipes/tomato",
-        sourceName: "Example Kitchen",
+        source: {
+          finalUrl: "https://example.com/recipes/tomato",
+          host: "example.com",
+        },
+        metadataCandidates: expect.arrayContaining([
+          { kind: "htmlTitle", value: "Tomato pasta" },
+          { kind: "h1", value: "Tomato pasta" },
+          { kind: "siteName", value: "Example Kitchen" },
+          { kind: "jsonLdRecipeName", value: "Tomato pasta" },
+        ]),
+        structuredContent: expect.stringContaining("# Tomato pasta"),
+        jsonLdDocuments: ['{"@type":"Recipe","name":"Tomato pasta"}'],
         imageCandidates: expect.arrayContaining([
-          expect.objectContaining({ url: "https://example.com/cover.jpg", kind: "cover" }),
-          expect.objectContaining({ url: "https://example.com/step.jpg", kind: "content" }),
+          expect.objectContaining({
+            id: "img_1",
+            url: "https://example.com/cover.jpg",
+            kindHint: "cover",
+          }),
+          expect.objectContaining({
+            id: "img_2",
+            url: "https://example.com/step.jpg",
+            kindHint: "content",
+          }),
         ]),
       }),
     ]);
@@ -141,6 +159,11 @@ describe("Import routes", () => {
   </head>
   <body>
     <main>
+      <h2>材料</h2>
+      <ul>
+        <li>玉ねぎ 1個</li>
+        <li>にんじん 1本</li>
+      </ul>
       <p>玉ねぎとにんじんを炒めて、スープでじっくり煮込みます。仕上げに塩で味を調えます。</p>
       <img data-src="../steps/simmer.jpg" alt="煮込む">
     </main>
@@ -180,27 +203,41 @@ describe("Import routes", () => {
     expect(response.status).toBe(200);
     expect(providerInputs).toEqual([
       expect.objectContaining({
-        sourceName: "Swapped Kitchen",
-        title: "Chunky soup",
-        description: "具だくさんスープの説明です。",
-        jsonLd: ['{"@type":"Recipe","name":"Chunky soup"}'],
+        source: {
+          finalUrl: "https://example.com/recipes/soup/index.html",
+          host: "example.com",
+        },
+        metadataCandidates: expect.arrayContaining([
+          { kind: "htmlTitle", value: "Chunky soup" },
+          { kind: "metaDescription", value: "具だくさんスープの説明です。" },
+          { kind: "siteName", value: "Swapped Kitchen" },
+          { kind: "jsonLdRecipeName", value: "Chunky soup" },
+        ]),
+        jsonLdDocuments: ['{"@type":"Recipe","name":"Chunky soup"}'],
         imageCandidates: expect.arrayContaining([
           expect.objectContaining({
+            id: "img_1",
             url: "https://example.com/images/cover.jpg",
-            kind: "cover",
+            kindHint: "cover",
           }),
           expect.objectContaining({
+            id: "img_2",
             url: "https://example.com/recipes/steps/simmer.jpg",
-            kind: "content",
+            kindHint: "content",
             alt: "煮込む",
+            nearbyText:
+              "玉ねぎとにんじんを炒めて、スープでじっくり煮込みます。仕上げに塩で味を調えます。",
           }),
         ]),
       }),
     ]);
-    const [providerInput] = providerInputs as [{ text: string }];
-    expect(providerInput.text).toContain("玉ねぎとにんじんを炒めて");
-    expect(providerInput.text).not.toContain("このscript本文は混ざらない");
-    expect(providerInput.text).not.toContain("このstyle本文も混ざらない");
+    const [providerInput] = providerInputs as [{ structuredContent: string }];
+    expect(providerInput.structuredContent).toContain("## 材料");
+    expect(providerInput.structuredContent).toContain("- 玉ねぎ 1個");
+    expect(providerInput.structuredContent).toContain("玉ねぎとにんじんを炒めて");
+    expect(providerInput.structuredContent).toContain('[image:img_2 alt="煮込む"]');
+    expect(providerInput.structuredContent).not.toContain("このscript本文は混ざらない");
+    expect(providerInput.structuredContent).not.toContain("このstyle本文も混ざらない");
   });
 
   it("URL形式が不正な場合はinvalid_urlを返す", async () => {
