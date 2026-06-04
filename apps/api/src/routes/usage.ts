@@ -28,8 +28,13 @@ export const createUsageRoutes = ({
 
   return routes.get("/ai", requireAuth(auth), async (c) => {
     const userId = c.get("userId");
-    const repository = usageRepository ?? createUsageRepository(createDb(c.env.DATABASE_URL));
     const currentDate = getCurrentDate?.() ?? new Date();
+    const repository =
+      usageRepository ??
+      createUsageRepository(createDb(c.env.DATABASE_URL), {
+        proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+        now: currentDate,
+      });
     const month = getCurrentJstMonth(currentDate);
     const appUser = await repository.getOrCreateAppUser(userId);
     const usage = (await repository.getAiUsage(userId, month)) ?? { month, used: 0 };

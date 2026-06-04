@@ -59,14 +59,19 @@ export const createImportRoutes = ({
         throw error;
       }
 
+      const now = getCurrentDate?.() ?? new Date();
       const repository =
-        importJobRepository ?? createImportJobRepository(createDb(c.env.DATABASE_URL));
+        importJobRepository ??
+        createImportJobRepository(createDb(c.env.DATABASE_URL), {
+          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+          now,
+        });
       const result = await repository.createUrlJob({
         id: createJobId?.() ?? createImportJobId(),
         userId,
         url: request.data.url,
         normalizedUrl,
-        now: getCurrentDate?.() ?? new Date(),
+        now,
       });
 
       if (result.status === "limitExceeded") {

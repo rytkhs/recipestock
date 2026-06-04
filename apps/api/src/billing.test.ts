@@ -166,6 +166,7 @@ describe("shouldApplyStripeEvent", () => {
 describe("syncAppUserPlanFromSubscriptions", () => {
   it("app userを作成保証し、導出したplanを保存して返す", async () => {
     const ensureAppUser = vi.fn<(userId: string) => Promise<void>>(async () => {});
+    const getAppUserPlan = vi.fn<(userId: string) => Promise<"free" | "pro">>(async () => "free");
     const listSubscriptionsByUserId = vi.fn<(userId: string) => Promise<SubscriptionPlanInput[]>>(
       async () => [subscription({ status: "trialing" })],
     );
@@ -180,6 +181,7 @@ describe("syncAppUserPlanFromSubscriptions", () => {
         now,
         repository: {
           ensureAppUser,
+          getAppUserPlan,
           listSubscriptionsByUserId,
           updateAppUserPlan,
         },
@@ -187,8 +189,58 @@ describe("syncAppUserPlanFromSubscriptions", () => {
     ).resolves.toBe("pro");
 
     expect(ensureAppUser).toHaveBeenCalledWith("user_123");
+    expect(getAppUserPlan).toHaveBeenCalledWith("user_123");
     expect(listSubscriptionsByUserId).toHaveBeenCalledWith("user_123");
     expect(updateAppUserPlan).toHaveBeenCalledWith("user_123", "pro");
+  });
+
+  it("保存済みplanと導出planが同じ場合は更新しない", async () => {
+    const updateAppUserPlan = vi.fn<(userId: string, plan: "free" | "pro") => Promise<void>>(
+      async () => {},
+    );
+
+    await expect(
+      syncAppUserPlanFromSubscriptions({
+        userId: "user_123",
+        proPriceId,
+        now,
+        repository: {
+          ensureAppUser: async () => {},
+          getAppUserPlan: async () => "pro",
+          listSubscriptionsByUserId: async () => [subscription({ status: "active" })],
+          updateAppUserPlan,
+        },
+      }),
+    ).resolves.toBe("pro");
+
+    expect(updateAppUserPlan).not.toHaveBeenCalled();
+  });
+
+  it("期限切れpast_dueで保存済みproならfreeへ同期する", async () => {
+    const updateAppUserPlan = vi.fn<(userId: string, plan: "free" | "pro") => Promise<void>>(
+      async () => {},
+    );
+
+    await expect(
+      syncAppUserPlanFromSubscriptions({
+        userId: "user_123",
+        proPriceId,
+        now,
+        repository: {
+          ensureAppUser: async () => {},
+          getAppUserPlan: async () => "pro",
+          listSubscriptionsByUserId: async () => [
+            subscription({
+              status: "past_due",
+              currentPeriodEnd: "2026-06-03T23:59:59.999Z",
+            }),
+          ],
+          updateAppUserPlan,
+        },
+      }),
+    ).resolves.toBe("free");
+
+    expect(updateAppUserPlan).toHaveBeenCalledWith("user_123", "free");
   });
 
   it("Price ID不一致のsubscriptionだけならfreeへ同期する", async () => {
@@ -203,6 +255,7 @@ describe("syncAppUserPlanFromSubscriptions", () => {
         now,
         repository: {
           ensureAppUser: async () => {},
+          getAppUserPlan: async () => "pro",
           listSubscriptionsByUserId: async () => [
             subscription({ stripePriceId: "price_other", status: "active" }),
           ],

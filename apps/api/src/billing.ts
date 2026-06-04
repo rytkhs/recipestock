@@ -32,6 +32,14 @@ export type SyncAppUserPlanParams = {
   now?: Date;
 };
 
+export type AppUserPlanSyncer = (userId: string, params?: { now?: Date }) => Promise<Plan>;
+
+export type AppUserPlanSyncOptions = {
+  proPriceId?: string;
+  now?: Date;
+  syncAppUserPlan?: AppUserPlanSyncer;
+};
+
 export type AppUserBillingState = {
   userId: string;
   plan: Plan;
@@ -59,6 +67,7 @@ export type UpsertSubscriptionFromStripeEventResult =
 
 type SyncAppUserPlanStorage = {
   ensureAppUser(userId: string): Promise<void>;
+  getAppUserPlan(userId: string): Promise<Plan>;
   listSubscriptionsByUserId(userId: string): Promise<SubscriptionPlanInput[]>;
   updateAppUserPlan(userId: string, plan: Plan): Promise<void>;
 };
@@ -123,12 +132,75 @@ export const syncAppUserPlanFromSubscriptions = async ({
 }): Promise<Plan> => {
   await repository.ensureAppUser(userId);
 
-  const subscriptionRows = await repository.listSubscriptionsByUserId(userId);
+  const [storedPlan, subscriptionRows] = await Promise.all([
+    repository.getAppUserPlan(userId),
+    repository.listSubscriptionsByUserId(userId),
+  ]);
   const plan = derivePlanFromSubscriptions(subscriptionRows, { proPriceId, now });
 
-  await repository.updateAppUserPlan(userId, plan);
+  if (storedPlan !== plan) {
+    await repository.updateAppUserPlan(userId, plan);
+  }
 
   return plan;
+};
+
+export const syncAppUserPlanForDb = async (
+  db: DbClient,
+  userId: string,
+  { proPriceId, now = new Date(), syncAppUserPlan }: AppUserPlanSyncOptions,
+): Promise<Plan> => {
+  if (syncAppUserPlan) {
+    return syncAppUserPlan(userId, { now });
+  }
+
+  if (!proPriceId) {
+    throw new Error("Plan sync requires a Stripe Pro price ID.");
+  }
+
+  return syncAppUserPlanFromSubscriptions({
+    userId,
+    proPriceId,
+    now,
+    repository: {
+      ensureAppUser: async (targetUserId) => storageEnsureAppUser(db, targetUserId),
+      getAppUserPlan: async (targetUserId) => getAppUserPlan(db, targetUserId),
+      listSubscriptionsByUserId: async (targetUserId) => listSubscriptionPlans(db, targetUserId),
+      updateAppUserPlan: async (targetUserId, plan) => updateAppUserPlan(db, targetUserId, plan),
+    },
+  });
+};
+
+const storageEnsureAppUser = async (db: DbClient, userId: string) => {
+  await db.insert(appUsers).values({ userId }).onConflictDoNothing();
+};
+
+const getAppUserPlan = async (db: DbClient, userId: string): Promise<Plan> => {
+  const [appUser] = await db
+    .select({ plan: appUsers.plan })
+    .from(appUsers)
+    .where(eq(appUsers.userId, userId))
+    .limit(1);
+
+  if (!appUser) {
+    throw new Error(`App user was not created for ${userId}`);
+  }
+
+  return appUser.plan;
+};
+
+const listSubscriptionPlans = (db: DbClient, userId: string) =>
+  db
+    .select({
+      stripePriceId: subscriptions.stripePriceId,
+      status: subscriptions.status,
+      currentPeriodEnd: subscriptions.currentPeriodEnd,
+    })
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, userId));
+
+const updateAppUserPlan = async (db: DbClient, userId: string, plan: Plan) => {
+  await db.update(appUsers).set({ plan, updatedAt: new Date() }).where(eq(appUsers.userId, userId));
 };
 
 export const selectBillingSubscriptionSummary = <
@@ -178,23 +250,16 @@ export const selectBillingSubscriptionSummary = <
 export const createBillingRepository = (db: DbClient): BillingRepository => {
   const storage: SyncAppUserPlanStorage = {
     async ensureAppUser(userId) {
-      await db.insert(appUsers).values({ userId }).onConflictDoNothing();
+      await storageEnsureAppUser(db, userId);
+    },
+    async getAppUserPlan(userId) {
+      return getAppUserPlan(db, userId);
     },
     async listSubscriptionsByUserId(userId) {
-      return db
-        .select({
-          stripePriceId: subscriptions.stripePriceId,
-          status: subscriptions.status,
-          currentPeriodEnd: subscriptions.currentPeriodEnd,
-        })
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, userId));
+      return listSubscriptionPlans(db, userId);
     },
     async updateAppUserPlan(userId, plan) {
-      await db
-        .update(appUsers)
-        .set({ plan, updatedAt: new Date() })
-        .where(eq(appUsers.userId, userId));
+      await updateAppUserPlan(db, userId, plan);
     },
   };
 
@@ -226,8 +291,14 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
         throw new Error("App user was not created.");
       }
 
+      const plan = derivePlanFromSubscriptions(subscriptionRows, { proPriceId, now });
+
+      if (appUser[0].plan !== plan) {
+        await storage.updateAppUserPlan(userId, plan);
+      }
+
       return {
-        plan: appUser[0].plan,
+        plan,
         subscription: selectBillingSubscriptionSummary(subscriptionRows, {
           proPriceId,
           now,

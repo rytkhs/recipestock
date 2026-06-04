@@ -79,6 +79,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         auth,
         meRepository: dependencies.meRepository,
         getCurrentMonth: dependencies.getCurrentMonth,
+        getCurrentDate: dependencies.getCurrentDate,
       }),
     )
     .route(
@@ -165,9 +166,10 @@ const handleImportQueue = async (
   env: Bindings,
 ): Promise<void> => {
   const db = createDb(env.DATABASE_URL);
-  const importJobRepository = createImportJobRepository(db);
-  const recipeRepository = createRecipeRepository(db);
-  const usageRepository = createUsageRepository(db);
+  const planSyncOptions = { proPriceId: env.STRIPE_PRO_PRICE_ID };
+  const importJobRepository = createImportJobRepository(db, planSyncOptions);
+  const recipeRepository = createRecipeRepository(db, planSyncOptions);
+  const usageRepository = createUsageRepository(db, planSyncOptions);
   const imageService = createRecipeImageService(env);
 
   for (const message of batch.messages) {

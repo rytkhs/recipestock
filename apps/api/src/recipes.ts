@@ -1,4 +1,4 @@
-import { appUsers, type DbClient, recipes } from "@recipestock/db";
+import { type DbClient, recipes } from "@recipestock/db";
 import {
   type LockedRecipeDetail,
   type RecipeContent,
@@ -13,6 +13,7 @@ import {
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
+import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
 
 export type RecipeRecord = {
   id: string;
@@ -278,8 +279,16 @@ export const createRecipeWithPlanLimitInSession = async (
   };
 };
 
-export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
+export const createRecipeRepository = (
+  db: DbClient,
+  planSyncOptions: AppUserPlanSyncOptions = {},
+): RecipeRepository => ({
   async createRecipeEnforcingPlanLimit(recipe) {
+    await syncAppUserPlanForDb(db, recipe.userId, {
+      ...planSyncOptions,
+      now: planSyncOptions.now ?? recipe.createdAt,
+    });
+
     const result = await db.execute<RecipeSqlRow>(sql`
       with ensured_user as (
         insert into app_users (user_id)
@@ -374,7 +383,7 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
       return null;
     }
 
-    const plan = await getAppUserPlan(db, userId);
+    const plan = await syncAppUserPlanForDb(db, userId, planSyncOptions);
     const unlockedRecipeIds =
       plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
     const recipe = mapRecipeRow(row);
@@ -401,7 +410,7 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
       );
     }
 
-    const plan = await getAppUserPlan(db, userId);
+    const plan = await syncAppUserPlanForDb(db, userId, planSyncOptions);
     const unlockedRecipeIds =
       plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
     const rows = await db
@@ -456,22 +465,6 @@ export const createRecipeRepository = (db: DbClient): RecipeRepository => ({
     return deletedRows.length > 0;
   },
 });
-
-const getAppUserPlan = async (db: DbClient, userId: string): Promise<Plan> => {
-  await db.insert(appUsers).values({ userId }).onConflictDoNothing();
-
-  const [appUser] = await db
-    .select({ plan: appUsers.plan })
-    .from(appUsers)
-    .where(eq(appUsers.userId, userId))
-    .limit(1);
-
-  if (!appUser) {
-    throw new Error(`App user was not created for ${userId}`);
-  }
-
-  return appUser.plan;
-};
 
 const getUnlockedRecipeIdSet = async (db: DbClient, userId: string): Promise<Set<string>> => {
   const rows = await db

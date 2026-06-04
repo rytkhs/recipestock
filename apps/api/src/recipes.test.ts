@@ -136,8 +136,13 @@ describe("isRecipeLockedForPlan", () => {
 });
 
 describe("createRecipeRepository", () => {
+  const planSyncOptions = {
+    proPriceId: "price_pro",
+    syncAppUserPlan: async () => "free" as const,
+  };
+
   it("不正な一覧cursorはDBに問い合わせる前に入力エラーとして扱う", async () => {
-    const repository = createRecipeRepository({} as never);
+    const repository = createRecipeRepository({} as never, planSyncOptions);
 
     await expect(
       repository.listRecipes({
@@ -161,7 +166,7 @@ describe("createRecipeRepository", () => {
         },
       ],
     }));
-    const repository = createRecipeRepository({ execute } as never);
+    const repository = createRecipeRepository({ execute } as never, planSyncOptions);
 
     await expect(repository.createRecipeEnforcingPlanLimit(recipe)).resolves.toEqual({
       status: "created",
@@ -172,7 +177,7 @@ describe("createRecipeRepository", () => {
 
   it("単一SQLが行を返さなければlimitExceededとして返す", async () => {
     const execute = vi.fn(async () => ({ rows: [] }));
-    const repository = createRecipeRepository({ execute } as never);
+    const repository = createRecipeRepository({ execute } as never, planSyncOptions);
 
     await expect(repository.createRecipeEnforcingPlanLimit(createRecipe())).resolves.toEqual({
       status: "limitExceeded",
