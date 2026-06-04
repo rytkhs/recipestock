@@ -48,6 +48,16 @@ const destinationObjectKey = ({
   createImageId: () => string;
 }) => `recipes/${userId}/${recipeId}/${createImageId()}.${extensionFromObjectKey(sourceKey)}`;
 
+const destinationObjectKeyPrefix = ({
+  userId,
+  recipeId,
+  createImageId,
+}: {
+  userId: string;
+  recipeId: string;
+  createImageId: () => string;
+}) => `recipes/${userId}/${recipeId}/${createImageId()}`;
+
 const assertImageObjectSizeAllowed = async (
   imageService: RecipeImageService,
   objectKey: string,
@@ -95,7 +105,24 @@ const resolveImageRef = async ({
   }
 
   if (image.type === "externalImageUrl") {
-    return undefined;
+    if (!imageService?.copyExternalImageUrl) {
+      return undefined;
+    }
+
+    try {
+      const result = await imageService.copyExternalImageUrl({
+        sourceUrl: image.url,
+        destinationKeyPrefix: destinationObjectKeyPrefix({
+          userId,
+          recipeId,
+          createImageId,
+        }),
+      });
+      copiedKeys.push(result.objectKey);
+      return result.objectKey;
+    } catch {
+      return undefined;
+    }
   }
 
   if (!imageService || !isUserTmpObjectKey(userId, image.key)) {
@@ -147,18 +174,24 @@ export const finalizeRecipeDraftImages = async ({
     const steps: RecipeContent["steps"] = [];
 
     for (const step of draft.steps) {
+      const imageKey = await resolveImageRef({
+        image: step.image,
+        userId,
+        recipeId,
+        imageService,
+        existingKeys,
+        createImageId,
+        copiedKeys,
+        tmpKeys,
+      });
+
+      if (!step.text && !imageKey) {
+        continue;
+      }
+
       steps.push({
         text: step.text,
-        imageKey: await resolveImageRef({
-          image: step.image,
-          userId,
-          recipeId,
-          imageService,
-          existingKeys,
-          createImageId,
-          copiedKeys,
-          tmpKeys,
-        }),
+        imageKey,
       });
     }
 

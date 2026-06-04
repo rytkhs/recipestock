@@ -24,7 +24,7 @@ export const draftImageRefSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("externalImageUrl"),
-    url: z.url(),
+    url: webUrlSchema,
   }),
   z.object({
     type: z.literal("existingObjectKey"),

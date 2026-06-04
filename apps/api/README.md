@@ -4,9 +4,9 @@ Hono API running on Cloudflare Workers.
 
 This Worker serves `/api/*` routes and, in production, also serves the built web app from `apps/web/dist` through the `ASSETS` binding.
 
-## Local secrets
+## Local environment variables
 
-Copy the local Worker secret template:
+Copy the local Worker environment template:
 
 ```bash
 cp apps/api/.dev.vars.example apps/api/.dev.vars
@@ -25,9 +25,6 @@ Required local secrets:
 - `CLOUDFLARE_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
-- `CF_AIG_TOKEN`
-
-Non-secret Worker vars such as `APP_ENV`, `IMPORT_TIMEOUT_MS`, `R2_BUCKET_NAME`, and AI model names live in `wrangler.jsonc`.
 
 ## R2 setup
 
@@ -55,16 +52,6 @@ pnpm --filter @recipestock/api dev
 Default local URL:
 
 - API: http://localhost:8787/
-- Health check: http://localhost:8787/api/health
-
-The health check should return:
-
-```json
-{
-  "ok": true,
-  "environment": "development"
-}
-```
 
 ## Verification
 
@@ -96,7 +83,6 @@ pnpm --filter @recipestock/api exec wrangler secret put STRIPE_PRO_PRICE_ID
 pnpm --filter @recipestock/api exec wrangler secret put CLOUDFLARE_ACCOUNT_ID
 pnpm --filter @recipestock/api exec wrangler secret put R2_ACCESS_KEY_ID
 pnpm --filter @recipestock/api exec wrangler secret put R2_SECRET_ACCESS_KEY
-pnpm --filter @recipestock/api exec wrangler secret put CF_AIG_TOKEN
 ```
 
 Do not commit `.dev.vars` or other secret files.

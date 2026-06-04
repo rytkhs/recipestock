@@ -3,12 +3,14 @@ import {
   type CreateRecipeResponse,
   type DeleteRecipeResponse,
   type GetRecipeResponse,
+  type ImportJobSummary,
   type ListRecipesResponse,
+  type RecentImportJobsResponse,
   type UpdateRecipeResponse,
 } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   createEmptyRecipeDraftFormValues,
   formValuesToCreateRecipeRequest,
@@ -85,6 +87,177 @@ const fetchRecipes = async ({ cursor, query }: { cursor?: string | null; query?:
   );
 };
 
+const fetchRecentImportJobs = async () =>
+  parseApiResponse<RecentImportJobsResponse>(
+    fetch("/api/import/jobs/recent", {
+      method: "GET",
+      credentials: "include",
+    }),
+  );
+
+const dismissImportJob = async (jobId: string) =>
+  parseApiResponse<{ job: ImportJobSummary }>(
+    fetch(`/api/import/jobs/${encodeURIComponent(jobId)}/dismiss`, {
+      method: "PATCH",
+      credentials: "include",
+    }),
+  );
+
+const createImportUrlJob = async (url: string) =>
+  parseApiResponse<{ job: ImportJobSummary }>(
+    fetch("/api/import/url/jobs", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url }),
+    }),
+  );
+
+const hasActiveImportJob = (jobs: ImportJobSummary[]) =>
+  jobs.some((job) => job.status === "queued" || job.status === "running");
+
+const importJobErrorMessage = (job: ImportJobSummary) => {
+  switch (job.errorCode) {
+    case "invalid_url":
+      return "URLを確認してください。";
+    case "fetch_failed":
+      return "ページを取得できませんでした。";
+    case "unsupported_page":
+      return "このページは取り込みに対応していません。";
+    case "extraction_failed":
+      return "レシピ本文を見つけられませんでした。";
+    case "ai_usage_limit_exceeded":
+      return "今月のAI利用回数の上限に達しています。";
+    case "ai_timeout":
+      return "タイムアウトしました。";
+    case "ai_schema_invalid":
+      return "解析結果を保存できませんでした。";
+    case "recipe_limit_exceeded":
+      return "保存できるレシピ数の上限に達しています。";
+    default:
+      return "URLを取り込めませんでした。";
+  }
+};
+
+const ImportJobBanner = () => {
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["importJobs", "recent"],
+    queryFn: fetchRecentImportJobs,
+    refetchInterval: (query) => (hasActiveImportJob(query.state.data?.jobs ?? []) ? 2500 : false),
+  });
+  const dismissMutation = useMutation({
+    mutationFn: dismissImportJob,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["importJobs", "recent"] });
+    },
+  });
+  const retryMutation = useMutation({
+    mutationFn: async (job: ImportJobSummary) => {
+      if (!job.url) {
+        throw new Error("Import job URL is missing.");
+      }
+
+      await dismissImportJob(job.id);
+      return createImportUrlJob(job.url);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["importJobs", "recent"] });
+    },
+  });
+  const jobs = data?.jobs ?? [];
+
+  useEffect(() => {
+    if (jobs.some((job) => job.status === "succeeded")) {
+      void queryClient.invalidateQueries({ queryKey: ["recipes"] });
+    }
+  }, [jobs, queryClient]);
+
+  if (jobs.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-6 grid gap-3">
+      {jobs.map((job) => {
+        if (job.status === "succeeded") {
+          return (
+            <div
+              className="rounded-lg border border-success bg-success-50 p-4 text-sm"
+              key={job.id}
+              role="status"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="font-medium text-success-700">取り込みが完了しました。</p>
+                <div className="flex gap-2">
+                  {job.recipeId ? (
+                    <Link
+                      className="inline-flex min-h-9 items-center justify-center rounded-lg bg-accent px-3 font-semibold text-accent-foreground text-sm"
+                      params={{ recipeId: job.recipeId }}
+                      to="/recipes/$recipeId"
+                    >
+                      開く
+                    </Link>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => dismissMutation.mutate(job.id)}
+                  >
+                    閉じる
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (job.status === "failed") {
+          return (
+            <div
+              className="rounded-lg border border-danger bg-danger-50 p-4 text-danger-700 text-sm"
+              key={job.id}
+              role="alert"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="font-medium">取り込みに失敗しました。{importJobErrorMessage(job)}</p>
+                <div className="flex gap-2">
+                  <Button
+                    isDisabled={!job.url || retryMutation.isPending}
+                    size="sm"
+                    variant="primary"
+                    onPress={() => retryMutation.mutate(job)}
+                  >
+                    再試行
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => dismissMutation.mutate(job.id)}
+                  >
+                    閉じる
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div
+            className="rounded-lg border border-border bg-surface p-4 text-default-700 text-sm"
+            key={job.id}
+            role="status"
+          >
+            <p className="font-medium">取り込み中...</p>
+            {job.url ? <p className="mt-1 break-all text-default-500">{job.url}</p> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export const RecipesIndexRoute = () => {
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
@@ -141,6 +314,8 @@ export const RecipesIndexRoute = () => {
           検索
         </Button>
       </form>
+
+      <ImportJobBanner />
 
       {error ? (
         <p className="mt-6 text-danger" role="alert">

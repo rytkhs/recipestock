@@ -17,14 +17,24 @@
       "remote": true
     }
   ],
-  "vars": {
-    "APP_ENV": "development",
-    "IMPORT_TIMEOUT_MS": "30000",
-    "R2_BUCKET_NAME": "recipestock-images-dev",
-    "AI_GATEWAY_NAME": "recipestock",
-    "AI_TEXT_MODEL": "openai/gpt-5.2",
-    "AI_VISION_MODEL": "openai/gpt-5.2",
-    "FREE_AI_MONTHLY_LIMIT": "10",
-    "PRO_AI_MONTHLY_LIMIT": "300"
+  "queues": {
+    "producers": [
+      {
+        "binding": "IMPORT_QUEUE",
+        "queue": "recipestock-import-jobs"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "recipestock-import-jobs",
+        "max_batch_size": 1,
+        "max_retries": 3,
+        "dead_letter_queue": "recipestock-import-jobs-dlq"
+      }
+    ]
+  },
+  "ai": {
+    "binding": "AI",
+    "remote": true
   }
 }

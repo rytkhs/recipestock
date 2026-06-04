@@ -556,6 +556,191 @@ describe("Recipe create routes", () => {
     });
   });
 
+  it("外部cover画像URLを確定objectKeyに変換して保存する", async () => {
+    const externalCopies: unknown[] = [];
+    const savedRecipes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async (recipe) => {
+          savedRecipes.push(recipe);
+          return {
+            status: "created",
+            recipe: {
+              ...recipe,
+              createdAt: new Date("2026-05-26T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            },
+          };
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        copyObject: async () => {
+          throw new Error("should not copy a tmp object");
+        },
+        copyExternalImageUrl: async (params) => {
+          externalCopies.push(params);
+          return { objectKey: `${params.destinationKeyPrefix}.jpg` };
+        },
+        deleteObject: async () => undefined,
+        deletePrefixBestEffort: async () => undefined,
+      },
+      createRecipeId: () => "recipe_123",
+      createImageId: () => "cover",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            coverImage: {
+              type: "externalImageUrl",
+              url: "https://cdn.example.com/cover.jpg",
+            },
+          },
+          source: { sourceType: "web", sourceUrl: "https://example.com/recipes/tomato" },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(externalCopies).toEqual([
+      {
+        sourceUrl: "https://cdn.example.com/cover.jpg",
+        destinationKeyPrefix: "recipes/user_123/recipe_123/cover",
+      },
+    ]);
+    expect(savedRecipes).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({
+          coverImageKey: "recipes/user_123/recipe_123/cover.jpg",
+        }),
+      }),
+    ]);
+    await expect(response.json()).resolves.toMatchObject({
+      recipe: {
+        content: {
+          coverImageKey: "recipes/user_123/recipe_123/cover.jpg",
+        },
+      },
+    });
+  });
+
+  it("外部画像URLの確定に失敗しても画像を省略してレシピを保存する", async () => {
+    const savedRecipes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async (recipe) => {
+          savedRecipes.push(recipe);
+          return {
+            status: "created",
+            recipe: {
+              ...recipe,
+              createdAt: new Date("2026-05-26T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            },
+          };
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        copyObject: async () => {
+          throw new Error("should not copy a tmp object");
+        },
+        copyExternalImageUrl: async () => {
+          throw new Error("external image unavailable");
+        },
+        deleteObject: async () => undefined,
+        deletePrefixBestEffort: async () => undefined,
+      },
+      createRecipeId: () => "recipe_123",
+      createImageId: () => "external",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            coverImage: {
+              type: "externalImageUrl",
+              url: "https://cdn.example.com/missing.jpg",
+            },
+            steps: [
+              {
+                image: {
+                  type: "externalImageUrl",
+                  url: "https://cdn.example.com/missing-step.jpg",
+                },
+              },
+              {
+                text: "盛り付ける",
+                image: {
+                  type: "externalImageUrl",
+                  url: "https://cdn.example.com/missing-step-2.jpg",
+                },
+              },
+            ],
+          },
+          source: { sourceType: "manual" },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(savedRecipes).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({
+          coverImageKey: undefined,
+          steps: [{ text: "盛り付ける" }],
+        }),
+      }),
+    ]);
+  });
+
   it("レシピ保存が例外で失敗したらcopy済み確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
     const testApp = createApp({
@@ -614,6 +799,137 @@ describe("Recipe create routes", () => {
     expect(deletes).toEqual(["recipes/user_123/recipe_123/image_456.webp"]);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "unknown" },
+    });
+  });
+
+  it("外部画像URLのcopy後にレシピ保存が失敗したら確定画像を削除対象にする", async () => {
+    const deletes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("database failed");
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        copyObject: async () => {
+          throw new Error("should not copy a tmp object");
+        },
+        copyExternalImageUrl: async ({ destinationKeyPrefix }) => ({
+          objectKey: `${destinationKeyPrefix}.webp`,
+        }),
+        deleteObject: async (objectKey) => {
+          deletes.push(objectKey);
+        },
+        deletePrefixBestEffort: async () => undefined,
+      },
+      createRecipeId: () => "recipe_123",
+      createImageId: () => "cover",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            coverImage: {
+              type: "externalImageUrl",
+              url: "https://cdn.example.com/cover.webp",
+            },
+          },
+          source: { sourceType: "manual" },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(500);
+    expect(deletes).toEqual(["recipes/user_123/recipe_123/cover.webp"]);
+  });
+
+  it("外部画像URLのcopy後に保存上限超過なら確定画像を削除対象にする", async () => {
+    const deletes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => ({ status: "limitExceeded" }),
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        copyObject: async () => {
+          throw new Error("should not copy a tmp object");
+        },
+        copyExternalImageUrl: async ({ destinationKeyPrefix }) => ({
+          objectKey: `${destinationKeyPrefix}.webp`,
+        }),
+        deleteObject: async (objectKey) => {
+          deletes.push(objectKey);
+        },
+        deletePrefixBestEffort: async () => undefined,
+      },
+      createRecipeId: () => "recipe_123",
+      createImageId: () => "cover",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            coverImage: {
+              type: "externalImageUrl",
+              url: "https://cdn.example.com/cover.webp",
+            },
+          },
+          source: { sourceType: "manual" },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(403);
+    expect(deletes).toEqual(["recipes/user_123/recipe_123/cover.webp"]);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "recipe_limit_exceeded" },
     });
   });
 

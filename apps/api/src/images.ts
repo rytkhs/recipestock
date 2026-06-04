@@ -1,10 +1,12 @@
 import {
   IMAGE_UPLOAD_URL_EXPIRES_IN_SECONDS,
   type ImageContentType,
+  imageContentTypeSchema,
   MAX_IMAGE_UPLOAD_SIZE_BYTES,
 } from "@recipestock/schemas";
 import { AwsClient } from "aws4fetch";
 import { type Bindings } from "./env";
+import { isHttpFetchUrlAllowed } from "./url-safety";
 
 export type ImageUrlResult = {
   url: string;
@@ -20,14 +22,23 @@ export type CreateSignedGetUrlParams = {
   objectKey: string;
 };
 
+export type CopyExternalImageUrlParams = {
+  sourceUrl: string;
+  destinationKeyPrefix: string;
+};
+
 export type RecipeImageService = {
   createUploadUrl(params: CreateUploadUrlParams): Promise<ImageUrlResult>;
   createSignedGetUrl(params: CreateSignedGetUrlParams): Promise<ImageUrlResult>;
   getObjectSize?(objectKey: string): Promise<number | null>;
   copyObject(sourceKey: string, destinationKey: string): Promise<void>;
+  copyExternalImageUrl?(params: CopyExternalImageUrlParams): Promise<{ objectKey: string }>;
   deleteObject(objectKey: string): Promise<void>;
   deletePrefixBestEffort(prefix: string): Promise<void>;
 };
+
+const EXTERNAL_IMAGE_FETCH_TIMEOUT_MS = 10_000;
+const MAX_EXTERNAL_IMAGE_REDIRECTS = 5;
 
 const addSeconds = (date: Date, seconds: number) => new Date(date.getTime() + seconds * 1000);
 
@@ -70,6 +81,102 @@ const createR2PresignedUrl = async ({
   return signed.url;
 };
 
+const normalizeImageContentType = (contentType: string | null): ImageContentType => {
+  const normalized = contentType?.split(";").at(0)?.trim().toLowerCase();
+  const parsed = imageContentTypeSchema.safeParse(normalized);
+
+  if (!parsed.success) {
+    throw new Error("External image content type is not supported.");
+  }
+
+  return parsed.data;
+};
+
+const assertExternalImageUrlAllowed = (sourceUrl: string) => {
+  if (!isHttpFetchUrlAllowed(sourceUrl)) {
+    throw new Error("External image URL is not allowed.");
+  }
+};
+
+const assertExternalImageContentLengthAllowed = (contentLength: string | null) => {
+  if (!contentLength) {
+    return;
+  }
+
+  const size = Number(contentLength);
+  if (Number.isFinite(size) && size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+    throw new Error("External image is too large.");
+  }
+};
+
+const isRedirectStatus = (status: number) =>
+  status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+
+const fetchExternalImageUrl = async (sourceUrl: string, signal: AbortSignal) => {
+  let currentUrl = sourceUrl;
+
+  for (let redirectCount = 0; redirectCount <= MAX_EXTERNAL_IMAGE_REDIRECTS; redirectCount++) {
+    assertExternalImageUrlAllowed(currentUrl);
+
+    const response = await fetch(currentUrl, {
+      redirect: "manual",
+      signal,
+    });
+
+    if (!isRedirectStatus(response.status)) {
+      if (response.url) {
+        assertExternalImageUrlAllowed(response.url);
+      }
+
+      return response;
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      throw new Error("External image redirect location was missing.");
+    }
+
+    currentUrl = new URL(location, currentUrl).toString();
+  }
+
+  throw new Error("External image had too many redirects.");
+};
+
+const readResponseBodyWithinLimit = async (response: Response) => {
+  if (!response.body) {
+    throw new Error("External image response body was empty.");
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+
+  while (true) {
+    const result = await reader.read();
+
+    if (result.done) {
+      break;
+    }
+
+    totalSize += result.value.byteLength;
+    if (totalSize > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+      throw new Error("External image is too large.");
+    }
+
+    chunks.push(result.value);
+  }
+
+  const body = new Uint8Array(totalSize);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return body;
+};
+
 export const createRecipeImageService = (env: Bindings): RecipeImageService => ({
   async createUploadUrl({ objectKey, contentType }) {
     return {
@@ -102,6 +209,34 @@ export const createRecipeImageService = (env: Bindings): RecipeImageService => (
       httpMetadata: sourceObject.httpMetadata,
       customMetadata: sourceObject.customMetadata,
     });
+  },
+  async copyExternalImageUrl({ sourceUrl, destinationKeyPrefix }) {
+    assertExternalImageUrlAllowed(sourceUrl);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), EXTERNAL_IMAGE_FETCH_TIMEOUT_MS);
+
+    try {
+      const response = await fetchExternalImageUrl(sourceUrl, controller.signal);
+
+      if (!response.ok) {
+        throw new Error("External image fetch failed.");
+      }
+
+      const contentType = normalizeImageContentType(response.headers.get("content-type"));
+      assertExternalImageContentLengthAllowed(response.headers.get("content-length"));
+
+      const objectKey = `${destinationKeyPrefix}.${imageExtensionFromContentType(contentType)}`;
+      const body = await readResponseBodyWithinLimit(response);
+
+      await env.RECIPE_IMAGES.put(objectKey, body, {
+        httpMetadata: { contentType },
+      });
+
+      return { objectKey };
+    } finally {
+      clearTimeout(timeout);
+    }
   },
   async deleteObject(objectKey) {
     await env.RECIPE_IMAGES.delete(objectKey);

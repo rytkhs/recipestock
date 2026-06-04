@@ -411,6 +411,118 @@ describe("Recipe mutation routes", () => {
     ]);
   });
 
+  it("レシピ更新で外部画像URLを確定し、不要な既存画像を削除対象にする", async () => {
+    const externalCopies: unknown[] = [];
+    const deletes: unknown[] = [];
+    const updates: unknown[] = [];
+    const existing = baseRecipe({
+      content: {
+        title: "Tomato pasta",
+        coverImageKey: "recipes/user_123/recipe_123/old-cover.webp",
+        ingredientGroups: [],
+        steps: [{ text: "煮詰める", imageKey: "recipes/user_123/recipe_123/old-step.webp" }],
+      },
+    });
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => existing,
+        listRecipes: unusedListRecipes,
+        updateRecipe: async (recipe) => {
+          updates.push(recipe);
+          return baseRecipe({
+            id: recipe.recipeId,
+            userId: recipe.userId,
+            title: recipe.title,
+            content: recipe.content,
+            searchText: recipe.searchText,
+            updatedAt: new Date("2026-05-27T00:00:00.000Z"),
+          });
+        },
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        copyObject: async () => {
+          throw new Error("should not copy a tmp object");
+        },
+        copyExternalImageUrl: async (params) => {
+          externalCopies.push(params);
+          return { objectKey: `${params.destinationKeyPrefix}.png` };
+        },
+        deleteObject: async (objectKey) => {
+          deletes.push(objectKey);
+        },
+        deletePrefixBestEffort: async () => undefined,
+      },
+      createImageId: () => "new-step",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes/recipe_123",
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            coverImage: {
+              type: "existingObjectKey",
+              key: "recipes/user_123/recipe_123/old-cover.webp",
+            },
+            steps: [
+              {
+                text: "盛り付ける",
+                image: {
+                  type: "externalImageUrl",
+                  url: "https://cdn.example.com/step.png",
+                },
+              },
+            ],
+          },
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(externalCopies).toEqual([
+      {
+        sourceUrl: "https://cdn.example.com/step.png",
+        destinationKeyPrefix: "recipes/user_123/recipe_123/new-step",
+      },
+    ]);
+    expect(deletes).toEqual(["recipes/user_123/recipe_123/old-step.webp"]);
+    expect(updates).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({
+          coverImageKey: "recipes/user_123/recipe_123/old-cover.webp",
+          steps: [
+            {
+              text: "盛り付ける",
+              imageKey: "recipes/user_123/recipe_123/new-step.png",
+            },
+          ],
+        }),
+      }),
+    ]);
+  });
+
   it("レシピ更新が例外で失敗したらcopy済み確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
     const existing = baseRecipe();
