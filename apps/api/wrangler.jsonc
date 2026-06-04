@@ -28,7 +28,8 @@
       {
         "queue": "recipestock-import-jobs",
         "max_batch_size": 1,
-        "max_retries": 3
+        "max_retries": 3,
+        "dead_letter_queue": "recipestock-import-jobs-dlq"
       }
     ]
   },
