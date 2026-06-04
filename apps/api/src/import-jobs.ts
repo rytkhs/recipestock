@@ -20,6 +20,7 @@ import {
 } from "./import-url";
 import {
   deleteObjectsBestEffort,
+  type FinalizedRecipeImages,
   finalizeRecipeDraftImages,
   RecipeImageFinalizeError,
 } from "./recipe-images";
@@ -443,6 +444,9 @@ export const processImportJob = async ({
     return;
   }
 
+  let finalized: FinalizedRecipeImages | null = null;
+  let recipeCreated = false;
+
   try {
     if (job.recipeId) {
       const existingRecipe = await recipeRepository.getRecipe(job.userId, job.recipeId);
@@ -466,7 +470,7 @@ export const processImportJob = async ({
       fetcher,
       now,
     });
-    const finalized = await finalizeRecipeDraftImages({
+    finalized = await finalizeRecipeDraftImages({
       draft: importResult.recipeDraftContent,
       userId: job.userId,
       recipeId: job.recipeId ?? recipeId,
@@ -504,6 +508,7 @@ export const processImportJob = async ({
       return;
     }
 
+    recipeCreated = true;
     await deleteObjectsBestEffort(imageService, finalized.tmpKeys);
     await importJobRepository.markJobSucceeded({
       jobId,
@@ -511,6 +516,10 @@ export const processImportJob = async ({
       now: getCurrentDate?.() ?? new Date(),
     });
   } catch (error) {
+    if (finalized && !recipeCreated) {
+      await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
+    }
+
     if (!(error instanceof RecipeImportError) && !(error instanceof RecipeImageFinalizeError)) {
       throw error;
     }

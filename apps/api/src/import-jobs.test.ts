@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type Bindings } from "./env";
+import { type RecipeImageService } from "./images";
 import { type ImportJobRecord, type ImportJobRepository, processImportJob } from "./import-jobs";
 import { type RecipeImportAIProvider, RecipeImportError } from "./import-url";
 import { type RecipeRepository } from "./recipes";
@@ -178,6 +179,51 @@ describe("processImportJob", () => {
     });
 
     expect(events).toEqual(["claim", "failed:recipe_limit_exceeded"]);
+  });
+
+  it("画像コピー後にRecipe作成で予期しない例外が起きた場合はコピー済み画像を削除して例外を再throwする", async () => {
+    const events: string[] = [];
+    const imageService = {
+      getObjectSize: async () => 100,
+      copyObject: async (sourceKey: string, destinationKey: string) => {
+        events.push(`copy:${sourceKey}:${destinationKey}`);
+      },
+      deleteObject: async (objectKey: string) => {
+        events.push(`delete:${objectKey}`);
+      },
+    } as Partial<RecipeImageService> as RecipeImageService;
+
+    await expect(
+      processImportJob({
+        jobId: "job_123",
+        env,
+        importJobRepository: createImportJobRepository(events),
+        recipeRepository: createRecipeRepository(events, {
+          createRecipeEnforcingPlanLimit: async () => {
+            throw new Error("database unavailable");
+          },
+        }),
+        usageRepository: createUsageRepository(),
+        imageService,
+        aiProvider: {
+          normalize: async () => ({
+            title: "Tomato pasta",
+            coverImage: { type: "tmpObjectKey", key: "tmp/user_123/cover.png" },
+            ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+            steps: [{ text: "煮詰める" }],
+          }),
+        },
+        fetcher: async (url) => ({ finalUrl: url, contentType: "text/html", body: htmlPage }),
+        createRecipeId: () => "recipe_123",
+        createImageId: () => "image_123",
+      }),
+    ).rejects.toThrow("database unavailable");
+
+    expect(events).toEqual([
+      "claim",
+      "copy:tmp/user_123/cover.png:recipes/user_123/recipe_123/image_123.png",
+      "delete:recipes/user_123/recipe_123/image_123.png",
+    ]);
   });
 
   it("queuedではないjobは処理しない", async () => {
