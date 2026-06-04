@@ -1,27 +1,37 @@
+import { createDb } from "@recipestock/db";
 import { Hono } from "hono";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
 import { type ApiEnv } from "./context";
-import { type RecipeImageService } from "./images";
+import { type Bindings } from "./env";
+import { createRecipeImageService, type RecipeImageService } from "./images";
+import {
+  createImportJobRepository,
+  type ImportJobRepository,
+  processImportJob,
+} from "./import-jobs";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
 import { type MeRepository } from "./me";
-import { type RecipeRepository } from "./recipes";
+import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
 import { createImageRoutes } from "./routes/images";
 import { createImportRoutes } from "./routes/import";
 import { createMeRoutes } from "./routes/me";
 import { createRecipeRoutes } from "./routes/recipes";
 import { createUsageRoutes } from "./routes/usage";
-import { type UsageRepository } from "./usage";
+import { createUsageRepository, type UsageRepository } from "./usage";
 
 type AppDependencies = {
   auth?: AuthService;
   meRepository?: MeRepository;
   usageRepository?: UsageRepository;
   recipeRepository?: RecipeRepository;
+  importJobRepository?: ImportJobRepository;
+  importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
   importAIProvider?: RecipeImportAIProvider;
   importFetcher?: RecipeImportFetcher;
+  createImportJobId?: () => string;
   createRecipeId?: () => string;
   createImageId?: () => string;
   getCurrentMonth?: () => string;
@@ -49,9 +59,9 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/import",
       createImportRoutes({
         auth,
-        usageRepository: dependencies.usageRepository,
-        aiProvider: dependencies.importAIProvider,
-        fetcher: dependencies.importFetcher,
+        importJobRepository: dependencies.importJobRepository,
+        importQueue: dependencies.importQueue,
+        createImportJobId: dependencies.createImportJobId,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )
@@ -86,4 +96,43 @@ export const createApp = (dependencies: AppDependencies = {}) => {
 const app = createApp();
 
 export type AppType = ReturnType<typeof createApp>;
-export default app;
+
+const handleImportQueue = async (
+  batch: MessageBatch<{ jobId: string }>,
+  env: Bindings,
+): Promise<void> => {
+  const db = createDb(env.DATABASE_URL);
+  const importJobRepository = createImportJobRepository(db);
+  const recipeRepository = createRecipeRepository(db);
+  const usageRepository = createUsageRepository(db);
+  const imageService = createRecipeImageService(env);
+
+  for (const message of batch.messages) {
+    try {
+      await processImportJob({
+        jobId: message.body.jobId,
+        env,
+        importJobRepository,
+        recipeRepository,
+        usageRepository,
+        imageService,
+      });
+      message.ack();
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "import_job_queue_error",
+          messageId: message.id,
+          jobId: message.body.jobId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      message.retry({ delaySeconds: Math.min(30 * 2 ** message.attempts, 600) });
+    }
+  }
+};
+
+export default {
+  fetch: app.fetch,
+  queue: handleImportQueue,
+} satisfies ExportedHandler<Bindings, { jobId: string }>;

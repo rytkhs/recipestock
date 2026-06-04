@@ -51,6 +51,10 @@ describe("RecipesRoute", () => {
           });
         }
 
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
+
         return new Response(null, { status: 404 });
       },
       { authenticated: true },
@@ -108,6 +112,140 @@ describe("RecipesRoute", () => {
     ).resolves.toBeInTheDocument();
     expect(screen.getByText("ロック中")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Locked pasta" })).not.toBeInTheDocument();
+  });
+
+  it("URL import成功バナーから作成されたレシピを開ける", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_123",
+                kind: "url",
+                status: "succeeded",
+                url: "https://example.com/recipes/tomato",
+                recipeId: "recipe_123",
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: "2026-06-01T00:00:10.000Z",
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(screen.findByText("取り込みが完了しました。")).resolves.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "開く" })).toHaveAttribute(
+      "href",
+      "/recipes/recipe_123",
+    );
+  });
+
+  it("URL import失敗バナーから同じURLで再試行できる", async () => {
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_failed",
+                kind: "url",
+                status: "failed",
+                url: "https://example.com/recipes/tomato",
+                recipeId: null,
+                errorCode: "fetch_failed",
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: "2026-06-01T00:00:10.000Z",
+              },
+            ],
+          });
+        }
+
+        if (
+          getRequestPath(input) === "/api/import/jobs/job_failed/dismiss" &&
+          init?.method === "PATCH"
+        ) {
+          return jsonResponse({
+            job: {
+              id: "job_failed",
+              kind: "url",
+              status: "failed",
+              url: "https://example.com/recipes/tomato",
+              recipeId: null,
+              errorCode: "fetch_failed",
+              createdAt: "2026-06-01T00:00:00.000Z",
+              startedAt: "2026-06-01T00:00:01.000Z",
+              finishedAt: "2026-06-01T00:00:10.000Z",
+            },
+          });
+        }
+
+        if (getRequestPath(input) === "/api/import/url/jobs" && init?.method === "POST") {
+          return jsonResponse(
+            {
+              kind: "created",
+              job: {
+                id: "job_retry",
+                kind: "url",
+                status: "queued",
+                url: "https://example.com/recipes/tomato",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:01:00.000Z",
+                startedAt: null,
+                finishedAt: null,
+              },
+            },
+            { status: 202 },
+          );
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "ページを取得できませんでした。",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "再試行" }));
+
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/import/url/jobs")).toEqual([
+        "/api/import/url/jobs",
+        expect.objectContaining({
+          credentials: "include",
+          method: "POST",
+          body: JSON.stringify({ url: "https://example.com/recipes/tomato" }),
+        }),
+      ]);
+    });
+    expect(findFetchCall(fetchMock, "/api/import/jobs/job_failed/dismiss")).toEqual([
+      "/api/import/jobs/job_failed/dismiss",
+      expect.objectContaining({
+        credentials: "include",
+        method: "PATCH",
+      }),
+    ]);
   });
 
   it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {

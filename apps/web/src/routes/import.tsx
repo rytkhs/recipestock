@@ -1,63 +1,16 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
-import {
-  type CreateRecipeResponse,
-  type ImportUrlResponse,
-  importUrlResponseSchema,
-  type RecipeSourceDraft,
-} from "@recipestock/schemas";
-import { useQueryClient } from "@tanstack/react-query";
+import { type CreateImportUrlJobResponse } from "@recipestock/schemas";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useState } from "react";
-import {
-  formValuesToCreateRecipeRequest,
-  RecipeDraftForm,
-  type RecipeDraftFormValues,
-  recipeDraftContentToFormValues,
-} from "../features/recipe-draft";
+import { type FormEvent, useState } from "react";
 import { ApiClientError, parseApiResponse } from "../lib/api";
 
-const importDraftStorageKey = "recipestock.import.url.result";
-
-const saveImportResult = (result: ImportUrlResponse) => {
-  sessionStorage.setItem(importDraftStorageKey, JSON.stringify(result));
-};
-
-const loadImportResult = () => {
-  const raw = sessionStorage.getItem(importDraftStorageKey);
-
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    return importUrlResponseSchema.parse(JSON.parse(raw));
-  } catch {
-    sessionStorage.removeItem(importDraftStorageKey);
-    return null;
-  }
-};
-
-const clearImportResult = () => {
-  sessionStorage.removeItem(importDraftStorageKey);
-};
-
-const importUrl = async (url: string) =>
-  parseApiResponse<ImportUrlResponse>(
-    fetch("/api/import/url", {
+const createImportUrlJob = async (url: string) =>
+  parseApiResponse<CreateImportUrlJobResponse>(
+    fetch("/api/import/url/jobs", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url }),
-    }),
-  );
-
-const postRecipe = async (values: RecipeDraftFormValues, source: RecipeSourceDraft) =>
-  parseApiResponse<CreateRecipeResponse>(
-    fetch("/api/recipes", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(formValuesToCreateRecipeRequest(values, source)),
     }),
   );
 
@@ -81,6 +34,8 @@ const importErrorMessage = (error: unknown) => {
       return "タイムアウトしました。";
     case "ai_schema_invalid":
       return "結果を読み取れませんでした。";
+    case "recipe_limit_exceeded":
+      return "保存できるレシピ数の上限に達しています。";
     default:
       return "URLを取り込めませんでした。";
   }
@@ -112,9 +67,8 @@ export const ImportUrlRoute = () => {
     setIsSubmitting(true);
 
     try {
-      const result = await importUrl(url);
-      saveImportResult(result);
-      await navigate({ to: "/import/confirm" });
+      await createImportUrlJob(url);
+      await navigate({ to: "/recipes" });
     } catch (submitError) {
       setError(importErrorMessage(submitError));
     } finally {
@@ -147,61 +101,6 @@ export const ImportUrlRoute = () => {
           {error}
         </p>
       ) : null}
-    </section>
-  );
-};
-
-export const ImportConfirmRoute = () => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [result, setResult] = useState<ImportUrlResponse | null>(() => loadImportResult());
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setResult(loadImportResult());
-  }, []);
-
-  if (!result) {
-    return (
-      <section className="mx-auto w-full max-w-3xl px-6 py-10">
-        <h1 className="font-semibold text-3xl">取り込み確認</h1>
-        <p className="mt-4 text-default-600">確認できる取り込み結果がありません。</p>
-        <Link className="mt-6 inline-flex text-accent" to="/import/url">
-          URL入力へ戻る
-        </Link>
-      </section>
-    );
-  }
-
-  const onSubmit = async (values: RecipeDraftFormValues) => {
-    setSubmitError(null);
-
-    try {
-      const response = await postRecipe(values, result.source);
-      clearImportResult();
-      await queryClient.invalidateQueries({ queryKey: ["recipes"] });
-      await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
-    } catch {
-      setSubmitError("レシピを保存できませんでした。");
-    }
-  };
-
-  return (
-    <section className="mx-auto w-full max-w-3xl px-6 py-10">
-      <h1 className="font-semibold text-3xl">取り込み確認</h1>
-      {result.warnings.length > 0 ? (
-        <div className="mt-4 rounded-lg border border-warning bg-warning-50 p-3 text-warning-700 text-sm">
-          {result.warnings.map((warning) => (
-            <p key={warning}>{warning}</p>
-          ))}
-        </div>
-      ) : null}
-      <RecipeDraftForm
-        defaultValues={recipeDraftContentToFormValues(result.recipeDraftContent)}
-        submitError={submitError}
-        submitLabel="保存"
-        onSubmit={onSubmit}
-      />
     </section>
   );
 };

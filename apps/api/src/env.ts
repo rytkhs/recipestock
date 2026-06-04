@@ -4,6 +4,7 @@ export type Bindings = {
   AI: Ai;
   APP_ENV: "development" | "staging" | "production";
   ASSETS: Fetcher;
+  IMPORT_QUEUE: Queue<{ jobId: string }>;
   DATABASE_URL: string;
   BETTER_AUTH_URL: string;
   RECIPE_IMAGES: R2Bucket;

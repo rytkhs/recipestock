@@ -1,4 +1,5 @@
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const recipes = pgTable(
   "recipes",
@@ -19,5 +20,31 @@ export const recipes = pgTable(
   (table) => [
     index("recipes_user_id_updated_at_idx").on(table.userId, table.updatedAt),
     index("recipes_normalized_source_url_idx").on(table.userId, table.normalizedSourceUrl),
+  ],
+);
+
+export const importJobs = pgTable(
+  "import_jobs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    kind: text("kind", { enum: ["url"] }).notNull(),
+    status: text("status", { enum: ["queued", "running", "succeeded", "failed"] }).notNull(),
+    url: text("url"),
+    normalizedUrl: text("normalized_url"),
+    recipeId: text("recipe_id"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("import_jobs_user_id_updated_at_idx").on(table.userId, table.updatedAt),
+    uniqueIndex("import_jobs_user_active_idx")
+      .on(table.userId)
+      .where(sql`${table.status} in ('queued', 'running')`),
   ],
 );

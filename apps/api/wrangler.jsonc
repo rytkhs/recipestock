@@ -17,6 +17,21 @@
       "remote": true
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "IMPORT_QUEUE",
+        "queue": "recipestock-import-jobs"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "recipestock-import-jobs",
+        "max_batch_size": 1,
+        "max_retries": 3
+      }
+    ]
+  },
   "ai": {
     "binding": "AI",
     "remote": true

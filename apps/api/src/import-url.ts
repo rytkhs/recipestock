@@ -477,9 +477,7 @@ const logImportAiFailure = (
   },
 ) => {
   const model =
-    providerKind === "openrouter"
-      ? env.OPENROUTER_TEXT_MODEL?.trim()
-      : env.AI_TEXT_MODEL?.trim();
+    providerKind === "openrouter" ? env.OPENROUTER_TEXT_MODEL?.trim() : env.AI_TEXT_MODEL?.trim();
 
   console.error("[recipe-import-ai] AI normalization failed", {
     provider: providerKind,
@@ -523,9 +521,7 @@ const sanitizeErrorDetails = (error: unknown, depth = 0): unknown => {
       statusCode: record.statusCode ?? record.status,
       url: typeof record.url === "string" ? record.url : undefined,
       responseBody:
-        typeof record.responseBody === "string"
-          ? record.responseBody.slice(0, 1_000)
-          : undefined,
+        typeof record.responseBody === "string" ? record.responseBody.slice(0, 1_000) : undefined,
       cause: record.cause ? sanitizeErrorDetails(record.cause, depth + 1) : undefined,
     };
   }
