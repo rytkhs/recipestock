@@ -2,6 +2,7 @@ import { createDb } from "@recipestock/db";
 import { Hono } from "hono";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
+import { type BillingRepository } from "./billing";
 import { type ApiEnv } from "./context";
 import { type Bindings } from "./env";
 import { createRecipeImageService, type RecipeImageService } from "./images";
@@ -14,11 +15,13 @@ import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-
 import { type MeRepository } from "./me";
 import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
+import { createBillingRoutes } from "./routes/billing";
 import { createImageRoutes } from "./routes/images";
 import { createImportRoutes } from "./routes/import";
 import { createMeRoutes } from "./routes/me";
 import { createRecipeRoutes } from "./routes/recipes";
 import { createUsageRoutes } from "./routes/usage";
+import { type StripeBillingClient } from "./stripe-billing";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
 const IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS = 4;
@@ -27,12 +30,14 @@ type AppDependencies = {
   auth?: AuthService;
   meRepository?: MeRepository;
   usageRepository?: UsageRepository;
+  billingRepository?: BillingRepository;
   recipeRepository?: RecipeRepository;
   importJobRepository?: ImportJobRepository;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
   importAIProvider?: RecipeImportAIProvider;
   importFetcher?: RecipeImportFetcher;
+  stripeBillingClient?: StripeBillingClient;
   createImportJobId?: () => string;
   createRecipeId?: () => string;
   createImageId?: () => string;
@@ -80,6 +85,15 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createUsageRoutes({
         auth,
         usageRepository: dependencies.usageRepository,
+        getCurrentDate: dependencies.getCurrentDate,
+      }),
+    )
+    .route(
+      "/billing",
+      createBillingRoutes({
+        auth,
+        billingRepository: dependencies.billingRepository,
+        stripeBillingClient: dependencies.stripeBillingClient,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )

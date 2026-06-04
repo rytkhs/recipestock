@@ -41,6 +41,13 @@ export const invalidRecipeListCursorResponse = () =>
     message: "Recipe list cursor is invalid.",
   });
 
+export const alreadySubscribedResponse = () =>
+  apiErrorResponse({
+    status: 409,
+    code: "already_subscribed",
+    message: "User already has an active Pro subscription.",
+  });
+
 export const recipeLimitExceededResponse = () =>
   apiErrorResponse({
     status: 403,

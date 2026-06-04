@@ -19,6 +19,12 @@ export type SyncAppUserPlanParams = {
   now?: Date;
 };
 
+export type AppUserBillingState = {
+  userId: string;
+  plan: Plan;
+  stripeCustomerId: string | null;
+};
+
 type SyncAppUserPlanStorage = {
   ensureAppUser(userId: string): Promise<void>;
   listSubscriptionsByUserId(userId: string): Promise<SubscriptionPlanInput[]>;
@@ -26,6 +32,9 @@ type SyncAppUserPlanStorage = {
 };
 
 export type BillingRepository = {
+  getOrCreateAppUserBillingState(userId: string): Promise<AppUserBillingState>;
+  listSubscriptionsByUserId(userId: string): Promise<SubscriptionPlanInput[]>;
+  setStripeCustomerId(userId: string, stripeCustomerId: string): Promise<void>;
   syncAppUserPlanFromSubscriptions(params: SyncAppUserPlanParams): Promise<Plan>;
 };
 
@@ -108,6 +117,32 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
   };
 
   return {
+    async getOrCreateAppUserBillingState(userId) {
+      await storage.ensureAppUser(userId);
+
+      const [appUser] = await db
+        .select({
+          userId: appUsers.userId,
+          plan: appUsers.plan,
+          stripeCustomerId: appUsers.stripeCustomerId,
+        })
+        .from(appUsers)
+        .where(eq(appUsers.userId, userId))
+        .limit(1);
+
+      if (!appUser) {
+        throw new Error("App user was not created.");
+      }
+
+      return appUser;
+    },
+    listSubscriptionsByUserId: storage.listSubscriptionsByUserId,
+    async setStripeCustomerId(userId, stripeCustomerId) {
+      await db
+        .update(appUsers)
+        .set({ stripeCustomerId, updatedAt: new Date() })
+        .where(eq(appUsers.userId, userId));
+    },
     syncAppUserPlanFromSubscriptions(params) {
       return syncAppUserPlanFromSubscriptions({ ...params, repository: storage });
     },
