@@ -29,6 +29,13 @@
       "when": 1780557314064,
       "tag": "0003_hot_dexter_bennett",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780582366157,
+      "tag": "0004_abandoned_bug",
+      "breakpoints": true
     }
   ]
 }
