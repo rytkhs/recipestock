@@ -1,6 +1,7 @@
-import { appUsers, type DbClient, subscriptions } from "@recipestock/db";
+import { appUsers, type DbClient, stripeEvents, subscriptions } from "@recipestock/db";
 import { type Plan } from "@recipestock/shared";
 import { eq } from "drizzle-orm";
+import { ulid } from "ulid";
 
 export type SubscriptionPlanInput = {
   stripePriceId: string;
@@ -25,6 +26,25 @@ export type AppUserBillingState = {
   stripeCustomerId: string | null;
 };
 
+export type UpsertSubscriptionFromStripeEventParams = {
+  userId: string;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+  stripePriceId: string;
+  stripeProductId: string | null;
+  status: string;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  cancelAt: Date | null;
+  canceledAt: Date | null;
+  latestEventCreatedAt: Date;
+};
+
+export type UpsertSubscriptionFromStripeEventResult =
+  | { status: "upserted" }
+  | { status: "skippedOldEvent" };
+
 type SyncAppUserPlanStorage = {
   ensureAppUser(userId: string): Promise<void>;
   listSubscriptionsByUserId(userId: string): Promise<SubscriptionPlanInput[]>;
@@ -33,9 +53,14 @@ type SyncAppUserPlanStorage = {
 
 export type BillingRepository = {
   getOrCreateAppUserBillingState(userId: string): Promise<AppUserBillingState>;
+  hasProcessedStripeEvent(eventId: string): Promise<boolean>;
   listSubscriptionsByUserId(userId: string): Promise<SubscriptionPlanInput[]>;
+  markStripeEventProcessed(eventId: string): Promise<void>;
   setStripeCustomerId(userId: string, stripeCustomerId: string): Promise<void>;
   syncAppUserPlanFromSubscriptions(params: SyncAppUserPlanParams): Promise<Plan>;
+  upsertSubscriptionFromStripeEvent(
+    params: UpsertSubscriptionFromStripeEventParams,
+  ): Promise<UpsertSubscriptionFromStripeEventResult>;
 };
 
 export const isProSubscription = (
@@ -136,15 +161,79 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
 
       return appUser;
     },
+    async hasProcessedStripeEvent(eventId) {
+      const [event] = await db
+        .select({ eventId: stripeEvents.eventId })
+        .from(stripeEvents)
+        .where(eq(stripeEvents.eventId, eventId))
+        .limit(1);
+
+      return Boolean(event);
+    },
     listSubscriptionsByUserId: storage.listSubscriptionsByUserId,
+    async markStripeEventProcessed(eventId) {
+      await db.insert(stripeEvents).values({ eventId }).onConflictDoNothing();
+    },
     async setStripeCustomerId(userId, stripeCustomerId) {
       await db
-        .update(appUsers)
-        .set({ stripeCustomerId, updatedAt: new Date() })
-        .where(eq(appUsers.userId, userId));
+        .insert(appUsers)
+        .values({ userId, stripeCustomerId })
+        .onConflictDoUpdate({
+          target: appUsers.userId,
+          set: { stripeCustomerId, updatedAt: new Date() },
+        });
     },
     syncAppUserPlanFromSubscriptions(params) {
       return syncAppUserPlanFromSubscriptions({ ...params, repository: storage });
+    },
+    async upsertSubscriptionFromStripeEvent(params) {
+      const [existingSubscription] = await db
+        .select({
+          latestEventCreatedAt: subscriptions.latestEventCreatedAt,
+        })
+        .from(subscriptions)
+        .where(eq(subscriptions.stripeSubscriptionId, params.stripeSubscriptionId))
+        .limit(1);
+
+      if (
+        existingSubscription &&
+        !shouldApplyStripeEvent({
+          latestEventCreatedAt: existingSubscription.latestEventCreatedAt,
+          eventCreatedAt: params.latestEventCreatedAt,
+        })
+      ) {
+        return { status: "skippedOldEvent" };
+      }
+
+      const values = {
+        userId: params.userId,
+        stripeCustomerId: params.stripeCustomerId,
+        stripeSubscriptionId: params.stripeSubscriptionId,
+        stripePriceId: params.stripePriceId,
+        stripeProductId: params.stripeProductId,
+        status: params.status,
+        currentPeriodStart: params.currentPeriodStart,
+        currentPeriodEnd: params.currentPeriodEnd,
+        cancelAtPeriodEnd: params.cancelAtPeriodEnd,
+        cancelAt: params.cancelAt,
+        canceledAt: params.canceledAt,
+        latestEventCreatedAt: params.latestEventCreatedAt,
+        updatedAt: new Date(),
+      };
+
+      if (existingSubscription) {
+        await db
+          .update(subscriptions)
+          .set(values)
+          .where(eq(subscriptions.stripeSubscriptionId, params.stripeSubscriptionId));
+      } else {
+        await db.insert(subscriptions).values({
+          id: ulid(),
+          ...values,
+        });
+      }
+
+      return { status: "upserted" };
     },
   };
 };

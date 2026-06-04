@@ -20,6 +20,7 @@ import { createImageRoutes } from "./routes/images";
 import { createImportRoutes } from "./routes/import";
 import { createMeRoutes } from "./routes/me";
 import { createRecipeRoutes } from "./routes/recipes";
+import { createStripeRoutes } from "./routes/stripe";
 import { createUsageRoutes } from "./routes/usage";
 import { type StripeBillingClient } from "./stripe-billing";
 import { createUsageRepository, type UsageRepository } from "./usage";
@@ -95,6 +96,13 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         billingRepository: dependencies.billingRepository,
         stripeBillingClient: dependencies.stripeBillingClient,
         getCurrentDate: dependencies.getCurrentDate,
+      }),
+    )
+    .route(
+      "/stripe",
+      createStripeRoutes({
+        billingRepository: dependencies.billingRepository,
+        stripeBillingClient: dependencies.stripeBillingClient,
       }),
     )
     .route(

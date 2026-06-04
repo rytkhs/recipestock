@@ -22,15 +22,24 @@ const createRepository = (overrides: Partial<BillingRepository> = {}): BillingRe
     plan: "free",
     stripeCustomerId: null,
   }),
+  hasProcessedStripeEvent: async () => false,
   listSubscriptionsByUserId: async () => [],
+  markStripeEventProcessed: async () => {},
   setStripeCustomerId: async () => {},
   syncAppUserPlanFromSubscriptions: async () => "free",
+  upsertSubscriptionFromStripeEvent: async () => ({ status: "upserted" }),
   ...overrides,
 });
 
 const createStripeClient = (overrides: Partial<StripeBillingClient> = {}): StripeBillingClient => ({
   createCustomer: async () => ({ id: "cus_123" }),
   createCheckoutSession: async () => ({ url: "https://checkout.stripe.com/session_123" }),
+  verifyWebhook: async () => ({
+    kind: "noop",
+    eventId: "evt_123",
+    eventCreatedAt: new Date("2026-06-04T00:00:00.000Z"),
+    type: "invoice.payment_failed",
+  }),
   ...overrides,
 });
 
