@@ -6,6 +6,7 @@ import {
 } from "@recipestock/schemas";
 import { AwsClient } from "aws4fetch";
 import { type Bindings } from "./env";
+import { isHttpFetchUrlAllowed } from "./url-safety";
 
 export type ImageUrlResult = {
   url: string;
@@ -91,60 +92,8 @@ const normalizeImageContentType = (contentType: string | null): ImageContentType
   return parsed.data;
 };
 
-const parseIpv4Address = (hostname: string) => {
-  const parts = hostname.split(".");
-
-  if (parts.length !== 4) {
-    return null;
-  }
-
-  const octets = parts.map((part) => {
-    if (!/^\d+$/.test(part)) {
-      return null;
-    }
-
-    const value = Number(part);
-    return value >= 0 && value <= 255 ? value : null;
-  });
-
-  return octets.every((octet) => octet !== null) ? (octets as number[]) : null;
-};
-
-const isBlockedExternalImageHostname = (hostname: string) => {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-
-  if (normalized === "localhost" || normalized.endsWith(".localhost")) {
-    return true;
-  }
-
-  const ipv4 = parseIpv4Address(normalized);
-  if (ipv4) {
-    const [first, second] = ipv4;
-    return (
-      first === 0 ||
-      first === 10 ||
-      first === 127 ||
-      (first === 169 && second === 254) ||
-      (first === 172 && second >= 16 && second <= 31) ||
-      (first === 192 && second === 168)
-    );
-  }
-
-  return (
-    normalized === "::1" ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    normalized.startsWith("fe80:")
-  );
-};
-
 const assertExternalImageUrlAllowed = (sourceUrl: string) => {
-  const url = new URL(sourceUrl);
-
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    isBlockedExternalImageHostname(url.hostname)
-  ) {
+  if (!isHttpFetchUrlAllowed(sourceUrl)) {
     throw new Error("External image URL is not allowed.");
   }
 };

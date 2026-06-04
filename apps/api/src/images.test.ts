@@ -132,6 +132,12 @@ describe("RecipeImageService", () => {
       "http://172.16.0.1/image.jpg",
       "http://192.168.0.1/image.jpg",
       "http://[::1]/image.jpg",
+      "http://[::ffff:127.0.0.1]/image.jpg",
+      "http://[::ffff:10.0.0.1]/image.jpg",
+      "http://[::ffff:172.16.0.1]/image.jpg",
+      "http://[::ffff:192.168.0.1]/image.jpg",
+      "http://[::ffff:169.254.169.254]/image.jpg",
+      "http://[::ffff:8.8.8.8]/image.jpg",
     ]) {
       await expect(
         service.copyExternalImageUrl?.({

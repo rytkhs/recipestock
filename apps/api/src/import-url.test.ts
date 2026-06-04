@@ -18,6 +18,12 @@ describe("URL import fetcher", () => {
       "http://192.168.0.1/recipe",
       "http://169.254.169.254/latest/meta-data/",
       "http://[::1]/recipe",
+      "http://[::ffff:127.0.0.1]/recipe",
+      "http://[::ffff:10.0.0.1]/recipe",
+      "http://[::ffff:172.16.0.1]/recipe",
+      "http://[::ffff:192.168.0.1]/recipe",
+      "http://[::ffff:169.254.169.254]/latest/meta-data/",
+      "http://[::ffff:8.8.8.8]/recipe",
     ]) {
       await expect(
         fetchImportPage(sourceUrl, { timeoutMs: 1000, maxBytes: 1024 }),
@@ -88,5 +94,6 @@ describe("assertImportUrlAllowed", () => {
     expect(() => assertImportUrlAllowed("https://example.com/recipe")).not.toThrow();
     expect(() => assertImportUrlAllowed("ftp://example.com/recipe")).toThrow("Import URL");
     expect(() => assertImportUrlAllowed("http://localhost/recipe")).toThrow("Import URL");
+    expect(() => assertImportUrlAllowed("http://[::ffff:8.8.8.8]/recipe")).toThrow("Import URL");
   });
 });
