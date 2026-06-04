@@ -143,4 +143,25 @@ describe("RecipeImageService", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("外部画像URLのリダイレクト先がblocked hostならR2へ保存しない", async () => {
+    const { puts, service } = createTestImageService();
+    const fetchMock = vi.fn(async () => {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data/" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      service.copyExternalImageUrl?.({
+        sourceUrl: "https://cdn.example.com/cover.jpg",
+        destinationKeyPrefix: "recipes/user_123/recipe_123/cover",
+      }),
+    ).rejects.toThrow("External image URL is not allowed.");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(puts).toEqual([]);
+  });
 });

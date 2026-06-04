@@ -37,6 +37,7 @@ export type RecipeImageService = {
 };
 
 const EXTERNAL_IMAGE_FETCH_TIMEOUT_MS = 10_000;
+const MAX_EXTERNAL_IMAGE_REDIRECTS = 5;
 
 const addSeconds = (date: Date, seconds: number) => new Date(date.getTime() + seconds * 1000);
 
@@ -159,6 +160,39 @@ const assertExternalImageContentLengthAllowed = (contentLength: string | null) =
   }
 };
 
+const isRedirectStatus = (status: number) =>
+  status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+
+const fetchExternalImageUrl = async (sourceUrl: string, signal: AbortSignal) => {
+  let currentUrl = sourceUrl;
+
+  for (let redirectCount = 0; redirectCount <= MAX_EXTERNAL_IMAGE_REDIRECTS; redirectCount++) {
+    assertExternalImageUrlAllowed(currentUrl);
+
+    const response = await fetch(currentUrl, {
+      redirect: "manual",
+      signal,
+    });
+
+    if (!isRedirectStatus(response.status)) {
+      if (response.url) {
+        assertExternalImageUrlAllowed(response.url);
+      }
+
+      return response;
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      throw new Error("External image redirect location was missing.");
+    }
+
+    currentUrl = new URL(location, currentUrl).toString();
+  }
+
+  throw new Error("External image had too many redirects.");
+};
+
 const readResponseBodyWithinLimit = async (response: Response) => {
   if (!response.body) {
     throw new Error("External image response body was empty.");
@@ -234,10 +268,7 @@ export const createRecipeImageService = (env: Bindings): RecipeImageService => (
     const timeout = setTimeout(() => controller.abort(), EXTERNAL_IMAGE_FETCH_TIMEOUT_MS);
 
     try {
-      const response = await fetch(sourceUrl, {
-        redirect: "follow",
-        signal: controller.signal,
-      });
+      const response = await fetchExternalImageUrl(sourceUrl, controller.signal);
 
       if (!response.ok) {
         throw new Error("External image fetch failed.");
