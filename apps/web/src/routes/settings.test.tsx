@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  billingStatusResponse,
   createSessionResponse,
   findFetchCall,
   getRequestPath,
@@ -55,6 +56,7 @@ describe("Settings routes", () => {
       ]);
     });
     expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/session_123");
+    expect(screen.queryByRole("button", { name: "請求管理" })).not.toBeInTheDocument();
   });
 
   it("Checkout成功後はwebhook反映待ちの案内を表示する", async () => {
@@ -97,6 +99,18 @@ describe("Settings routes", () => {
         });
       }
 
+      if (path === "/api/billing/status") {
+        return jsonResponse({
+          plan: "pro",
+          subscription: {
+            status: "active",
+            cancelAtPeriodEnd: false,
+            currentPeriodEnd: "2026-07-04T00:00:00.000Z",
+            cancelAt: null,
+          },
+        });
+      }
+
       return new Response(null, { status: 404 });
     });
 
@@ -104,6 +118,147 @@ describe("Settings routes", () => {
 
     await expect(screen.findByText("Pro契約中です。")).resolves.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pro契約" })).not.toBeInTheDocument();
+  });
+
+  it("ProユーザーはCustomer Portalを開ける", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(true);
+      }
+
+      if (path === "/api/me") {
+        return jsonResponse({
+          ...viewerResponse,
+          plan: "pro",
+          recipeLimit: null,
+        });
+      }
+
+      if (path === "/api/billing/status") {
+        return jsonResponse({
+          plan: "pro",
+          subscription: {
+            status: "active",
+            cancelAtPeriodEnd: false,
+            currentPeriodEnd: "2026-07-04T00:00:00.000Z",
+            cancelAt: null,
+          },
+        });
+      }
+
+      if (path === "/api/billing/portal" && init?.method === "POST") {
+        return jsonResponse({ url: "https://billing.stripe.com/session_123" });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+    const assign = vi.spyOn(checkoutRedirect, "assign").mockImplementation(() => {});
+
+    await renderApp("/settings/billing");
+    await userEvent.click(await screen.findByRole("button", { name: "請求管理" }));
+
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/billing/portal")).toEqual([
+        "/api/billing/portal",
+        expect.objectContaining({
+          credentials: "include",
+          method: "POST",
+        }),
+      ]);
+    });
+    expect(assign).toHaveBeenCalledWith("https://billing.stripe.com/session_123");
+  });
+
+  it("解約予約中は期間終了日つきの案内を表示する", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(true);
+      }
+
+      if (path === "/api/me") {
+        return jsonResponse({
+          ...viewerResponse,
+          plan: "pro",
+          recipeLimit: null,
+        });
+      }
+
+      if (path === "/api/billing/status") {
+        return jsonResponse({
+          plan: "pro",
+          subscription: {
+            status: "active",
+            cancelAtPeriodEnd: true,
+            currentPeriodEnd: "2026-07-04T00:00:00.000Z",
+            cancelAt: "2026-07-04T00:00:00.000Z",
+          },
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/settings/billing");
+
+    await expect(
+      screen.findByText("解約予約中。2026/07/04 までは Pro を利用できます。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("Proは請求期間終了まで利用できます。")).toBeInTheDocument();
+  });
+
+  it("Portal作成に失敗した場合は案内を表示する", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(true);
+      }
+
+      if (path === "/api/me") {
+        return jsonResponse({
+          ...viewerResponse,
+          plan: "pro",
+          recipeLimit: null,
+        });
+      }
+
+      if (path === "/api/billing/status") {
+        return jsonResponse({
+          plan: "pro",
+          subscription: {
+            status: "active",
+            cancelAtPeriodEnd: false,
+            currentPeriodEnd: "2026-07-04T00:00:00.000Z",
+            cancelAt: null,
+          },
+        });
+      }
+
+      if (path === "/api/billing/portal" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            error: {
+              code: "unknown",
+              message: "Unexpected error occurred.",
+            },
+          },
+          { status: 500 },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/settings/billing");
+    await userEvent.click(await screen.findByRole("button", { name: "請求管理" }));
+
+    await expect(
+      screen.findByText("請求管理を開けませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
   });
 
   it("already_subscribedの場合は案内を表示してviewerを再取得する", async () => {
@@ -118,6 +273,10 @@ describe("Settings routes", () => {
       if (path === "/api/me") {
         meCalls += 1;
         return jsonResponse(viewerResponse);
+      }
+
+      if (path === "/api/billing/status") {
+        return jsonResponse(billingStatusResponse);
       }
 
       if (path === "/api/billing/checkout" && init?.method === "POST") {

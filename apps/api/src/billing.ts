@@ -9,6 +9,18 @@ export type SubscriptionPlanInput = {
   currentPeriodEnd: Date | string | null;
 };
 
+export type BillingSubscriptionSummary = {
+  status: string;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: Date | null;
+  cancelAt: Date | null;
+};
+
+export type BillingStatus = {
+  plan: Plan;
+  subscription: BillingSubscriptionSummary | null;
+};
+
 export type ProSubscriptionOptions = {
   proPriceId: string;
   now?: Date;
@@ -52,6 +64,7 @@ type SyncAppUserPlanStorage = {
 };
 
 export type BillingRepository = {
+  getBillingStatus(params: SyncAppUserPlanParams): Promise<BillingStatus>;
   getOrCreateAppUserBillingState(userId: string): Promise<AppUserBillingState>;
   hasProcessedStripeEvent(eventId: string): Promise<boolean>;
   listSubscriptionsByUserId(userId: string): Promise<SubscriptionPlanInput[]>;
@@ -118,6 +131,50 @@ export const syncAppUserPlanFromSubscriptions = async ({
   return plan;
 };
 
+export const selectBillingSubscriptionSummary = <
+  T extends {
+    stripePriceId: string;
+    status: string;
+    currentPeriodEnd: Date | null;
+    cancelAt: Date | null;
+    cancelAtPeriodEnd: boolean;
+    currentPeriodStart: Date | null;
+    updatedAt: Date;
+  },
+>(
+  subscriptionRows: T[],
+  options: ProSubscriptionOptions,
+): BillingSubscriptionSummary | null => {
+  const proPriceSubscriptions = subscriptionRows.filter(
+    (subscription) => subscription.stripePriceId === options.proPriceId,
+  );
+
+  const [selectedSubscription] = [...proPriceSubscriptions].sort((left, right) => {
+    const leftIsPro = isProSubscription(left, options);
+    const rightIsPro = isProSubscription(right, options);
+
+    if (leftIsPro !== rightIsPro) {
+      return leftIsPro ? -1 : 1;
+    }
+
+    const leftTime = left.currentPeriodStart?.getTime() ?? left.updatedAt.getTime();
+    const rightTime = right.currentPeriodStart?.getTime() ?? right.updatedAt.getTime();
+
+    return rightTime - leftTime;
+  });
+
+  if (!selectedSubscription) {
+    return null;
+  }
+
+  return {
+    status: selectedSubscription.status,
+    cancelAtPeriodEnd: selectedSubscription.cancelAtPeriodEnd,
+    currentPeriodEnd: selectedSubscription.currentPeriodEnd,
+    cancelAt: selectedSubscription.cancelAt,
+  };
+};
+
 export const createBillingRepository = (db: DbClient): BillingRepository => {
   const storage: SyncAppUserPlanStorage = {
     async ensureAppUser(userId) {
@@ -142,6 +199,41 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
   };
 
   return {
+    async getBillingStatus({ userId, proPriceId, now = new Date() }) {
+      await storage.ensureAppUser(userId);
+
+      const [appUser, subscriptionRows] = await Promise.all([
+        db
+          .select({ plan: appUsers.plan })
+          .from(appUsers)
+          .where(eq(appUsers.userId, userId))
+          .limit(1),
+        db
+          .select({
+            stripePriceId: subscriptions.stripePriceId,
+            status: subscriptions.status,
+            currentPeriodStart: subscriptions.currentPeriodStart,
+            currentPeriodEnd: subscriptions.currentPeriodEnd,
+            cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
+            cancelAt: subscriptions.cancelAt,
+            updatedAt: subscriptions.updatedAt,
+          })
+          .from(subscriptions)
+          .where(eq(subscriptions.userId, userId)),
+      ]);
+
+      if (!appUser[0]) {
+        throw new Error("App user was not created.");
+      }
+
+      return {
+        plan: appUser[0].plan,
+        subscription: selectBillingSubscriptionSummary(subscriptionRows, {
+          proPriceId,
+          now,
+        }),
+      };
+    },
     async getOrCreateAppUserBillingState(userId) {
       await storage.ensureAppUser(userId);
 

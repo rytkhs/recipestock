@@ -62,6 +62,10 @@ const noopEvent = (type = "invoice.payment_failed"): StripeWebhookEvent => ({
 });
 
 const createRepository = (overrides: Partial<BillingRepository> = {}): BillingRepository => ({
+  getBillingStatus: async () => ({
+    plan: "free",
+    subscription: null,
+  }),
   getOrCreateAppUserBillingState: async (userId) => ({
     userId,
     plan: "free",
@@ -79,6 +83,7 @@ const createRepository = (overrides: Partial<BillingRepository> = {}): BillingRe
 const createStripeClient = (event: StripeWebhookEvent): StripeBillingClient => ({
   createCustomer: async () => ({ id: "cus_123" }),
   createCheckoutSession: async () => ({ url: "https://checkout.stripe.com/session_123" }),
+  createPortalSession: async () => ({ url: "https://billing.stripe.com/session_123" }),
   verifyWebhook: async () => event,
 });
 

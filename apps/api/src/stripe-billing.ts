@@ -13,9 +13,15 @@ export type CreateStripeCheckoutSessionParams = {
   cancelUrl: string;
 };
 
+export type CreateStripePortalSessionParams = {
+  stripeCustomerId: string;
+  returnUrl: string;
+};
+
 export type StripeBillingClient = {
   createCustomer(params: CreateStripeCustomerParams): Promise<{ id: string }>;
   createCheckoutSession(params: CreateStripeCheckoutSessionParams): Promise<{ url: string }>;
+  createPortalSession(params: CreateStripePortalSessionParams): Promise<{ url: string }>;
   verifyWebhook(params: VerifyStripeWebhookParams): Promise<StripeWebhookEvent>;
 };
 
@@ -188,6 +194,14 @@ export const createStripeBillingClient = (env: Bindings): StripeBillingClient =>
       if (!session.url) {
         throw new Error("Stripe Checkout Session URL was not returned.");
       }
+
+      return { url: session.url };
+    },
+    async createPortalSession({ stripeCustomerId, returnUrl }) {
+      const session = await stripe.billingPortal.sessions.create({
+        customer: stripeCustomerId,
+        return_url: returnUrl,
+      });
 
       return { url: session.url };
     },

@@ -3,6 +3,7 @@ import {
   derivePlanFromSubscriptions,
   isProSubscription,
   type SubscriptionPlanInput,
+  selectBillingSubscriptionSummary,
   shouldApplyStripeEvent,
   syncAppUserPlanFromSubscriptions,
 } from "./billing";
@@ -82,6 +83,63 @@ describe("derivePlanFromSubscriptions", () => {
         { proPriceId, now },
       ),
     ).toBe("free");
+  });
+});
+
+describe("selectBillingSubscriptionSummary", () => {
+  type SummarySubscription = {
+    stripePriceId: string;
+    status: string;
+    currentPeriodEnd: Date | null;
+    cancelAt: Date | null;
+    cancelAtPeriodEnd: boolean;
+    currentPeriodStart: Date | null;
+    updatedAt: Date;
+  };
+
+  const summarySubscription = (
+    overrides: Partial<SummarySubscription> = {},
+  ): SummarySubscription => ({
+    stripePriceId: proPriceId,
+    status: "active",
+    currentPeriodStart: new Date("2026-06-04T00:00:00.000Z"),
+    currentPeriodEnd: new Date("2026-07-04T00:00:00.000Z"),
+    cancelAtPeriodEnd: false,
+    cancelAt: null,
+    updatedAt: new Date("2026-06-04T00:00:00.000Z"),
+    ...overrides,
+  });
+
+  it("Pro判定に使われるsubscriptionを優先して返す", () => {
+    expect(
+      selectBillingSubscriptionSummary(
+        [
+          summarySubscription({
+            status: "canceled",
+            currentPeriodStart: new Date("2026-07-04T00:00:00.000Z"),
+          }),
+          summarySubscription({
+            status: "active",
+            cancelAtPeriodEnd: true,
+          }),
+        ],
+        { proPriceId, now },
+      ),
+    ).toEqual({
+      status: "active",
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: new Date("2026-07-04T00:00:00.000Z"),
+      cancelAt: null,
+    });
+  });
+
+  it("Pro対象Price IDのsubscriptionがなければnullを返す", () => {
+    expect(
+      selectBillingSubscriptionSummary(
+        [summarySubscription({ stripePriceId: "price_other", status: "active" })],
+        { proPriceId, now },
+      ),
+    ).toBeNull();
   });
 });
 
