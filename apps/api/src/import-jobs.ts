@@ -11,6 +11,7 @@ import { ulid } from "ulid";
 import { type Bindings } from "./env";
 import { type RecipeImageService } from "./images";
 import {
+  assertImportUrlAllowed,
   createDefaultRecipeImportAIProvider,
   importRecipeFromUrl,
   type RecipeImportAIProvider,
@@ -552,7 +553,9 @@ const mapImportJobFailure = (
 
 export const assertImportableUrl = (rawUrl: string) => {
   try {
-    return normalizeUrl(rawUrl);
+    const normalizedUrl = normalizeUrl(rawUrl);
+    assertImportUrlAllowed(normalizedUrl);
+    return normalizedUrl;
   } catch {
     throw new RecipeImportError("invalid_url", "Import URL is invalid.");
   }

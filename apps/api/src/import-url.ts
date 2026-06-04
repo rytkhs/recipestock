@@ -107,18 +107,17 @@ export type RecipeImportFetcher = (
   options: { timeoutMs: number; maxBytes: number },
 ) => Promise<FetchedImportPage>;
 
+const MAX_IMPORT_PAGE_REDIRECTS = 5;
+
 export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, maxBytes }) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        accept: "text/html,application/xhtml+xml",
-        "user-agent": "RecipeStockBot/1.0",
-      },
-      signal: controller.signal,
-    });
+    const { finalUrl, response } = await fetchImportPageFollowingAllowedRedirects(
+      url,
+      controller.signal,
+    );
 
     if (!response.ok) {
       throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
@@ -127,7 +126,7 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, max
     assertContentLengthAllowed(response, maxBytes);
 
     return {
-      finalUrl: response.url || url,
+      finalUrl,
       contentType: response.headers.get("content-type") ?? "",
       body: await readResponseTextWithLimit(response, maxBytes),
     };
@@ -139,6 +138,104 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, max
     throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
   } finally {
     clearTimeout(timeout);
+  }
+};
+
+const fetchImportPageFollowingAllowedRedirects = async (sourceUrl: string, signal: AbortSignal) => {
+  let currentUrl = sourceUrl;
+
+  for (let redirectCount = 0; redirectCount <= MAX_IMPORT_PAGE_REDIRECTS; redirectCount++) {
+    assertImportUrlAllowed(currentUrl);
+
+    const response = await fetch(currentUrl, {
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": "RecipeStockBot/1.0",
+      },
+      redirect: "manual",
+      signal,
+    });
+
+    if (!isRedirectStatus(response.status)) {
+      if (response.url) {
+        assertImportUrlAllowed(response.url);
+      }
+
+      return {
+        finalUrl: response.url || currentUrl,
+        response,
+      };
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      throw new RecipeImportError("fetch_failed", "Import URL redirect location was missing.");
+    }
+
+    currentUrl = new URL(location, currentUrl).toString();
+  }
+
+  throw new RecipeImportError("fetch_failed", "Import URL had too many redirects.");
+};
+
+const isRedirectStatus = (status: number) =>
+  status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+
+const parseIpv4Address = (hostname: string) => {
+  const parts = hostname.split(".");
+
+  if (parts.length !== 4) {
+    return null;
+  }
+
+  const octets = parts.map((part) => {
+    if (!/^\d+$/.test(part)) {
+      return null;
+    }
+
+    const value = Number(part);
+    return value >= 0 && value <= 255 ? value : null;
+  });
+
+  return octets.every((octet) => octet !== null) ? (octets as number[]) : null;
+};
+
+const isBlockedImportHostname = (hostname: string) => {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  if (normalized === "localhost" || normalized.endsWith(".localhost")) {
+    return true;
+  }
+
+  const ipv4 = parseIpv4Address(normalized);
+  if (ipv4) {
+    const [first, second] = ipv4;
+    return (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168)
+    );
+  }
+
+  return (
+    normalized === "::1" ||
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    normalized.startsWith("fe80:")
+  );
+};
+
+export const assertImportUrlAllowed = (sourceUrl: string) => {
+  const url = new URL(sourceUrl);
+
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    isBlockedImportHostname(url.hostname)
+  ) {
+    throw new RecipeImportError("invalid_url", "Import URL is invalid.");
   }
 };
 

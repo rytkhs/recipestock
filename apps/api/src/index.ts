@@ -21,6 +21,8 @@ import { createRecipeRoutes } from "./routes/recipes";
 import { createUsageRoutes } from "./routes/usage";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
+const IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS = 4;
+
 type AppDependencies = {
   auth?: AuthService;
   meRepository?: MeRepository;
@@ -97,6 +99,45 @@ const app = createApp();
 
 export type AppType = ReturnType<typeof createApp>;
 
+type ImportQueueMessage = Pick<
+  Message<{ jobId: string }>,
+  "ack" | "attempts" | "body" | "id" | "retry"
+>;
+
+export const handleImportQueueMessageError = async ({
+  error,
+  importJobRepository,
+  message,
+  now = new Date(),
+}: {
+  error: unknown;
+  importJobRepository: ImportJobRepository;
+  message: ImportQueueMessage;
+  now?: Date;
+}) => {
+  console.error(
+    JSON.stringify({
+      event: "import_job_queue_error",
+      messageId: message.id,
+      jobId: message.body.jobId,
+      error: error instanceof Error ? error.message : String(error),
+    }),
+  );
+
+  if (message.attempts >= IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS) {
+    await importJobRepository.markJobFailed({
+      jobId: message.body.jobId,
+      errorCode: "unknown",
+      errorMessage: error instanceof Error ? error.message : "Unexpected import job error.",
+      now,
+    });
+    message.ack();
+    return;
+  }
+
+  message.retry({ delaySeconds: Math.min(30 * 2 ** message.attempts, 600) });
+};
+
 const handleImportQueue = async (
   batch: MessageBatch<{ jobId: string }>,
   env: Bindings,
@@ -119,15 +160,11 @@ const handleImportQueue = async (
       });
       message.ack();
     } catch (error) {
-      console.error(
-        JSON.stringify({
-          event: "import_job_queue_error",
-          messageId: message.id,
-          jobId: message.body.jobId,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-      message.retry({ delaySeconds: Math.min(30 * 2 ** message.attempts, 600) });
+      await handleImportQueueMessageError({
+        error,
+        importJobRepository,
+        message,
+      });
     }
   }
 };
