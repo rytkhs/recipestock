@@ -61,10 +61,6 @@ export type UpsertSubscriptionFromStripeEventParams = {
   latestEventCreatedAt: Date;
 };
 
-export type UpsertSubscriptionFromStripeEventResult =
-  | { status: "upserted" }
-  | { status: "skippedOldEvent" };
-
 type SyncAppUserPlanStorage = {
   ensureAppUser(userId: string): Promise<void>;
   getAppUserPlan(userId: string): Promise<Plan>;
@@ -80,9 +76,7 @@ export type BillingRepository = {
   markStripeEventProcessed(eventId: string): Promise<void>;
   setStripeCustomerId(userId: string, stripeCustomerId: string): Promise<void>;
   syncAppUserPlanFromSubscriptions(params: SyncAppUserPlanParams): Promise<Plan>;
-  upsertSubscriptionFromStripeEvent(
-    params: UpsertSubscriptionFromStripeEventParams,
-  ): Promise<UpsertSubscriptionFromStripeEventResult>;
+  upsertSubscriptionFromStripeEvent(params: UpsertSubscriptionFromStripeEventParams): Promise<void>;
 };
 
 export const isProSubscription = (
@@ -111,16 +105,6 @@ export const derivePlanFromSubscriptions = (
   subscriptionRows.some((subscription) => isProSubscription(subscription, options))
     ? "pro"
     : "free";
-
-export const shouldApplyStripeEvent = ({
-  latestEventCreatedAt,
-  eventCreatedAt,
-}: {
-  latestEventCreatedAt: Date | string | null;
-  eventCreatedAt: Date | string;
-}) =>
-  latestEventCreatedAt === null ||
-  new Date(eventCreatedAt).getTime() >= new Date(latestEventCreatedAt).getTime();
 
 export const syncAppUserPlanFromSubscriptions = async ({
   userId,
@@ -352,21 +336,11 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
     async upsertSubscriptionFromStripeEvent(params) {
       const [existingSubscription] = await db
         .select({
-          latestEventCreatedAt: subscriptions.latestEventCreatedAt,
+          id: subscriptions.id,
         })
         .from(subscriptions)
         .where(eq(subscriptions.stripeSubscriptionId, params.stripeSubscriptionId))
         .limit(1);
-
-      if (
-        existingSubscription &&
-        !shouldApplyStripeEvent({
-          latestEventCreatedAt: existingSubscription.latestEventCreatedAt,
-          eventCreatedAt: params.latestEventCreatedAt,
-        })
-      ) {
-        return { status: "skippedOldEvent" };
-      }
 
       const values = {
         userId: params.userId,
@@ -395,8 +369,6 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
           ...values,
         });
       }
-
-      return { status: "upserted" };
     },
   };
 };

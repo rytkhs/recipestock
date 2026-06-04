@@ -9,6 +9,7 @@ import { type ApiEnv } from "../context";
 import {
   createStripeBillingClient,
   type StripeBillingClient,
+  type StripeSubscriptionState,
   type StripeWebhookEvent,
   StripeWebhookSignatureError,
 } from "../stripe-billing";
@@ -32,19 +33,20 @@ const invalidWebhookResponse = () =>
 const receivedResponse = () => Response.json({ received: true });
 
 const toSubscriptionUpsertParams = (
+  subscription: StripeSubscriptionState,
   event: Extract<StripeWebhookEvent, { kind: "subscription_changed" }>,
 ): UpsertSubscriptionFromStripeEventParams => ({
-  userId: event.userId,
-  stripeCustomerId: event.stripeCustomerId,
-  stripeSubscriptionId: event.stripeSubscriptionId,
-  stripePriceId: event.stripePriceId,
-  stripeProductId: event.stripeProductId,
-  status: event.status,
-  currentPeriodStart: event.currentPeriodStart,
-  currentPeriodEnd: event.currentPeriodEnd,
-  cancelAtPeriodEnd: event.cancelAtPeriodEnd,
-  cancelAt: event.cancelAt,
-  canceledAt: event.canceledAt,
+  userId: subscription.userId,
+  stripeCustomerId: subscription.stripeCustomerId,
+  stripeSubscriptionId: subscription.stripeSubscriptionId,
+  stripePriceId: subscription.stripePriceId,
+  stripeProductId: subscription.stripeProductId,
+  status: subscription.status,
+  currentPeriodStart: subscription.currentPeriodStart,
+  currentPeriodEnd: subscription.currentPeriodEnd,
+  cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+  cancelAt: subscription.cancelAt,
+  canceledAt: subscription.canceledAt,
   latestEventCreatedAt: event.eventCreatedAt,
 });
 
@@ -52,10 +54,12 @@ export const processStripeWebhookEvent = async ({
   event,
   proPriceId,
   repository,
+  stripeClient,
 }: {
   event: StripeWebhookEvent;
   proPriceId: string;
   repository: BillingRepository;
+  stripeClient: StripeBillingClient;
 }) => {
   if (await repository.hasProcessedStripeEvent(event.eventId)) {
     return;
@@ -68,17 +72,18 @@ export const processStripeWebhookEvent = async ({
   }
 
   if (event.kind === "subscription_changed") {
-    const result = await repository.upsertSubscriptionFromStripeEvent(
-      toSubscriptionUpsertParams(event),
-    );
+    const subscription = await stripeClient.retrieveSubscription({
+      stripeSubscriptionId: event.stripeSubscriptionId,
+    });
 
-    if (result.status === "upserted") {
-      await repository.syncAppUserPlanFromSubscriptions({
-        userId: event.userId,
-        proPriceId,
-        now: event.eventCreatedAt,
-      });
-    }
+    await repository.upsertSubscriptionFromStripeEvent(
+      toSubscriptionUpsertParams(subscription, event),
+    );
+    await repository.syncAppUserPlanFromSubscriptions({
+      userId: subscription.userId,
+      proPriceId,
+      now: event.eventCreatedAt,
+    });
 
     await repository.markStripeEventProcessed(event.eventId);
     return;
@@ -124,6 +129,7 @@ export const createStripeRoutes = ({
       event,
       proPriceId: c.env.STRIPE_PRO_PRICE_ID,
       repository,
+      stripeClient,
     });
 
     return receivedResponse();

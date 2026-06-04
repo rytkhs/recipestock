@@ -18,10 +18,29 @@ export type CreateStripePortalSessionParams = {
   returnUrl: string;
 };
 
+export type RetrieveStripeSubscriptionParams = {
+  stripeSubscriptionId: string;
+};
+
+export type StripeSubscriptionState = {
+  userId: string;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+  stripePriceId: string;
+  stripeProductId: string | null;
+  status: string;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  cancelAt: Date | null;
+  canceledAt: Date | null;
+};
+
 export type StripeBillingClient = {
   createCustomer(params: CreateStripeCustomerParams): Promise<{ id: string }>;
   createCheckoutSession(params: CreateStripeCheckoutSessionParams): Promise<{ url: string }>;
   createPortalSession(params: CreateStripePortalSessionParams): Promise<{ url: string }>;
+  retrieveSubscription(params: RetrieveStripeSubscriptionParams): Promise<StripeSubscriptionState>;
   verifyWebhook(params: VerifyStripeWebhookParams): Promise<StripeWebhookEvent>;
 };
 
@@ -45,17 +64,7 @@ export type StripeWebhookEvent =
       kind: "subscription_changed";
       eventId: string;
       eventCreatedAt: Date;
-      userId: string;
-      stripeCustomerId: string;
       stripeSubscriptionId: string;
-      stripePriceId: string;
-      stripeProductId: string | null;
-      status: string;
-      currentPeriodStart: Date | null;
-      currentPeriodEnd: Date | null;
-      cancelAtPeriodEnd: boolean;
-      cancelAt: Date | null;
-      canceledAt: Date | null;
     }
   | {
       kind: "noop";
@@ -88,6 +97,39 @@ const getStringId = (value: string | { id: string } | null | undefined, label: s
   throw new Error(`Stripe webhook ${label} was missing.`);
 };
 
+export const normalizeStripeSubscription = (
+  subscription: Stripe.Subscription,
+): StripeSubscriptionState => {
+  const subscriptionPeriods = subscription as Stripe.Subscription & {
+    current_period_start?: number | null;
+    current_period_end?: number | null;
+  };
+  const userId = subscription.metadata?.userId;
+  const item = subscription.items.data[0];
+
+  if (!userId) {
+    throw new Error("Stripe Subscription userId was missing.");
+  }
+
+  if (!item) {
+    throw new Error("Stripe Subscription item was missing.");
+  }
+
+  return {
+    userId,
+    stripeCustomerId: getStringId(subscription.customer, "customer"),
+    stripeSubscriptionId: subscription.id,
+    stripePriceId: item.price.id,
+    stripeProductId: getStringId(item.price.product, "product"),
+    status: subscription.status,
+    currentPeriodStart: toDate(subscriptionPeriods.current_period_start),
+    currentPeriodEnd: toDate(subscriptionPeriods.current_period_end),
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    cancelAt: toDate(subscription.cancel_at),
+    canceledAt: toDate(subscription.canceled_at),
+  };
+};
+
 export const normalizeStripeWebhookEvent = (event: Stripe.Event): StripeWebhookEvent => {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
@@ -112,36 +154,15 @@ export const normalizeStripeWebhookEvent = (event: Stripe.Event): StripeWebhookE
     event.type === "customer.subscription.deleted"
   ) {
     const subscription = event.data.object as Stripe.Subscription;
-    const subscriptionPeriods = subscription as Stripe.Subscription & {
-      current_period_start?: number | null;
-      current_period_end?: number | null;
-    };
-    const userId = subscription.metadata?.userId;
-    const item = subscription.items.data[0];
-
-    if (!userId) {
-      throw new Error("Stripe Subscription userId was missing.");
-    }
-
-    if (!item) {
-      throw new Error("Stripe Subscription item was missing.");
+    if (!subscription.id) {
+      throw new Error("Stripe Subscription id was missing.");
     }
 
     return {
       kind: "subscription_changed",
       eventId: event.id,
       eventCreatedAt: toEventCreatedAt(event),
-      userId,
-      stripeCustomerId: getStringId(subscription.customer, "customer"),
       stripeSubscriptionId: subscription.id,
-      stripePriceId: item.price.id,
-      stripeProductId: getStringId(item.price.product, "product"),
-      status: subscription.status,
-      currentPeriodStart: toDate(subscriptionPeriods.current_period_start),
-      currentPeriodEnd: toDate(subscriptionPeriods.current_period_end),
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      cancelAt: toDate(subscription.cancel_at),
-      canceledAt: toDate(subscription.canceled_at),
     };
   }
 
@@ -204,6 +225,11 @@ export const createStripeBillingClient = (env: Bindings): StripeBillingClient =>
       });
 
       return { url: session.url };
+    },
+    async retrieveSubscription({ stripeSubscriptionId }) {
+      const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+
+      return normalizeStripeSubscription(subscription);
     },
     async verifyWebhook({ payload, signature, webhookSecret }) {
       let event: Stripe.Event;

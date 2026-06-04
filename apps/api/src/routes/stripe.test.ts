@@ -3,6 +3,7 @@ import { type BillingRepository } from "../billing";
 import { createApp } from "../index";
 import {
   type StripeBillingClient,
+  type StripeSubscriptionState,
   type StripeWebhookEvent,
   StripeWebhookSignatureError,
 } from "../stripe-billing";
@@ -40,6 +41,13 @@ const subscriptionChangedEvent = (
   kind: "subscription_changed",
   eventId: "evt_subscription",
   eventCreatedAt,
+  stripeSubscriptionId: "sub_123",
+  ...overrides,
+});
+
+const subscriptionState = (
+  overrides: Partial<StripeSubscriptionState> = {},
+): StripeSubscriptionState => ({
   userId: "user_123",
   stripeCustomerId: "cus_123",
   stripeSubscriptionId: "sub_123",
@@ -76,14 +84,18 @@ const createRepository = (overrides: Partial<BillingRepository> = {}): BillingRe
   markStripeEventProcessed: async () => {},
   setStripeCustomerId: async () => {},
   syncAppUserPlanFromSubscriptions: async () => "free",
-  upsertSubscriptionFromStripeEvent: async () => ({ status: "upserted" }),
+  upsertSubscriptionFromStripeEvent: async () => {},
   ...overrides,
 });
 
-const createStripeClient = (event: StripeWebhookEvent): StripeBillingClient => ({
+const createStripeClient = (
+  event: StripeWebhookEvent,
+  subscription: StripeSubscriptionState = subscriptionState(),
+): StripeBillingClient => ({
   createCustomer: async () => ({ id: "cus_123" }),
   createCheckoutSession: async () => ({ url: "https://checkout.stripe.com/session_123" }),
   createPortalSession: async () => ({ url: "https://billing.stripe.com/session_123" }),
+  retrieveSubscription: async () => subscription,
   verifyWebhook: async () => event,
 });
 
@@ -128,18 +140,23 @@ describe("Stripe webhook route", () => {
   it("重複eventは同期処理せず200を返す", async () => {
     const setStripeCustomerId = vi.fn<BillingRepository["setStripeCustomerId"]>();
     const markStripeEventProcessed = vi.fn<BillingRepository["markStripeEventProcessed"]>();
+    const retrieveSubscription = vi.fn<StripeBillingClient["retrieveSubscription"]>();
     const response = await requestWebhook({
       billingRepository: createRepository({
         hasProcessedStripeEvent: async () => true,
         setStripeCustomerId,
         markStripeEventProcessed,
       }),
-      stripeBillingClient: createStripeClient(checkoutCompletedEvent()),
+      stripeBillingClient: {
+        ...createStripeClient(checkoutCompletedEvent()),
+        retrieveSubscription,
+      },
     });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ received: true });
     expect(setStripeCustomerId).not.toHaveBeenCalled();
+    expect(retrieveSubscription).not.toHaveBeenCalled();
     expect(markStripeEventProcessed).not.toHaveBeenCalled();
   });
 
@@ -167,20 +184,27 @@ describe("Stripe webhook route", () => {
   it("customer.subscription.createdはsubscriptionを保存しplanを同期する", async () => {
     const upsertSubscriptionFromStripeEvent = vi.fn<
       BillingRepository["upsertSubscriptionFromStripeEvent"]
-    >(async () => ({ status: "upserted" }));
+    >(async () => {});
     const syncAppUserPlanFromSubscriptions = vi.fn<
       BillingRepository["syncAppUserPlanFromSubscriptions"]
     >(async () => "pro");
+    const retrieveSubscription = vi.fn<StripeBillingClient["retrieveSubscription"]>(async () =>
+      subscriptionState(),
+    );
 
     const response = await requestWebhook({
       billingRepository: createRepository({
         upsertSubscriptionFromStripeEvent,
         syncAppUserPlanFromSubscriptions,
       }),
-      stripeBillingClient: createStripeClient(subscriptionChangedEvent()),
+      stripeBillingClient: {
+        ...createStripeClient(subscriptionChangedEvent()),
+        retrieveSubscription,
+      },
     });
 
     expect(response.status).toBe(200);
+    expect(retrieveSubscription).toHaveBeenCalledWith({ stripeSubscriptionId: "sub_123" });
     expect(upsertSubscriptionFromStripeEvent).toHaveBeenCalledWith({
       userId: "user_123",
       stripeCustomerId: "cus_123",
@@ -209,7 +233,7 @@ describe("Stripe webhook route", () => {
   ])("customer.subscription.updated %sは同期repositoryへ渡す", async (status) => {
     const upsertSubscriptionFromStripeEvent = vi.fn<
       BillingRepository["upsertSubscriptionFromStripeEvent"]
-    >(async () => ({ status: "upserted" }));
+    >(async () => {});
     const syncAppUserPlanFromSubscriptions = vi.fn<
       BillingRepository["syncAppUserPlanFromSubscriptions"]
     >(async () => "free");
@@ -219,7 +243,10 @@ describe("Stripe webhook route", () => {
         upsertSubscriptionFromStripeEvent,
         syncAppUserPlanFromSubscriptions,
       }),
-      stripeBillingClient: createStripeClient(subscriptionChangedEvent({ status })),
+      stripeBillingClient: createStripeClient(
+        subscriptionChangedEvent(),
+        subscriptionState({ status }),
+      ),
     });
 
     expect(response.status).toBe(200);
@@ -236,7 +263,7 @@ describe("Stripe webhook route", () => {
   it("customer.subscription.deletedは失効状態を保存してplanを同期する", async () => {
     const upsertSubscriptionFromStripeEvent = vi.fn<
       BillingRepository["upsertSubscriptionFromStripeEvent"]
-    >(async () => ({ status: "upserted" }));
+    >(async () => {});
     const syncAppUserPlanFromSubscriptions = vi.fn<
       BillingRepository["syncAppUserPlanFromSubscriptions"]
     >(async () => "free");
@@ -247,7 +274,8 @@ describe("Stripe webhook route", () => {
         syncAppUserPlanFromSubscriptions,
       }),
       stripeBillingClient: createStripeClient(
-        subscriptionChangedEvent({ status: "canceled", eventId: "evt_deleted" }),
+        subscriptionChangedEvent({ eventId: "evt_deleted" }),
+        subscriptionState({ status: "canceled" }),
       ),
     });
 
@@ -262,29 +290,101 @@ describe("Stripe webhook route", () => {
     });
   });
 
-  it("古いeventは処理済みにするがplan同期しない", async () => {
+  it("stale payloadでもStripe current stateを保存してplan同期する", async () => {
+    const upsertSubscriptionFromStripeEvent = vi.fn<
+      BillingRepository["upsertSubscriptionFromStripeEvent"]
+    >(async () => {});
+    const syncAppUserPlanFromSubscriptions = vi.fn<
+      BillingRepository["syncAppUserPlanFromSubscriptions"]
+    >(async () => "free");
     const markStripeEventProcessed = vi.fn<BillingRepository["markStripeEventProcessed"]>();
+
+    const response = await requestWebhook({
+      billingRepository: createRepository({
+        upsertSubscriptionFromStripeEvent,
+        syncAppUserPlanFromSubscriptions,
+        markStripeEventProcessed,
+      }),
+      stripeBillingClient: createStripeClient(
+        subscriptionChangedEvent({ eventId: "evt_stale" }),
+        subscriptionState({
+          status: "canceled",
+          currentPeriodEnd: new Date("2026-06-04T00:00:00.000Z"),
+          canceledAt: new Date("2026-06-04T00:00:00.000Z"),
+        }),
+      ),
+    });
+
+    expect(response.status).toBe(200);
+    expect(upsertSubscriptionFromStripeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "canceled",
+        canceledAt: new Date("2026-06-04T00:00:00.000Z"),
+      }),
+    );
+    expect(syncAppUserPlanFromSubscriptions).toHaveBeenCalledWith({
+      userId: "user_123",
+      proPriceId: "price_pro",
+      now: eventCreatedAt,
+    });
+    expect(markStripeEventProcessed).toHaveBeenCalledWith("evt_stale");
+  });
+
+  it("subscription取得失敗時はeventを処理済みにしない", async () => {
+    const markStripeEventProcessed = vi.fn<BillingRepository["markStripeEventProcessed"]>();
+    const syncAppUserPlanFromSubscriptions =
+      vi.fn<BillingRepository["syncAppUserPlanFromSubscriptions"]>();
+    const upsertSubscriptionFromStripeEvent =
+      vi.fn<BillingRepository["upsertSubscriptionFromStripeEvent"]>();
+
+    const response = await requestWebhook({
+      billingRepository: createRepository({
+        markStripeEventProcessed,
+        upsertSubscriptionFromStripeEvent,
+        syncAppUserPlanFromSubscriptions,
+      }),
+      stripeBillingClient: {
+        ...createStripeClient(subscriptionChangedEvent({ eventId: "evt_retrieve_failed" })),
+        retrieveSubscription: async () => {
+          throw new Error("Stripe retrieve failed.");
+        },
+      },
+    });
+
+    expect(response.status).toBe(500);
+    expect(upsertSubscriptionFromStripeEvent).not.toHaveBeenCalled();
+    expect(syncAppUserPlanFromSubscriptions).not.toHaveBeenCalled();
+    expect(markStripeEventProcessed).not.toHaveBeenCalled();
+  });
+
+  it("upsert失敗時はeventを処理済みにしない", async () => {
+    const markStripeEventProcessed = vi.fn<BillingRepository["markStripeEventProcessed"]>();
+    const upsertSubscriptionFromStripeEvent = vi.fn<
+      BillingRepository["upsertSubscriptionFromStripeEvent"]
+    >(async () => {
+      throw new Error("DB upsert failed.");
+    });
     const syncAppUserPlanFromSubscriptions =
       vi.fn<BillingRepository["syncAppUserPlanFromSubscriptions"]>();
 
     const response = await requestWebhook({
       billingRepository: createRepository({
         markStripeEventProcessed,
-        upsertSubscriptionFromStripeEvent: async () => ({ status: "skippedOldEvent" }),
+        upsertSubscriptionFromStripeEvent,
         syncAppUserPlanFromSubscriptions,
       }),
-      stripeBillingClient: createStripeClient(subscriptionChangedEvent({ eventId: "evt_old" })),
+      stripeBillingClient: createStripeClient(subscriptionChangedEvent({ eventId: "evt_failed" })),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(500);
     expect(syncAppUserPlanFromSubscriptions).not.toHaveBeenCalled();
-    expect(markStripeEventProcessed).toHaveBeenCalledWith("evt_old");
+    expect(markStripeEventProcessed).not.toHaveBeenCalled();
   });
 
-  it("price不一致eventも保存するがPro判定は同期repositoryに委ねる", async () => {
+  it("price不一致のcurrent stateも保存するがPro判定は同期repositoryに委ねる", async () => {
     const upsertSubscriptionFromStripeEvent = vi.fn<
       BillingRepository["upsertSubscriptionFromStripeEvent"]
-    >(async () => ({ status: "upserted" }));
+    >(async () => {});
     const syncAppUserPlanFromSubscriptions = vi.fn<
       BillingRepository["syncAppUserPlanFromSubscriptions"]
     >(async () => "free");
@@ -295,7 +395,8 @@ describe("Stripe webhook route", () => {
         syncAppUserPlanFromSubscriptions,
       }),
       stripeBillingClient: createStripeClient(
-        subscriptionChangedEvent({ stripePriceId: "price_other" }),
+        subscriptionChangedEvent(),
+        subscriptionState({ stripePriceId: "price_other" }),
       ),
     });
 

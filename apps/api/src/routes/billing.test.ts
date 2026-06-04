@@ -31,7 +31,7 @@ const createRepository = (overrides: Partial<BillingRepository> = {}): BillingRe
   markStripeEventProcessed: async () => {},
   setStripeCustomerId: async () => {},
   syncAppUserPlanFromSubscriptions: async () => "free",
-  upsertSubscriptionFromStripeEvent: async () => ({ status: "upserted" }),
+  upsertSubscriptionFromStripeEvent: async () => {},
   ...overrides,
 });
 
@@ -39,6 +39,19 @@ const createStripeClient = (overrides: Partial<StripeBillingClient> = {}): Strip
   createCustomer: async () => ({ id: "cus_123" }),
   createCheckoutSession: async () => ({ url: "https://checkout.stripe.com/session_123" }),
   createPortalSession: async () => ({ url: "https://billing.stripe.com/session_123" }),
+  retrieveSubscription: async () => ({
+    userId: "user_123",
+    stripeCustomerId: "cus_123",
+    stripeSubscriptionId: "sub_123",
+    stripePriceId: "price_pro",
+    stripeProductId: "prod_123",
+    status: "active",
+    currentPeriodStart: new Date("2026-06-04T00:00:00.000Z"),
+    currentPeriodEnd: new Date("2026-07-04T00:00:00.000Z"),
+    cancelAtPeriodEnd: false,
+    cancelAt: null,
+    canceledAt: null,
+  }),
   verifyWebhook: async () => ({
     kind: "noop",
     eventId: "evt_123",

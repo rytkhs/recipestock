@@ -4,7 +4,6 @@ import {
   isProSubscription,
   type SubscriptionPlanInput,
   selectBillingSubscriptionSummary,
-  shouldApplyStripeEvent,
   syncAppUserPlanFromSubscriptions,
 } from "./billing";
 
@@ -140,26 +139,6 @@ describe("selectBillingSubscriptionSummary", () => {
         { proPriceId, now },
       ),
     ).toBeNull();
-  });
-});
-
-describe("shouldApplyStripeEvent", () => {
-  it("最後に反映したeventより古いeventは反映しない", () => {
-    expect(
-      shouldApplyStripeEvent({
-        latestEventCreatedAt: "2026-06-04T00:00:00.000Z",
-        eventCreatedAt: "2026-06-03T23:59:59.999Z",
-      }),
-    ).toBe(false);
-  });
-
-  it("同時刻以降のeventは反映する", () => {
-    expect(
-      shouldApplyStripeEvent({
-        latestEventCreatedAt: "2026-06-04T00:00:00.000Z",
-        eventCreatedAt: "2026-06-04T00:00:00.000Z",
-      }),
-    ).toBe(true);
   });
 });
 

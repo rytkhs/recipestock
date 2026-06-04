@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { describe, expect, it } from "vitest";
-import { normalizeStripeWebhookEvent } from "./stripe-billing";
+import { normalizeStripeSubscription, normalizeStripeWebhookEvent } from "./stripe-billing";
 
 const stripeEvent = (overrides: Record<string, unknown>): Stripe.Event =>
   ({
@@ -36,7 +36,7 @@ const subscriptionObject = (overrides: Record<string, unknown> = {}) =>
   }) as unknown as Stripe.Subscription;
 
 describe("normalizeStripeWebhookEvent", () => {
-  it("subscription eventから同期に必要な値を抽出する", () => {
+  it("subscription eventからsubscription idを抽出する", () => {
     expect(
       normalizeStripeWebhookEvent(
         stripeEvent({
@@ -54,17 +54,7 @@ describe("normalizeStripeWebhookEvent", () => {
       kind: "subscription_changed",
       eventId: "evt_123",
       eventCreatedAt: new Date("2026-06-04T00:00:00.000Z"),
-      userId: "user_123",
-      stripeCustomerId: "cus_123",
       stripeSubscriptionId: "sub_123",
-      stripePriceId: "price_pro",
-      stripeProductId: "prod_123",
-      status: "past_due",
-      currentPeriodStart: new Date("2026-06-04T00:00:00.000Z"),
-      currentPeriodEnd: new Date("2026-07-04T00:00:00.000Z"),
-      cancelAtPeriodEnd: true,
-      cancelAt: new Date("2026-07-04T00:00:00.000Z"),
-      canceledAt: null,
     });
   });
 
@@ -91,16 +81,16 @@ describe("normalizeStripeWebhookEvent", () => {
     });
   });
 
-  it("subscription eventでuserIdが欠けている場合は処理エラーにする", () => {
+  it("subscription eventでsubscription idが欠けている場合は処理エラーにする", () => {
     expect(() =>
       normalizeStripeWebhookEvent(
         stripeEvent({
           data: {
-            object: subscriptionObject({ metadata: {} }),
+            object: subscriptionObject({ id: "" }),
           },
         }),
       ),
-    ).toThrow("Stripe Subscription userId was missing.");
+    ).toThrow("Stripe Subscription id was missing.");
   });
 
   it("対象外eventはno-opにする", () => {
@@ -116,5 +106,37 @@ describe("normalizeStripeWebhookEvent", () => {
       eventCreatedAt: new Date("2026-06-04T00:00:00.000Z"),
       type: "invoice.payment_failed",
     });
+  });
+});
+
+describe("normalizeStripeSubscription", () => {
+  it("Stripe subscriptionから保存用stateを抽出する", () => {
+    expect(
+      normalizeStripeSubscription(
+        subscriptionObject({
+          status: "past_due",
+          cancel_at_period_end: true,
+          cancel_at: 1_783_123_200,
+        }),
+      ),
+    ).toEqual({
+      userId: "user_123",
+      stripeCustomerId: "cus_123",
+      stripeSubscriptionId: "sub_123",
+      stripePriceId: "price_pro",
+      stripeProductId: "prod_123",
+      status: "past_due",
+      currentPeriodStart: new Date("2026-06-04T00:00:00.000Z"),
+      currentPeriodEnd: new Date("2026-07-04T00:00:00.000Z"),
+      cancelAtPeriodEnd: true,
+      cancelAt: new Date("2026-07-04T00:00:00.000Z"),
+      canceledAt: null,
+    });
+  });
+
+  it("userIdが欠けているsubscriptionは処理エラーにする", () => {
+    expect(() => normalizeStripeSubscription(subscriptionObject({ metadata: {} }))).toThrow(
+      "Stripe Subscription userId was missing.",
+    );
   });
 });
