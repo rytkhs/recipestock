@@ -24,6 +24,11 @@ const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
   ...overrides,
 });
 
+const sameOriginHeaders = {
+  origin: "https://app.example.com",
+  "sec-fetch-site": "same-origin",
+};
+
 describe("Recipe mutation routes", () => {
   it("ログイン済みユーザーがレシピ本文全体を更新できる", async () => {
     const updates: unknown[] = [];
@@ -924,6 +929,7 @@ describe("Recipe mutation routes", () => {
       "/api/recipes/recipe_123",
       {
         method: "DELETE",
+        headers: sameOriginHeaders,
       },
       {
         APP_ENV: "development",
@@ -959,6 +965,7 @@ describe("Recipe mutation routes", () => {
       "/api/recipes/missing_recipe",
       {
         method: "DELETE",
+        headers: sameOriginHeaders,
       },
       {
         APP_ENV: "development",
@@ -995,6 +1002,7 @@ describe("Recipe mutation routes", () => {
       "/api/recipes/other_user_recipe",
       {
         method: "DELETE",
+        headers: sameOriginHeaders,
       },
       {
         APP_ENV: "development",

@@ -6,8 +6,6 @@ This file defines how AI agents should work in this repository.
 
 Recipe Stock is a PWA for saving recipes from recipe websites, YouTube, social posts, books, images, and screenshots into a unified format that can be searched and viewed later. The MVP focuses on the shortest path through import, confirmation/editing, saving, search, and viewing.
 
-It is not the product specification. Product and technical requirements live under `docs/dev/`; keep this file focused on working rules, review expectations, and repository conventions.
-
 ## Communication
 
 - Respond to the user in Japanese by default.

@@ -1,5 +1,8 @@
 import { createDb } from "@recipestock/db";
 import { Hono } from "hono";
+import { csrf } from "hono/csrf";
+import { HTTPException } from "hono/http-exception";
+import { secureHeaders } from "hono/secure-headers";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
 import { type BillingRepository } from "./billing";
@@ -49,8 +52,17 @@ type AppDependencies = {
 export const createApp = (dependencies: AppDependencies = {}) => {
   const app = new Hono<ApiEnv>().basePath("/api");
   const auth = dependencies.auth ?? authService;
+  const csrfProtection = csrf();
 
-  app.onError(() => unknownResponse());
+  app.onError((error) =>
+    error instanceof HTTPException ? error.getResponse() : unknownResponse(),
+  );
+  app.use("*", secureHeaders());
+  app.use("/billing/*", csrfProtection);
+  app.use("/images/*", csrfProtection);
+  app.use("/import/*", csrfProtection);
+  app.use("/recipes", csrfProtection);
+  app.use("/recipes/*", csrfProtection);
 
   return app
     .route("/auth", createAuthRoutes({ auth }))
