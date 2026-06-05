@@ -1,6 +1,38 @@
 import type Stripe from "stripe";
-import { describe, expect, it } from "vitest";
-import { normalizeStripeSubscription, normalizeStripeWebhookEvent } from "./stripe-billing";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createStripeBillingClient,
+  normalizeStripeSubscription,
+  normalizeStripeWebhookEvent,
+} from "./stripe-billing";
+
+const stripeMocks = vi.hoisted(() => ({
+  checkoutSessionsCreate: vi.fn(),
+  constructEventAsync: vi.fn(),
+  customersCreate: vi.fn(),
+  portalSessionsCreate: vi.fn(),
+  subscriptionsRetrieve: vi.fn(),
+}));
+
+vi.mock("stripe", () => {
+  const StripeMock = vi.fn(function StripeMock() {
+    return {
+      billingPortal: { sessions: { create: stripeMocks.portalSessionsCreate } },
+      checkout: { sessions: { create: stripeMocks.checkoutSessionsCreate } },
+      customers: { create: stripeMocks.customersCreate },
+      subscriptions: { retrieve: stripeMocks.subscriptionsRetrieve },
+      webhooks: { constructEventAsync: stripeMocks.constructEventAsync },
+    };
+  });
+
+  (
+    StripeMock as unknown as {
+      createSubtleCryptoProvider: ReturnType<typeof vi.fn>;
+    }
+  ).createSubtleCryptoProvider = vi.fn();
+
+  return { default: StripeMock };
+});
 
 const stripeEvent = (overrides: Record<string, unknown>): Stripe.Event =>
   ({
@@ -34,6 +66,34 @@ const subscriptionObject = (overrides: Record<string, unknown> = {}) =>
     canceled_at: null,
     ...overrides,
   }) as unknown as Stripe.Subscription;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("createStripeBillingClient", () => {
+  it("Customer作成はuserIdベースのidempotency keyを付ける", async () => {
+    stripeMocks.customersCreate.mockResolvedValue({ id: "cus_123" });
+
+    const client = createStripeBillingClient({
+      STRIPE_SECRET_KEY: "sk_test",
+    } as Parameters<typeof createStripeBillingClient>[0]);
+
+    await expect(client.createCustomer({ userId: "user_123" })).resolves.toEqual({
+      id: "cus_123",
+    });
+    expect(stripeMocks.customersCreate).toHaveBeenCalledWith(
+      {
+        metadata: {
+          userId: "user_123",
+        },
+      },
+      {
+        idempotencyKey: "create-customer:user_123",
+      },
+    );
+  });
+});
 
 describe("normalizeStripeWebhookEvent", () => {
   it("subscription eventからsubscription idを抽出する", () => {

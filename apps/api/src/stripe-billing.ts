@@ -181,11 +181,16 @@ export const createStripeBillingClient = (env: Bindings): StripeBillingClient =>
 
   return {
     async createCustomer({ userId }) {
-      const customer = await stripe.customers.create({
-        metadata: {
-          userId,
+      const customer = await stripe.customers.create(
+        {
+          metadata: {
+            userId,
+          },
         },
-      });
+        {
+          idempotencyKey: `create-customer:${userId}`,
+        },
+      );
 
       return { id: customer.id };
     },
