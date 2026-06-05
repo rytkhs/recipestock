@@ -4,6 +4,11 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-05-25",
   "compatibility_flags": ["nodejs_compat"],
+  "keep_vars": true,
+  "upload_source_maps": true,
+  "observability": {
+    "enabled": true
+  },
   "assets": {
     "directory": "../web/dist",
     "binding": "ASSETS",
