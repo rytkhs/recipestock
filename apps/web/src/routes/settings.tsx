@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiClientError, api, parseApiResponse } from "../lib/api";
+import { billingStatusQueryKey } from "../lib/billing";
 import { useViewer, viewerQueryKey } from "../lib/viewer";
 
 const createCheckout = () =>
@@ -18,8 +19,6 @@ const createBillingPortal = () =>
 
 const fetchBillingStatus = () =>
   parseApiResponse<GetBillingStatusResponse>(api.api.billing.status.$get());
-
-const billingStatusQueryKey = ["billing-status"] as const;
 
 export const checkoutRedirect = {
   assign(url: string) {
