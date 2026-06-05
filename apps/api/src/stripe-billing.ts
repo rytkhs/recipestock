@@ -200,6 +200,10 @@ export const createStripeBillingClient = (env: Bindings): StripeBillingClient =>
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
         customer: stripeCustomerId,
+        customer_update: {
+          address: "auto",
+          name: "auto",
+        },
         client_reference_id: userId,
         success_url: successUrl,
         cancel_url: cancelUrl,

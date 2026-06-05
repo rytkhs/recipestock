@@ -96,6 +96,38 @@ describe("createStripeBillingClient", () => {
       },
     );
   });
+
+  it("Checkout作成はCustomerの請求先情報更新を許可する", async () => {
+    stripeMocks.checkoutSessionsCreate.mockResolvedValue({
+      id: "cs_123",
+      url: "https://checkout.stripe.com/session_123",
+    });
+
+    const client = createStripeBillingClient({
+      STRIPE_SECRET_KEY: "sk_test",
+    } as Parameters<typeof createStripeBillingClient>[0]);
+
+    await expect(
+      client.createCheckoutSession({
+        userId: "user_123",
+        stripeCustomerId: "cus_123",
+        proPriceId: "price_pro",
+        successUrl: "https://app.example.com/settings/billing?checkout=success",
+        cancelUrl: "https://app.example.com/settings/billing?checkout=cancel",
+      }),
+    ).resolves.toEqual({
+      url: "https://checkout.stripe.com/session_123",
+    });
+    expect(stripeMocks.checkoutSessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: "cus_123",
+        customer_update: {
+          address: "auto",
+          name: "auto",
+        },
+      }),
+    );
+  });
 });
 
 describe("normalizeStripeWebhookEvent", () => {
