@@ -39,7 +39,7 @@ describe("Recipe detail routes", () => {
     const testApp = createApp({
       auth: {
         getSession: async () => ({
-          user: { id: "user_123" },
+          user: { id: "user_123", email: "user@example.com" },
         }),
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },
@@ -99,7 +99,7 @@ describe("Recipe detail routes", () => {
     const testApp = createApp({
       auth: {
         getSession: async () => ({
-          user: { id: "user_123" },
+          user: { id: "user_123", email: "user@example.com" },
         }),
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },
@@ -170,7 +170,7 @@ describe("Recipe detail routes", () => {
     const testApp = createApp({
       auth: {
         getSession: async () => ({
-          user: { id: "user_123" },
+          user: { id: "user_123", email: "user@example.com" },
         }),
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },
@@ -233,7 +233,7 @@ describe("Recipe detail routes", () => {
     const testApp = createApp({
       auth: {
         getSession: async () => ({
-          user: { id: "user_123" },
+          user: { id: "user_123", email: "user@example.com" },
         }),
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },

@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { type Bindings } from "./env";
 
 export type CreateStripeCustomerParams = {
+  email: string;
   userId: string;
 };
 
@@ -180,9 +181,10 @@ export const createStripeBillingClient = (env: Bindings): StripeBillingClient =>
   });
 
   return {
-    async createCustomer({ userId }) {
+    async createCustomer({ email, userId }) {
       const customer = await stripe.customers.create(
         {
+          email,
           metadata: {
             userId,
           },

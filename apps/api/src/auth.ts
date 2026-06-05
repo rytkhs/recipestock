@@ -8,6 +8,7 @@ import { type Bindings } from "./env";
 
 export type AuthSession = {
   user: {
+    email: string;
     id: string;
   };
 };

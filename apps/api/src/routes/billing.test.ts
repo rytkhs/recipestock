@@ -12,7 +12,7 @@ const env = {
 };
 
 const auth = {
-  getSession: async () => ({ user: { id: "user_123" } }),
+  getSession: async () => ({ user: { id: "user_123", email: "user@example.com" } }),
   handleAuthRequest: async () => new Response(null, { status: 404 }),
 };
 
@@ -154,7 +154,10 @@ describe("Billing routes", () => {
     await expect(response.json()).resolves.toEqual({
       url: "https://checkout.stripe.com/session_123",
     });
-    expect(createCustomer).toHaveBeenCalledWith({ userId: "user_123" });
+    expect(createCustomer).toHaveBeenCalledWith({
+      email: "user@example.com",
+      userId: "user_123",
+    });
     expect(setStripeCustomerId).toHaveBeenCalledWith("user_123", "cus_123");
     expect(createCheckoutSession).toHaveBeenCalledWith({
       userId: "user_123",
@@ -233,7 +236,10 @@ describe("Billing routes", () => {
     await expect(response.json()).resolves.toEqual({
       url: "https://billing.stripe.com/session_123",
     });
-    expect(createCustomer).toHaveBeenCalledWith({ userId: "user_123" });
+    expect(createCustomer).toHaveBeenCalledWith({
+      email: "user@example.com",
+      userId: "user_123",
+    });
     expect(setStripeCustomerId).toHaveBeenCalledWith("user_123", "cus_123");
     expect(createPortalSession).toHaveBeenCalledWith({
       stripeCustomerId: "cus_123",

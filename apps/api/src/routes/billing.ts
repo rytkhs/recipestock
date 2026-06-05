@@ -29,18 +29,20 @@ const ensureStripeCustomerId = async ({
   appUserStripeCustomerId,
   repository,
   stripeClient,
+  userEmail,
   userId,
 }: {
   appUserStripeCustomerId: string | null;
   repository: BillingRepository;
   stripeClient: StripeBillingClient;
+  userEmail: string;
   userId: string;
 }) => {
   if (appUserStripeCustomerId) {
     return appUserStripeCustomerId;
   }
 
-  const customer = await stripeClient.createCustomer({ userId });
+  const customer = await stripeClient.createCustomer({ email: userEmail, userId });
   await repository.setStripeCustomerId(userId, customer.id);
   return customer.id;
 };
@@ -55,6 +57,7 @@ export const createBillingRoutes = ({
 
   return routes
     .post("/checkout", requireAuth(auth), async (c) => {
+      const userEmail = c.get("authSession").user.email;
       const userId = c.get("userId");
       const repository = billingRepository ?? createBillingRepository(createDb(c.env.DATABASE_URL));
       const stripeClient = stripeBillingClient ?? createStripeBillingClient(c.env);
@@ -74,6 +77,7 @@ export const createBillingRoutes = ({
         appUserStripeCustomerId: appUser.stripeCustomerId,
         repository,
         stripeClient,
+        userEmail,
         userId,
       });
 
@@ -88,6 +92,7 @@ export const createBillingRoutes = ({
       return c.json(createCheckoutResponseSchema.parse(session));
     })
     .post("/portal", requireAuth(auth), async (c) => {
+      const userEmail = c.get("authSession").user.email;
       const userId = c.get("userId");
       const repository = billingRepository ?? createBillingRepository(createDb(c.env.DATABASE_URL));
       const stripeClient = stripeBillingClient ?? createStripeBillingClient(c.env);
@@ -96,6 +101,7 @@ export const createBillingRoutes = ({
         appUserStripeCustomerId: appUser.stripeCustomerId,
         repository,
         stripeClient,
+        userEmail,
         userId,
       });
 

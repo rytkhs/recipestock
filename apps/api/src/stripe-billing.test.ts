@@ -79,11 +79,14 @@ describe("createStripeBillingClient", () => {
       STRIPE_SECRET_KEY: "sk_test",
     } as Parameters<typeof createStripeBillingClient>[0]);
 
-    await expect(client.createCustomer({ userId: "user_123" })).resolves.toEqual({
+    await expect(
+      client.createCustomer({ email: "user@example.com", userId: "user_123" }),
+    ).resolves.toEqual({
       id: "cus_123",
     });
     expect(stripeMocks.customersCreate).toHaveBeenCalledWith(
       {
+        email: "user@example.com",
         metadata: {
           userId: "user_123",
         },
