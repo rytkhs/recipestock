@@ -37,8 +37,21 @@ const createAuth = (env: Bindings) => {
       maxPasswordLength: 128,
       revokeSessionsOnPasswordReset: true,
     },
+    user: {
+      changeEmail: {
+        enabled: true,
+      },
+    },
     emailVerification: {
       autoSignInAfterVerification: true,
+      async sendVerificationEmail({ user, url }) {
+        await resend.emails.send({
+          from: env.AUTH_EMAIL_FROM,
+          to: user.email,
+          subject: "Recipe Stock email change verification",
+          text: `Open this link to verify your Recipe Stock email address change: ${url}`,
+        });
+      },
     },
     socialProviders:
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET

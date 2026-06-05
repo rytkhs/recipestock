@@ -42,6 +42,7 @@ export const createMeRoutes = ({
       getMeResponseSchema.parse(
         buildMeResponse({
           userId,
+          email: c.get("authSession").user.email,
           plan: appUser.plan,
           recipeCount,
           aiUsage: storedAiUsage ?? { month, used: 0 },
