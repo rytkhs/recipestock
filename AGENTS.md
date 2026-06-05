@@ -95,6 +95,7 @@ After making changes, run the relevant package checks and verification scripts:
   ```bash
   pnpm test
   ```
+  Run all test commands with escalated permissions. Some test runners, such as Wrangler/Vitest for Cloudflare Workers, need to write logs outside the workspace and listen on localhost.
 - Build Validation:
   ```bash
   pnpm build
