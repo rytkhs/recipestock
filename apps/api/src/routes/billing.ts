@@ -39,11 +39,20 @@ const ensureStripeCustomerId = async ({
   userId: string;
 }) => {
   if (appUserStripeCustomerId) {
-    await stripeClient.updateCustomerEmail({
-      email: userEmail,
-      stripeCustomerId: appUserStripeCustomerId,
-      userId,
-    });
+    try {
+      await stripeClient.updateCustomerEmail({
+        email: userEmail,
+        stripeCustomerId: appUserStripeCustomerId,
+        userId,
+      });
+    } catch (error) {
+      console.error("[billing] Stripe customer email sync failed", {
+        error,
+        stripeCustomerId: appUserStripeCustomerId,
+        userId,
+      });
+    }
+
     return appUserStripeCustomerId;
   }
 
