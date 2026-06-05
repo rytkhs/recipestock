@@ -4,7 +4,9 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { Resend } from "resend";
+import { type BillingRepository, createBillingRepository } from "./billing";
 import { type Bindings } from "./env";
+import { createStripeBillingClient, type StripeBillingClient } from "./stripe-billing";
 
 export type AuthSession = {
   user: {
@@ -18,9 +20,51 @@ export type AuthService = {
   handleAuthRequest(request: Request, env: Bindings): Promise<Response>;
 };
 
+type StripeCustomerEmailSyncLogger = {
+  error(...data: unknown[]): void;
+};
+
+export type SyncStripeCustomerEmailForUserParams = {
+  email: string;
+  logger?: StripeCustomerEmailSyncLogger;
+  repository: Pick<BillingRepository, "getOrCreateAppUserBillingState">;
+  stripeClient: Pick<StripeBillingClient, "updateCustomerEmail">;
+  userId: string;
+};
+
+export const syncStripeCustomerEmailForUser = async ({
+  email,
+  logger = console,
+  repository,
+  stripeClient,
+  userId,
+}: SyncStripeCustomerEmailForUserParams) => {
+  const appUser = await repository.getOrCreateAppUserBillingState(userId);
+
+  if (!appUser.stripeCustomerId) {
+    return;
+  }
+
+  try {
+    await stripeClient.updateCustomerEmail({
+      email,
+      stripeCustomerId: appUser.stripeCustomerId,
+      userId,
+    });
+  } catch (error) {
+    logger.error("[auth] Stripe customer email sync failed", {
+      error,
+      stripeCustomerId: appUser.stripeCustomerId,
+      userId,
+    });
+  }
+};
+
 const createAuth = (env: Bindings) => {
   const db = createDb(env.DATABASE_URL);
+  const billingRepository = createBillingRepository(db);
   const resend = new Resend(env.RESEND_API_KEY);
+  const stripeClient = createStripeBillingClient(env);
 
   return betterAuth({
     basePath: "/api/auth",
@@ -84,6 +128,23 @@ const createAuth = (env: Bindings) => {
         create: {
           after: async (user) => {
             await db.insert(appUsers).values({ userId: user.id }).onConflictDoNothing();
+          },
+        },
+        update: {
+          after: async (user) => {
+            try {
+              await syncStripeCustomerEmailForUser({
+                email: user.email,
+                repository: billingRepository,
+                stripeClient,
+                userId: user.id,
+              });
+            } catch (error) {
+              console.error("[auth] Stripe customer email sync hook failed", {
+                error,
+                userId: user.id,
+              });
+            }
           },
         },
       },

@@ -39,6 +39,11 @@ const ensureStripeCustomerId = async ({
   userId: string;
 }) => {
   if (appUserStripeCustomerId) {
+    await stripeClient.updateCustomerEmail({
+      email: userEmail,
+      stripeCustomerId: appUserStripeCustomerId,
+      userId,
+    });
     return appUserStripeCustomerId;
   }
 

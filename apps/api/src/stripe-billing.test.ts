@@ -10,6 +10,7 @@ const stripeMocks = vi.hoisted(() => ({
   checkoutSessionsCreate: vi.fn(),
   constructEventAsync: vi.fn(),
   customersCreate: vi.fn(),
+  customersUpdate: vi.fn(),
   portalSessionsCreate: vi.fn(),
   subscriptionsRetrieve: vi.fn(),
 }));
@@ -19,7 +20,7 @@ vi.mock("stripe", () => {
     return {
       billingPortal: { sessions: { create: stripeMocks.portalSessionsCreate } },
       checkout: { sessions: { create: stripeMocks.checkoutSessionsCreate } },
-      customers: { create: stripeMocks.customersCreate },
+      customers: { create: stripeMocks.customersCreate, update: stripeMocks.customersUpdate },
       subscriptions: { retrieve: stripeMocks.subscriptionsRetrieve },
       webhooks: { constructEventAsync: stripeMocks.constructEventAsync },
     };
@@ -127,6 +128,25 @@ describe("createStripeBillingClient", () => {
         },
       }),
     );
+  });
+
+  it("Customer emailを更新する", async () => {
+    stripeMocks.customersUpdate.mockResolvedValue({ id: "cus_123" });
+
+    const client = createStripeBillingClient({
+      STRIPE_SECRET_KEY: "sk_test",
+    } as Parameters<typeof createStripeBillingClient>[0]);
+
+    await expect(
+      client.updateCustomerEmail({
+        email: "new@example.com",
+        stripeCustomerId: "cus_123",
+        userId: "user_123",
+      }),
+    ).resolves.toBeUndefined();
+    expect(stripeMocks.customersUpdate).toHaveBeenCalledWith("cus_123", {
+      email: "new@example.com",
+    });
   });
 });
 
