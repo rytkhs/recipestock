@@ -16,6 +16,14 @@ const auth = {
   handleAuthRequest: async () => new Response(null, { status: 404 }),
 };
 
+const sameOriginPost = {
+  method: "POST",
+  headers: {
+    origin: "https://app.example.com",
+    "sec-fetch-site": "same-origin",
+  },
+};
+
 const createRepository = (overrides: Partial<BillingRepository> = {}): BillingRepository => ({
   getBillingStatus: async () => ({
     plan: "free",
@@ -80,7 +88,7 @@ describe("Billing routes", () => {
       stripeBillingClient: stripeClient,
     });
 
-    const response = await testApp.request("/api/billing/checkout", { method: "POST" }, env);
+    const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
@@ -111,7 +119,7 @@ describe("Billing routes", () => {
       stripeBillingClient: stripeClient,
     });
 
-    const response = await testApp.request("/api/billing/portal", { method: "POST" }, env);
+    const response = await testApp.request("/api/billing/portal", sameOriginPost, env);
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
@@ -148,7 +156,7 @@ describe("Billing routes", () => {
       getCurrentDate: () => new Date("2026-06-04T00:00:00.000Z"),
     });
 
-    const response = await testApp.request("/api/billing/checkout", { method: "POST" }, env);
+    const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -192,7 +200,7 @@ describe("Billing routes", () => {
       stripeBillingClient: createStripeClient({ createCustomer, createCheckoutSession }),
     });
 
-    const response = await testApp.request("/api/billing/checkout", { method: "POST" }, env);
+    const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -230,7 +238,7 @@ describe("Billing routes", () => {
       stripeBillingClient: createStripeClient({ createCustomer, createPortalSession }),
     });
 
-    const response = await testApp.request("/api/billing/portal", { method: "POST" }, env);
+    const response = await testApp.request("/api/billing/portal", sameOriginPost, env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -271,7 +279,7 @@ describe("Billing routes", () => {
       stripeBillingClient: createStripeClient({ createCustomer, createPortalSession }),
     });
 
-    const response = await testApp.request("/api/billing/portal", { method: "POST" }, env);
+    const response = await testApp.request("/api/billing/portal", sameOriginPost, env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -304,7 +312,7 @@ describe("Billing routes", () => {
       stripeBillingClient: stripeClient,
     });
 
-    const response = await testApp.request("/api/billing/checkout", { method: "POST" }, env);
+    const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({

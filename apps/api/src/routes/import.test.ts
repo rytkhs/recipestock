@@ -9,6 +9,11 @@ const auth = {
   handleAuthRequest: async () => new Response(null, { status: 404 }),
 };
 
+const sameOriginHeaders = {
+  origin: "https://app.example.com",
+  "sec-fetch-site": "same-origin",
+};
+
 const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord => ({
   id: "job_123",
   userId: "user_123",
@@ -56,7 +61,7 @@ describe("Import job routes", () => {
 
     const response = await testApp.request("/api/import/url/jobs", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...sameOriginHeaders },
       body: JSON.stringify({ url: "https://example.com:443/recipe?utm_source=x#step" }),
     });
 
@@ -100,7 +105,7 @@ describe("Import job routes", () => {
 
     const response = await testApp.request("/api/import/url/jobs", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...sameOriginHeaders },
       body: JSON.stringify({ url: "https://example.com/recipe" }),
     });
 
@@ -124,7 +129,7 @@ describe("Import job routes", () => {
 
     const response = await testApp.request("/api/import/url/jobs", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...sameOriginHeaders },
       body: JSON.stringify({ url: "ftp://example.com/recipe" }),
     });
 
@@ -145,7 +150,7 @@ describe("Import job routes", () => {
 
     const response = await testApp.request("/api/import/url/jobs", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...sameOriginHeaders },
       body: JSON.stringify({ url: "https://example.com/recipe" }),
     });
 
@@ -197,6 +202,7 @@ describe("Import job routes", () => {
 
     const response = await testApp.request("/api/import/jobs/job_123/dismiss", {
       method: "PATCH",
+      headers: sameOriginHeaders,
     });
 
     expect(response.status).toBe(200);
