@@ -151,6 +151,7 @@ describe("API app composition", () => {
         retrieveSubscription: async () => {
           throw new Error("should not retrieve subscription");
         },
+        updateCustomerEmail: async () => {},
         verifyWebhook,
       },
     });

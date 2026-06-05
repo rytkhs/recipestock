@@ -1,4 +1,4 @@
-import { Button } from "@heroui/react";
+import { Button, Input, Label, TextField } from "@heroui/react";
 import {
   type CreateBillingPortalResponse,
   type CreateCheckoutResponse,
@@ -6,8 +6,9 @@ import {
 } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { ApiClientError, api, parseApiResponse } from "../lib/api";
+import { changeEmail, changePassword } from "../lib/auth";
 import { billingStatusQueryKey } from "../lib/billing";
 import { useViewer, viewerQueryKey } from "../lib/viewer";
 
@@ -56,11 +57,125 @@ const formatBillingDate = (date: string) =>
 
 export const SettingsIndexRoute = () => {
   const viewer = useViewer({ enabled: true });
+  const [newEmail, setNewEmail] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
+  const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
+
+  const handleEmailChange = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setEmailMessage(null);
+    setEmailError(null);
+    setIsEmailSubmitting(true);
+
+    try {
+      await changeEmail(newEmail);
+      setNewEmail("");
+      setEmailMessage("確認メールを送信しました。");
+    } catch {
+      setEmailError("メールアドレスを変更できませんでした。時間をおいて再度お試しください。");
+    } finally {
+      setIsEmailSubmitting(false);
+    }
+  };
+
+  const handlePasswordChange = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordMessage(null);
+    setPasswordError(null);
+    setIsPasswordSubmitting(true);
+
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setPasswordMessage("パスワードを変更しました。");
+    } catch {
+      setPasswordError("パスワードを変更できませんでした。入力内容を確認してください。");
+    } finally {
+      setIsPasswordSubmitting(false);
+    }
+  };
 
   return (
     <section className="mx-auto w-full max-w-5xl px-6 py-10">
       <h1 className="font-semibold text-3xl">Settings</h1>
       <div className="mt-6 grid gap-4">
+        <div className="rounded-lg border border-border bg-surface p-5">
+          <h2 className="font-semibold text-xl">アカウント</h2>
+          <p className="mt-2 text-default-600 text-sm">
+            現在のメールアドレス: {viewer.data?.email ?? ""}
+          </p>
+          <div className="mt-5 grid gap-6 md:grid-cols-2">
+            <form className="grid content-start gap-3" onSubmit={handleEmailChange}>
+              <h3 className="font-semibold text-base">メールアドレス変更</h3>
+              <TextField isRequired type="email">
+                <Label>新しいメールアドレス</Label>
+                <Input
+                  autoComplete="email"
+                  inputMode="email"
+                  value={newEmail}
+                  onChange={(event) => setNewEmail(event.target.value)}
+                />
+              </TextField>
+              <Button isDisabled={isEmailSubmitting} type="submit" variant="secondary">
+                確認メールを送信
+              </Button>
+              {emailMessage ? (
+                <p className="font-medium text-success" role="status">
+                  {emailMessage}
+                </p>
+              ) : null}
+              {emailError ? (
+                <p className="text-danger" role="alert">
+                  {emailError}
+                </p>
+              ) : null}
+            </form>
+
+            <form className="grid content-start gap-3" onSubmit={handlePasswordChange}>
+              <h3 className="font-semibold text-base">パスワード変更</h3>
+              <TextField isRequired type="password">
+                <Label>現在のパスワード</Label>
+                <Input
+                  autoComplete="current-password"
+                  maxLength={128}
+                  minLength={8}
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                />
+              </TextField>
+              <TextField isRequired type="password">
+                <Label>新しいパスワード</Label>
+                <Input
+                  autoComplete="new-password"
+                  maxLength={128}
+                  minLength={8}
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+              </TextField>
+              <Button isDisabled={isPasswordSubmitting} type="submit" variant="secondary">
+                パスワードを変更
+              </Button>
+              {passwordMessage ? (
+                <p className="font-medium text-success" role="status">
+                  {passwordMessage}
+                </p>
+              ) : null}
+              {passwordError ? (
+                <p className="text-danger" role="alert">
+                  {passwordError}
+                </p>
+              ) : null}
+            </form>
+          </div>
+        </div>
         <div className="rounded-lg border border-border bg-surface p-5">
           <h2 className="font-semibold text-xl">プラン</h2>
           <p className="mt-2 text-default-600 text-sm">

@@ -19,6 +19,7 @@ const authenticatedSession = {
 
 export const viewerResponse = {
   userId: "user_123",
+  email: "chef@example.com",
   plan: "free",
   recipeCount: 0,
   recipeLimit: 5,

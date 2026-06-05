@@ -19,6 +19,12 @@ export type CreateStripePortalSessionParams = {
   returnUrl: string;
 };
 
+export type UpdateStripeCustomerEmailParams = {
+  email: string;
+  stripeCustomerId: string;
+  userId: string;
+};
+
 export type RetrieveStripeSubscriptionParams = {
   stripeSubscriptionId: string;
 };
@@ -42,6 +48,7 @@ export type StripeBillingClient = {
   createCheckoutSession(params: CreateStripeCheckoutSessionParams): Promise<{ url: string }>;
   createPortalSession(params: CreateStripePortalSessionParams): Promise<{ url: string }>;
   retrieveSubscription(params: RetrieveStripeSubscriptionParams): Promise<StripeSubscriptionState>;
+  updateCustomerEmail(params: UpdateStripeCustomerEmailParams): Promise<void>;
   verifyWebhook(params: VerifyStripeWebhookParams): Promise<StripeWebhookEvent>;
 };
 
@@ -241,6 +248,11 @@ export const createStripeBillingClient = (env: Bindings): StripeBillingClient =>
       const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
 
       return normalizeStripeSubscription(subscription);
+    },
+    async updateCustomerEmail({ email, stripeCustomerId }) {
+      await stripe.customers.update(stripeCustomerId, {
+        email,
+      });
     },
     async verifyWebhook({ payload, signature, webhookSecret }) {
       let event: Stripe.Event;

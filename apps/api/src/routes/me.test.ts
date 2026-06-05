@@ -65,6 +65,7 @@ describe("Me routes", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       userId: "user_123",
+      email: "user@example.com",
       plan: "free",
       recipeCount: 5,
       recipeLimit: 5,

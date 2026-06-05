@@ -23,11 +23,113 @@ describe("Settings routes", () => {
     await renderApp("/settings");
 
     await expect(screen.findByRole("heading", { name: "Settings" })).resolves.toBeInTheDocument();
+    expect(screen.getByText("現在のメールアドレス: chef@example.com")).toBeInTheDocument();
     expect(screen.getByText("現在のプラン: Free")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "課金設定" })).toHaveAttribute(
       "href",
       "/settings/billing",
     );
+  });
+
+  it("設定画面からメールアドレス変更確認メールを送信できる", async () => {
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/auth/change-email" && init?.method === "POST") {
+          return jsonResponse({ status: true });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+    await renderApp("/settings");
+
+    await userEvent.type(await screen.findByLabelText("新しいメールアドレス"), "new@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
+
+    const changeEmailCall = findFetchCall(fetchMock, "/api/auth/change-email");
+    expect(changeEmailCall).toEqual([
+      "/api/auth/change-email",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
+    ]);
+    expect(JSON.parse(String(changeEmailCall?.[1]?.body))).toEqual({
+      newEmail: "new@example.com",
+      callbackURL: "/settings",
+    });
+    await expect(screen.findByText("確認メールを送信しました。")).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("新しいメールアドレス")).toHaveValue("");
+  });
+
+  it("設定画面からパスワードを変更できる", async () => {
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/auth/change-password" && init?.method === "POST") {
+          return jsonResponse({ status: true });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+    await renderApp("/settings");
+
+    await userEvent.type(await screen.findByLabelText("現在のパスワード"), "password123");
+    await userEvent.type(screen.getByLabelText("新しいパスワード"), "newpassword123");
+    await userEvent.click(screen.getByRole("button", { name: "パスワードを変更" }));
+
+    const changePasswordCall = findFetchCall(fetchMock, "/api/auth/change-password");
+    expect(changePasswordCall).toEqual([
+      "/api/auth/change-password",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
+    ]);
+    expect(JSON.parse(String(changePasswordCall?.[1]?.body))).toEqual({
+      currentPassword: "password123",
+      newPassword: "newpassword123",
+      revokeOtherSessions: true,
+    });
+    await expect(screen.findByText("パスワードを変更しました。")).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("現在のパスワード")).toHaveValue("");
+    expect(screen.getByLabelText("新しいパスワード")).toHaveValue("");
+  });
+
+  it("アカウント設定の変更に失敗した場合は固定文言を表示する", async () => {
+    mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+
+        if (
+          (path === "/api/auth/change-email" || path === "/api/auth/change-password") &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse({ message: "Auth request failed." }, { status: 400 });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+    await renderApp("/settings");
+
+    await userEvent.type(await screen.findByLabelText("新しいメールアドレス"), "new@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
+
+    await expect(
+      screen.findByText("メールアドレスを変更できませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("現在のパスワード"), "password123");
+    await userEvent.type(screen.getByLabelText("新しいパスワード"), "newpassword123");
+    await userEvent.click(screen.getByRole("button", { name: "パスワードを変更" }));
+
+    await expect(
+      screen.findByText("パスワードを変更できませんでした。入力内容を確認してください。"),
+    ).resolves.toBeInTheDocument();
   });
 
   it("Freeユーザーは課金設定からCheckoutを開始できる", async () => {

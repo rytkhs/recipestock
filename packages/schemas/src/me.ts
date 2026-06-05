@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const getMeResponseSchema = z.object({
   userId: z.string(),
+  email: z.string().email(),
   plan: z.enum(["free", "pro"]),
   recipeCount: z.number().int().nonnegative(),
   recipeLimit: z.number().int().positive().nullable(),

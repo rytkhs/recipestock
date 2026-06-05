@@ -60,6 +60,23 @@ export const signOut = async () => {
   assertAuthSuccess(result);
 };
 
+export const changeEmail = async (newEmail: string) => {
+  const result = await authClient.changeEmail({
+    newEmail,
+    callbackURL: "/settings",
+  });
+  assertAuthSuccess(result);
+};
+
+export const changePassword = async (currentPassword: string, newPassword: string) => {
+  const result = await authClient.changePassword({
+    currentPassword,
+    newPassword,
+    revokeOtherSessions: true,
+  });
+  assertAuthSuccess(result);
+};
+
 export const useAuthSession = () => authClient.useSession();
 
 export const signUpWithEmailPassword = async (email: string, password: string) => {

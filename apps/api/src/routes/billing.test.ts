@@ -60,6 +60,7 @@ const createStripeClient = (overrides: Partial<StripeBillingClient> = {}): Strip
     cancelAt: null,
     canceledAt: null,
   }),
+  updateCustomerEmail: async () => {},
   verifyWebhook: async () => ({
     kind: "noop",
     eventId: "evt_123",
@@ -74,6 +75,7 @@ describe("Billing routes", () => {
     const stripeClient = createStripeClient({
       createCustomer: vi.fn(),
       createCheckoutSession: vi.fn(),
+      updateCustomerEmail: vi.fn(),
     });
     const testApp = createApp({
       auth: {
@@ -99,12 +101,14 @@ describe("Billing routes", () => {
     });
     expect(stripeClient.createCustomer).not.toHaveBeenCalled();
     expect(stripeClient.createCheckoutSession).not.toHaveBeenCalled();
+    expect(stripeClient.updateCustomerEmail).not.toHaveBeenCalled();
   });
 
   it("未ログイン時はPortalを作らずunauthorizedを返す", async () => {
     const stripeClient = createStripeClient({
       createCustomer: vi.fn(),
       createPortalSession: vi.fn(),
+      updateCustomerEmail: vi.fn(),
     });
     const testApp = createApp({
       auth: {
@@ -130,6 +134,7 @@ describe("Billing routes", () => {
     });
     expect(stripeClient.createCustomer).not.toHaveBeenCalled();
     expect(stripeClient.createPortalSession).not.toHaveBeenCalled();
+    expect(stripeClient.updateCustomerEmail).not.toHaveBeenCalled();
   });
 
   it("Stripe Customer未作成のFreeユーザーはCustomerを作成してCheckout URLを返す", async () => {
@@ -149,10 +154,15 @@ describe("Billing routes", () => {
         return { url: "https://checkout.stripe.com/session_123" };
       },
     );
+    const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>();
     const testApp = createApp({
       auth,
       billingRepository: createRepository({ setStripeCustomerId }),
-      stripeBillingClient: createStripeClient({ createCustomer, createCheckoutSession }),
+      stripeBillingClient: createStripeClient({
+        createCustomer,
+        createCheckoutSession,
+        updateCustomerEmail,
+      }),
       getCurrentDate: () => new Date("2026-06-04T00:00:00.000Z"),
     });
 
@@ -167,6 +177,7 @@ describe("Billing routes", () => {
       userId: "user_123",
     });
     expect(setStripeCustomerId).toHaveBeenCalledWith("user_123", "cus_123");
+    expect(updateCustomerEmail).not.toHaveBeenCalled();
     expect(createCheckoutSession).toHaveBeenCalledWith({
       userId: "user_123",
       stripeCustomerId: "cus_123",
@@ -182,10 +193,19 @@ describe("Billing routes", () => {
   });
 
   it("Stripe Customer作成済みならCustomerを再作成せずCheckoutを作る", async () => {
+    const calls: string[] = [];
     const createCustomer = vi.fn<StripeBillingClient["createCustomer"]>();
-    const createCheckoutSession = vi.fn<StripeBillingClient["createCheckoutSession"]>(async () => ({
-      url: "https://checkout.stripe.com/session_456",
-    }));
+    const createCheckoutSession = vi.fn<StripeBillingClient["createCheckoutSession"]>(
+      async (params) => {
+        calls.push(`create-checkout:${params.stripeCustomerId}`);
+        return { url: "https://checkout.stripe.com/session_456" };
+      },
+    );
+    const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>(
+      async (params) => {
+        calls.push(`update-customer-email:${params.stripeCustomerId}:${params.email}`);
+      },
+    );
     const setStripeCustomerId = vi.fn<BillingRepository["setStripeCustomerId"]>();
     const testApp = createApp({
       auth,
@@ -197,7 +217,11 @@ describe("Billing routes", () => {
         }),
         setStripeCustomerId,
       }),
-      stripeBillingClient: createStripeClient({ createCustomer, createCheckoutSession }),
+      stripeBillingClient: createStripeClient({
+        createCustomer,
+        createCheckoutSession,
+        updateCustomerEmail,
+      }),
     });
 
     const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
@@ -208,11 +232,70 @@ describe("Billing routes", () => {
     });
     expect(createCustomer).not.toHaveBeenCalled();
     expect(setStripeCustomerId).not.toHaveBeenCalled();
+    expect(updateCustomerEmail).toHaveBeenCalledWith({
+      email: "user@example.com",
+      stripeCustomerId: "cus_existing",
+      userId: "user_123",
+    });
     expect(createCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({
         stripeCustomerId: "cus_existing",
       }),
     );
+    expect(calls).toEqual([
+      "update-customer-email:cus_existing:user@example.com",
+      "create-checkout:cus_existing",
+    ]);
+  });
+
+  it("Checkout前のCustomer email同期が失敗してもCheckoutを作る", async () => {
+    const createCheckoutSession = vi.fn<StripeBillingClient["createCheckoutSession"]>(async () => ({
+      url: "https://checkout.stripe.com/session_456",
+    }));
+    const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>(async () => {
+      throw new Error("Stripe update failed.");
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const testApp = createApp({
+      auth,
+      billingRepository: createRepository({
+        getOrCreateAppUserBillingState: async (userId) => ({
+          userId,
+          plan: "free",
+          stripeCustomerId: "cus_existing",
+        }),
+      }),
+      stripeBillingClient: createStripeClient({
+        createCheckoutSession,
+        updateCustomerEmail,
+      }),
+    });
+
+    try {
+      const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        url: "https://checkout.stripe.com/session_456",
+      });
+      expect(updateCustomerEmail).toHaveBeenCalledWith({
+        email: "user@example.com",
+        stripeCustomerId: "cus_existing",
+        userId: "user_123",
+      });
+      expect(createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stripeCustomerId: "cus_existing",
+        }),
+      );
+      expect(consoleError).toHaveBeenCalledWith("[billing] Stripe customer email sync failed", {
+        error: expect.any(Error),
+        stripeCustomerId: "cus_existing",
+        userId: "user_123",
+      });
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("Stripe Customer未作成ユーザーはCustomerを作成してPortal URLを返す", async () => {
@@ -232,10 +315,15 @@ describe("Billing routes", () => {
         return { url: "https://billing.stripe.com/session_123" };
       },
     );
+    const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>();
     const testApp = createApp({
       auth,
       billingRepository: createRepository({ setStripeCustomerId }),
-      stripeBillingClient: createStripeClient({ createCustomer, createPortalSession }),
+      stripeBillingClient: createStripeClient({
+        createCustomer,
+        createPortalSession,
+        updateCustomerEmail,
+      }),
     });
 
     const response = await testApp.request("/api/billing/portal", sameOriginPost, env);
@@ -249,6 +337,7 @@ describe("Billing routes", () => {
       userId: "user_123",
     });
     expect(setStripeCustomerId).toHaveBeenCalledWith("user_123", "cus_123");
+    expect(updateCustomerEmail).not.toHaveBeenCalled();
     expect(createPortalSession).toHaveBeenCalledWith({
       stripeCustomerId: "cus_123",
       returnUrl: "https://app.example.com/settings/billing",
@@ -261,10 +350,19 @@ describe("Billing routes", () => {
   });
 
   it("Stripe Customer作成済みならCustomerを再作成せずPortalを作る", async () => {
+    const calls: string[] = [];
     const createCustomer = vi.fn<StripeBillingClient["createCustomer"]>();
-    const createPortalSession = vi.fn<StripeBillingClient["createPortalSession"]>(async () => ({
-      url: "https://billing.stripe.com/session_456",
-    }));
+    const createPortalSession = vi.fn<StripeBillingClient["createPortalSession"]>(
+      async (params) => {
+        calls.push(`create-portal:${params.stripeCustomerId}`);
+        return { url: "https://billing.stripe.com/session_456" };
+      },
+    );
+    const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>(
+      async (params) => {
+        calls.push(`update-customer-email:${params.stripeCustomerId}:${params.email}`);
+      },
+    );
     const setStripeCustomerId = vi.fn<BillingRepository["setStripeCustomerId"]>();
     const testApp = createApp({
       auth,
@@ -276,7 +374,11 @@ describe("Billing routes", () => {
         }),
         setStripeCustomerId,
       }),
-      stripeBillingClient: createStripeClient({ createCustomer, createPortalSession }),
+      stripeBillingClient: createStripeClient({
+        createCustomer,
+        createPortalSession,
+        updateCustomerEmail,
+      }),
     });
 
     const response = await testApp.request("/api/billing/portal", sameOriginPost, env);
@@ -287,16 +389,75 @@ describe("Billing routes", () => {
     });
     expect(createCustomer).not.toHaveBeenCalled();
     expect(setStripeCustomerId).not.toHaveBeenCalled();
+    expect(updateCustomerEmail).toHaveBeenCalledWith({
+      email: "user@example.com",
+      stripeCustomerId: "cus_existing",
+      userId: "user_123",
+    });
     expect(createPortalSession).toHaveBeenCalledWith({
       stripeCustomerId: "cus_existing",
       returnUrl: "https://app.example.com/settings/billing",
     });
+    expect(calls).toEqual([
+      "update-customer-email:cus_existing:user@example.com",
+      "create-portal:cus_existing",
+    ]);
+  });
+
+  it("Portal前のCustomer email同期が失敗してもPortalを作る", async () => {
+    const createPortalSession = vi.fn<StripeBillingClient["createPortalSession"]>(async () => ({
+      url: "https://billing.stripe.com/session_456",
+    }));
+    const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>(async () => {
+      throw new Error("Stripe update failed.");
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const testApp = createApp({
+      auth,
+      billingRepository: createRepository({
+        getOrCreateAppUserBillingState: async (userId) => ({
+          userId,
+          plan: "pro",
+          stripeCustomerId: "cus_existing",
+        }),
+      }),
+      stripeBillingClient: createStripeClient({
+        createPortalSession,
+        updateCustomerEmail,
+      }),
+    });
+
+    try {
+      const response = await testApp.request("/api/billing/portal", sameOriginPost, env);
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        url: "https://billing.stripe.com/session_456",
+      });
+      expect(updateCustomerEmail).toHaveBeenCalledWith({
+        email: "user@example.com",
+        stripeCustomerId: "cus_existing",
+        userId: "user_123",
+      });
+      expect(createPortalSession).toHaveBeenCalledWith({
+        stripeCustomerId: "cus_existing",
+        returnUrl: "https://app.example.com/settings/billing",
+      });
+      expect(consoleError).toHaveBeenCalledWith("[billing] Stripe customer email sync failed", {
+        error: expect.any(Error),
+        stripeCustomerId: "cus_existing",
+        userId: "user_123",
+      });
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("Pro相当のsubscriptionがある場合は二重Checkoutを作らない", async () => {
     const stripeClient = createStripeClient({
       createCustomer: vi.fn(),
       createCheckoutSession: vi.fn(),
+      updateCustomerEmail: vi.fn(),
     });
     const testApp = createApp({
       auth,
@@ -323,6 +484,7 @@ describe("Billing routes", () => {
     });
     expect(stripeClient.createCustomer).not.toHaveBeenCalled();
     expect(stripeClient.createCheckoutSession).not.toHaveBeenCalled();
+    expect(stripeClient.updateCustomerEmail).not.toHaveBeenCalled();
   });
 
   it("Billing statusでPro対象subscriptionを返す", async () => {

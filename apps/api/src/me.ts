@@ -61,12 +61,14 @@ export const createMeRepository = (
 
 export const buildMeResponse = ({
   userId,
+  email,
   plan,
   recipeCount,
   aiUsage,
   aiUsageLimit,
 }: {
   userId: string;
+  email: string;
   plan: Plan;
   recipeCount: number;
   aiUsage: AiUsageSummary;
@@ -76,6 +78,7 @@ export const buildMeResponse = ({
 
   return {
     userId,
+    email,
     plan,
     recipeCount,
     recipeLimit: planLimits.savedRecipes,
