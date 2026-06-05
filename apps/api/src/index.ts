@@ -2,6 +2,7 @@ import { createDb } from "@recipestock/db";
 import { Hono } from "hono";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
+import { type BillingRepository } from "./billing";
 import { type ApiEnv } from "./context";
 import { type Bindings } from "./env";
 import { createRecipeImageService, type RecipeImageService } from "./images";
@@ -14,11 +15,14 @@ import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-
 import { type MeRepository } from "./me";
 import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
+import { createBillingRoutes } from "./routes/billing";
 import { createImageRoutes } from "./routes/images";
 import { createImportRoutes } from "./routes/import";
 import { createMeRoutes } from "./routes/me";
 import { createRecipeRoutes } from "./routes/recipes";
+import { createStripeRoutes } from "./routes/stripe";
 import { createUsageRoutes } from "./routes/usage";
+import { type StripeBillingClient } from "./stripe-billing";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
 const IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS = 4;
@@ -27,12 +31,14 @@ type AppDependencies = {
   auth?: AuthService;
   meRepository?: MeRepository;
   usageRepository?: UsageRepository;
+  billingRepository?: BillingRepository;
   recipeRepository?: RecipeRepository;
   importJobRepository?: ImportJobRepository;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
   importAIProvider?: RecipeImportAIProvider;
   importFetcher?: RecipeImportFetcher;
+  stripeBillingClient?: StripeBillingClient;
   createImportJobId?: () => string;
   createRecipeId?: () => string;
   createImageId?: () => string;
@@ -73,6 +79,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         auth,
         meRepository: dependencies.meRepository,
         getCurrentMonth: dependencies.getCurrentMonth,
+        getCurrentDate: dependencies.getCurrentDate,
       }),
     )
     .route(
@@ -81,6 +88,22 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         auth,
         usageRepository: dependencies.usageRepository,
         getCurrentDate: dependencies.getCurrentDate,
+      }),
+    )
+    .route(
+      "/billing",
+      createBillingRoutes({
+        auth,
+        billingRepository: dependencies.billingRepository,
+        stripeBillingClient: dependencies.stripeBillingClient,
+        getCurrentDate: dependencies.getCurrentDate,
+      }),
+    )
+    .route(
+      "/stripe",
+      createStripeRoutes({
+        billingRepository: dependencies.billingRepository,
+        stripeBillingClient: dependencies.stripeBillingClient,
       }),
     )
     .route(
@@ -143,9 +166,10 @@ const handleImportQueue = async (
   env: Bindings,
 ): Promise<void> => {
   const db = createDb(env.DATABASE_URL);
-  const importJobRepository = createImportJobRepository(db);
-  const recipeRepository = createRecipeRepository(db);
-  const usageRepository = createUsageRepository(db);
+  const planSyncOptions = { proPriceId: env.STRIPE_PRO_PRICE_ID };
+  const importJobRepository = createImportJobRepository(db, planSyncOptions);
+  const recipeRepository = createRecipeRepository(db, planSyncOptions);
+  const usageRepository = createUsageRepository(db, planSyncOptions);
   const imageService = createRecipeImageService(env);
 
   for (const message of batch.messages) {

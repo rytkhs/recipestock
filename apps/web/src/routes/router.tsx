@@ -17,6 +17,7 @@ import { useViewer } from "../lib/viewer";
 import { ImportIndexRoute, ImportUrlRoute } from "./import";
 import { LoginRoute } from "./login";
 import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
+import { SettingsBillingRoute, SettingsIndexRoute } from "./settings";
 
 const LoadingPage = () => (
   <section className="mx-auto w-full max-w-5xl px-6 py-10">
@@ -219,9 +220,17 @@ const settingsRoute = createRoute({
   path: "/settings",
   component: () => (
     <RequireViewer>
-      <section className="mx-auto w-full max-w-5xl px-6 py-10">
-        <h1 className="font-semibold text-3xl">Settings</h1>
-      </section>
+      <SettingsIndexRoute />
+    </RequireViewer>
+  ),
+});
+
+const settingsBillingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/billing",
+  component: () => (
+    <RequireViewer>
+      <SettingsBillingRoute />
     </RequireViewer>
   ),
 });
@@ -236,6 +245,7 @@ const routeTree = rootRoute.addChildren([
   importRoute,
   importUrlRoute,
   settingsRoute,
+  settingsBillingRoute,
 ]);
 
 type AppRouterOptions = Omit<Parameters<typeof createRouter>[0], "routeTree">;

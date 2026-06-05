@@ -11,15 +11,27 @@ type MeRouteDependencies = {
   auth: AuthService;
   meRepository?: MeRepository;
   getCurrentMonth?: () => string;
+  getCurrentDate?: () => Date;
 };
 
-export const createMeRoutes = ({ auth, meRepository, getCurrentMonth }: MeRouteDependencies) => {
+export const createMeRoutes = ({
+  auth,
+  meRepository,
+  getCurrentMonth,
+  getCurrentDate,
+}: MeRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
 
   return routes.get("/", requireAuth(auth), async (c) => {
     const userId = c.get("userId");
-    const repository = meRepository ?? createMeRepository(createDb(c.env.DATABASE_URL));
-    const month = getCurrentMonth?.() ?? getCurrentJstMonth();
+    const now = getCurrentDate?.() ?? new Date();
+    const repository =
+      meRepository ??
+      createMeRepository(createDb(c.env.DATABASE_URL), {
+        proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+        now,
+      });
+    const month = getCurrentMonth?.() ?? getCurrentJstMonth(now);
     const appUser = await repository.getOrCreateAppUser(userId);
     const [recipeCount, storedAiUsage] = await Promise.all([
       repository.countRecipes(userId),

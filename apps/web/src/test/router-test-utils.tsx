@@ -31,6 +31,11 @@ export const viewerResponse = {
   },
 };
 
+export const billingStatusResponse = {
+  plan: "free",
+  subscription: null,
+};
+
 export const getRequestPath = (input: RequestInfo | URL) => {
   const toPath = (urlValue: string) => {
     try {
@@ -74,6 +79,10 @@ export const mockFetch = (
 
     if (path === "/api/me" && authenticated) {
       return jsonResponse(viewerResponse);
+    }
+
+    if (path === "/api/billing/status" && authenticated) {
+      return jsonResponse(billingStatusResponse);
     }
 
     return handler(input, init);

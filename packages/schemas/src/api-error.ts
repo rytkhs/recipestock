@@ -15,6 +15,7 @@ export const apiErrorCodeSchema = z.enum([
   "ai_schema_invalid",
   "locked_recipe",
   "invalid_recipe_list_cursor",
+  "already_subscribed",
   "invalid_image_type",
   "image_too_large",
   "image_finalize_failed",

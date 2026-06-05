@@ -106,7 +106,12 @@ export const createImageRoutes = ({
         return forbiddenResponse();
       }
 
-      const repository = recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      const repository =
+        recipeRepository ??
+        createRecipeRepository(createDb(c.env.DATABASE_URL), {
+          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+          now: new Date(),
+        });
       const recipe = await repository.getRecipe(userId, recipeId);
 
       if (!recipe) {

@@ -8,6 +8,7 @@ import {
 import { normalizeUrl, PLAN_LIMITS } from "@recipestock/shared";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
+import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
 import { type Bindings } from "./env";
 import { type RecipeImageService } from "./images";
 import {
@@ -158,8 +159,18 @@ const mapImportJobSqlRow = (row: ImportJobSqlRow): ImportJobRecord => ({
   updatedAt: dateFromSql(row.updatedAt) ?? new Date(),
 });
 
-export const createImportJobRepository = (db: DbClient): ImportJobRepository => ({
+export const createImportJobRepository = (
+  db: DbClient,
+  planSyncOptions?: AppUserPlanSyncOptions,
+): ImportJobRepository => ({
   async createUrlJob({ id, userId, url, normalizedUrl, now }) {
+    if (planSyncOptions) {
+      await syncAppUserPlanForDb(db, userId, {
+        ...planSyncOptions,
+        now: planSyncOptions.now ?? now,
+      });
+    }
+
     const nowIso = now.toISOString();
     const result = await db.execute<ImportJobSqlRow>(sql`
       with ensured_user as (

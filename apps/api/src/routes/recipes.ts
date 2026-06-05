@@ -70,7 +70,6 @@ export const createRecipeRoutes = ({
         return validationFailedResponse(request.error.flatten());
       }
 
-      const repository = recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
       const recipeId = createRecipeId?.() ?? createDefaultRecipeId();
       const images = imageService ?? createRecipeImageService(c.env);
       let finalized: Awaited<ReturnType<typeof finalizeRecipeDraftImages>>;
@@ -94,6 +93,12 @@ export const createRecipeRoutes = ({
       const content = finalized.content;
       const source = normalizeRecipeSource(request.data.source);
       const now = new Date();
+      const repository =
+        recipeRepository ??
+        createRecipeRepository(createDb(c.env.DATABASE_URL), {
+          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+          now,
+        });
       let result: Awaited<ReturnType<RecipeRepository["createRecipeEnforcingPlanLimit"]>>;
 
       try {
@@ -134,7 +139,12 @@ export const createRecipeRoutes = ({
         return validationFailedResponse(query.error.flatten());
       }
 
-      const repository = recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      const repository =
+        recipeRepository ??
+        createRecipeRepository(createDb(c.env.DATABASE_URL), {
+          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+          now: new Date(),
+        });
       let result: ListRecipesResult;
 
       try {
@@ -161,7 +171,12 @@ export const createRecipeRoutes = ({
     })
     .get("/:recipeId", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
-      const repository = recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      const repository =
+        recipeRepository ??
+        createRecipeRepository(createDb(c.env.DATABASE_URL), {
+          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+          now: new Date(),
+        });
       const recipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
       if (!recipe) {
@@ -193,7 +208,12 @@ export const createRecipeRoutes = ({
         return validationFailedResponse(request.error.flatten());
       }
 
-      const repository = recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      const repository =
+        recipeRepository ??
+        createRecipeRepository(createDb(c.env.DATABASE_URL), {
+          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+          now: new Date(),
+        });
       const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
       if (!existingRecipe) {
@@ -259,7 +279,12 @@ export const createRecipeRoutes = ({
     })
     .delete("/:recipeId", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
-      const repository = recipeRepository ?? createRecipeRepository(createDb(c.env.DATABASE_URL));
+      const repository =
+        recipeRepository ??
+        createRecipeRepository(createDb(c.env.DATABASE_URL), {
+          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+          now: new Date(),
+        });
       const deleted = await repository.deleteRecipe(userId, c.req.param("recipeId"));
 
       if (!deleted) {

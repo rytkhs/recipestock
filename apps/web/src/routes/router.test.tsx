@@ -99,12 +99,22 @@ describe("AppRouter", () => {
     });
     const { queryClient } = await renderApp("/recipes", (queryClient) => {
       queryClient.setQueryData(["viewer"], viewerResponse);
+      queryClient.setQueryData(["billing-status"], {
+        plan: "pro",
+        subscription: {
+          status: "active",
+          cancelAtPeriodEnd: false,
+          currentPeriodEnd: "2026-07-04T00:00:00.000Z",
+          cancelAt: null,
+        },
+      });
       queryClient.setQueryData(["recipes", "", null], { items: [], nextCursor: null });
     });
 
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/me")).toBeDefined();
     expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
+    expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();
     expect(queryClient.getQueryData(["recipes", "", null])).toBeUndefined();
   });
 
@@ -153,6 +163,15 @@ describe("AppRouter", () => {
     queryClient.setQueryData(["recipes", "", null], { items: [], nextCursor: null });
     queryClient.setQueryData(["recipe", "recipe_123"], { id: "recipe_123" });
     queryClient.setQueryData(["viewer"], viewerResponse);
+    queryClient.setQueryData(["billing-status"], {
+      plan: "pro",
+      subscription: {
+        status: "active",
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: "2026-07-04T00:00:00.000Z",
+        cancelAt: null,
+      },
+    });
 
     await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
 
@@ -167,5 +186,6 @@ describe("AppRouter", () => {
     expect(queryClient.getQueryData(["recipes", "", null])).toBeUndefined();
     expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
     expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
+    expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();
   });
 });
