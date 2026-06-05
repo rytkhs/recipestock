@@ -182,18 +182,30 @@ describe("Stripe webhook route", () => {
   });
 
   it("customer.subscription.createdはsubscriptionを保存しplanを同期する", async () => {
+    const calls: string[] = [];
+    const setStripeCustomerId = vi.fn<BillingRepository["setStripeCustomerId"]>(
+      async (userId, stripeCustomerId) => {
+        calls.push(`save-customer:${userId}:${stripeCustomerId}`);
+      },
+    );
     const upsertSubscriptionFromStripeEvent = vi.fn<
       BillingRepository["upsertSubscriptionFromStripeEvent"]
-    >(async () => {});
+    >(async () => {
+      calls.push("upsert-subscription");
+    });
     const syncAppUserPlanFromSubscriptions = vi.fn<
       BillingRepository["syncAppUserPlanFromSubscriptions"]
-    >(async () => "pro");
+    >(async () => {
+      calls.push("sync-plan");
+      return "pro";
+    });
     const retrieveSubscription = vi.fn<StripeBillingClient["retrieveSubscription"]>(async () =>
       subscriptionState(),
     );
 
     const response = await requestWebhook({
       billingRepository: createRepository({
+        setStripeCustomerId,
         upsertSubscriptionFromStripeEvent,
         syncAppUserPlanFromSubscriptions,
       }),
@@ -205,6 +217,7 @@ describe("Stripe webhook route", () => {
 
     expect(response.status).toBe(200);
     expect(retrieveSubscription).toHaveBeenCalledWith({ stripeSubscriptionId: "sub_123" });
+    expect(setStripeCustomerId).toHaveBeenCalledWith("user_123", "cus_123");
     expect(upsertSubscriptionFromStripeEvent).toHaveBeenCalledWith({
       userId: "user_123",
       stripeCustomerId: "cus_123",
@@ -224,6 +237,7 @@ describe("Stripe webhook route", () => {
       proPriceId: "price_pro",
       now: eventCreatedAt,
     });
+    expect(calls).toEqual(["save-customer:user_123:cus_123", "upsert-subscription", "sync-plan"]);
   });
 
   it.each([

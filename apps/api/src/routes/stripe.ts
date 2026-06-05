@@ -76,6 +76,7 @@ export const processStripeWebhookEvent = async ({
       stripeSubscriptionId: event.stripeSubscriptionId,
     });
 
+    await repository.setStripeCustomerId(subscription.userId, subscription.stripeCustomerId);
     await repository.upsertSubscriptionFromStripeEvent(
       toSubscriptionUpsertParams(subscription, event),
     );

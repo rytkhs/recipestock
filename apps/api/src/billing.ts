@@ -334,14 +334,6 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
       return syncAppUserPlanFromSubscriptions({ ...params, repository: storage });
     },
     async upsertSubscriptionFromStripeEvent(params) {
-      const [existingSubscription] = await db
-        .select({
-          id: subscriptions.id,
-        })
-        .from(subscriptions)
-        .where(eq(subscriptions.stripeSubscriptionId, params.stripeSubscriptionId))
-        .limit(1);
-
       const values = {
         userId: params.userId,
         stripeCustomerId: params.stripeCustomerId,
@@ -358,17 +350,16 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
         updatedAt: new Date(),
       };
 
-      if (existingSubscription) {
-        await db
-          .update(subscriptions)
-          .set(values)
-          .where(eq(subscriptions.stripeSubscriptionId, params.stripeSubscriptionId));
-      } else {
-        await db.insert(subscriptions).values({
+      await db
+        .insert(subscriptions)
+        .values({
           id: ulid(),
           ...values,
+        })
+        .onConflictDoUpdate({
+          target: subscriptions.stripeSubscriptionId,
+          set: values,
         });
-      }
     },
   };
 };
