@@ -36,6 +36,13 @@
       "when": 1780582366157,
       "tag": "0004_abandoned_bug",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780761057534,
+      "tag": "0005_slippery_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

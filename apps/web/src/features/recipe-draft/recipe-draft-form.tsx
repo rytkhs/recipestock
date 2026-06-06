@@ -22,6 +22,7 @@ type RecipeDraftFormProps = {
 type RecipeDraftFormControl = ReturnType<typeof useForm<RecipeDraftFormValues>>["control"];
 type RecipeDraftTextFieldPath = FieldPathByValue<RecipeDraftFormValues, string | undefined>;
 type RecipeDraftImageFieldPath = FieldPathByValue<RecipeDraftFormValues, DraftImageRef | undefined>;
+type RecipeDraftImageArrayFieldPath = FieldPathByValue<RecipeDraftFormValues, DraftImageRef[]>;
 
 const FormInput = ({
   control,
@@ -100,6 +101,7 @@ const ImageInput = ({
         <Input
           accept="image/jpeg,image/png,image/webp"
           aria-label={label}
+          disabled={isUploading}
           type="file"
           onChange={(event) => void handleChange(event)}
         />
@@ -111,6 +113,88 @@ const ImageInput = ({
       </div>
       {isUploading ? <p className="text-default-600 text-sm">アップロード中</p> : null}
       {field.value ? <p className="text-default-600 text-sm">画像あり</p> : null}
+      {error ? (
+        <p className="text-danger text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+};
+
+const StepImagesInput = ({
+  control,
+  label,
+  name,
+  onUploadStateChange,
+  uploadImage,
+}: {
+  control: RecipeDraftFormControl;
+  label: string;
+  name: RecipeDraftImageArrayFieldPath;
+  onUploadStateChange(isUploading: boolean): void;
+  uploadImage: (file: File) => Promise<DraftImageRef>;
+}) => {
+  const { field } = useController({ control, name });
+  const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const images = field.value ?? [];
+
+  const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    setError(null);
+    setIsUploading(true);
+    onUploadStateChange(true);
+
+    try {
+      field.onChange([...images, await uploadImage(file)]);
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof RecipeImageUploadError && uploadError.code === "image_too_large"
+          ? "画像は5MB以下にしてください。"
+          : "画像をアップロードできませんでした。",
+      );
+    } finally {
+      setIsUploading(false);
+      onUploadStateChange(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-2">
+      <Label>{label}</Label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          accept="image/jpeg,image/png,image/webp"
+          aria-label={label}
+          type="file"
+          onChange={(event) => void handleChange(event)}
+        />
+      </div>
+      {isUploading ? <p className="text-default-600 text-sm">アップロード中</p> : null}
+      {images.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 text-default-600 text-sm">
+          <span>{images.length}枚の画像あり</span>
+          {images.map((image, imageIndex) => (
+            <Button
+              key={`${image.type}:${"key" in image ? image.key : image.url}`}
+              isDisabled={isUploading}
+              variant="secondary"
+              onPress={() =>
+                field.onChange(images.filter((_, currentIndex) => currentIndex !== imageIndex))
+              }
+            >
+              {imageIndex + 1}枚目を削除
+            </Button>
+          ))}
+        </div>
+      ) : null}
       {error ? (
         <p className="text-danger text-sm" role="alert">
           {error}
@@ -260,10 +344,10 @@ export const RecipeDraftForm = ({
                   name={`steps.${stepIndex}.text`}
                   rows={3}
                 />
-                <ImageInput
+                <StepImagesInput
                   control={control}
                   label={`手順${stepIndex + 1}の画像`}
-                  name={`steps.${stepIndex}.image`}
+                  name={`steps.${stepIndex}.images`}
                   onUploadStateChange={handleUploadStateChange}
                   uploadImage={uploadImage}
                 />

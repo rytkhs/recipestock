@@ -15,7 +15,7 @@ const compactText = (value?: string) => {
 
 export const formValuesToCreateRecipeRequest = (
   values: RecipeDraftFormValues,
-  source: RecipeSourceDraft = { sourceType: "manual" },
+  source: RecipeSourceDraft = {},
 ): CreateRecipeRequest => {
   return createRecipeRequestSchema.parse({
     content: formValuesToRecipeDraftContent(values),
@@ -42,8 +42,8 @@ export const formValuesToRecipeDraftContent = (
       }))
       .filter((group) => group.label || group.ingredients.length > 0),
     steps: values.steps
-      .map((step) => ({ text: compactText(step.text), image: step.image }))
-      .filter((step) => step.text || step.image),
+      .map((step) => ({ text: compactText(step.text), images: step.images }))
+      .filter((step) => step.text || step.images.length > 0),
     note: compactText(values.note),
   });
 };
@@ -72,9 +72,9 @@ export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormV
     recipe.content.steps.length > 0
       ? recipe.content.steps.map((step) => ({
           text: step.text ?? "",
-          image: step.imageKey ? { type: "existingObjectKey", key: step.imageKey } : undefined,
+          images: step.imageKeys.map((key) => ({ type: "existingObjectKey", key })),
         }))
-      : [{ text: "" }],
+      : [createEmptyFormStep()],
 });
 
 export const recipeDraftContentToFormValues = (
@@ -101,7 +101,9 @@ export const recipeDraftContentToFormValues = (
     draft.steps.length > 0
       ? draft.steps.map((step) => ({
           text: step.text ?? "",
-          image: step.image,
+          images: step.images,
         }))
-      : [{ text: "" }],
+      : [createEmptyFormStep()],
 });
+
+const createEmptyFormStep = () => ({ text: "", images: [] });

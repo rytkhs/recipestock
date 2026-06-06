@@ -31,7 +31,7 @@ describe("formValuesToCreateRecipeRequest", () => {
               ingredients: [{ name: "  トマト缶  ", amount: "  1缶  " }],
             },
           ],
-          steps: [{ text: "  煮詰める  " }],
+          steps: [{ text: "  煮詰める  ", images: [] }],
         }),
       ),
     ).toMatchObject({
@@ -45,11 +45,9 @@ describe("formValuesToCreateRecipeRequest", () => {
             ingredients: [{ name: "トマト缶", amount: "1缶" }],
           },
         ],
-        steps: [{ text: "煮詰める" }],
+        steps: [{ text: "煮詰める", images: [] }],
       },
-      source: {
-        sourceType: "manual",
-      },
+      source: {},
     });
   });
 
@@ -70,13 +68,16 @@ describe("formValuesToCreateRecipeRequest", () => {
               ingredients: [{ name: "", amount: "" }],
             },
           ],
-          steps: [{ text: "  " }, { text: "煮詰める" }],
+          steps: [
+            { text: "  ", images: [] },
+            { text: "煮詰める", images: [] },
+          ],
         }),
       ),
     ).toMatchObject({
       content: {
         ingredientGroups: [{ ingredients: [{ name: "バジル", amount: "" }] }],
-        steps: [{ text: "煮詰める" }],
+        steps: [{ text: "煮詰める", images: [] }],
       },
     });
   });
@@ -88,7 +89,7 @@ describe("formValuesToCreateRecipeRequest", () => {
           steps: [
             {
               text: "  ",
-              image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+              images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
             },
           ],
         }),
@@ -97,30 +98,24 @@ describe("formValuesToCreateRecipeRequest", () => {
       content: {
         steps: [
           {
-            image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+            images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
           },
         ],
       },
     });
   });
 
-  it("手動作成ではsourceTypeだけをmanualにする", () => {
-    expect(formValuesToCreateRecipeRequest(createValues()).source).toEqual({
-      sourceType: "manual",
-    });
+  it("手動作成では出典metadataを空にする", () => {
+    expect(formValuesToCreateRecipeRequest(createValues()).source).toEqual({});
   });
 
   it("URL取り込みのsource metadataを保存リクエストに使える", () => {
     expect(
       formValuesToCreateRecipeRequest(createValues(), {
-        sourceType: "web",
-        sourcePlatform: "cookpad",
         sourceUrl: "https://cookpad.com/recipe/123",
         sourceName: "Cookpad",
       }).source,
     ).toEqual({
-      sourceType: "web",
-      sourcePlatform: "cookpad",
       sourceUrl: "https://cookpad.com/recipe/123",
       sourceName: "Cookpad",
     });
@@ -137,12 +132,10 @@ describe("formValuesToCreateRecipeRequest", () => {
           ingredientGroups: [
             { label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] },
           ],
-          steps: [{ text: "煮詰める" }],
+          steps: [{ text: "煮詰める", imageKeys: [], imageUrls: [] }],
           note: "仕上げにオリーブオイル。",
         },
         source: {
-          sourceType: "web",
-          sourcePlatform: null,
           sourceUrl: "https://example.com/recipes/tomato",
           normalizedSourceUrl: "https://example.com/recipes/tomato",
           sourceName: "Example Kitchen",
@@ -156,7 +149,7 @@ describe("formValuesToCreateRecipeRequest", () => {
       servingsText: "2人分",
       note: "仕上げにオリーブオイル。",
       ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ text: "煮詰める" }],
+      steps: [{ text: "煮詰める", images: [] }],
     });
   });
 
@@ -170,7 +163,7 @@ describe("formValuesToCreateRecipeRequest", () => {
         steps: [
           {
             text: "煮詰める",
-            image: { type: "externalImageUrl", url: "https://example.com/step.jpg" },
+            images: [{ type: "externalImageUrl", url: "https://example.com/step.jpg" }],
           },
         ],
         note: "仕上げにオリーブオイル。",
@@ -184,7 +177,7 @@ describe("formValuesToCreateRecipeRequest", () => {
       steps: [
         {
           text: "煮詰める",
-          image: { type: "externalImageUrl", url: "https://example.com/step.jpg" },
+          images: [{ type: "externalImageUrl", url: "https://example.com/step.jpg" }],
         },
       ],
     });

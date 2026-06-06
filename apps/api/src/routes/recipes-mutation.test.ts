@@ -11,10 +11,8 @@ const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
   content: {
     title: "Tomato pasta",
     ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-    steps: [{ text: "煮詰める" }],
+    steps: [{ text: "煮詰める", imageKeys: [] }],
   },
-  sourceType: "web",
-  sourcePlatform: null,
   sourceUrl: "https://example.com/recipes/tomato",
   normalizedSourceUrl: "https://example.com/recipes/tomato",
   sourceName: "Example Kitchen",
@@ -70,7 +68,7 @@ describe("Recipe mutation routes", () => {
             title: "Potato salad",
             servingsText: "3人分",
             ingredientGroups: [{ ingredients: [{ name: "じゃがいも", amount: "2個" }] }],
-            steps: [{ text: "つぶす" }],
+            steps: [{ text: "つぶす", images: [] }],
             note: "冷やす。",
           },
         }),
@@ -285,7 +283,7 @@ describe("Recipe mutation routes", () => {
             steps: [
               {
                 text: "盛り付ける",
-                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+                images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
               },
             ],
           },
@@ -315,7 +313,7 @@ describe("Recipe mutation routes", () => {
         title: "Tomato pasta",
         coverImageKey: "recipes/user_123/recipe_123/old-cover.webp",
         ingredientGroups: [],
-        steps: [{ text: "煮詰める", imageKey: "recipes/user_123/recipe_123/old-step.webp" }],
+        steps: [{ text: "煮詰める", imageKeys: ["recipes/user_123/recipe_123/old-step.webp"] }],
       },
     });
     const testApp = createApp({
@@ -379,7 +377,7 @@ describe("Recipe mutation routes", () => {
             steps: [
               {
                 text: "盛り付ける",
-                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+                images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
               },
             ],
           },
@@ -408,7 +406,7 @@ describe("Recipe mutation routes", () => {
           steps: [
             {
               text: "盛り付ける",
-              imageKey: "recipes/user_123/recipe_123/new-step.webp",
+              imageKeys: ["recipes/user_123/recipe_123/new-step.webp"],
             },
           ],
         }),
@@ -425,7 +423,7 @@ describe("Recipe mutation routes", () => {
         title: "Tomato pasta",
         coverImageKey: "recipes/user_123/recipe_123/old-cover.webp",
         ingredientGroups: [],
-        steps: [{ text: "煮詰める", imageKey: "recipes/user_123/recipe_123/old-step.webp" }],
+        steps: [{ text: "煮詰める", imageKeys: ["recipes/user_123/recipe_123/old-step.webp"] }],
       },
     });
     const testApp = createApp({
@@ -491,10 +489,12 @@ describe("Recipe mutation routes", () => {
             steps: [
               {
                 text: "盛り付ける",
-                image: {
-                  type: "externalImageUrl",
-                  url: "https://cdn.example.com/step.png",
-                },
+                images: [
+                  {
+                    type: "externalImageUrl",
+                    url: "https://cdn.example.com/step.png",
+                  },
+                ],
               },
             ],
           },
@@ -520,7 +520,7 @@ describe("Recipe mutation routes", () => {
           steps: [
             {
               text: "盛り付ける",
-              imageKey: "recipes/user_123/recipe_123/new-step.png",
+              imageKeys: ["recipes/user_123/recipe_123/new-step.png"],
             },
           ],
         }),
@@ -577,7 +577,7 @@ describe("Recipe mutation routes", () => {
             steps: [
               {
                 text: "盛り付ける",
-                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+                images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
               },
             ],
           },
@@ -647,7 +647,7 @@ describe("Recipe mutation routes", () => {
             steps: [
               {
                 text: "盛り付ける",
-                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+                images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
               },
             ],
           },
@@ -722,7 +722,7 @@ describe("Recipe mutation routes", () => {
             steps: [
               {
                 text: "盛り付ける",
-                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+                images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
               },
             ],
           },
@@ -800,7 +800,7 @@ describe("Recipe mutation routes", () => {
             steps: [
               {
                 text: "盛り付ける",
-                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+                images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
               },
             ],
           },

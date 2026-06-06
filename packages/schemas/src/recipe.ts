@@ -5,18 +5,6 @@ const webUrlSchema = z.url().refine((value) => {
   return protocol === "http:" || protocol === "https:";
 });
 
-export const sourceTypeSchema = z.enum(["web", "youtube", "sns", "image", "manual", "other"]);
-
-export const sourcePlatformSchema = z.enum([
-  "youtube",
-  "instagram",
-  "tiktok",
-  "x",
-  "cookpad",
-  "delishkitchen",
-  "other",
-]);
-
 export const draftImageRefSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("tmpObjectKey"),
@@ -45,16 +33,16 @@ export const ingredientGroupSchema = z.object({
 export const recipeStepSchema = z
   .object({
     text: z.string().min(1).optional(),
-    imageKey: z.string().min(1).optional(),
+    imageKeys: z.array(z.string().min(1)).default([]),
   })
-  .refine((step) => step.text || step.imageKey);
+  .refine((step) => step.text || step.imageKeys.length > 0);
 
 export const recipeDraftStepSchema = z
   .object({
     text: z.string().min(1).optional(),
-    image: draftImageRefSchema.optional(),
+    images: z.array(draftImageRefSchema).default([]),
   })
-  .refine((step) => step.text || step.image);
+  .refine((step) => step.text || step.images.length > 0);
 
 export const recipeContentSchema = z.object({
   title: z.string().min(1),
@@ -66,7 +54,7 @@ export const recipeContentSchema = z.object({
 });
 
 export const recipeStepWithUrlSchema = recipeStepSchema.extend({
-  imageUrl: z.string().optional(),
+  imageUrls: z.array(z.string()).default([]),
 });
 
 export const recipeContentWithUrlsSchema = recipeContentSchema.extend({
@@ -84,8 +72,6 @@ export const recipeDraftContentSchema = z.object({
 });
 
 export const recipeSourceDraftSchema = z.object({
-  sourceType: sourceTypeSchema,
-  sourcePlatform: sourcePlatformSchema.optional().nullable(),
   sourceUrl: webUrlSchema.optional().nullable(),
   sourceName: z.string().optional().nullable(),
 });
@@ -155,8 +141,6 @@ export const getRecipeResponseSchema = z.object({
   recipe: z.discriminatedUnion("locked", [recipeDetailSchema, lockedRecipeDetailSchema]),
 });
 
-export type SourceType = z.infer<typeof sourceTypeSchema>;
-export type SourcePlatform = z.infer<typeof sourcePlatformSchema>;
 export type DraftImageRef = z.infer<typeof draftImageRefSchema>;
 export type Ingredient = z.infer<typeof ingredientSchema>;
 export type IngredientGroup = z.infer<typeof ingredientGroupSchema>;

@@ -18,8 +18,6 @@ const createRecipe = (): NewRecipeRecord => ({
     ingredientGroups: [],
     steps: [],
   },
-  sourceType: "web",
-  sourcePlatform: null,
   sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
   normalizedSourceUrl: "https://example.com/recipes/tomato",
   sourceName: "Example Kitchen",
@@ -61,13 +59,10 @@ describe("normalizeRecipeSource", () => {
   it("正規化済み出典URL入力を信用せずsourceUrlから再計算する", () => {
     expect(
       normalizeRecipeSource({
-        sourceType: "web",
         sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
         normalizedSourceUrl: "https://attacker.example/wrong",
       } as Parameters<typeof normalizeRecipeSource>[0]),
     ).toEqual({
-      sourceType: "web",
-      sourcePlatform: null,
       sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
       normalizedSourceUrl: "https://example.com/recipes/tomato",
       sourceName: null,

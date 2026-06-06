@@ -36,7 +36,6 @@ describe("recipeDraftContentSchema", () => {
         note: "仕上げにオリーブオイル。",
       },
       source: {
-        sourceType: "web",
         sourceName: "Example Kitchen",
         sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter",
       },
@@ -52,7 +51,7 @@ describe("recipeDraftContentSchema", () => {
       steps: [
         {
           text: "盛り付ける",
-          image: { type: "externalImageUrl", url: "https://example.com/image.jpg" },
+          images: [{ type: "externalImageUrl", url: "https://example.com/image.jpg" }],
         },
       ],
     });
@@ -88,7 +87,7 @@ describe("recipeDraftContentSchema", () => {
       title: "Tomato pasta",
       steps: [
         {
-          image: { type: "tmpObjectKey", key: "tmp/user/step.webp" },
+          images: [{ type: "tmpObjectKey", key: "tmp/user/step.webp" }],
         },
       ],
     });
@@ -101,7 +100,6 @@ describe("recipeSourceDraftSchema", () => {
   it("出典URLはhttp/httpsだけを受け入れる", () => {
     expect(
       recipeSourceDraftSchema.safeParse({
-        sourceType: "web",
         sourceUrl: "https://example.com/recipes/tomato",
       }).success,
     ).toBe(true);
@@ -114,7 +112,6 @@ describe("recipeSourceDraftSchema", () => {
     ]) {
       expect(
         recipeSourceDraftSchema.safeParse({
-          sourceType: "web",
           sourceUrl,
         }).success,
       ).toBe(false);
@@ -123,12 +120,11 @@ describe("recipeSourceDraftSchema", () => {
 
   it("保存リクエストの正規化済み出典URLは入力として採用しない", () => {
     const result = recipeSourceDraftSchema.safeParse({
-      sourceType: "web",
       normalizedSourceUrl: "javascript:alert(1)",
     });
 
     expect(result.success).toBe(true);
-    expect(result.data).toEqual({ sourceType: "web" });
+    expect(result.data).toEqual({});
   });
 });
 
@@ -144,8 +140,6 @@ describe("createRecipeResponseSchema", () => {
           steps: [],
         },
         source: {
-          sourceType: "web",
-          sourcePlatform: null,
           sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter",
           normalizedSourceUrl: "https://example.com/recipes/tomato",
           sourceName: "Example Kitchen",

@@ -265,11 +265,11 @@ export const imageExtensionFromContentType = (contentType: ImageContentType) => 
 
 export const getRecipeImageKeys = (content: {
   coverImageKey?: string;
-  steps: { imageKey?: string }[];
+  steps: { imageKeys: string[] }[];
 }) =>
   new Set([
     ...(content.coverImageKey ? [content.coverImageKey] : []),
-    ...content.steps.flatMap((step) => (step.imageKey ? [step.imageKey] : [])),
+    ...content.steps.flatMap((step) => step.imageKeys),
   ]);
 
 export const recipeIdFromImageObjectKey = (userId: string, objectKey: string) => {

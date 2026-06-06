@@ -17,7 +17,7 @@ Temporary pre-save recipe content shown in the confirmation and edit flow after 
 _Avoid_: Draft, saved draft, temporary recipe
 
 **Source**:
-Metadata describing where a **Recipe** came from, such as the source URL, normalized source URL, source type, platform, and source name. **Source** is stored outside **RecipeContent**.
+Metadata describing where a **Recipe** came from, such as the source URL, normalized source URL, and source name. **Source** is stored outside **RecipeContent**.
 _Avoid_: Origin, reference, citation
 
 ## Example Dialogue

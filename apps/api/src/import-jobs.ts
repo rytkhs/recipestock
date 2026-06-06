@@ -495,8 +495,6 @@ export const processImportJob = async ({
       userId: job.userId,
       title: finalized.content.title,
       content: finalized.content,
-      sourceType: source.sourceType,
-      sourcePlatform: source.sourcePlatform,
       sourceUrl: source.sourceUrl,
       normalizedSourceUrl: source.normalizedSourceUrl,
       sourceName: source.sourceName,

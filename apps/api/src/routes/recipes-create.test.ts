@@ -45,7 +45,7 @@ describe("Recipe create routes", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           content: { title: "Tomato pasta" },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -64,8 +64,6 @@ describe("Recipe create routes", () => {
           steps: [],
         },
         source: {
-          sourceType: "manual",
-          sourcePlatform: null,
           sourceUrl: null,
           normalizedSourceUrl: null,
           sourceName: null,
@@ -111,7 +109,7 @@ describe("Recipe create routes", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           content: { title: "" },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -182,7 +180,6 @@ describe("Recipe create routes", () => {
             note: "仕上げにオリーブオイル。",
           },
           source: {
-            sourceType: "web",
             sourceName: "Example Kitchen",
             sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
           },
@@ -200,7 +197,6 @@ describe("Recipe create routes", () => {
           servingsText: "2人分",
           note: "仕上げにオリーブオイル。",
         }),
-        sourceType: "web",
         sourceName: "Example Kitchen",
         sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
         normalizedSourceUrl: "https://example.com/recipes/tomato",
@@ -256,7 +252,6 @@ describe("Recipe create routes", () => {
         body: JSON.stringify({
           content: { title: "Tomato pasta" },
           source: {
-            sourceType: "web",
             sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
             normalizedSourceUrl: "https://attacker.example/wrong",
           },
@@ -309,7 +304,7 @@ describe("Recipe create routes", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           content: { title: "Tomato pasta" },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -363,7 +358,7 @@ describe("Recipe create routes", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           content: { title: "Tomato pasta" },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -434,7 +429,7 @@ describe("Recipe create routes", () => {
             title: "Tomato pasta",
             coverImage: { type: "tmpObjectKey", key: "tmp/user_123/upload.webp" },
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -521,11 +516,11 @@ describe("Recipe create routes", () => {
             title: "Tomato pasta",
             steps: [
               {
-                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+                images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
               },
             ],
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -543,14 +538,14 @@ describe("Recipe create routes", () => {
     expect(savedRecipes).toEqual([
       expect.objectContaining({
         content: expect.objectContaining({
-          steps: [{ imageKey: "recipes/user_123/recipe_123/step_image.webp" }],
+          steps: [{ imageKeys: ["recipes/user_123/recipe_123/step_image.webp"] }],
         }),
       }),
     ]);
     await expect(response.json()).resolves.toMatchObject({
       recipe: {
         content: {
-          steps: [{ imageKey: "recipes/user_123/recipe_123/step_image.webp" }],
+          steps: [{ imageKeys: ["recipes/user_123/recipe_123/step_image.webp"] }],
         },
       },
     });
@@ -617,7 +612,7 @@ describe("Recipe create routes", () => {
               url: "https://cdn.example.com/cover.jpg",
             },
           },
-          source: { sourceType: "web", sourceUrl: "https://example.com/recipes/tomato" },
+          source: { sourceUrl: "https://example.com/recipes/tomato" },
         }),
       },
       {
@@ -708,21 +703,25 @@ describe("Recipe create routes", () => {
             },
             steps: [
               {
-                image: {
-                  type: "externalImageUrl",
-                  url: "https://cdn.example.com/missing-step.jpg",
-                },
+                images: [
+                  {
+                    type: "externalImageUrl",
+                    url: "https://cdn.example.com/missing-step.jpg",
+                  },
+                ],
               },
               {
                 text: "盛り付ける",
-                image: {
-                  type: "externalImageUrl",
-                  url: "https://cdn.example.com/missing-step-2.jpg",
-                },
+                images: [
+                  {
+                    type: "externalImageUrl",
+                    url: "https://cdn.example.com/missing-step-2.jpg",
+                  },
+                ],
               },
             ],
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -735,7 +734,7 @@ describe("Recipe create routes", () => {
       expect.objectContaining({
         content: expect.objectContaining({
           coverImageKey: undefined,
-          steps: [{ text: "盛り付ける" }],
+          steps: [{ text: "盛り付ける", imageKeys: [] }],
         }),
       }),
     ]);
@@ -787,7 +786,7 @@ describe("Recipe create routes", () => {
             title: "Tomato pasta",
             coverImage: { type: "tmpObjectKey", key: "tmp/user_123/upload.webp" },
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -855,7 +854,7 @@ describe("Recipe create routes", () => {
               url: "https://cdn.example.com/cover.webp",
             },
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -918,7 +917,7 @@ describe("Recipe create routes", () => {
               url: "https://cdn.example.com/cover.webp",
             },
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -989,7 +988,7 @@ describe("Recipe create routes", () => {
             title: "Tomato pasta",
             coverImage: { type: "tmpObjectKey", key: "tmp/user_123/upload.webp" },
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -1065,11 +1064,11 @@ describe("Recipe create routes", () => {
             steps: [
               {
                 text: "盛り付ける",
-                image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+                images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
               },
             ],
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
@@ -1146,7 +1145,7 @@ describe("Recipe create routes", () => {
             title: "Tomato pasta",
             coverImage: { type: "tmpObjectKey", key: "tmp/user_123/upload.webp" },
           },
-          source: { sourceType: "manual" },
+          source: {},
         }),
       },
       {
