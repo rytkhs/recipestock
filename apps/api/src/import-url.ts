@@ -35,9 +35,7 @@ export class RecipeImportError extends Error {
 export type RecipeImportImageCandidate = {
   id: string;
   url: string;
-  kindHint: "cover" | "content";
   alt?: string;
-  nearbyText?: string;
   position: number;
 };
 
@@ -217,7 +215,7 @@ export const genericHtmlImportConverter: RecipeImportConverter = {
         },
         metadataCandidates: buildMetadataCandidates(extraction),
         structuredContent,
-        jsonLdDocuments: extraction.jsonLd,
+        jsonLdDocuments: filterRecipeJsonLdDocuments(extraction.jsonLd),
         imageCandidates: resolvedImageCandidates,
       },
       source: {
@@ -748,9 +746,7 @@ type SemanticHtmlTag =
 type ExtractedImageCandidate = {
   id: string;
   rawUrl: string;
-  kindHint: "cover" | "content";
   alt?: string;
-  nearbyText?: string;
 };
 
 type HtmlImportExtraction = {
@@ -774,7 +770,6 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
   let ignoredTextDepth = 0;
   let semanticElementDepth = 0;
   let jsonLdText: string | null = null;
-  let recentText = "";
   const textBuffers: { text: string }[] = [];
 
   const response = importPageBodyToResponse(page);
@@ -789,24 +784,20 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
   };
   const appendImageCandidate = (
     rawUrl: string | undefined,
-    kindHint: "cover" | "content",
+    isContentImage: boolean,
     alt?: string,
   ) => {
     if (!rawUrl || extraction.imageCandidates.length >= 20) return;
 
     const normalizedAlt = alt ? normalizeReadableText(alt) : undefined;
     const id = `img_${extraction.imageCandidates.length + 1}`;
-    const nearbyText =
-      normalizeReadableText(textBuffers.at(-1)?.text ?? "") || recentText || undefined;
     extraction.imageCandidates.push({
       id,
       rawUrl,
-      kindHint,
       alt: normalizedAlt || undefined,
-      nearbyText,
     });
 
-    if (kindHint === "content") {
+    if (isContentImage) {
       appendStructuredContent(
         `<img data-image-id="${id}"${normalizedAlt ? ` alt="${escapeHtmlAttribute(normalizedAlt)}"` : ""}>`,
       );
@@ -847,7 +838,6 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
         const normalized = normalizeReadableText(buffer.text);
         if (normalized) {
           onNormalizedText?.(normalized);
-          recentText = normalized;
         }
 
         appendStructuredContent(`</${tagName}>\n`);
@@ -885,7 +875,7 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
 
         extraction.meta[key] = normalizeReadableText(content);
         if (key === "og:image" || key === "twitter:image") {
-          appendImageCandidate(content, "cover");
+          appendImageCandidate(content, false);
         }
       },
     })
@@ -934,18 +924,7 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
     .on("img", {
       element(element) {
         const rawUrl = element.getAttribute("src") ?? element.getAttribute("data-src") ?? undefined;
-        appendImageCandidate(rawUrl, "content", element.getAttribute("alt") ?? undefined);
-      },
-    })
-    .onDocument({
-      text(text) {
-        if (ignoredTextDepth > 0) return;
-        if (semanticElementDepth > 0) return;
-
-        const normalized = normalizeReadableText(text.text);
-        if (normalized) {
-          recentText = normalized;
-        }
+        appendImageCandidate(rawUrl, true, element.getAttribute("alt") ?? undefined);
       },
     })
     .transform(response)
@@ -1026,11 +1005,40 @@ const buildMetadataCandidates = (
   pushCandidate("twitterTitle", extraction.meta["twitter:title"]);
   pushCandidate("twitterDescription", extraction.meta["twitter:description"]);
   pushCandidate("siteName", extraction.meta["og:site_name"]);
-  for (const name of extractJsonLdRecipeNames(extraction.jsonLd).slice(0, 3)) {
+  for (const name of extractJsonLdRecipeNames(filterRecipeJsonLdDocuments(extraction.jsonLd)).slice(
+    0,
+    3,
+  )) {
     pushCandidate("jsonLdRecipeName", name);
   }
 
   return candidates;
+};
+
+const filterRecipeJsonLdDocuments = (documents: string[]): string[] =>
+  documents.filter((document) => {
+    try {
+      return containsJsonLdRecipe(JSON.parse(document));
+    } catch {
+      return false;
+    }
+  });
+
+const containsJsonLdRecipe = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.some(containsJsonLdRecipe);
+  }
+
+  if (typeof value !== "object" || value === null) return false;
+
+  const record = value as Record<string, unknown>;
+  return isJsonLdRecipeNode(record) || containsJsonLdRecipe(record["@graph"]);
+};
+
+const isJsonLdRecipeNode = (record: Record<string, unknown>): boolean => {
+  const type = record["@type"];
+  const typeValues = Array.isArray(type) ? type : [type];
+  return typeValues.some((entry) => typeof entry === "string" && entry.toLowerCase() === "recipe");
 };
 
 const extractJsonLdRecipeNames = (documents: string[]): string[] => {
@@ -1044,13 +1052,7 @@ const extractJsonLdRecipeNames = (documents: string[]): string[] => {
     if (typeof value !== "object" || value === null) return;
 
     const record = value as Record<string, unknown>;
-    const type = record["@type"];
-    const typeValues = Array.isArray(type) ? type : [type];
-    const isRecipe = typeValues.some(
-      (entry) => typeof entry === "string" && entry.toLowerCase() === "recipe",
-    );
-
-    if (isRecipe && typeof record.name === "string") {
+    if (isJsonLdRecipeNode(record) && typeof record.name === "string") {
       names.push(record.name);
     }
 
@@ -1082,9 +1084,7 @@ const resolveImageCandidates = (
       candidates.push({
         id: candidate.id,
         url,
-        kindHint: candidate.kindHint,
         alt: candidate.alt,
-        nearbyText: candidate.nearbyText,
         position: candidates.length,
       });
     } catch {

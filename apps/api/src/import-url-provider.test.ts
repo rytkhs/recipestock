@@ -41,7 +41,6 @@ const input: RecipeImportAIInput = {
     {
       id: "img_1",
       url: "https://example.com/cover.jpg",
-      kindHint: "cover",
       alt: "Tomato pasta",
       position: 0,
     },
