@@ -13,6 +13,7 @@ const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
     ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
     steps: [{ text: "煮詰める", imageKeys: [] }],
   },
+  originType: "manual",
   sourceUrl: "https://example.com/recipes/tomato",
   normalizedSourceUrl: "https://example.com/recipes/tomato",
   sourceName: "Example Kitchen",

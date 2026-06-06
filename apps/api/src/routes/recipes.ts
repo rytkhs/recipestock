@@ -107,6 +107,7 @@ export const createRecipeRoutes = ({
           userId,
           title: content.title,
           content,
+          originType: "manual",
           sourceUrl: source.sourceUrl,
           normalizedSourceUrl: source.normalizedSourceUrl,
           sourceName: source.sourceName,

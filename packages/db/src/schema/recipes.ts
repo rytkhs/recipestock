@@ -8,6 +8,9 @@ export const recipes = pgTable(
     userId: text("user_id").notNull(),
     title: text("title").notNull(),
     content: jsonb("content").notNull(),
+    originType: text("origin_type", { enum: ["manual", "url", "image", "text"] })
+      .notNull()
+      .default("manual"),
     sourceUrl: text("source_url"),
     normalizedSourceUrl: text("normalized_source_url"),
     sourceName: text("source_name"),

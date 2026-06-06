@@ -19,6 +19,7 @@ export type RecipeRecord = {
   userId: string;
   title: string;
   content: RecipeContent;
+  originType: "manual" | "url" | "image" | "text";
   sourceUrl: string | null;
   normalizedSourceUrl: string | null;
   sourceName: string | null;
@@ -77,6 +78,7 @@ type RecipeSqlRow = {
   userId: string;
   title: string;
   content: unknown;
+  originType: "manual" | "url" | "image" | "text";
   sourceUrl: string | null;
   normalizedSourceUrl: string | null;
   sourceName: string | null;
@@ -302,6 +304,7 @@ export const createRecipeRepository = (
           user_id,
           title,
           content,
+          origin_type,
           source_url,
           normalized_source_url,
           source_name,
@@ -314,6 +317,7 @@ export const createRecipeRepository = (
           ${recipe.userId},
           ${recipe.title},
           ${JSON.stringify(recipe.content)}::jsonb,
+          ${recipe.originType},
           ${recipe.sourceUrl},
           ${recipe.normalizedSourceUrl},
           ${recipe.sourceName},
@@ -335,6 +339,7 @@ export const createRecipeRepository = (
           user_id as "userId",
           title,
           content,
+          origin_type as "originType",
           source_url as "sourceUrl",
           normalized_source_url as "normalizedSourceUrl",
           source_name as "sourceName",
@@ -467,6 +472,7 @@ const mapRecipeSqlRow = (row: RecipeSqlRow): RecipeRecord => ({
   userId: row.userId,
   title: row.title,
   content: recipeContentSchema.parse(row.content),
+  originType: row.originType,
   sourceUrl: row.sourceUrl,
   normalizedSourceUrl: row.normalizedSourceUrl,
   sourceName: row.sourceName,
@@ -480,6 +486,7 @@ const mapRecipeRow = (row: typeof recipes.$inferSelect): RecipeRecord => ({
   userId: row.userId,
   title: row.title,
   content: recipeContentSchema.parse(row.content),
+  originType: row.originType,
   sourceUrl: row.sourceUrl,
   normalizedSourceUrl: row.normalizedSourceUrl,
   sourceName: row.sourceName,

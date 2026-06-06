@@ -1,0 +1,1 @@
+ALTER TABLE "recipes" ADD COLUMN "origin_type" text DEFAULT 'manual' NOT NULL;
