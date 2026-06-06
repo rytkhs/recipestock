@@ -18,6 +18,7 @@ const createRecipe = (): NewRecipeRecord => ({
     ingredientGroups: [],
     steps: [],
   },
+  originType: "manual",
   sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter#steps",
   normalizedSourceUrl: "https://example.com/recipes/tomato",
   sourceName: "Example Kitchen",

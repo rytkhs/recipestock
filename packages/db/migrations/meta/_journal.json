@@ -43,6 +43,13 @@
       "when": 1780761057534,
       "tag": "0005_slippery_squadron_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780763751938,
+      "tag": "0006_clammy_falcon",
+      "breakpoints": true
     }
   ]
 }
