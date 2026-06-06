@@ -17,7 +17,7 @@ export const recipeDraftFormSchema = z.object({
       ),
     }),
   ),
-  steps: z.array(z.object({ text: z.string().optional(), image: draftImageRefSchema.optional() })),
+  steps: z.array(z.object({ text: z.string().optional(), images: z.array(draftImageRefSchema) })),
 });
 
 export type RecipeDraftFormValues = z.infer<typeof recipeDraftFormSchema>;
@@ -27,7 +27,7 @@ export const createEmptyIngredientGroup = () => ({
   ingredients: [{ name: "", amount: "" }],
 });
 
-export const createEmptyStep = () => ({ text: "" });
+export const createEmptyStep = () => ({ text: "", images: [] });
 
 export const createEmptyRecipeDraftFormValues = (): RecipeDraftFormValues => ({
   title: "",

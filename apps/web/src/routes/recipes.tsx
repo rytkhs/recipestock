@@ -519,14 +519,19 @@ export const RecipeDetailRoute = () => {
           <h2 className="font-semibold text-xl">手順</h2>
           <ol className="mt-3 list-decimal space-y-4 pl-5">
             {recipe.content.steps.map((step, stepIndex) => (
-              <li key={step.imageKey ?? step.imageUrl ?? step.text}>
+              <li key={step.imageKeys.join(":") || step.imageUrls.join(":") || step.text}>
                 {step.text ? <p>{step.text}</p> : null}
-                {step.imageUrl ? (
-                  <img
-                    alt={`手順${stepIndex + 1}`}
-                    className="mt-3 aspect-video w-full rounded-lg object-cover"
-                    src={step.imageUrl}
-                  />
+                {step.imageUrls.length > 0 ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {step.imageUrls.map((imageUrl, imageIndex) => (
+                      <img
+                        alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
+                        className="aspect-video w-full rounded-lg object-cover"
+                        key={imageUrl}
+                        src={imageUrl}
+                      />
+                    ))}
+                  </div>
                 ) : null}
               </li>
             ))}

@@ -7,8 +7,7 @@ import {
   type RecipeListItem,
   type RecipeSourceDraft,
   recipeContentSchema,
-  type SourcePlatform,
-  type SourceType,
+  recipeContentWithUrlsSchema,
 } from "@recipestock/schemas";
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
@@ -20,8 +19,6 @@ export type RecipeRecord = {
   userId: string;
   title: string;
   content: RecipeContent;
-  sourceType: SourceType;
-  sourcePlatform: SourcePlatform | null;
   sourceUrl: string | null;
   normalizedSourceUrl: string | null;
   sourceName: string | null;
@@ -80,8 +77,6 @@ type RecipeSqlRow = {
   userId: string;
   title: string;
   content: unknown;
-  sourceType: string;
-  sourcePlatform: string | null;
   sourceUrl: string | null;
   normalizedSourceUrl: string | null;
   sourceName: string | null;
@@ -106,8 +101,6 @@ export type RecipeRepository = {
 };
 
 export type NormalizedRecipeSource = {
-  sourceType: SourceType;
-  sourcePlatform: SourcePlatform | null;
   sourceUrl: string | null;
   normalizedSourceUrl: string | null;
   sourceName: string | null;
@@ -131,7 +124,9 @@ export const toRecipeContent = (draft: RecipeDraftContent): RecipeContent => {
     ingredientGroups: draft.ingredientGroups,
     steps: draft.steps.map((step) => ({
       text: step.text,
-      imageKey: objectKeyFromDraftImage(step.image),
+      imageKeys: step.images
+        .map((image) => objectKeyFromDraftImage(image))
+        .filter((imageKey): imageKey is string => Boolean(imageKey)),
     })),
     note: draft.note,
   });
@@ -140,8 +135,6 @@ export const toRecipeContent = (draft: RecipeDraftContent): RecipeContent => {
 export const normalizeRecipeSource = (source: RecipeSourceDraft): NormalizedRecipeSource => {
   const sourceUrl = source.sourceUrl ?? null;
   return {
-    sourceType: source.sourceType,
-    sourcePlatform: source.sourcePlatform ?? null,
     sourceUrl,
     normalizedSourceUrl: sourceUrl ? normalizeUrl(sourceUrl) : null,
     sourceName: source.sourceName ?? null,
@@ -177,10 +170,8 @@ export const toRecipeListItem = (recipe: RecipeListRecord): RecipeListItem => ({
 export const toRecipeDetail = (recipe: RecipeRecord): RecipeDetail => ({
   id: recipe.id,
   title: recipe.title,
-  content: recipe.content,
+  content: recipeContentWithUrlsSchema.parse(recipe.content),
   source: {
-    sourceType: recipe.sourceType,
-    sourcePlatform: recipe.sourcePlatform,
     sourceUrl: recipe.sourceUrl,
     normalizedSourceUrl: recipe.normalizedSourceUrl,
     sourceName: recipe.sourceName,
@@ -311,8 +302,6 @@ export const createRecipeRepository = (
           user_id,
           title,
           content,
-          source_type,
-          source_platform,
           source_url,
           normalized_source_url,
           source_name,
@@ -325,8 +314,6 @@ export const createRecipeRepository = (
           ${recipe.userId},
           ${recipe.title},
           ${JSON.stringify(recipe.content)}::jsonb,
-          ${recipe.sourceType},
-          ${recipe.sourcePlatform},
           ${recipe.sourceUrl},
           ${recipe.normalizedSourceUrl},
           ${recipe.sourceName},
@@ -348,8 +335,6 @@ export const createRecipeRepository = (
           user_id as "userId",
           title,
           content,
-          source_type as "sourceType",
-          source_platform as "sourcePlatform",
           source_url as "sourceUrl",
           normalized_source_url as "normalizedSourceUrl",
           source_name as "sourceName",
@@ -482,8 +467,6 @@ const mapRecipeSqlRow = (row: RecipeSqlRow): RecipeRecord => ({
   userId: row.userId,
   title: row.title,
   content: recipeContentSchema.parse(row.content),
-  sourceType: (row.sourceType ?? "other") as SourceType,
-  sourcePlatform: row.sourcePlatform as SourcePlatform | null,
   sourceUrl: row.sourceUrl,
   normalizedSourceUrl: row.normalizedSourceUrl,
   sourceName: row.sourceName,
@@ -497,8 +480,6 @@ const mapRecipeRow = (row: typeof recipes.$inferSelect): RecipeRecord => ({
   userId: row.userId,
   title: row.title,
   content: recipeContentSchema.parse(row.content),
-  sourceType: (row.sourceType ?? "other") as SourceType,
-  sourcePlatform: row.sourcePlatform as SourcePlatform | null,
   sourceUrl: row.sourceUrl,
   normalizedSourceUrl: row.normalizedSourceUrl,
   sourceName: row.sourceName,

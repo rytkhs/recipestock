@@ -3,7 +3,6 @@ import {
   type RecipeDraftContent,
   type RecipeSourceDraft,
   recipeDraftContentSchema,
-  type SourcePlatform,
 } from "@recipestock/schemas";
 import { normalizeUrl } from "@recipestock/shared";
 import { generateObject } from "ai";
@@ -222,8 +221,6 @@ export const genericHtmlImportConverter: RecipeImportConverter = {
         imageCandidates: resolvedImageCandidates,
       },
       source: {
-        sourceType: "web",
-        sourcePlatform: detectSourcePlatform(normalizedUrl),
         sourceUrl: normalizedUrl,
         sourceName,
       },
@@ -721,25 +718,15 @@ const filterDraftImages = (
     draft: recipeDraftContentSchema.parse({
       ...draft,
       coverImage: filterImage(draft.coverImage),
-      steps: draft.steps.map((step) => ({ ...step, image: filterImage(step.image) })),
+      steps: draft.steps.map((step) => ({
+        ...step,
+        images: step.images
+          .map(filterImage)
+          .filter((image): image is NonNullable<typeof image> => Boolean(image)),
+      })),
     }),
     warnings,
   };
-};
-
-const detectSourcePlatform = (urlValue: string): SourcePlatform | null => {
-  const hostname = new URL(urlValue).hostname.replace(/^www\./, "");
-
-  if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) return "youtube";
-  if (hostname.includes("instagram.com")) return "instagram";
-  if (hostname.includes("tiktok.com")) return "tiktok";
-  if (hostname === "x.com" || hostname.endsWith(".x.com") || hostname.includes("twitter.com")) {
-    return "x";
-  }
-  if (hostname.includes("cookpad.com")) return "cookpad";
-  if (hostname.includes("delishkitchen.tv")) return "delishkitchen";
-
-  return "other";
 };
 
 type HtmlRewriterElement = Parameters<

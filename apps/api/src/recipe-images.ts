@@ -5,6 +5,7 @@ import {
   type RecipeContentWithUrls,
   type RecipeDraftContent,
   recipeContentSchema,
+  recipeContentWithUrlsSchema,
 } from "@recipestock/schemas";
 import { getRecipeImageKeys, type RecipeImageService } from "./images";
 import { createRecipeId } from "./recipes";
@@ -174,24 +175,30 @@ export const finalizeRecipeDraftImages = async ({
     const steps: RecipeContent["steps"] = [];
 
     for (const step of draft.steps) {
-      const imageKey = await resolveImageRef({
-        image: step.image,
-        userId,
-        recipeId,
-        imageService,
-        existingKeys,
-        createImageId,
-        copiedKeys,
-        tmpKeys,
-      });
+      const imageKeys = (
+        await Promise.all(
+          step.images.map((image) =>
+            resolveImageRef({
+              image,
+              userId,
+              recipeId,
+              imageService,
+              existingKeys,
+              createImageId,
+              copiedKeys,
+              tmpKeys,
+            }),
+          ),
+        )
+      ).filter((imageKey): imageKey is string => Boolean(imageKey));
 
-      if (!step.text && !imageKey) {
+      if (!step.text && imageKeys.length === 0) {
         continue;
       }
 
       steps.push({
         text: step.text,
-        imageKey,
+        imageKeys,
       });
     }
 
@@ -242,7 +249,7 @@ export const attachRecipeImageUrls = async (
   imageService: RecipeImageService | undefined,
 ): Promise<RecipeContentWithUrls> => {
   if (!imageService) {
-    return content;
+    return recipeContentWithUrlsSchema.parse(content);
   }
 
   const coverImageUrl = content.coverImageKey
@@ -254,12 +261,16 @@ export const attachRecipeImageUrls = async (
   const steps = await Promise.all(
     content.steps.map(async (step) => ({
       ...step,
-      imageUrl: step.imageKey
-        ? await imageService
-            .createSignedGetUrl({ objectKey: step.imageKey })
-            .then((result) => result.url)
-            .catch(() => undefined)
-        : undefined,
+      imageUrls: (
+        await Promise.all(
+          step.imageKeys.map((imageKey) =>
+            imageService
+              .createSignedGetUrl({ objectKey: imageKey })
+              .then((result) => result.url)
+              .catch(() => undefined),
+          ),
+        )
+      ).filter((imageUrl): imageUrl is string => Boolean(imageUrl)),
     })),
   );
 

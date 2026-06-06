@@ -336,15 +336,13 @@ describe("RecipesRoute", () => {
           steps: [
             {
               text: "煮詰める",
-              imageKey: "recipes/user_123/recipe_123/step.webp",
-              imageUrl: "https://images.example/step.webp",
+              imageKeys: ["recipes/user_123/recipe_123/step.webp"],
+              imageUrls: ["https://images.example/step.webp"],
             },
           ],
           note: "仕上げにオリーブオイル。",
         },
         source: {
-          sourceType: "manual",
-          sourcePlatform: null,
           sourceUrl: null,
           normalizedSourceUrl: null,
           sourceName: null,
@@ -394,12 +392,10 @@ describe("RecipesRoute", () => {
         title: "Tomato pasta",
         servingsText: "2人分",
         ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-        steps: [{ text: "煮詰める" }],
+        steps: [{ text: "煮詰める", images: [] }],
         note: "仕上げにオリーブオイル。",
       },
-      source: {
-        sourceType: "manual",
-      },
+      source: {},
     });
     await expect(
       screen.findByRole("heading", { name: "Tomato pasta" }),
@@ -421,14 +417,12 @@ describe("RecipesRoute", () => {
           steps: [
             {
               text: "煮詰める",
-              imageKey: "recipes/user_123/recipe_123/step.webp",
-              imageUrl: "https://images.example/step.webp",
+              imageKeys: ["recipes/user_123/recipe_123/step.webp"],
+              imageUrls: ["https://images.example/step.webp"],
             },
           ],
         },
         source: {
-          sourceType: "manual",
-          sourcePlatform: null,
           sourceUrl: null,
           normalizedSourceUrl: null,
           sourceName: null,
@@ -499,7 +493,7 @@ describe("RecipesRoute", () => {
         steps: [
           {
             text: "煮詰める",
-            image: { type: "tmpObjectKey", key: "tmp/user_123/step.webp" },
+            images: [{ type: "tmpObjectKey", key: "tmp/user_123/step.webp" }],
           },
         ],
       },
@@ -527,13 +521,15 @@ describe("RecipesRoute", () => {
                 coverImageUrl: "https://images.example/cover.webp",
                 ingredientGroups: [],
                 steps: [
-                  { text: "煮詰める", imageUrl: "https://images.example/step.webp" },
-                  { imageUrl: "https://images.example/step-only.webp" },
+                  {
+                    text: "煮詰める",
+                    imageKeys: [],
+                    imageUrls: ["https://images.example/step.webp"],
+                  },
+                  { imageKeys: [], imageUrls: ["https://images.example/step-only.webp"] },
                 ],
               },
               source: {
-                sourceType: "manual",
-                sourcePlatform: null,
                 sourceUrl: null,
                 normalizedSourceUrl: null,
                 sourceName: null,
@@ -556,8 +552,11 @@ describe("RecipesRoute", () => {
       "src",
       "https://images.example/cover.webp",
     );
-    expect(screen.getByAltText("手順1")).toHaveAttribute("src", "https://images.example/step.webp");
-    expect(screen.getByAltText("手順2")).toHaveAttribute(
+    expect(screen.getByAltText("手順1の画像1")).toHaveAttribute(
+      "src",
+      "https://images.example/step.webp",
+    );
+    expect(screen.getByAltText("手順2の画像1")).toHaveAttribute(
       "src",
       "https://images.example/step-only.webp",
     );
@@ -629,15 +628,13 @@ describe("RecipesRoute", () => {
           steps: [
             {
               text: "煮詰める",
-              imageKey: "recipes/user_123/recipe_123/step.webp",
-              imageUrl: "https://images.example/step.webp",
+              imageKeys: ["recipes/user_123/recipe_123/step.webp"],
+              imageUrls: ["https://images.example/step.webp"],
             },
           ],
           note: "仕上げにオリーブオイル。",
         },
         source: {
-          sourceType: "web",
-          sourcePlatform: null,
           sourceUrl: "https://example.com/recipes/tomato",
           normalizedSourceUrl: "https://example.com/recipes/tomato",
           sourceName: "Example Kitchen",
@@ -659,7 +656,7 @@ describe("RecipesRoute", () => {
           steps: [
             {
               text: "煮詰める",
-              imageKey: "recipes/user_123/recipe_123/step.webp",
+              imageKeys: ["recipes/user_123/recipe_123/step.webp"],
             },
           ],
           note: "仕上げにオリーブオイル。",
@@ -740,10 +737,12 @@ describe("RecipesRoute", () => {
         steps: [
           {
             text: "煮詰める",
-            image: {
-              type: "existingObjectKey",
-              key: "recipes/user_123/recipe_123/step.webp",
-            },
+            images: [
+              {
+                type: "existingObjectKey",
+                key: "recipes/user_123/recipe_123/step.webp",
+              },
+            ],
           },
         ],
       },
@@ -755,7 +754,10 @@ describe("RecipesRoute", () => {
       "src",
       "https://images.example/cover.webp",
     );
-    expect(screen.getByAltText("手順1")).toHaveAttribute("src", "https://images.example/step.webp");
+    expect(screen.getByAltText("手順1の画像1")).toHaveAttribute(
+      "src",
+      "https://images.example/step.webp",
+    );
   });
 
   it("更新成功後の詳細再取得に失敗しても更新失敗として扱わない", async () => {
@@ -767,11 +769,9 @@ describe("RecipesRoute", () => {
           title: "Tomato pasta",
           servingsText: "2人分",
           ingredientGroups: [],
-          steps: [{ text: "煮詰める" }],
+          steps: [{ text: "煮詰める", imageKeys: [], imageUrls: [] }],
         },
         source: {
-          sourceType: "manual",
-          sourcePlatform: null,
           sourceUrl: null,
           normalizedSourceUrl: null,
           sourceName: null,
@@ -846,8 +846,6 @@ describe("RecipesRoute", () => {
           steps: [],
         },
         source: {
-          sourceType: "manual",
-          sourcePlatform: null,
           sourceUrl: null,
           normalizedSourceUrl: null,
           sourceName: null,
