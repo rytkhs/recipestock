@@ -1,4 +1,5 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
+import { Globe } from "@phosphor-icons/react";
 import {
   type CreateRecipeResponse,
   type DeleteRecipeResponse,
@@ -258,6 +259,10 @@ const ImportJobBanner = () => {
   );
 };
 
+const SourceIcon = () => {
+  return <Globe className="h-4 w-4 text-default-500" />;
+};
+
 export const RecipesIndexRoute = () => {
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
@@ -329,37 +334,64 @@ export const RecipesIndexRoute = () => {
         <p className="mt-6 text-default-600">レシピがありません。</p>
       ) : null}
 
-      <div className="mt-6 grid gap-3">
-        {recipes.map((recipe) => (
-          <article className="rounded-lg border border-border bg-surface p-4" key={recipe.id}>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <h2 className="font-semibold text-xl">
-                {recipe.locked ? (
-                  <span>{recipe.title}</span>
-                ) : (
-                  <Link
-                    className="hover:text-accent"
-                    params={{ recipeId: recipe.id }}
-                    to="/recipes/$recipeId"
-                  >
-                    {recipe.title}
-                  </Link>
-                )}
-              </h2>
-              {recipe.locked ? (
-                <span className="inline-flex w-fit rounded-md border border-border px-2 py-1 font-medium text-default-600 text-xs">
-                  ロック中
-                </span>
-              ) : null}
-            </div>
-            {recipe.sourceName ? (
-              <p className="mt-2 text-default-600">{recipe.sourceName}</p>
-            ) : null}
-            <p className="mt-1 text-default-500 text-sm">
-              {new Date(recipe.updatedAt).toLocaleDateString("ja-JP")}
-            </p>
-          </article>
-        ))}
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {recipes.map((recipe) => {
+          const content = (
+            <>
+              <div className="relative aspect-video w-full bg-default-100 overflow-hidden">
+                {recipe.coverImageUrl ? (
+                  <img
+                    src={recipe.coverImageUrl}
+                    alt={recipe.title}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : null}
+              </div>
+              <div className="flex flex-1 flex-col p-4">
+                <h2 className="line-clamp-2 font-bold text-lg leading-tight text-default-foreground">
+                  {recipe.title}
+                </h2>
+                <div className="mt-auto pt-4 flex items-center justify-between">
+                  {recipe.sourceName ? (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-default-100 px-2.5 py-1 text-xs font-medium text-default-600">
+                      <SourceIcon />
+                      {recipe.sourceName}
+                    </div>
+                  ) : (
+                    <div />
+                  )}
+                  {recipe.locked ? (
+                    <span className="inline-flex rounded-md border border-border px-2 py-1 font-medium text-default-600 text-xs">
+                      ロック中
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          );
+
+          if (recipe.locked) {
+            return (
+              <div
+                key={recipe.id}
+                className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface opacity-75"
+              >
+                {content}
+              </div>
+            );
+          }
+
+          return (
+            <Link
+              key={recipe.id}
+              to="/recipes/$recipeId"
+              params={{ recipeId: recipe.id }}
+              className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface transition-shadow hover:shadow-md"
+            >
+              {content}
+            </Link>
+          );
+        })}
       </div>
 
       {nextCursor ? (
