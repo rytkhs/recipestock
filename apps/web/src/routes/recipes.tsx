@@ -1,4 +1,4 @@
-import { Button, Input, TextField } from "@heroui/react";
+import { Button, Input, TextField, Label } from "@heroui/react";
 import { Globe } from "@phosphor-icons/react";
 import {
   type CreateRecipeResponse,
@@ -302,6 +302,7 @@ export const RecipesIndexRoute = () => {
         onSubmit={submitSearch}
       >
         <TextField>
+          <Label className="sr-only">検索</Label>
           <Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />
         </TextField>
         <Button type="submit" variant="secondary">
