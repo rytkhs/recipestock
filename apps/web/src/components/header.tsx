@@ -17,20 +17,20 @@ const AppNav = () => {
     <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-x-1 gap-y-2">
       <Link
         activeProps={{ className: "text-accent font-semibold" }}
-        className="link no-underline text-default-700 text-sm"
-        to="/recipes"
+        className="link no-underline text-sm"
+        to="/import"
       >
-        <Button size="sm" variant="ghost">
-          レシピ一覧
+        <Button size="sm" variant="primary">
+          レシピ登録
         </Button>
       </Link>
       <Link
         activeProps={{ className: "text-accent font-semibold" }}
         className="link no-underline text-default-700 text-sm"
-        to="/import"
+        to="/recipes"
       >
         <Button size="sm" variant="ghost">
-          レシピ登録
+          レシピ一覧
         </Button>
       </Link>
       <Link

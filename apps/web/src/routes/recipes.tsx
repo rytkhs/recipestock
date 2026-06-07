@@ -297,22 +297,12 @@ export const RecipesIndexRoute = () => {
 
   return (
     <section className="mx-auto w-full max-w-5xl px-6 py-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-semibold text-3xl">Recipes</h1>
-        <Link
-          className="inline-flex min-h-10 items-center justify-center rounded-lg bg-accent px-4 font-semibold text-accent-foreground text-sm"
-          to="/recipes/new"
-        >
-          新規作成
-        </Link>
-      </div>
 
       <form
         className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
         onSubmit={submitSearch}
       >
         <TextField>
-          <Label>検索</Label>
           <Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />
         </TextField>
         <Button type="submit" variant="secondary">
