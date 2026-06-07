@@ -19,7 +19,7 @@ const AppNav = () => {
     <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-x-1 gap-y-2">
       <Dropdown>
         <Button size="sm" variant="primary">
-          レシピ登録
+          レシピ追加
         </Button>
         <Dropdown.Popover className="min-w-56">
           <Dropdown.Menu
@@ -34,16 +34,16 @@ const AppNav = () => {
               }
             }}
           >
-            <Dropdown.Item id="manual" textValue="手入力で登録">
+            <Dropdown.Item id="url" textValue="URLから">
               <div className="flex flex-col">
-                <Label>手入力で登録</Label>
-                <Description>材料と手順を自分で入力</Description>
+                <Label>URLから</Label>
+                <Description>サイトから取り込む</Description>
               </div>
             </Dropdown.Item>
-            <Dropdown.Item id="url" textValue="URLから取り込む">
+            <Dropdown.Item id="manual" textValue="手入力">
               <div className="flex flex-col">
-                <Label>URLから取り込む</Label>
-                <Description>レシピページから下書きを作成</Description>
+                <Label>手入力</Label>
+                <Description>レシピを自分で入力</Description>
               </div>
             </Dropdown.Item>
           </Dropdown.Menu>
