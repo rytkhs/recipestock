@@ -29,19 +29,20 @@ const input: RecipeImportAIInput = {
     finalUrl: "https://example.com/recipes/tomato",
     host: "example.com",
   },
-  metadataCandidates: [
-    { kind: "siteName", value: "Example Kitchen" },
-    { kind: "htmlTitle", value: "Tomato pasta" },
-    { kind: "metaDescription", value: "Simple tomato pasta" },
-  ],
   structuredContent:
     '<main><h1>Tomato pasta</h1><p>トマト缶とオリーブオイルで作るパスタです。</p><img data-image-id="img_1" alt="Tomato pasta"></main>',
-  jsonLdDocuments: ['{"@type":"Recipe","name":"Tomato pasta"}'],
+  recipeJsonLdEvidence: [
+    {
+      name: "Tomato pasta",
+      imageUrls: [],
+      rawIngredients: ["トマト缶 1缶"],
+      rawInstructions: ["煮詰める"],
+    },
+  ],
   imageCandidates: [
     {
       id: "img_1",
       url: "https://example.com/cover.jpg",
-      kindHint: "cover",
       alt: "Tomato pasta",
       position: 0,
     },
@@ -90,7 +91,7 @@ describe("default recipe import AI provider", () => {
         model: { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" },
         schema: recipeDraftContentSchema,
         system: expect.stringContaining("RecipeDraftContent"),
-        prompt: expect.stringContaining("metadataCandidates"),
+        prompt: expect.not.stringContaining("metadataCandidates"),
         temperature: 0,
         maxRetries: 0,
         timeout: 180000,
@@ -104,7 +105,7 @@ describe("default recipe import AI provider", () => {
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("sanitized semantic HTML");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain('data-image-id="img_1"');
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("imageCandidates");
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("jsonLdDocuments");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeJsonLdEvidence");
   });
 
   it("AI SDKのschema失敗をai_schema_invalidへ変換する", async () => {
