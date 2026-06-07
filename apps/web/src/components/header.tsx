@@ -1,5 +1,5 @@
-import { Button } from "@heroui/react";
-import { Link } from "@tanstack/react-router";
+import { Button, Description, Dropdown, Label } from "@heroui/react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useAuthSession } from "../lib/auth";
 
 const PublicNav = () => (
@@ -13,17 +13,42 @@ const PublicNav = () => (
 );
 
 const AppNav = () => {
+  const navigate = useNavigate();
+
   return (
     <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-x-1 gap-y-2">
-      <Link
-        activeProps={{ className: "text-accent font-semibold" }}
-        className="link no-underline text-sm"
-        to="/import"
-      >
+      <Dropdown>
         <Button size="sm" variant="primary">
           レシピ登録
         </Button>
-      </Link>
+        <Dropdown.Popover className="min-w-56">
+          <Dropdown.Menu
+            onAction={(key) => {
+              if (key === "manual") {
+                void navigate({ to: "/recipes/new" });
+                return;
+              }
+
+              if (key === "url") {
+                void navigate({ to: "/import/url" });
+              }
+            }}
+          >
+            <Dropdown.Item id="manual" textValue="手入力で登録">
+              <div className="flex flex-col">
+                <Label>手入力で登録</Label>
+                <Description>材料と手順を自分で入力</Description>
+              </div>
+            </Dropdown.Item>
+            <Dropdown.Item id="url" textValue="URLから取り込む">
+              <div className="flex flex-col">
+                <Label>URLから取り込む</Label>
+                <Description>レシピページから下書きを作成</Description>
+              </div>
+            </Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown>
       <Link
         activeProps={{ className: "text-accent font-semibold" }}
         className="link no-underline text-default-700 text-sm"

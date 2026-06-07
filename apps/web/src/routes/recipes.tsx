@@ -1,4 +1,4 @@
-import { Button, Input, Label, TextField } from "@heroui/react";
+import { Button, Input, TextField } from "@heroui/react";
 import { Globe } from "@phosphor-icons/react";
 import {
   type CreateRecipeResponse,
@@ -297,7 +297,6 @@ export const RecipesIndexRoute = () => {
 
   return (
     <section className="mx-auto w-full max-w-5xl px-6 py-10">
-
       <form
         className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
         onSubmit={submitSearch}

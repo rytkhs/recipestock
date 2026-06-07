@@ -13,7 +13,7 @@ import { ApiClientError } from "../lib/api";
 import { useAuthSession } from "../lib/auth";
 import { clearUserScopedCache } from "../lib/query-cache";
 import { useViewer } from "../lib/viewer";
-import { ImportIndexRoute, ImportUrlRoute } from "./import";
+import { ImportUrlRoute } from "./import";
 import { LoginRoute } from "./login";
 import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
 import { SettingsBillingRoute, SettingsIndexRoute } from "./settings";
@@ -154,16 +154,6 @@ const loginRoute = createRoute({
   ),
 });
 
-const importRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/import",
-  component: () => (
-    <RequireViewer>
-      <ImportIndexRoute />
-    </RequireViewer>
-  ),
-});
-
 const importUrlRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import/url",
@@ -201,7 +191,6 @@ const routeTree = rootRoute.addChildren([
   newRecipeRoute,
   recipeDetailRoute,
   editRecipeRoute,
-  importRoute,
   importUrlRoute,
   settingsRoute,
   settingsBillingRoute,

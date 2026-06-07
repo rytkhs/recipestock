@@ -1,6 +1,6 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
 import { type CreateImportUrlJobResponse } from "@recipestock/schemas";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { ApiClientError, parseApiResponse } from "../lib/api";
 
@@ -40,20 +40,6 @@ const importErrorMessage = (error: unknown) => {
       return "URLを取り込めませんでした。";
   }
 };
-
-export const ImportIndexRoute = () => (
-  <section className="mx-auto w-full max-w-5xl px-6 py-10">
-    <h1 className="font-semibold text-3xl">Import</h1>
-    <div className="mt-6">
-      <Link
-        className="inline-flex min-h-10 items-center justify-center rounded-lg bg-accent px-4 font-semibold text-accent-foreground text-sm"
-        to="/import/url"
-      >
-        URLから取り込む
-      </Link>
-    </div>
-  </section>
-);
 
 export const ImportUrlRoute = () => {
   const navigate = useNavigate();

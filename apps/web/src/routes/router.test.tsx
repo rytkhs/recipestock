@@ -135,6 +135,56 @@ describe("AppRouter", () => {
     await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
   });
 
+  it("ヘッダーのレシピ登録Dropdownから手入力作成へ遷移する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await userEvent.click(await screen.findByRole("button", { name: "レシピ登録" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /手入力で登録/ }));
+
+    await expect(screen.findByRole("heading", { name: "レシピ作成" })).resolves.toBeInTheDocument();
+  });
+
+  it("ヘッダーのレシピ登録DropdownからURL取り込みへ遷移する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await userEvent.click(await screen.findByRole("button", { name: "レシピ登録" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /URLから取り込む/ }));
+
+    await expect(
+      screen.findByRole("heading", { name: "URLから取り込む" }),
+    ).resolves.toBeInTheDocument();
+  });
+
   it("ログアウトするとユーザー依存キャッシュを消してログインへ遷移する", async () => {
     let authenticated = true;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
