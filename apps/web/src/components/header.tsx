@@ -1,8 +1,6 @@
 import { Button } from "@heroui/react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { signOut, useAuthSession } from "../lib/auth";
-import { clearUserScopedCache } from "../lib/query-cache";
+import { Link } from "@tanstack/react-router";
+import { useAuthSession } from "../lib/auth";
 
 const PublicNav = () => (
   <nav aria-label="Main navigation" className="flex items-center gap-2">
@@ -15,17 +13,6 @@ const PublicNav = () => (
 );
 
 const AppNav = () => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const session = useAuthSession();
-
-  const handleSignOut = async () => {
-    await signOut();
-    clearUserScopedCache(queryClient);
-    await session.refetch();
-    await navigate({ to: "/login" });
-  };
-
   return (
     <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-x-1 gap-y-2">
       <Link
@@ -55,9 +42,6 @@ const AppNav = () => {
           アカウント
         </Button>
       </Link>
-      <Button size="sm" variant="ghost" onPress={() => void handleSignOut()}>
-        ログアウト
-      </Button>
     </nav>
   );
 };

@@ -5,11 +5,12 @@ import {
   type GetBillingStatusResponse,
 } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { ApiClientError, api, parseApiResponse } from "../lib/api";
-import { changeEmail, changePassword } from "../lib/auth";
+import { changeEmail, changePassword, signOut, useAuthSession } from "../lib/auth";
 import { billingStatusQueryKey } from "../lib/billing";
+import { clearUserScopedCache } from "../lib/query-cache";
 import { useViewer, viewerQueryKey } from "../lib/viewer";
 
 const createCheckout = () =>
@@ -56,6 +57,9 @@ const formatBillingDate = (date: string) =>
   }).format(new Date(date));
 
 export const SettingsIndexRoute = () => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const session = useAuthSession();
   const viewer = useViewer({ enabled: true });
   const [newEmail, setNewEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -66,6 +70,13 @@ export const SettingsIndexRoute = () => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
   const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    clearUserScopedCache(queryClient);
+    await session.refetch();
+    await navigate({ to: "/login" });
+  };
 
   const handleEmailChange = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -188,6 +199,15 @@ export const SettingsIndexRoute = () => {
             課金設定
           </Link>
         </div>
+      </div>
+      <div className="mt-8 flex justify-center">
+        <Button
+          className="text-danger border-none bg-transparent hover:bg-danger-50"
+          variant="ghost"
+          onPress={() => void handleSignOut()}
+        >
+          ログアウト
+        </Button>
       </div>
     </section>
   );
