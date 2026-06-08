@@ -9,8 +9,11 @@ type ErrorLogValue = {
 type LogFields = Record<string, unknown>;
 
 type BaseLogFields = {
+  jobId?: string;
+  messageId?: string;
   requestId?: string;
   route?: string;
+  sourceHost?: string;
   userId?: string;
 };
 

@@ -236,6 +236,11 @@ const handleImportQueue = async (
   const imageService = createRecipeImageService(env);
 
   for (const message of batch.messages) {
+    const logger = createLogger({
+      jobId: message.body.jobId,
+      messageId: message.id,
+    });
+
     try {
       await processImportJob({
         jobId: message.body.jobId,
@@ -244,6 +249,7 @@ const handleImportQueue = async (
         recipeRepository,
         usageRepository,
         imageService,
+        logger,
       });
       message.ack();
     } catch (error) {

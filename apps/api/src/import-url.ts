@@ -9,6 +9,7 @@ import { generateObject } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
 import { type Bindings } from "./env";
+import { createLogger, type Logger } from "./logger";
 import { isHttpFetchUrlAllowed } from "./url-safety";
 import { consumeAiUsage, type UsageRepository } from "./usage";
 
@@ -227,15 +228,17 @@ export const importRecipeFromUrl = async ({
   fetcher = fetchImportPage,
   converters = [genericHtmlImportConverter],
   now = new Date(),
+  logger = createLogger(),
 }: {
   rawUrl: string;
   userId: string;
   env: Partial<Bindings>;
   usageRepository: UsageRepository;
-  aiProvider: RecipeImportAIProvider;
+  aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
   converters?: RecipeImportConverter[];
   now?: Date;
+  logger?: Logger;
 }): Promise<RecipeImportResult> => {
   let normalizedUrl: string;
 
@@ -266,10 +269,12 @@ export const importRecipeFromUrl = async ({
     throw new RecipeImportError("ai_usage_limit_exceeded", "AI usage limit exceeded.");
   }
 
+  const importAIProvider =
+    aiProvider ?? createDefaultRecipeImportAIProvider(env as Bindings, { logger });
   let draft: RecipeDraftContent;
 
   try {
-    draft = recipeDraftContentSchema.parse(await aiProvider.normalize(conversion.input));
+    draft = recipeDraftContentSchema.parse(await importAIProvider.normalize(conversion.input));
   } catch (error) {
     if (error instanceof RecipeImportError) {
       throw error;
@@ -314,7 +319,10 @@ const convertImportPage = (
 
 type ImportAiProviderKind = "workers-ai" | "openrouter";
 
-export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImportAIProvider => ({
+export const createDefaultRecipeImportAIProvider = (
+  env: Bindings,
+  { logger = createLogger() }: { logger?: Logger } = {},
+): RecipeImportAIProvider => ({
   async normalize(input) {
     const providerKind = resolveImportAiProvider(env);
     const system = resolveImportRecipeSystemPrompt(env);
@@ -343,6 +351,7 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
       logImportAiFailure(error, {
         env,
         input,
+        logger,
         providerKind,
         timeoutMs,
       });
@@ -487,11 +496,13 @@ const logImportAiFailure = (
   {
     env,
     input,
+    logger,
     providerKind,
     timeoutMs,
   }: {
     env: Partial<Bindings>;
     input: RecipeImportAIInput;
+    logger: Logger;
     providerKind: ImportAiProviderKind;
     timeoutMs: number;
   },
@@ -499,7 +510,7 @@ const logImportAiFailure = (
   const model =
     providerKind === "openrouter" ? env.OPENROUTER_TEXT_MODEL?.trim() : env.AI_TEXT_MODEL?.trim();
 
-  console.error("[recipe-import-ai] AI normalization failed", {
+  logger.error("recipe_import_ai_normalization_failed", {
     provider: providerKind,
     model: model || undefined,
     timeoutMs,
