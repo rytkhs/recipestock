@@ -30,21 +30,13 @@ const input: RecipeImportAIInput = {
     host: "example.com",
   },
   structuredContent:
-    '<main><h1>Tomato pasta</h1><p>トマト缶とオリーブオイルで作るパスタです。</p><img data-image-id="img_1" alt="Tomato pasta"></main>',
+    '<main><h1>Tomato pasta</h1><p>トマト缶とオリーブオイルで作るパスタです。</p><img src="/cover.jpg" alt="Tomato pasta"></main>',
   recipeJsonLdEvidence: [
     {
       name: "Tomato pasta",
       imageUrls: [],
       rawIngredients: ["トマト缶 1缶"],
       rawInstructions: ["煮詰める"],
-    },
-  ],
-  imageCandidates: [
-    {
-      id: "img_1",
-      url: "https://example.com/cover.jpg",
-      alt: "Tomato pasta",
-      position: 0,
     },
   ],
 };
@@ -103,8 +95,9 @@ describe("default recipe import AI provider", () => {
     );
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("structuredContent");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("sanitized semantic HTML");
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain('data-image-id="img_1"');
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("imageCandidates");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain('src="/cover.jpg"');
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("data-image-id");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("imageCandidates");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeJsonLdEvidence");
   });
 
