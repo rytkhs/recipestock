@@ -99,6 +99,69 @@ export type RecipeImportFetcher = (
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
 
+const importAiWebUrlSchema = z.url().refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "http:" || protocol === "https:";
+});
+
+const importAiImageRefSchema = z.union([
+  z.object({
+    type: z.literal("externalImageUrl"),
+    url: importAiWebUrlSchema,
+  }),
+  z.object({
+    type: z.literal("url"),
+    url: importAiWebUrlSchema,
+  }),
+  z.strictObject({
+    url: importAiWebUrlSchema,
+  }),
+]);
+
+const importAiIngredientSchema = z.object({
+  name: z.string().min(1),
+  amount: z.string(),
+});
+
+const importAiIngredientGroupSchema = z.object({
+  label: z.string().optional(),
+  ingredients: z.array(importAiIngredientSchema).default([]),
+});
+
+const importAiDraftStepSchema = z
+  .object({
+    text: z.string().min(1).optional(),
+    images: z.array(importAiImageRefSchema).default([]),
+  })
+  .refine((step) => step.text || step.images.length > 0);
+
+const importAiDraftContentSchema = z.object({
+  title: z.string().min(1),
+  servingsText: z.string().optional(),
+  coverImage: importAiImageRefSchema.optional(),
+  ingredientGroups: z.array(importAiIngredientGroupSchema).default([]),
+  steps: z.array(importAiDraftStepSchema).default([]),
+  note: z.string().optional(),
+});
+
+const normalizeImportAiImageRef = (image: z.infer<typeof importAiImageRefSchema>) => ({
+  type: "externalImageUrl" as const,
+  url: image.url,
+});
+
+const normalizeImportAiDraftContent = (value: unknown): RecipeDraftContent => {
+  const draft = importAiDraftContentSchema.parse(value);
+
+  return recipeDraftContentSchema.parse({
+    ...draft,
+    ...(draft.coverImage ? { coverImage: normalizeImportAiImageRef(draft.coverImage) } : {}),
+    steps: draft.steps.map((step) => ({
+      ...step,
+      images: step.images.map(normalizeImportAiImageRef),
+    })),
+  });
+};
+
 export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, maxBytes }) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -342,7 +405,7 @@ export const createDefaultRecipeImportAIProvider = (
     try {
       const result = await generateObject({
         model: createImportLanguageModel(env, providerKind, timeoutMs),
-        schema: recipeDraftContentSchema,
+        schema: importAiDraftContentSchema,
         system,
         prompt: buildImportUserPrompt(input),
         temperature: 0,
@@ -351,7 +414,7 @@ export const createDefaultRecipeImportAIProvider = (
         abortSignal: controller.signal,
       });
 
-      return result.object;
+      return normalizeImportAiDraftContent(result.object);
     } catch (error) {
       logImportAiFailure(error, {
         env,
@@ -366,6 +429,10 @@ export const createDefaultRecipeImportAIProvider = (
       }
 
       if (isAiSchemaError(error)) {
+        throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
+      }
+
+      if (error instanceof z.ZodError) {
         throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
       }
 

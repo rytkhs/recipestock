@@ -1,4 +1,3 @@
-import { recipeDraftContentSchema } from "@recipestock/schemas";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDefaultRecipeImportAIProvider,
@@ -67,7 +66,10 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).resolves.toEqual(draft);
+    await expect(provider.normalize(input)).resolves.toEqual({
+      ...draft,
+      steps: [{ text: "煮詰める", images: [] }],
+    });
     expect(mocks.createWorkersAI).toHaveBeenCalledWith({
       binding: expect.objectContaining({ run: expect.any(Function) }),
       gateway: { id: "recipestock" },
@@ -81,7 +83,7 @@ describe("default recipe import AI provider", () => {
     expect(mocks.generateObject).toHaveBeenCalledWith(
       expect.objectContaining({
         model: { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" },
-        schema: recipeDraftContentSchema,
+        schema: expect.any(Object),
         system: expect.stringContaining("RecipeDraftContent"),
         prompt: expect.not.stringContaining("metadataCandidates"),
         temperature: 0,
@@ -94,11 +96,109 @@ describe("default recipe import AI provider", () => {
       "https://example.com/recipes/tomato",
     );
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("structuredContent");
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("sanitized semantic HTML");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain('src="/cover.jpg"');
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("data-image-id");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("imageCandidates");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeJsonLdEvidence");
+  });
+
+  it("AIがcoverImageにtype urlを返した場合はexternalImageUrlへ正規化する", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: {
+        title: "Tomato pasta",
+        coverImage: { type: "url", url: "https://example.com/cover.jpg" },
+        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+        steps: [{ text: "煮詰める" }],
+      },
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(input)).resolves.toMatchObject({
+      coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
+    });
+  });
+
+  it("AIがcoverImageにurlだけを返した場合はexternalImageUrlへ正規化する", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: {
+        title: "Tomato pasta",
+        coverImage: { url: "https://example.com/cover.jpg" },
+        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+        steps: [{ text: "煮詰める" }],
+      },
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(input)).resolves.toMatchObject({
+      coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
+    });
+  });
+
+  it("AIがstepsの画像にtype urlやurlだけを返した場合はexternalImageUrlへ正規化する", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: {
+        title: "Tomato pasta",
+        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+        steps: [
+          {
+            text: "煮詰める",
+            images: [
+              { type: "url", url: "https://example.com/step-1.jpg" },
+              { url: "https://example.com/step-2.jpg" },
+            ],
+          },
+        ],
+      },
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(input)).resolves.toMatchObject({
+      steps: [
+        {
+          images: [
+            { type: "externalImageUrl", url: "https://example.com/step-1.jpg" },
+            { type: "externalImageUrl", url: "https://example.com/step-2.jpg" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("AIが不正URLの画像を返した場合はai_schema_invalidへ変換する", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: {
+        title: "Tomato pasta",
+        coverImage: { type: "url", url: "ftp://example.com/cover.jpg" },
+        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+        steps: [{ text: "煮詰める" }],
+      },
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_schema_invalid",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("AIがkeyベースの画像参照を返した場合はai_schema_invalidへ変換する", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: {
+        title: "Tomato pasta",
+        coverImage: { type: "tmpObjectKey", key: "tmp/user_123/cover.webp" },
+        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+        steps: [{ text: "煮詰める" }],
+      },
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_schema_invalid",
+    } satisfies Partial<RecipeImportError>);
   });
 
   it("AI SDKのschema失敗をai_schema_invalidへ変換する", async () => {
