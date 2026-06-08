@@ -137,10 +137,15 @@ const fetchImportPageFollowingAllowedRedirects = async (sourceUrl: string, signa
   for (let redirectCount = 0; redirectCount <= MAX_IMPORT_PAGE_REDIRECTS; redirectCount++) {
     assertImportUrlAllowed(currentUrl);
 
+    const DEFAULT_IMPORT_USER_AGENT =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+      "AppleWebKit/537.36 (KHTML, like Gecko) " +
+      "Chrome/125.0.0.0 Safari/537.36";
+
     const response = await fetch(currentUrl, {
       headers: {
         accept: "text/html,application/xhtml+xml",
-        "user-agent": "RecipeStockBot/1.0",
+        "user-agent": DEFAULT_IMPORT_USER_AGENT,
       },
       redirect: "manual",
       signal,
