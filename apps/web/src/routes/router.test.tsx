@@ -46,7 +46,7 @@ describe("AppRouter", () => {
 
     await renderApp("/login");
 
-    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
   });
 
   it("ログイン済みで認証必須ルートに入るとviewerを取得してから画面を表示する", async () => {
@@ -63,7 +63,7 @@ describe("AppRouter", () => {
 
     await renderApp("/recipes");
 
-    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/me")).toEqual([
       "/api/me",
       expect.objectContaining({
@@ -132,7 +132,57 @@ describe("AppRouter", () => {
 
     await renderApp("/");
 
-    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
+  });
+
+  it("ヘッダーのレシピ追加Dropdownから手入力作成へ遷移する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await userEvent.click(await screen.findByRole("button", { name: "レシピ追加" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /手入力/ }));
+
+    await expect(screen.findByRole("heading", { name: "レシピ作成" })).resolves.toBeInTheDocument();
+  });
+
+  it("ヘッダーのレシピ追加DropdownからURL取り込みへ遷移する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await userEvent.click(await screen.findByRole("button", { name: "レシピ追加" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /URLから/ }));
+
+    await expect(
+      screen.findByRole("heading", { name: "URLから取り込む" }),
+    ).resolves.toBeInTheDocument();
   });
 
   it("ログアウトするとユーザー依存キャッシュを消してログインへ遷移する", async () => {
@@ -159,7 +209,7 @@ describe("AppRouter", () => {
 
       return new Response(null, { status: 404 });
     });
-    const { queryClient } = await renderApp("/recipes");
+    const { queryClient } = await renderApp("/settings");
     queryClient.setQueryData(["recipes", "", null], { items: [], nextCursor: null });
     queryClient.setQueryData(["recipe", "recipe_123"], { id: "recipe_123" });
     queryClient.setQueryData(["viewer"], viewerResponse);

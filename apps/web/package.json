@@ -13,6 +13,7 @@
     "@heroui/react": "^3.1.0",
     "@heroui/styles": "^3.1.0",
     "@hookform/resolvers": "^5.2.2",
+    "@phosphor-icons/react": "^2.1.10",
     "@recipestock/api": "workspace:*",
     "@recipestock/schemas": "workspace:*",
     "@recipestock/shared": "workspace:*",

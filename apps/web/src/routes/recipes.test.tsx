@@ -886,7 +886,7 @@ describe("RecipesRoute", () => {
         }),
       );
     });
-    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
   });
 
   it("レシピ保存上限に達している場合は専用メッセージを表示する", async () => {

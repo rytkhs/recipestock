@@ -69,7 +69,7 @@ describe("Import routes", () => {
     await userEvent.type(await screen.findByLabelText("URL"), "https://example.com/recipes/tomato");
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
-    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(screen.getByText("取り込み中...")).toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/import/url/jobs")).toEqual([
       "/api/import/url/jobs",

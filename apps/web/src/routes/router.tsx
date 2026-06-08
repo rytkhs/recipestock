@@ -1,20 +1,19 @@
-import { Button } from "@heroui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createRootRoute,
   createRoute,
   createRouter,
-  Link,
   Outlet,
   RouterProvider,
   useNavigate,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
+import { Header } from "../components/header";
 import { ApiClientError } from "../lib/api";
-import { signOut, useAuthSession } from "../lib/auth";
+import { useAuthSession } from "../lib/auth";
 import { clearUserScopedCache } from "../lib/query-cache";
 import { useViewer } from "../lib/viewer";
-import { ImportIndexRoute, ImportUrlRoute } from "./import";
+import { ImportUrlRoute } from "./import";
 import { LoginRoute } from "./login";
 import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
 import { SettingsBillingRoute, SettingsIndexRoute } from "./settings";
@@ -77,54 +76,14 @@ const RedirectAuthenticated = ({ children }: { children: ReactNode }) => {
   return children;
 };
 
-const RootLayout = () => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const session = useAuthSession();
-
-  const handleSignOut = async () => {
-    await signOut();
-    clearUserScopedCache(queryClient);
-    await session.refetch();
-    await navigate({ to: "/login" });
-  };
-
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="flex flex-col gap-4 border-border border-b bg-surface px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <Link className="font-bold text-lg no-underline" to="/">
-          Recipe Stock
-        </Link>
-        <nav
-          aria-label="Main navigation"
-          className="flex flex-wrap items-center gap-x-4 gap-y-2 text-default-700 text-sm"
-        >
-          <Link activeProps={{ className: "text-accent font-semibold" }} to="/recipes">
-            Recipes
-          </Link>
-          <Link activeProps={{ className: "text-accent font-semibold" }} to="/import">
-            Import
-          </Link>
-          <Link activeProps={{ className: "text-accent font-semibold" }} to="/settings">
-            Settings
-          </Link>
-          {session.data ? (
-            <Button size="sm" variant="ghost" onPress={() => void handleSignOut()}>
-              ログアウト
-            </Button>
-          ) : (
-            <Link activeProps={{ className: "text-accent font-semibold" }} to="/login">
-              ログイン
-            </Link>
-          )}
-        </nav>
-      </header>
-      <main>
-        <Outlet />
-      </main>
-    </div>
-  );
-};
+const RootLayout = () => (
+  <div className="min-h-screen bg-background text-foreground">
+    <Header />
+    <main>
+      <Outlet />
+    </main>
+  </div>
+);
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -195,16 +154,6 @@ const loginRoute = createRoute({
   ),
 });
 
-const importRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/import",
-  component: () => (
-    <RequireViewer>
-      <ImportIndexRoute />
-    </RequireViewer>
-  ),
-});
-
 const importUrlRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import/url",
@@ -242,7 +191,6 @@ const routeTree = rootRoute.addChildren([
   newRecipeRoute,
   recipeDetailRoute,
   editRecipeRoute,
-  importRoute,
   importUrlRoute,
   settingsRoute,
   settingsBillingRoute,

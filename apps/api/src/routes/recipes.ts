@@ -161,9 +161,25 @@ export const createRecipeRoutes = ({
         throw error;
       }
 
+      const images = imageService ?? createRecipeImageService(c.env);
+      const itemsWithImages = await Promise.all(
+        result.items.map(async (item) => {
+          const base = toRecipeListItem(item);
+          if (!item.locked && item.coverImageKey) {
+            try {
+              const urlResult = await images.createSignedGetUrl({ objectKey: item.coverImageKey });
+              base.coverImageUrl = urlResult.url;
+            } catch {
+              // ignore
+            }
+          }
+          return base;
+        }),
+      );
+
       return c.json(
         listRecipesResponseSchema.parse({
-          items: result.items.map(toRecipeListItem),
+          items: itemsWithImages,
           nextCursor: result.nextCursor,
         }),
       );

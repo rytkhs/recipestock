@@ -33,6 +33,7 @@ export type RecipeListRecord = Pick<
   RecipeRecord,
   "id" | "title" | "sourceName" | "createdAt" | "updatedAt"
 > & {
+  coverImageKey?: string | null;
   locked?: boolean;
 };
 
@@ -410,6 +411,13 @@ export const createRecipeRepository = (
         sourceName: recipes.sourceName,
         createdAt: recipes.createdAt,
         updatedAt: recipes.updatedAt,
+        coverImageKey: sql<string | null>`
+          case
+            when jsonb_typeof(${recipes.content}->'coverImageKey') = 'string'
+              then ${recipes.content}->>'coverImageKey'
+            else null
+          end
+        `,
       })
       .from(recipes)
       .where(and(...whereConditions))

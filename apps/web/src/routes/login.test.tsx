@@ -80,7 +80,7 @@ describe("LoginRoute", () => {
       email: "chef@example.com",
       password: "password123",
     });
-    await expect(screen.findByRole("heading", { name: "Recipes" })).resolves.toBeInTheDocument();
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/me")).toBeDefined();
   });
 
