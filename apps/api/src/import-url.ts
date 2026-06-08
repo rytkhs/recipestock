@@ -396,9 +396,7 @@ const createImportLanguageModel = (
   }) as never;
 };
 
-const buildImportUserPrompt = (
-  input: RecipeImportAIInput,
-) => `
+const buildImportUserPrompt = (input: RecipeImportAIInput) => `
 source:
 ${JSON.stringify(input.source)}
 
