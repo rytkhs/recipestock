@@ -1,6 +1,7 @@
 import { createDb } from "@recipestock/db";
 import { Hono } from "hono";
 import { csrf } from "hono/csrf";
+import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { unknownResponse } from "./api-error";
@@ -15,6 +16,7 @@ import {
   processImportJob,
 } from "./import-jobs";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
+import { createLogger } from "./logger";
 import { type MeRepository } from "./me";
 import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
@@ -49,14 +51,65 @@ type AppDependencies = {
   getCurrentDate?: () => Date;
 };
 
+const createLoggerMiddleware = () =>
+  createMiddleware<ApiEnv>(async (c, next) => {
+    const requestId = crypto.randomUUID();
+    const logger = createLogger({
+      requestId,
+      route: c.req.path,
+    });
+    const startedAt = Date.now();
+
+    c.set("requestId", requestId);
+    c.set("logger", logger);
+
+    await next();
+
+    const status = c.res.status;
+    const fields = {
+      durationMs: Date.now() - startedAt,
+      method: c.req.method,
+      status,
+      userId: c.var.userId,
+    };
+
+    if (status >= 500) {
+      logger.error("api_request_completed", fields);
+      return;
+    }
+
+    if (status >= 400) {
+      logger.warn("api_request_completed", fields);
+      return;
+    }
+
+    logger.info("api_request_completed", fields);
+  });
+
 export const createApp = (dependencies: AppDependencies = {}) => {
   const app = new Hono<ApiEnv>().basePath("/api");
   const auth = dependencies.auth ?? authService;
   const csrfProtection = csrf();
 
-  app.onError((error) =>
-    error instanceof HTTPException ? error.getResponse() : unknownResponse(),
-  );
+  app.onError((error, c) => {
+    const response = error instanceof HTTPException ? error.getResponse() : unknownResponse();
+    const logger =
+      c.var.logger ??
+      createLogger({
+        requestId: c.var.requestId,
+        route: c.req.path,
+      });
+
+    logger.error("api_request_failed", {
+      error,
+      method: c.req.method,
+      status: response.status,
+      userId: c.var.userId,
+    });
+
+    return response;
+  });
+  app.use("*", createLoggerMiddleware());
   app.use("*", secureHeaders());
   app.use("/billing/*", csrfProtection);
   app.use("/images/*", csrfProtection);
@@ -150,14 +203,12 @@ export const handleImportQueueMessageError = async ({
   message: ImportQueueMessage;
   now?: Date;
 }) => {
-  console.error(
-    JSON.stringify({
-      event: "import_job_queue_error",
-      messageId: message.id,
-      jobId: message.body.jobId,
-      error: error instanceof Error ? error.message : String(error),
-    }),
-  );
+  createLogger().error("import_job_queue_error", {
+    attempts: message.attempts,
+    error,
+    jobId: message.body.jobId,
+    messageId: message.id,
+  });
 
   if (message.attempts >= IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS) {
     await importJobRepository.markJobFailed({
@@ -185,6 +236,11 @@ const handleImportQueue = async (
   const imageService = createRecipeImageService(env);
 
   for (const message of batch.messages) {
+    const logger = createLogger({
+      jobId: message.body.jobId,
+      messageId: message.id,
+    });
+
     try {
       await processImportJob({
         jobId: message.body.jobId,
@@ -193,6 +249,7 @@ const handleImportQueue = async (
         recipeRepository,
         usageRepository,
         imageService,
+        logger,
       });
       message.ack();
     } catch (error) {

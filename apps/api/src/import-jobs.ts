@@ -19,6 +19,7 @@ import {
   RecipeImportError,
   type RecipeImportFetcher,
 } from "./import-url";
+import { createLogger, type Logger } from "./logger";
 import {
   deleteObjectsBestEffort,
   type FinalizedRecipeImages,
@@ -421,6 +422,7 @@ export type ProcessImportJobDependencies = {
   createRecipeId?: () => string;
   createImageId?: () => string;
   getCurrentDate?: () => Date;
+  logger?: Logger;
 };
 
 export const processImportJob = async ({
@@ -435,6 +437,7 @@ export const processImportJob = async ({
   createRecipeId,
   createImageId,
   getCurrentDate,
+  logger,
 }: ProcessImportJobDependencies & { jobId: string }) => {
   const now = getCurrentDate?.() ?? new Date();
   const recipeId = createRecipeId?.() ?? createDefaultRecipeId();
@@ -445,7 +448,23 @@ export const processImportJob = async ({
     return;
   }
 
+  const sourceHost = resolveImportSourceHost(job.normalizedUrl ?? job.url);
+  const jobLogger =
+    logger ??
+    createLogger({
+      jobId,
+      sourceHost,
+      userId: job.userId,
+    });
+
   if (job.kind !== "url" || !job.url) {
+    jobLogger.warn("recipe_import_job_failed", {
+      errorCode: "unknown",
+      errorMessage: "Import job is invalid.",
+      jobId,
+      sourceHost,
+      userId: job.userId,
+    });
     await importJobRepository.markJobFailed({
       jobId,
       errorCode: "unknown",
@@ -477,9 +496,10 @@ export const processImportJob = async ({
       userId: job.userId,
       env,
       usageRepository,
-      aiProvider: aiProvider ?? createDefaultRecipeImportAIProvider(env),
+      aiProvider: aiProvider ?? createDefaultRecipeImportAIProvider(env, { logger: jobLogger }),
       fetcher,
       now,
+      logger: jobLogger,
     });
     finalized = await finalizeRecipeDraftImages({
       draft: importResult.recipeDraftContent,
@@ -515,6 +535,13 @@ export const processImportJob = async ({
         errorMessage: "Recipe limit exceeded.",
         now: getCurrentDate?.() ?? new Date(),
       });
+      jobLogger.warn("recipe_import_job_failed", {
+        errorCode: "recipe_limit_exceeded",
+        errorMessage: "Recipe limit exceeded.",
+        jobId,
+        sourceHost,
+        userId: job.userId,
+      });
       return;
     }
 
@@ -531,6 +558,12 @@ export const processImportJob = async ({
     }
 
     if (!(error instanceof RecipeImportError) && !(error instanceof RecipeImageFinalizeError)) {
+      jobLogger.error("recipe_import_job_unexpected_error", {
+        error,
+        jobId,
+        sourceHost,
+        userId: job.userId,
+      });
       throw error;
     }
 
@@ -541,6 +574,24 @@ export const processImportJob = async ({
       errorMessage: mapped.message,
       now: getCurrentDate?.() ?? new Date(),
     });
+    jobLogger.warn("recipe_import_job_failed", {
+      error,
+      errorCode: mapped.code,
+      errorMessage: mapped.message,
+      jobId,
+      sourceHost,
+      userId: job.userId,
+    });
+  }
+};
+
+const resolveImportSourceHost = (sourceUrl: string | null) => {
+  if (!sourceUrl) return undefined;
+
+  try {
+    return new URL(sourceUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
   }
 };
 

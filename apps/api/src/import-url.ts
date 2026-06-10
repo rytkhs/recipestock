@@ -9,6 +9,7 @@ import { generateObject } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
 import { type Bindings } from "./env";
+import { createLogger, type Logger } from "./logger";
 import { isHttpFetchUrlAllowed } from "./url-safety";
 import { consumeAiUsage, type UsageRepository } from "./usage";
 
@@ -98,6 +99,69 @@ export type RecipeImportFetcher = (
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
 
+const importAiWebUrlSchema = z.url().refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "http:" || protocol === "https:";
+});
+
+const importAiImageRefSchema = z.union([
+  z.object({
+    type: z.literal("externalImageUrl"),
+    url: importAiWebUrlSchema,
+  }),
+  z.object({
+    type: z.literal("url"),
+    url: importAiWebUrlSchema,
+  }),
+  z.strictObject({
+    url: importAiWebUrlSchema,
+  }),
+]);
+
+const importAiIngredientSchema = z.object({
+  name: z.string().min(1),
+  amount: z.string(),
+});
+
+const importAiIngredientGroupSchema = z.object({
+  label: z.string().optional(),
+  ingredients: z.array(importAiIngredientSchema).default([]),
+});
+
+const importAiDraftStepSchema = z
+  .object({
+    text: z.string().min(1).optional(),
+    images: z.array(importAiImageRefSchema).default([]),
+  })
+  .refine((step) => step.text || step.images.length > 0);
+
+const importAiDraftContentSchema = z.object({
+  title: z.string().min(1),
+  servingsText: z.string().optional(),
+  coverImage: importAiImageRefSchema.optional(),
+  ingredientGroups: z.array(importAiIngredientGroupSchema).default([]),
+  steps: z.array(importAiDraftStepSchema).default([]),
+  note: z.string().optional(),
+});
+
+const normalizeImportAiImageRef = (image: z.infer<typeof importAiImageRefSchema>) => ({
+  type: "externalImageUrl" as const,
+  url: image.url,
+});
+
+const normalizeImportAiDraftContent = (value: unknown): RecipeDraftContent => {
+  const draft = importAiDraftContentSchema.parse(value);
+
+  return recipeDraftContentSchema.parse({
+    ...draft,
+    ...(draft.coverImage ? { coverImage: normalizeImportAiImageRef(draft.coverImage) } : {}),
+    steps: draft.steps.map((step) => ({
+      ...step,
+      images: step.images.map(normalizeImportAiImageRef),
+    })),
+  });
+};
+
 export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, maxBytes }) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -136,10 +200,15 @@ const fetchImportPageFollowingAllowedRedirects = async (sourceUrl: string, signa
   for (let redirectCount = 0; redirectCount <= MAX_IMPORT_PAGE_REDIRECTS; redirectCount++) {
     assertImportUrlAllowed(currentUrl);
 
+    const DEFAULT_IMPORT_USER_AGENT =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+      "AppleWebKit/537.36 (KHTML, like Gecko) " +
+      "Chrome/125.0.0.0 Safari/537.36";
+
     const response = await fetch(currentUrl, {
       headers: {
         accept: "text/html,application/xhtml+xml",
-        "user-agent": "RecipeStockBot/1.0",
+        "user-agent": DEFAULT_IMPORT_USER_AGENT,
       },
       redirect: "manual",
       signal,
@@ -227,15 +296,17 @@ export const importRecipeFromUrl = async ({
   fetcher = fetchImportPage,
   converters = [genericHtmlImportConverter],
   now = new Date(),
+  logger = createLogger(),
 }: {
   rawUrl: string;
   userId: string;
   env: Partial<Bindings>;
   usageRepository: UsageRepository;
-  aiProvider: RecipeImportAIProvider;
+  aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
   converters?: RecipeImportConverter[];
   now?: Date;
+  logger?: Logger;
 }): Promise<RecipeImportResult> => {
   let normalizedUrl: string;
 
@@ -266,10 +337,12 @@ export const importRecipeFromUrl = async ({
     throw new RecipeImportError("ai_usage_limit_exceeded", "AI usage limit exceeded.");
   }
 
+  const importAIProvider =
+    aiProvider ?? createDefaultRecipeImportAIProvider(env as Bindings, { logger });
   let draft: RecipeDraftContent;
 
   try {
-    draft = recipeDraftContentSchema.parse(await aiProvider.normalize(conversion.input));
+    draft = recipeDraftContentSchema.parse(await importAIProvider.normalize(conversion.input));
   } catch (error) {
     if (error instanceof RecipeImportError) {
       throw error;
@@ -314,7 +387,10 @@ const convertImportPage = (
 
 type ImportAiProviderKind = "workers-ai" | "openrouter";
 
-export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImportAIProvider => ({
+export const createDefaultRecipeImportAIProvider = (
+  env: Bindings,
+  { logger = createLogger() }: { logger?: Logger } = {},
+): RecipeImportAIProvider => ({
   async normalize(input) {
     const providerKind = resolveImportAiProvider(env);
     const system = resolveImportRecipeSystemPrompt(env);
@@ -329,7 +405,7 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
     try {
       const result = await generateObject({
         model: createImportLanguageModel(env, providerKind, timeoutMs),
-        schema: recipeDraftContentSchema,
+        schema: importAiDraftContentSchema,
         system,
         prompt: buildImportUserPrompt(input),
         temperature: 0,
@@ -338,11 +414,12 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
         abortSignal: controller.signal,
       });
 
-      return result.object;
+      return normalizeImportAiDraftContent(result.object);
     } catch (error) {
       logImportAiFailure(error, {
         env,
         input,
+        logger,
         providerKind,
         timeoutMs,
       });
@@ -352,6 +429,10 @@ export const createDefaultRecipeImportAIProvider = (env: Bindings): RecipeImport
       }
 
       if (isAiSchemaError(error)) {
+        throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
+      }
+
+      if (error instanceof z.ZodError) {
         throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
       }
 
@@ -396,9 +477,7 @@ const createImportLanguageModel = (
   }) as never;
 };
 
-const buildImportUserPrompt = (
-  input: RecipeImportAIInput,
-) => `
+const buildImportUserPrompt = (input: RecipeImportAIInput) => `
 source:
 ${JSON.stringify(input.source)}
 
@@ -489,11 +568,13 @@ const logImportAiFailure = (
   {
     env,
     input,
+    logger,
     providerKind,
     timeoutMs,
   }: {
     env: Partial<Bindings>;
     input: RecipeImportAIInput;
+    logger: Logger;
     providerKind: ImportAiProviderKind;
     timeoutMs: number;
   },
@@ -501,7 +582,7 @@ const logImportAiFailure = (
   const model =
     providerKind === "openrouter" ? env.OPENROUTER_TEXT_MODEL?.trim() : env.AI_TEXT_MODEL?.trim();
 
-  console.error("[recipe-import-ai] AI normalization failed", {
+  logger.error("recipe_import_ai_normalization_failed", {
     provider: providerKind,
     model: model || undefined,
     timeoutMs,
