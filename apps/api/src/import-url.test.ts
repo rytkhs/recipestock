@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assertImportUrlAllowed, fetchImportPage, type RecipeImportError } from "./import-url";
+import {
+  assertImportUrlAllowed,
+  fetchImportPage,
+  genericHtmlImportConverter,
+  importRecipeFromUrl,
+  type RecipeImportError,
+} from "./import-url";
+import { type UsageRepository } from "./usage";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -96,4 +103,195 @@ describe("assertImportUrlAllowed", () => {
     expect(() => assertImportUrlAllowed("http://localhost/recipe")).toThrow("Import URL");
     expect(() => assertImportUrlAllowed("http://[::ffff:8.8.8.8]/recipe")).toThrow("Import URL");
   });
+});
+
+describe("generic HTML import converter", () => {
+  it("JSON-LD Recipeをstructured evidenceとして抽出する", async () => {
+    const conversion = await convertRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">
+            {
+              "@context": "https://schema.org",
+              "@type": "Recipe",
+              "name": "Tomato pasta",
+              "recipeYield": "2 servings",
+              "image": "/jsonld.jpg",
+              "recipeIngredient": ["Tomato 1 can", "Olive oil 1 tbsp"],
+              "recipeInstructions": [
+                { "@type": "HowToStep", "text": "Simmer the tomato sauce." },
+                { "@type": "HowToStep", "name": "Toss with pasta." }
+              ]
+            }
+          </script>
+        </head>
+        <body><main><h1>Tomato pasta</h1><p>Enough visible recipe content for extraction.</p></main></body>
+      </html>
+    `);
+
+    expect(conversion.input.recipeStructuredEvidence).toEqual([
+      {
+        format: "jsonLd",
+        name: "Tomato pasta",
+        servingsText: "2 servings",
+        imageUrls: ["https://example.com/jsonld.jpg"],
+        rawIngredients: ["Tomato 1 can", "Olive oil 1 tbsp"],
+        rawInstructions: ["Simmer the tomato sauce.", "Toss with pasta."],
+      },
+    ]);
+  });
+
+  it("Microdata RecipeをRecipe scope内だけから抽出する", async () => {
+    const conversion = await convertRecipeHtml(`
+      <html>
+        <body>
+          <span itemprop="recipeIngredient">Scope outside ingredient</span>
+          <article itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name headline">Miso soup</h1>
+            <meta itemprop="recipeYield" content="2 bowls">
+            <meta itemprop="image" content="/miso.jpg">
+            <ul>
+              <li itemprop="recipeIngredient">Miso 2 tbsp</li>
+              <li itemprop="recipeIngredient">Tofu 150g</li>
+            </ul>
+            <ol>
+              <li itemprop="recipeInstructions" itemscope itemtype="https://schema.org/HowToStep">
+                <span itemprop="text">Warm the broth.</span>
+              </li>
+              <li itemprop="recipeInstructions" itemscope itemtype="https://schema.org/HowToStep">
+                <span itemprop="name">Dissolve the miso.</span>
+              </li>
+            </ol>
+            <p>Enough visible recipe content for extraction and import conversion.</p>
+          </article>
+        </body>
+      </html>
+    `);
+
+    expect(conversion.input.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Miso soup",
+      servingsText: "2 bowls",
+      imageUrls: ["https://example.com/miso.jpg"],
+      rawIngredients: ["Miso 2 tbsp", "Tofu 150g"],
+      rawInstructions: ["Warm the broth.", "Dissolve the miso."],
+    });
+    expect(JSON.stringify(conversion.input.recipeStructuredEvidence)).not.toContain(
+      "Scope outside ingredient",
+    );
+  });
+
+  it("RDFa Recipeをschema.org表記揺れ込みで抽出する", async () => {
+    const conversion = await convertRecipeHtml(`
+      <html>
+        <body vocab="https://schema.org/">
+          <span property="recipeIngredient">Scope outside ingredient</span>
+          <article typeof="schema:Recipe">
+            <h1 property="schema:name headline">Rice bowl</h1>
+            <meta property="https://schema.org/recipeYield" content="1 serving">
+            <img property="schema:image" src="/rice.jpg" alt="Rice bowl">
+            <p property="schema:recipeIngredient">Rice 200g</p>
+            <p property="schema:recipeIngredient">Egg 1</p>
+            <ol>
+              <li property="schema:recipeInstructions">
+                Steam the rice.
+              </li>
+              <li property="schema:recipeInstructions">
+                Add the egg.
+              </li>
+            </ol>
+            <p>Enough visible recipe content for extraction and import conversion.</p>
+          </article>
+        </body>
+      </html>
+    `);
+
+    expect(conversion.input.recipeStructuredEvidence).toContainEqual({
+      format: "rdfa",
+      name: "Rice bowl",
+      servingsText: "1 serving",
+      imageUrls: ["https://example.com/rice.jpg"],
+      rawIngredients: ["Rice 200g", "Egg 1"],
+      rawInstructions: ["Steam the rice.", "Add the egg."],
+    });
+    expect(JSON.stringify(conversion.input.recipeStructuredEvidence)).not.toContain(
+      "Scope outside ingredient",
+    );
+  });
+
+  it("structured evidence由来の画像URLをAI返却画像として許可する", async () => {
+    const usageRepository = createUsageRepositoryStub();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/structured-image",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository,
+        fetcher: async () => ({
+          finalUrl: "https://example.com/recipes/structured-image",
+          contentType: "text/html",
+          body: `
+            <article itemscope itemtype="https://schema.org/Recipe">
+              <h1 itemprop="name">Structured image recipe</h1>
+              <meta itemprop="image" content="/structured.jpg">
+              <p itemprop="recipeIngredient">Flour 100g</p>
+              <p itemprop="recipeInstructions">Mix and bake.</p>
+              <p>Enough visible recipe content for extraction and import conversion.</p>
+            </article>
+          `,
+        }),
+        aiProvider: {
+          async normalize() {
+            return {
+              title: "Structured image recipe",
+              coverImage: {
+                type: "externalImageUrl",
+                url: "https://example.com/structured.jpg",
+              },
+              ingredientGroups: [{ ingredients: [{ name: "Flour", amount: "100g" }] }],
+              steps: [{ text: "Mix and bake.", images: [] }],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        coverImage: {
+          type: "externalImageUrl",
+          url: "https://example.com/structured.jpg",
+        },
+      },
+      warnings: [],
+    });
+  });
+});
+
+const convertRecipeHtml = async (body: string) => {
+  const conversion = await genericHtmlImportConverter.convert({
+    finalUrl: "https://example.com/recipes/test",
+    contentType: "text/html",
+    body,
+  });
+
+  if (conversion.type !== "requiresAi") {
+    throw new Error(`Expected requiresAi conversion, received ${conversion.type}`);
+  }
+
+  return conversion;
+};
+
+const createUsageRepositoryStub = (): UsageRepository => ({
+  async getOrCreateAppUser(userId) {
+    return { userId, plan: "free" };
+  },
+  async getAiUsage(_userId, month) {
+    return { month, used: 0 };
+  },
+  async consumeAiUsage({ month }) {
+    return { status: "consumed", usage: { month, used: 1 } };
+  },
 });
