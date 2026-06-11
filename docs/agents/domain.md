@@ -4,7 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Layout
 
-This is a single-context repo for the Recipe Stock MVP.
+This is a single-context repo for the Recipe Stock.
 
 ## Before exploring, read these
 

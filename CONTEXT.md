@@ -28,4 +28,4 @@ Domain expert: "No. `sourceName` is part of the Source metadata on the Recipe re
 
 Developer: "Can we save a RecipeDraftContent so users can come back later?"
 
-Domain expert: "No. A RecipeDraftContent is temporary pre-save content. The MVP only saves a Recipe after the user confirms."
+Domain expert: "No. A RecipeDraftContent is temporary pre-save content."
