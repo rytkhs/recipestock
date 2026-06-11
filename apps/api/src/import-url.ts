@@ -40,7 +40,8 @@ export type RecipeImportImageCandidate = {
   position: number;
 };
 
-export type ExtractedRecipeJsonLd = {
+export type ExtractedRecipeStructuredEvidence = {
+  format: "jsonLd" | "microdata" | "rdfa";
   name?: string;
   servingsText?: string;
   imageUrls: string[];
@@ -54,7 +55,7 @@ export type RecipeImportAIInput = {
     host: string;
   };
   structuredContent: string;
-  recipeJsonLdEvidence: ExtractedRecipeJsonLd[];
+  recipeStructuredEvidence: ExtractedRecipeStructuredEvidence[];
 };
 
 export type RecipeImportAIProvider = {
@@ -252,18 +253,21 @@ export const genericHtmlImportConverter: RecipeImportConverter = {
     }
 
     const normalizedUrl = normalizeUrl(page.finalUrl);
-    const extraction = await extractHtmlImportData(page);
+    const extraction = await extractHtmlImportData(page, normalizedUrl);
     const sourceName =
       extraction.meta["og:site_name"] ?? new URL(normalizedUrl).hostname.replace(/^www\./, "");
     const structuredContent = normalizeStructuredContent(extraction.structuredContent);
-    const recipeJsonLdEvidence = extractRecipeJsonLdEvidence(extraction.jsonLd, normalizedUrl);
+    const recipeStructuredEvidence = dedupeRecipeStructuredEvidence([
+      ...extractRecipeJsonLdEvidence(extraction.jsonLd, normalizedUrl),
+      ...extraction.recipeStructuredEvidence,
+    ]);
 
     if (structuredContent.length < 40 && !hasDescriptionMetadata(extraction.meta)) {
       throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
     }
 
     const resolvedImageCandidates = resolveImageCandidates(
-      appendJsonLdImageCandidates(extraction.imageCandidates, recipeJsonLdEvidence),
+      appendStructuredEvidenceImageCandidates(extraction.imageCandidates, recipeStructuredEvidence),
       normalizedUrl,
     );
 
@@ -275,7 +279,7 @@ export const genericHtmlImportConverter: RecipeImportConverter = {
           host: new URL(normalizedUrl).hostname.replace(/^www\./, ""),
         },
         structuredContent,
-        recipeJsonLdEvidence,
+        recipeStructuredEvidence,
       },
       imageCandidates: resolvedImageCandidates,
       source: {
@@ -481,8 +485,8 @@ const buildImportUserPrompt = (input: RecipeImportAIInput) => `
 source:
 ${JSON.stringify(input.source)}
 
-recipeJsonLdEvidence:
-${JSON.stringify(input.recipeJsonLdEvidence)}
+recipeStructuredEvidence:
+${JSON.stringify(input.recipeStructuredEvidence)}
 
 structuredContent:
 <<<PAGE_CONTENT
@@ -793,6 +797,8 @@ type HtmlRewriterElement = Parameters<
   NonNullable<HTMLRewriterElementContentHandlers["element"]>
 >[0];
 
+type HtmlElementEndTagRegistrar = (element: HtmlRewriterElement, callback: () => void) => void;
+
 type SemanticHtmlTag =
   | "article"
   | "h1"
@@ -811,28 +817,56 @@ type ExtractedImageCandidate = {
   alt?: string;
 };
 
+type RecipeStructuredEvidenceBuilder = {
+  format: ExtractedRecipeStructuredEvidence["format"];
+  name?: string;
+  servingsText?: string;
+  imageUrls: string[];
+  rawIngredients: string[];
+  rawInstructions: string[];
+};
+
+type RecipeStructuredProperty = keyof Pick<
+  ExtractedRecipeStructuredEvidence,
+  "name" | "servingsText" | "imageUrls" | "rawIngredients" | "rawInstructions"
+>;
+
+type RecipeStructuredTextCapture = {
+  builder: RecipeStructuredEvidenceBuilder;
+  properties: RecipeStructuredProperty[];
+  text: string;
+};
+
 type HtmlImportExtraction = {
   title: string;
   meta: Record<string, string | undefined>;
   h1: string[];
   structuredContent: string;
   jsonLd: string[];
+  recipeStructuredEvidence: ExtractedRecipeStructuredEvidence[];
   imageCandidates: ExtractedImageCandidate[];
 };
 
-const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImportExtraction> => {
+const extractHtmlImportData = async (
+  page: FetchedImportPage,
+  baseUrl: string,
+): Promise<HtmlImportExtraction> => {
   const extraction: HtmlImportExtraction = {
     title: "",
     meta: {},
     h1: [],
     structuredContent: "",
     jsonLd: [],
+    recipeStructuredEvidence: [],
     imageCandidates: [],
   };
   let ignoredTextDepth = 0;
   let semanticElementDepth = 0;
   let jsonLdText: string | null = null;
   const textBuffers: { text: string }[] = [];
+  const endTagCallbacks = new WeakMap<HtmlRewriterElement, Array<() => void>>();
+
+  extraction.recipeStructuredEvidence = await extractRecipeHtmlStructuredEvidence(page, baseUrl);
 
   const response = importPageBodyToResponse(page);
   const appendStructuredContent = (value: string) => {
@@ -865,10 +899,25 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
       );
     }
   };
+  const onHtmlElementEnd: HtmlElementEndTagRegistrar = (element, callback) => {
+    const callbacks = endTagCallbacks.get(element);
+    if (callbacks) {
+      callbacks.push(callback);
+      return;
+    }
+
+    const elementCallbacks = [callback];
+    endTagCallbacks.set(element, elementCallbacks);
+    element.onEndTag(() => {
+      for (let index = elementCallbacks.length - 1; index >= 0; index -= 1) {
+        elementCallbacks[index]?.();
+      }
+    });
+  };
   const ignoreElementText = {
     element(element: HtmlRewriterElement) {
       ignoredTextDepth += 1;
-      element.onEndTag(() => {
+      onHtmlElementEnd(element, () => {
         ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
       });
     },
@@ -879,7 +928,7 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
 
       semanticElementDepth += 1;
       appendStructuredContent(`\n<${tagName}>`);
-      element.onEndTag(() => {
+      onHtmlElementEnd(element, () => {
         appendStructuredContent(`</${tagName}>\n`);
         semanticElementDepth = Math.max(0, semanticElementDepth - 1);
       });
@@ -896,7 +945,7 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
       textBuffers.push(buffer);
       semanticElementDepth += 1;
       appendStructuredContent(`\n<${tagName}>`);
-      element.onEndTag(() => {
+      onHtmlElementEnd(element, () => {
         const normalized = normalizeReadableText(buffer.text);
         if (normalized) {
           onNormalizedText?.(normalized);
@@ -960,13 +1009,13 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
         const type = element.getAttribute("type")?.toLowerCase().replace(/\s+/g, "");
         jsonLdText = type === "application/ld+json" && extraction.jsonLd.length < 5 ? "" : null;
         if (type !== "application/ld+json" || extraction.jsonLd.length >= 5) {
-          element.onEndTag(() => {
+          onHtmlElementEnd(element, () => {
             ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
           });
           return;
         }
 
-        element.onEndTag(() => {
+        onHtmlElementEnd(element, () => {
           ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
           const normalizedJsonLd = normalizeReadableText(jsonLdText ?? "");
           if (normalizedJsonLd && extraction.jsonLd.length < 5) {
@@ -995,13 +1044,327 @@ const extractHtmlImportData = async (page: FetchedImportPage): Promise<HtmlImpor
   return {
     ...extraction,
     jsonLd: extraction.jsonLd.filter(Boolean).slice(0, 5),
+    recipeStructuredEvidence: dedupeRecipeStructuredEvidence(
+      extraction.recipeStructuredEvidence,
+    ).slice(0, 20),
     imageCandidates: extraction.imageCandidates.slice(0, 100),
   };
 };
 
+const extractRecipeHtmlStructuredEvidence = async (
+  page: FetchedImportPage,
+  baseUrl: string,
+): Promise<ExtractedRecipeStructuredEvidence[]> => {
+  const recipes: ExtractedRecipeStructuredEvidence[] = [];
+  const microdataRecipeStack: RecipeStructuredEvidenceBuilder[] = [];
+  const rdfaRecipeStack: RecipeStructuredEvidenceBuilder[] = [];
+  const structuredTextCaptures: RecipeStructuredTextCapture[] = [];
+  const endTagCallbacks = new WeakMap<HtmlRewriterElement, Array<() => void>>();
+
+  const onHtmlElementEnd: HtmlElementEndTagRegistrar = (element, callback) => {
+    const callbacks = endTagCallbacks.get(element);
+    if (callbacks) {
+      callbacks.push(callback);
+      return;
+    }
+
+    const elementCallbacks = [callback];
+    endTagCallbacks.set(element, elementCallbacks);
+    element.onEndTag(() => {
+      for (let index = elementCallbacks.length - 1; index >= 0; index -= 1) {
+        elementCallbacks[index]?.();
+      }
+    });
+  };
+  const appendStructuredEvidence = (builder: RecipeStructuredEvidenceBuilder) => {
+    const evidence = normalizeRecipeStructuredEvidence(builder);
+    if (!evidence || recipes.length >= 20) return;
+
+    recipes.push(evidence);
+  };
+
+  await new HTMLRewriter()
+    .on("*", {
+      element(element) {
+        const microdataRecipe = createMicrodataRecipeBuilder(element);
+        if (microdataRecipe) {
+          microdataRecipeStack.push(microdataRecipe);
+          onHtmlElementEnd(element, () => {
+            removeStackEntry(microdataRecipeStack, microdataRecipe);
+            appendStructuredEvidence(microdataRecipe);
+          });
+        }
+
+        const rdfaRecipe = createRdfaRecipeBuilder(element);
+        if (rdfaRecipe) {
+          rdfaRecipeStack.push(rdfaRecipe);
+          onHtmlElementEnd(element, () => {
+            removeStackEntry(rdfaRecipeStack, rdfaRecipe);
+            appendStructuredEvidence(rdfaRecipe);
+          });
+        }
+
+        captureMicrodataRecipeProperties(element, microdataRecipeStack.at(-1), {
+          baseUrl,
+          structuredTextCaptures,
+          onHtmlElementEnd,
+        });
+        captureRdfaRecipeProperties(element, rdfaRecipeStack.at(-1), {
+          baseUrl,
+          structuredTextCaptures,
+          onHtmlElementEnd,
+        });
+      },
+    })
+    .onDocument({
+      text(text) {
+        for (const capture of structuredTextCaptures) {
+          capture.text += text.text;
+        }
+      },
+    })
+    .transform(importPageBodyToResponse(page))
+    .text();
+
+  return dedupeRecipeStructuredEvidence(recipes).slice(0, 20);
+};
+
+const createMicrodataRecipeBuilder = (
+  element: HtmlRewriterElement,
+): RecipeStructuredEvidenceBuilder | undefined => {
+  if (!element.hasAttribute("itemscope")) return undefined;
+  if (!hasSchemaRecipeType(element.getAttribute("itemtype"))) return undefined;
+
+  return createRecipeStructuredEvidenceBuilder("microdata");
+};
+
+const createRdfaRecipeBuilder = (
+  element: HtmlRewriterElement,
+): RecipeStructuredEvidenceBuilder | undefined => {
+  if (!hasSchemaRecipeType(element.getAttribute("typeof"))) return undefined;
+
+  return createRecipeStructuredEvidenceBuilder("rdfa");
+};
+
+const createRecipeStructuredEvidenceBuilder = (
+  format: ExtractedRecipeStructuredEvidence["format"],
+): RecipeStructuredEvidenceBuilder => ({
+  format,
+  imageUrls: [],
+  rawIngredients: [],
+  rawInstructions: [],
+});
+
+const removeStackEntry = <T>(stack: T[], entry: T) => {
+  const index = stack.lastIndexOf(entry);
+  if (index >= 0) {
+    stack.splice(index, 1);
+  }
+};
+
+const captureMicrodataRecipeProperties = (
+  element: HtmlRewriterElement,
+  builder: RecipeStructuredEvidenceBuilder | undefined,
+  {
+    baseUrl,
+    structuredTextCaptures,
+    onHtmlElementEnd,
+  }: {
+    baseUrl: string;
+    structuredTextCaptures: RecipeStructuredTextCapture[];
+    onHtmlElementEnd: HtmlElementEndTagRegistrar;
+  },
+) => {
+  if (!builder) return;
+
+  const properties = normalizeRecipeStructuredProperties(element.getAttribute("itemprop"));
+  if (properties.length === 0) return;
+
+  const value = extractStructuredElementValue(element);
+  if (value) {
+    appendRecipeStructuredValue(builder, properties, value, baseUrl);
+    return;
+  }
+
+  startRecipeStructuredTextCapture(element, builder, properties, structuredTextCaptures, {
+    onHtmlElementEnd,
+  });
+};
+
+const captureRdfaRecipeProperties = (
+  element: HtmlRewriterElement,
+  builder: RecipeStructuredEvidenceBuilder | undefined,
+  {
+    baseUrl,
+    structuredTextCaptures,
+    onHtmlElementEnd,
+  }: {
+    baseUrl: string;
+    structuredTextCaptures: RecipeStructuredTextCapture[];
+    onHtmlElementEnd: HtmlElementEndTagRegistrar;
+  },
+) => {
+  if (!builder) return;
+
+  const properties = normalizeRecipeStructuredProperties(element.getAttribute("property"));
+  if (properties.length === 0) return;
+
+  const value = extractStructuredElementValue(element);
+  if (value) {
+    appendRecipeStructuredValue(builder, properties, value, baseUrl);
+    return;
+  }
+
+  startRecipeStructuredTextCapture(element, builder, properties, structuredTextCaptures, {
+    onHtmlElementEnd,
+  });
+};
+
+const startRecipeStructuredTextCapture = (
+  element: HtmlRewriterElement,
+  builder: RecipeStructuredEvidenceBuilder,
+  properties: RecipeStructuredProperty[],
+  structuredTextCaptures: RecipeStructuredTextCapture[],
+  { onHtmlElementEnd }: { onHtmlElementEnd: HtmlElementEndTagRegistrar },
+) => {
+  const capture: RecipeStructuredTextCapture = { builder, properties, text: "" };
+  structuredTextCaptures.push(capture);
+  onHtmlElementEnd(element, () => {
+    const normalizedText = normalizeReadableText(capture.text);
+    if (normalizedText) {
+      appendRecipeStructuredValue(builder, properties, normalizedText, "");
+    }
+
+    const captureIndex = structuredTextCaptures.lastIndexOf(capture);
+    if (captureIndex >= 0) {
+      structuredTextCaptures.splice(captureIndex, 1);
+    }
+  });
+};
+
+const extractStructuredElementValue = (element: HtmlRewriterElement) =>
+  firstReadableAttribute(element, ["content", "src", "href", "data", "value", "datetime"]);
+
+const firstReadableAttribute = (element: HtmlRewriterElement, attributes: string[]) => {
+  for (const attribute of attributes) {
+    const value = element.getAttribute(attribute);
+    const normalized = value ? normalizeReadableText(value) : "";
+    if (normalized) return normalized;
+  }
+
+  return undefined;
+};
+
+const appendRecipeStructuredValue = (
+  builder: RecipeStructuredEvidenceBuilder,
+  properties: RecipeStructuredProperty[],
+  value: string,
+  baseUrl: string,
+) => {
+  for (const property of properties) {
+    if (property === "name") {
+      builder.name ??= value;
+    } else if (property === "servingsText") {
+      builder.servingsText ??= value;
+    } else if (property === "imageUrls") {
+      const imageUrl = resolveStructuredImageUrl(value, baseUrl);
+      if (imageUrl) builder.imageUrls.push(imageUrl);
+    } else if (property === "rawIngredients") {
+      builder.rawIngredients.push(value);
+    } else if (property === "rawInstructions") {
+      builder.rawInstructions.push(value);
+    }
+  }
+};
+
+const normalizeRecipeStructuredEvidence = (
+  builder: RecipeStructuredEvidenceBuilder,
+): ExtractedRecipeStructuredEvidence | undefined => {
+  const evidence = {
+    format: builder.format,
+    name: builder.name ? normalizeReadableText(builder.name) : undefined,
+    servingsText: builder.servingsText ? normalizeReadableText(builder.servingsText) : undefined,
+    imageUrls: dedupeStrings(builder.imageUrls.map(normalizeReadableText).filter(Boolean)),
+    rawIngredients: dedupeStrings(
+      builder.rawIngredients.map(normalizeReadableText).filter(Boolean),
+    ),
+    rawInstructions: dedupeStrings(
+      builder.rawInstructions.map(normalizeReadableText).filter(Boolean),
+    ),
+  } satisfies ExtractedRecipeStructuredEvidence;
+
+  if (
+    !evidence.name &&
+    !evidence.servingsText &&
+    evidence.imageUrls.length === 0 &&
+    evidence.rawIngredients.length === 0 &&
+    evidence.rawInstructions.length === 0
+  ) {
+    return undefined;
+  }
+
+  return evidence;
+};
+
+const normalizeRecipeStructuredProperties = (value: string | null): RecipeStructuredProperty[] => {
+  const properties: RecipeStructuredProperty[] = [];
+
+  for (const token of splitHtmlTokens(value)) {
+    const property = normalizeRecipeStructuredProperty(token);
+    if (property && !properties.includes(property)) {
+      properties.push(property);
+    }
+  }
+
+  return properties;
+};
+
+const normalizeRecipeStructuredProperty = (value: string): RecipeStructuredProperty | undefined => {
+  const term = normalizeSchemaTerm(value);
+  if (term === "name") return "name";
+  if (term === "recipeyield") return "servingsText";
+  if (term === "image") return "imageUrls";
+  if (term === "recipeingredient") return "rawIngredients";
+  if (term === "recipeinstructions" || term === "text" || term === "itemlistelement") {
+    return "rawInstructions";
+  }
+
+  return undefined;
+};
+
+const hasSchemaRecipeType = (value: string | null) =>
+  splitHtmlTokens(value).some((token) => normalizeSchemaTerm(token) === "recipe");
+
+const normalizeSchemaTerm = (value: string) => {
+  const normalized = value.trim().replace(/\/$/, "");
+  const lower = normalized.toLowerCase();
+
+  if (lower.startsWith("http://schema.org/")) {
+    return lower.slice("http://schema.org/".length);
+  }
+  if (lower.startsWith("https://schema.org/")) {
+    return lower.slice("https://schema.org/".length);
+  }
+  if (lower.startsWith("schema:")) {
+    return lower.slice("schema:".length);
+  }
+
+  return lower;
+};
+
+const splitHtmlTokens = (value: string | null) => (value ? value.trim().split(/\s+/) : []);
+
+const resolveStructuredImageUrl = (rawUrl: string, baseUrl: string) => {
+  try {
+    return new URL(decodeHtml(rawUrl), baseUrl || undefined).toString();
+  } catch {
+    return undefined;
+  }
+};
+
 const importPageBodyToResponse = (page: FetchedImportPage) => {
   if (typeof page.body !== "string") {
-    return page.body;
+    return page.body.clone();
   }
 
   return new Response(page.body, {
@@ -1046,8 +1409,8 @@ const hasDescriptionMetadata = (meta: HtmlImportExtraction["meta"]) =>
 const extractRecipeJsonLdEvidence = (
   documents: string[],
   baseUrl: string,
-): ExtractedRecipeJsonLd[] => {
-  const recipes: ExtractedRecipeJsonLd[] = [];
+): ExtractedRecipeStructuredEvidence[] => {
+  const recipes: ExtractedRecipeStructuredEvidence[] = [];
   const seen = new Set<string>();
 
   for (const document of documents) {
@@ -1093,7 +1456,8 @@ const collectRecipeJsonLdNodes = (value: unknown): Record<string, unknown>[] => 
 const normalizeRecipeJsonLdNode = (
   record: Record<string, unknown>,
   baseUrl: string,
-): ExtractedRecipeJsonLd => ({
+): ExtractedRecipeStructuredEvidence => ({
+  format: "jsonLd",
   name: firstReadableText(record.name),
   servingsText: firstReadableText(record.recipeYield),
   imageUrls: extractJsonLdImageUrls(record.image, baseUrl),
@@ -1207,9 +1571,9 @@ const extractJsonLdImageUrls = (value: unknown, baseUrl: string): string[] => {
   );
 };
 
-const appendJsonLdImageCandidates = (
+const appendStructuredEvidenceImageCandidates = (
   candidates: ExtractedImageCandidate[],
-  recipes: ExtractedRecipeJsonLd[],
+  recipes: ExtractedRecipeStructuredEvidence[],
 ): ExtractedImageCandidate[] => {
   const nextCandidates = [...candidates];
   const seenUrls = new Set(nextCandidates.map((candidate) => candidate.rawUrl));
@@ -1228,6 +1592,29 @@ const appendJsonLdImageCandidates = (
   }
 
   return nextCandidates;
+};
+
+const dedupeRecipeStructuredEvidence = (
+  recipes: ExtractedRecipeStructuredEvidence[],
+): ExtractedRecipeStructuredEvidence[] => {
+  const seen = new Set<string>();
+  const deduped: ExtractedRecipeStructuredEvidence[] = [];
+
+  for (const recipe of recipes) {
+    const key = JSON.stringify({
+      name: recipe.name,
+      servingsText: recipe.servingsText,
+      imageUrls: recipe.imageUrls,
+      rawIngredients: recipe.rawIngredients,
+      rawInstructions: recipe.rawInstructions,
+    });
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    deduped.push(recipe);
+  }
+
+  return deduped;
 };
 
 const dedupeStrings = (values: string[]) => {

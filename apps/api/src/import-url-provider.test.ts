@@ -30,8 +30,9 @@ const input: RecipeImportAIInput = {
   },
   structuredContent:
     '<main><h1>Tomato pasta</h1><p>トマト缶とオリーブオイルで作るパスタです。</p><img src="/cover.jpg" alt="Tomato pasta"></main>',
-  recipeJsonLdEvidence: [
+  recipeStructuredEvidence: [
     {
+      format: "jsonLd",
       name: "Tomato pasta",
       imageUrls: [],
       rawIngredients: ["トマト缶 1缶"],
@@ -99,7 +100,7 @@ describe("default recipe import AI provider", () => {
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain('src="/cover.jpg"');
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("data-image-id");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("imageCandidates");
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeJsonLdEvidence");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeStructuredEvidence");
   });
 
   it("AIがcoverImageにtype urlを返した場合はexternalImageUrlへ正規化する", async () => {
