@@ -119,8 +119,16 @@ describe("generic HTML import converter", () => {
               "image": "/jsonld.jpg",
               "recipeIngredient": ["Tomato 1 can", "Olive oil 1 tbsp"],
               "recipeInstructions": [
-                { "@type": "HowToStep", "text": "Simmer the tomato sauce." },
-                { "@type": "HowToStep", "name": "Toss with pasta." }
+                {
+                  "@type": "HowToStep",
+                  "text": "Simmer the tomato sauce.",
+                  "image": "/step-1.jpg"
+                },
+                {
+                  "@type": "HowToStep",
+                  "name": "Toss with pasta.",
+                  "image": ["/step-2a.jpg", { "url": "/step-2b.jpg" }]
+                }
               ]
             }
           </script>
@@ -137,6 +145,78 @@ describe("generic HTML import converter", () => {
         imageUrls: ["https://example.com/jsonld.jpg"],
         rawIngredients: ["Tomato 1 can", "Olive oil 1 tbsp"],
         rawInstructions: ["Simmer the tomato sauce.", "Toss with pasta."],
+        structuredInstructions: [
+          {
+            text: "Simmer the tomato sauce.",
+            imageUrls: ["https://example.com/step-1.jpg"],
+          },
+          {
+            text: "Toss with pasta.",
+            imageUrls: ["https://example.com/step-2a.jpg", "https://example.com/step-2b.jpg"],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("JSON-LD Recipeのsection/list配下の手順画像をstructured evidenceとして抽出する", async () => {
+    const conversion = await convertRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">
+            {
+              "@context": "https://schema.org",
+              "@type": "Recipe",
+              "name": "Layered pasta",
+              "recipeIngredient": ["Pasta 100g"],
+              "recipeInstructions": [
+                {
+                  "@type": "HowToSection",
+                  "name": "Sauce",
+                  "itemListElement": [
+                    {
+                      "@type": "HowToStep",
+                      "text": "Warm the sauce.",
+                      "image": { "url": "/section-step.jpg" }
+                    }
+                  ]
+                },
+                {
+                  "@type": "ItemList",
+                  "steps": [
+                    {
+                      "@type": "HowToStep",
+                      "name": "Serve with pasta.",
+                      "image": "/item-list-step.jpg"
+                    }
+                  ]
+                }
+              ]
+            }
+          </script>
+        </head>
+        <body><main><h1>Layered pasta</h1><p>Enough visible recipe content for extraction.</p></main></body>
+      </html>
+    `);
+
+    expect(conversion.input.recipeStructuredEvidence).toEqual([
+      {
+        format: "jsonLd",
+        name: "Layered pasta",
+        servingsText: undefined,
+        imageUrls: [],
+        rawIngredients: ["Pasta 100g"],
+        rawInstructions: ["Warm the sauce.", "Serve with pasta."],
+        structuredInstructions: [
+          {
+            text: "Warm the sauce.",
+            imageUrls: ["https://example.com/section-step.jpg"],
+          },
+          {
+            text: "Serve with pasta.",
+            imageUrls: ["https://example.com/item-list-step.jpg"],
+          },
+        ],
       },
     ]);
   });
@@ -175,6 +255,7 @@ describe("generic HTML import converter", () => {
       imageUrls: ["https://example.com/miso.jpg"],
       rawIngredients: ["Miso 2 tbsp", "Tofu 150g"],
       rawInstructions: ["Warm the broth.", "Dissolve the miso."],
+      structuredInstructions: [],
     });
     expect(JSON.stringify(conversion.input.recipeStructuredEvidence)).not.toContain(
       "Scope outside ingredient",
@@ -209,6 +290,7 @@ describe("generic HTML import converter", () => {
       imageUrls: [],
       rawIngredients: ["Same-node ingredient text for extraction and import conversion."],
       rawInstructions: [],
+      structuredInstructions: [],
       servingsText: undefined,
     });
   });
@@ -245,6 +327,7 @@ describe("generic HTML import converter", () => {
       imageUrls: ["https://example.com/rice.jpg"],
       rawIngredients: ["Rice 200g", "Egg 1"],
       rawInstructions: ["Steam the rice.", "Add the egg."],
+      structuredInstructions: [],
     });
     expect(JSON.stringify(conversion.input.recipeStructuredEvidence)).not.toContain(
       "Scope outside ingredient",
@@ -296,6 +379,80 @@ describe("generic HTML import converter", () => {
           type: "externalImageUrl",
           url: "https://example.com/structured.jpg",
         },
+      },
+      warnings: [],
+    });
+  });
+
+  it("JSON-LD手順画像URLをAI返却画像として許可する", async () => {
+    const usageRepository = createUsageRepositoryStub();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/structured-step-image",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository,
+        fetcher: async () => ({
+          finalUrl: "https://example.com/recipes/structured-step-image",
+          contentType: "text/html",
+          body: `
+            <html>
+              <head>
+                <script type="application/ld+json">
+                  {
+                    "@context": "https://schema.org",
+                    "@type": "Recipe",
+                    "name": "Structured step image recipe",
+                    "recipeIngredient": ["Flour 100g"],
+                    "recipeInstructions": [
+                      {
+                        "@type": "HowToStep",
+                        "text": "Mix and bake.",
+                        "image": "/step.jpg"
+                      }
+                    ]
+                  }
+                </script>
+              </head>
+              <body>
+                <main>
+                  <h1>Structured step image recipe</h1>
+                  <p>Enough visible recipe content for extraction and import conversion.</p>
+                </main>
+              </body>
+            </html>
+          `,
+        }),
+        aiProvider: {
+          async normalize(input) {
+            expect(JSON.stringify(input.recipeStructuredEvidence)).toContain(
+              "https://example.com/step.jpg",
+            );
+
+            return {
+              title: "Structured step image recipe",
+              ingredientGroups: [{ ingredients: [{ name: "Flour", amount: "100g" }] }],
+              steps: [
+                {
+                  text: "Mix and bake.",
+                  images: [{ type: "externalImageUrl", url: "https://example.com/step.jpg" }],
+                },
+              ],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        steps: [
+          {
+            images: [{ type: "externalImageUrl", url: "https://example.com/step.jpg" }],
+          },
+        ],
       },
       warnings: [],
     });

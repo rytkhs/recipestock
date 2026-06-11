@@ -37,6 +37,7 @@ const input: RecipeImportAIInput = {
       imageUrls: [],
       rawIngredients: ["トマト缶 1缶"],
       rawInstructions: ["煮詰める"],
+      structuredInstructions: [],
     },
   ],
 };
