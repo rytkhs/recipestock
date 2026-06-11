@@ -40,6 +40,11 @@ export type RecipeImportImageCandidate = {
   position: number;
 };
 
+export type ExtractedRecipeStructuredInstruction = {
+  text: string;
+  imageUrls: string[];
+};
+
 export type ExtractedRecipeStructuredEvidence = {
   format: "jsonLd" | "microdata" | "rdfa";
   name?: string;
@@ -47,6 +52,7 @@ export type ExtractedRecipeStructuredEvidence = {
   imageUrls: string[];
   rawIngredients: string[];
   rawInstructions: string[];
+  structuredInstructions: ExtractedRecipeStructuredInstruction[];
 };
 
 export type RecipeImportAIInput = {
@@ -824,6 +830,7 @@ type RecipeStructuredEvidenceBuilder = {
   imageUrls: string[];
   rawIngredients: string[];
   rawInstructions: string[];
+  structuredInstructions: ExtractedRecipeStructuredInstruction[];
 };
 
 type RecipeStructuredProperty = keyof Pick<
@@ -1153,6 +1160,7 @@ const createRecipeStructuredEvidenceBuilder = (
   imageUrls: [],
   rawIngredients: [],
   rawInstructions: [],
+  structuredInstructions: [],
 });
 
 const removeStackEntry = <T>(stack: T[], entry: T) => {
@@ -1291,6 +1299,7 @@ const normalizeRecipeStructuredEvidence = (
     rawInstructions: dedupeStrings(
       builder.rawInstructions.map(normalizeReadableText).filter(Boolean),
     ),
+    structuredInstructions: builder.structuredInstructions,
   } satisfies ExtractedRecipeStructuredEvidence;
 
   if (
@@ -1298,7 +1307,8 @@ const normalizeRecipeStructuredEvidence = (
     !evidence.servingsText &&
     evidence.imageUrls.length === 0 &&
     evidence.rawIngredients.length === 0 &&
-    evidence.rawInstructions.length === 0
+    evidence.rawInstructions.length === 0 &&
+    evidence.structuredInstructions.length === 0
   ) {
     return undefined;
   }
@@ -1456,14 +1466,22 @@ const collectRecipeJsonLdNodes = (value: unknown): Record<string, unknown>[] => 
 const normalizeRecipeJsonLdNode = (
   record: Record<string, unknown>,
   baseUrl: string,
-): ExtractedRecipeStructuredEvidence => ({
-  format: "jsonLd",
-  name: firstReadableText(record.name),
-  servingsText: firstReadableText(record.recipeYield),
-  imageUrls: extractJsonLdImageUrls(record.image, baseUrl),
-  rawIngredients: extractReadableTexts(record.recipeIngredient),
-  rawInstructions: extractInstructionTexts(record.recipeInstructions),
-});
+): ExtractedRecipeStructuredEvidence => {
+  const structuredInstructions = extractJsonLdStructuredInstructions(
+    record.recipeInstructions,
+    baseUrl,
+  );
+
+  return {
+    format: "jsonLd",
+    name: firstReadableText(record.name),
+    servingsText: firstReadableText(record.recipeYield),
+    imageUrls: extractJsonLdImageUrls(record.image, baseUrl),
+    rawIngredients: extractReadableTexts(record.recipeIngredient),
+    rawInstructions: structuredInstructions.map((instruction) => instruction.text),
+    structuredInstructions,
+  };
+};
 
 const isJsonLdRecipeNode = (record: Record<string, unknown>): boolean => {
   const type = record["@type"];
@@ -1502,11 +1520,17 @@ const extractReadableTexts = (value: unknown): string[] => {
 
 const firstReadableText = (value: unknown) => extractReadableTexts(value)[0];
 
-const extractInstructionTexts = (value: unknown): string[] => {
-  const texts: string[] = [];
+const extractJsonLdStructuredInstructions = (
+  value: unknown,
+  baseUrl: string,
+): ExtractedRecipeStructuredInstruction[] => {
+  const instructions: ExtractedRecipeStructuredInstruction[] = [];
   const visit = (node: unknown) => {
     if (typeof node === "string") {
-      texts.push(node);
+      const text = normalizeReadableText(node);
+      if (text) {
+        instructions.push({ text, imageUrls: [] });
+      }
       return;
     }
 
@@ -1518,10 +1542,21 @@ const extractInstructionTexts = (value: unknown): string[] => {
     if (typeof node !== "object" || node === null) return;
 
     const record = node as Record<string, unknown>;
-    if (typeof record.text === "string") {
-      texts.push(record.text);
-    } else if (typeof record.name === "string" && isJsonLdHowToStepNode(record)) {
-      texts.push(record.name);
+    const text =
+      typeof record.text === "string"
+        ? record.text
+        : typeof record.name === "string" && isJsonLdHowToStepNode(record)
+          ? record.name
+          : undefined;
+
+    if (text) {
+      const normalizedText = normalizeReadableText(text);
+      if (normalizedText) {
+        instructions.push({
+          text: normalizedText,
+          imageUrls: extractJsonLdImageUrls(record.image, baseUrl),
+        });
+      }
     }
 
     visit(record.itemListElement);
@@ -1529,7 +1564,35 @@ const extractInstructionTexts = (value: unknown): string[] => {
   };
 
   visit(value);
-  return dedupeStrings(texts.map(normalizeReadableText).filter(Boolean));
+  return dedupeStructuredInstructions(instructions);
+};
+
+const dedupeStructuredInstructions = (
+  instructions: ExtractedRecipeStructuredInstruction[],
+): ExtractedRecipeStructuredInstruction[] => {
+  const byText = new Map<string, Set<string>>();
+  const orderedTexts: string[] = [];
+
+  for (const instruction of instructions) {
+    const text = normalizeReadableText(instruction.text);
+    if (!text) continue;
+
+    let imageUrls = byText.get(text);
+    if (!imageUrls) {
+      imageUrls = new Set<string>();
+      byText.set(text, imageUrls);
+      orderedTexts.push(text);
+    }
+
+    for (const imageUrl of instruction.imageUrls) {
+      imageUrls.add(imageUrl);
+    }
+  }
+
+  return orderedTexts.map((text) => ({
+    text,
+    imageUrls: [...(byText.get(text) ?? [])],
+  }));
 };
 
 const isJsonLdHowToStepNode = (record: Record<string, unknown>): boolean => {
@@ -1557,6 +1620,7 @@ const extractJsonLdImageUrls = (value: unknown, baseUrl: string): string[] => {
 
     const record = node as Record<string, unknown>;
     visit(record.url);
+    visit(record.contentUrl);
   };
 
   visit(value);
@@ -1577,22 +1641,37 @@ const appendStructuredEvidenceImageCandidates = (
 ): ExtractedImageCandidate[] => {
   const nextCandidates = [...candidates];
   const seenUrls = new Set(nextCandidates.map((candidate) => candidate.rawUrl));
+  const appendCandidate = (rawUrl: string, alt?: string) => {
+    if (seenUrls.has(rawUrl)) return;
+
+    seenUrls.add(rawUrl);
+    nextCandidates.push({
+      id: `img_${nextCandidates.length + 1}`,
+      rawUrl,
+      alt,
+    });
+  };
 
   for (const recipe of recipes) {
     for (const url of recipe.imageUrls) {
-      if (seenUrls.has(url)) continue;
+      appendCandidate(url, recipe.name);
+    }
 
-      seenUrls.add(url);
-      nextCandidates.push({
-        id: `img_${nextCandidates.length + 1}`,
-        rawUrl: url,
-        alt: recipe.name,
-      });
+    for (const instruction of recipe.structuredInstructions) {
+      const alt = buildStructuredInstructionImageAlt(recipe, instruction);
+      for (const url of instruction.imageUrls) {
+        appendCandidate(url, alt);
+      }
     }
   }
 
   return nextCandidates;
 };
+
+const buildStructuredInstructionImageAlt = (
+  recipe: ExtractedRecipeStructuredEvidence,
+  instruction: ExtractedRecipeStructuredInstruction,
+) => normalizeReadableText([recipe.name, instruction.text].filter(Boolean).join(" ")).slice(0, 160);
 
 const dedupeRecipeStructuredEvidence = (
   recipes: ExtractedRecipeStructuredEvidence[],
@@ -1607,6 +1686,7 @@ const dedupeRecipeStructuredEvidence = (
       imageUrls: recipe.imageUrls,
       rawIngredients: recipe.rawIngredients,
       rawInstructions: recipe.rawInstructions,
+      structuredInstructions: recipe.structuredInstructions,
     });
     if (seen.has(key)) continue;
 
