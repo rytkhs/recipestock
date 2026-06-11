@@ -900,12 +900,17 @@ const extractHtmlImportData = async (
     }
   };
   const onHtmlElementEnd: HtmlElementEndTagRegistrar = (element, callback) => {
-    const callbacks = endTagCallbacks.get(element) ?? [];
-    callbacks.push(callback);
-    endTagCallbacks.set(element, callbacks);
+    const callbacks = endTagCallbacks.get(element);
+    if (callbacks) {
+      callbacks.push(callback);
+      return;
+    }
+
+    const elementCallbacks = [callback];
+    endTagCallbacks.set(element, elementCallbacks);
     element.onEndTag(() => {
-      for (const callback of callbacks) {
-        callback();
+      for (let index = elementCallbacks.length - 1; index >= 0; index -= 1) {
+        elementCallbacks[index]?.();
       }
     });
   };
@@ -1057,12 +1062,17 @@ const extractRecipeHtmlStructuredEvidence = async (
   const endTagCallbacks = new WeakMap<HtmlRewriterElement, Array<() => void>>();
 
   const onHtmlElementEnd: HtmlElementEndTagRegistrar = (element, callback) => {
-    const callbacks = endTagCallbacks.get(element) ?? [];
-    callbacks.push(callback);
-    endTagCallbacks.set(element, callbacks);
+    const callbacks = endTagCallbacks.get(element);
+    if (callbacks) {
+      callbacks.push(callback);
+      return;
+    }
+
+    const elementCallbacks = [callback];
+    endTagCallbacks.set(element, elementCallbacks);
     element.onEndTag(() => {
-      for (const callback of callbacks) {
-        callback();
+      for (let index = elementCallbacks.length - 1; index >= 0; index -= 1) {
+        elementCallbacks[index]?.();
       }
     });
   };

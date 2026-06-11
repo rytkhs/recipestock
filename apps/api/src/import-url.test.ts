@@ -181,6 +181,38 @@ describe("generic HTML import converter", () => {
     );
   });
 
+  it("同じMicrodata Recipe要素のtext propertyをRecipe evidenceへ反映する", async () => {
+    const conversion = await convertRecipeHtml(`
+      <html>
+        <head>
+          <meta
+            name="description"
+            content="Recipe page with enough metadata for import conversion."
+          >
+        </head>
+        <body>
+          <article
+            itemscope
+            itemtype="https://schema.org/Recipe"
+            itemprop="recipeIngredient"
+          >
+            <meta itemprop="name" content="Same node soup">
+            Same-node ingredient text for extraction and import conversion.
+          </article>
+        </body>
+      </html>
+    `);
+
+    expect(conversion.input.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Same node soup",
+      imageUrls: [],
+      rawIngredients: ["Same-node ingredient text for extraction and import conversion."],
+      rawInstructions: [],
+      servingsText: undefined,
+    });
+  });
+
   it("RDFa Recipeをschema.org表記揺れ込みで抽出する", async () => {
     const conversion = await convertRecipeHtml(`
       <html>
