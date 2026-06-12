@@ -1,3 +1,5 @@
+/// <reference path="./html2md4llm.d.ts" />
+
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
   type RecipeDraftContent,
@@ -6,6 +8,7 @@ import {
 } from "@recipestock/schemas";
 import { normalizeUrl } from "@recipestock/shared";
 import { generateObject } from "ai";
+import html2md4llm from "html2md4llm";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
 import { type Bindings } from "./env";
@@ -55,17 +58,57 @@ export type ExtractedRecipeStructuredEvidence = {
   structuredInstructions: ExtractedRecipeStructuredInstruction[];
 };
 
+export type RecipeImportStructuredInstructionEvidence = {
+  text: string;
+  imageIds: string[];
+};
+
+export type RecipeImportStructuredEvidence = {
+  format: "jsonLd" | "microdata" | "rdfa";
+  name?: string;
+  servingsText?: string;
+  imageIds: string[];
+  rawIngredients: string[];
+  rawInstructions: string[];
+  structuredInstructions: RecipeImportStructuredInstructionEvidence[];
+};
+
 export type RecipeImportAIInput = {
   source: {
     finalUrl: string;
     host: string;
   };
-  structuredContent: string;
-  recipeStructuredEvidence: ExtractedRecipeStructuredEvidence[];
+  markdownContent: string;
+  recipeStructuredEvidence: RecipeImportStructuredEvidence[];
+};
+
+export type RecipeImportAIImageRef = {
+  type: "imageId";
+  id: string;
+};
+
+export type RecipeImportAIDraftStep = {
+  text?: string;
+  images: RecipeImportAIImageRef[];
+};
+
+export type RecipeImportAIDraftContent = {
+  title: string;
+  servingsText?: string;
+  coverImage?: RecipeImportAIImageRef;
+  ingredientGroups: Array<{
+    label?: string;
+    ingredients: Array<{
+      name: string;
+      amount: string;
+    }>;
+  }>;
+  steps: RecipeImportAIDraftStep[];
+  note?: string;
 };
 
 export type RecipeImportAIProvider = {
-  normalize(input: RecipeImportAIInput): Promise<RecipeDraftContent>;
+  normalize(input: RecipeImportAIInput): Promise<RecipeImportAIDraftContent>;
 };
 
 export type RecipeImportResult = {
@@ -106,24 +149,10 @@ export type RecipeImportFetcher = (
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
 
-const importAiWebUrlSchema = z.url().refine((value) => {
-  const protocol = new URL(value).protocol;
-  return protocol === "http:" || protocol === "https:";
+const importAiImageRefSchema = z.strictObject({
+  type: z.literal("imageId"),
+  id: z.string().min(1),
 });
-
-const importAiImageRefSchema = z.union([
-  z.object({
-    type: z.literal("externalImageUrl"),
-    url: importAiWebUrlSchema,
-  }),
-  z.object({
-    type: z.literal("url"),
-    url: importAiWebUrlSchema,
-  }),
-  z.strictObject({
-    url: importAiWebUrlSchema,
-  }),
-]);
 
 const importAiIngredientSchema = z.object({
   name: z.string().min(1),
@@ -151,22 +180,16 @@ const importAiDraftContentSchema = z.object({
   note: z.string().optional(),
 });
 
-const normalizeImportAiImageRef = (image: z.infer<typeof importAiImageRefSchema>) => ({
-  type: "externalImageUrl" as const,
-  url: image.url,
-});
-
-const normalizeImportAiDraftContent = (value: unknown): RecipeDraftContent => {
+const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftContent => {
   const draft = importAiDraftContentSchema.parse(value);
 
-  return recipeDraftContentSchema.parse({
+  return {
     ...draft,
-    ...(draft.coverImage ? { coverImage: normalizeImportAiImageRef(draft.coverImage) } : {}),
     steps: draft.steps.map((step) => ({
       ...step,
-      images: step.images.map(normalizeImportAiImageRef),
+      images: step.images,
     })),
-  });
+  };
 };
 
 export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, maxBytes }) => {
@@ -259,23 +282,23 @@ export const genericHtmlImportConverter: RecipeImportConverter = {
     }
 
     const normalizedUrl = normalizeUrl(page.finalUrl);
-    const extraction = await extractHtmlImportData(page, normalizedUrl);
+    const imageRegistry = new ImportImageRegistry(normalizedUrl);
+    const extraction = await extractHtmlImportData(page, normalizedUrl, imageRegistry);
     const sourceName =
       extraction.meta["og:site_name"] ?? new URL(normalizedUrl).hostname.replace(/^www\./, "");
-    const structuredContent = normalizeStructuredContent(extraction.structuredContent);
-    const recipeStructuredEvidence = dedupeRecipeStructuredEvidence([
+    const markdownContent = normalizeMarkdownContent(extraction.markdownContent);
+    const extractedRecipeStructuredEvidence = dedupeRecipeStructuredEvidence([
       ...extractRecipeJsonLdEvidence(extraction.jsonLd, normalizedUrl),
       ...extraction.recipeStructuredEvidence,
     ]);
+    const recipeStructuredEvidence = buildImportStructuredEvidence(
+      extractedRecipeStructuredEvidence,
+      imageRegistry,
+    );
 
-    if (structuredContent.length < 40 && !hasDescriptionMetadata(extraction.meta)) {
+    if (markdownContent.length < 40 && !hasDescriptionMetadata(extraction.meta)) {
       throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
     }
-
-    const resolvedImageCandidates = resolveImageCandidates(
-      appendStructuredEvidenceImageCandidates(extraction.imageCandidates, recipeStructuredEvidence),
-      normalizedUrl,
-    );
 
     return {
       type: "requiresAi",
@@ -284,10 +307,10 @@ export const genericHtmlImportConverter: RecipeImportConverter = {
           finalUrl: normalizedUrl,
           host: new URL(normalizedUrl).hostname.replace(/^www\./, ""),
         },
-        structuredContent,
+        markdownContent,
         recipeStructuredEvidence,
       },
-      imageCandidates: resolvedImageCandidates,
+      imageCandidates: imageRegistry.candidates,
       source: {
         sourceUrl: normalizedUrl,
         sourceName,
@@ -349,10 +372,10 @@ export const importRecipeFromUrl = async ({
 
   const importAIProvider =
     aiProvider ?? createDefaultRecipeImportAIProvider(env as Bindings, { logger });
-  let draft: RecipeDraftContent;
+  let draft: RecipeImportAIDraftContent;
 
   try {
-    draft = recipeDraftContentSchema.parse(await importAIProvider.normalize(conversion.input));
+    draft = await importAIProvider.normalize(conversion.input);
   } catch (error) {
     if (error instanceof RecipeImportError) {
       throw error;
@@ -368,7 +391,7 @@ export const importRecipeFromUrl = async ({
   let imageResult: { draft: RecipeDraftContent; warnings: string[] };
 
   try {
-    imageResult = filterDraftImages(draft, conversion.imageCandidates);
+    imageResult = resolveDraftImageIds(draft, conversion.imageCandidates);
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
@@ -494,9 +517,9 @@ ${JSON.stringify(input.source)}
 recipeStructuredEvidence:
 ${JSON.stringify(input.recipeStructuredEvidence)}
 
-structuredContent:
+markdownContent:
 <<<PAGE_CONTENT
-${input.structuredContent}
+${input.markdownContent}
 PAGE_CONTENT`;
 
 const resolveImportTimeoutMs = (env: Partial<Bindings>) => {
@@ -769,29 +792,35 @@ const isAiSchemaError = (error: unknown): boolean => {
   return cause ? isAiSchemaError(cause) : false;
 };
 
-const filterDraftImages = (
-  draft: RecipeDraftContent,
+const resolveDraftImageIds = (
+  draft: RecipeImportAIDraftContent,
   candidates: RecipeImportImageCandidate[],
 ): { draft: RecipeDraftContent; warnings: string[] } => {
-  const allowedUrls = new Set(candidates.map((candidate) => candidate.url));
+  const urlsById = new Map(candidates.map((candidate) => [candidate.id, candidate.url]));
   const warnings: string[] = [];
-  const filterImage = (image: RecipeDraftContent["coverImage"]) => {
-    if (!image || image.type !== "externalImageUrl" || allowedUrls.has(image.url)) {
-      return image;
+  const resolveImage = (image: RecipeImportAIImageRef | undefined) => {
+    if (!image) return undefined;
+
+    const url = urlsById.get(image.id);
+    if (url) {
+      return {
+        type: "externalImageUrl" as const,
+        url,
+      };
     }
 
-    warnings.push(`AI returned image URL outside extracted candidates: ${image.url}`);
+    warnings.push(`AI returned unknown image ID: ${image.id}`);
     return undefined;
   };
 
   return {
     draft: recipeDraftContentSchema.parse({
       ...draft,
-      coverImage: filterImage(draft.coverImage),
+      coverImage: resolveImage(draft.coverImage),
       steps: draft.steps.map((step) => ({
         ...step,
         images: step.images
-          .map(filterImage)
+          .map(resolveImage)
           .filter((image): image is NonNullable<typeof image> => Boolean(image)),
       })),
     }),
@@ -804,24 +833,6 @@ type HtmlRewriterElement = Parameters<
 >[0];
 
 type HtmlElementEndTagRegistrar = (element: HtmlRewriterElement, callback: () => void) => void;
-
-type SemanticHtmlTag =
-  | "article"
-  | "h1"
-  | "h2"
-  | "h3"
-  | "li"
-  | "main"
-  | "ol"
-  | "p"
-  | "section"
-  | "ul";
-
-type ExtractedImageCandidate = {
-  id: string;
-  rawUrl: string;
-  alt?: string;
-};
 
 type RecipeStructuredEvidenceBuilder = {
   format: ExtractedRecipeStructuredEvidence["format"];
@@ -848,64 +859,70 @@ type HtmlImportExtraction = {
   title: string;
   meta: Record<string, string | undefined>;
   h1: string[];
-  structuredContent: string;
+  markdownContent: string;
   jsonLd: string[];
   recipeStructuredEvidence: ExtractedRecipeStructuredEvidence[];
-  imageCandidates: ExtractedImageCandidate[];
 };
+
+class ImportImageRegistry {
+  readonly #baseUrl: string;
+  readonly #candidates: RecipeImportImageCandidate[] = [];
+  readonly #idsByUrl = new Map<string, string>();
+
+  constructor(baseUrl: string) {
+    this.#baseUrl = baseUrl;
+  }
+
+  get candidates() {
+    return this.#candidates;
+  }
+
+  getOrCreateId(rawUrl: string | undefined, alt?: string): string | undefined {
+    if (!rawUrl || this.#candidates.length >= 100) return undefined;
+
+    let url: string;
+    try {
+      url = new URL(decodeHtml(rawUrl), this.#baseUrl).toString();
+    } catch {
+      return undefined;
+    }
+
+    const existingId = this.#idsByUrl.get(url);
+    if (existingId) return existingId;
+
+    const id = `img_${String(this.#candidates.length + 1).padStart(3, "0")}`;
+    const normalizedAlt = alt ? normalizeImageAlt(alt) : undefined;
+    this.#idsByUrl.set(url, id);
+    this.#candidates.push({
+      id,
+      url,
+      alt: normalizedAlt || undefined,
+      position: this.#candidates.length,
+    });
+
+    return id;
+  }
+}
 
 const extractHtmlImportData = async (
   page: FetchedImportPage,
   baseUrl: string,
+  imageRegistry: ImportImageRegistry,
 ): Promise<HtmlImportExtraction> => {
   const extraction: HtmlImportExtraction = {
     title: "",
     meta: {},
     h1: [],
-    structuredContent: "",
+    markdownContent: "",
     jsonLd: [],
     recipeStructuredEvidence: [],
-    imageCandidates: [],
   };
   let ignoredTextDepth = 0;
-  let semanticElementDepth = 0;
   let jsonLdText: string | null = null;
-  const textBuffers: { text: string }[] = [];
+  const h1TextBuffers: { text: string }[] = [];
   const endTagCallbacks = new WeakMap<HtmlRewriterElement, Array<() => void>>();
 
   extraction.recipeStructuredEvidence = await extractRecipeHtmlStructuredEvidence(page, baseUrl);
-
-  const response = importPageBodyToResponse(page);
-  const appendStructuredContent = (value: string) => {
-    extraction.structuredContent += value;
-  };
-  const appendTextContent = (value: string) => {
-    const normalized = decodeHtml(value).replace(/\s+/g, " ");
-    if (!normalized.trim()) return;
-
-    appendStructuredContent(escapeHtmlText(normalized));
-  };
-  const appendImageCandidate = (
-    rawUrl: string | undefined,
-    isContentImage: boolean,
-    alt?: string,
-  ) => {
-    if (!rawUrl || extraction.imageCandidates.length >= 100) return;
-
-    const normalizedAlt = alt ? normalizeReadableText(alt) : undefined;
-    const id = `img_${extraction.imageCandidates.length + 1}`;
-    extraction.imageCandidates.push({
-      id,
-      rawUrl,
-      alt: normalizedAlt || undefined,
-    });
-
-    if (isContentImage) {
-      appendStructuredContent(
-        `<img src="${escapeHtmlAttribute(rawUrl)}"${normalizedAlt ? ` alt="${escapeHtmlAttribute(normalizedAlt)}"` : ""}>`,
-      );
-    }
-  };
   const onHtmlElementEnd: HtmlElementEndTagRegistrar = (element, callback) => {
     const callbacks = endTagCallbacks.get(element);
     if (callbacks) {
@@ -929,55 +946,35 @@ const extractHtmlImportData = async (
       });
     },
   };
-  const semanticContainerHandler = (tagName: SemanticHtmlTag) => ({
-    element(element: HtmlRewriterElement) {
-      if (ignoredTextDepth > 0) return;
-
-      semanticElementDepth += 1;
-      appendStructuredContent(`\n<${tagName}>`);
-      onHtmlElementEnd(element, () => {
-        appendStructuredContent(`</${tagName}>\n`);
-        semanticElementDepth = Math.max(0, semanticElementDepth - 1);
-      });
-    },
-  });
-  const semanticTextHandler = (
-    tagName: SemanticHtmlTag,
-    onNormalizedText?: (text: string) => void,
-  ) => ({
+  const h1Handler = {
     element(element: HtmlRewriterElement) {
       if (ignoredTextDepth > 0) return;
 
       const buffer = { text: "" };
-      textBuffers.push(buffer);
-      semanticElementDepth += 1;
-      appendStructuredContent(`\n<${tagName}>`);
+      h1TextBuffers.push(buffer);
       onHtmlElementEnd(element, () => {
         const normalized = normalizeReadableText(buffer.text);
         if (normalized) {
-          onNormalizedText?.(normalized);
+          extraction.h1.push(normalized);
         }
 
-        appendStructuredContent(`</${tagName}>\n`);
-        semanticElementDepth = Math.max(0, semanticElementDepth - 1);
-        const bufferIndex = textBuffers.lastIndexOf(buffer);
+        const bufferIndex = h1TextBuffers.lastIndexOf(buffer);
         if (bufferIndex >= 0) {
-          textBuffers.splice(bufferIndex, 1);
+          h1TextBuffers.splice(bufferIndex, 1);
         }
       });
     },
     text(text: Parameters<NonNullable<HTMLRewriterElementContentHandlers["text"]>>[0]) {
       if (ignoredTextDepth > 0) return;
 
-      const buffer = textBuffers.at(-1);
+      const buffer = h1TextBuffers.at(-1);
       if (buffer) {
         buffer.text += text.text;
       }
-      appendTextContent(text.text);
     },
-  });
+  };
 
-  await new HTMLRewriter()
+  const htmlWithImageMarkers = await new HTMLRewriter()
     .on("title", {
       text(text) {
         extraction.title += text.text;
@@ -993,23 +990,11 @@ const extractHtmlImportData = async (
 
         extraction.meta[key] = normalizeReadableText(content);
         if (key === "og:image" || key === "twitter:image") {
-          appendImageCandidate(content, false);
+          imageRegistry.getOrCreateId(content);
         }
       },
     })
-    .on(
-      "h1",
-      semanticTextHandler("h1", (text) => extraction.h1.push(text)),
-    )
-    .on("h2", semanticTextHandler("h2"))
-    .on("h3", semanticTextHandler("h3"))
-    .on("p", semanticTextHandler("p"))
-    .on("li", semanticTextHandler("li"))
-    .on("main", semanticContainerHandler("main"))
-    .on("article", semanticContainerHandler("article"))
-    .on("section", semanticContainerHandler("section"))
-    .on("ul", semanticContainerHandler("ul"))
-    .on("ol", semanticContainerHandler("ol"))
+    .on("h1", h1Handler)
     .on("script", {
       element(element) {
         ignoredTextDepth += 1;
@@ -1042,11 +1027,18 @@ const extractHtmlImportData = async (
     .on("img", {
       element(element) {
         const rawUrl = element.getAttribute("src") ?? element.getAttribute("data-src") ?? undefined;
-        appendImageCandidate(rawUrl, true, element.getAttribute("alt") ?? undefined);
+        const alt = element.getAttribute("alt") ?? undefined;
+        const id = imageRegistry.getOrCreateId(rawUrl, alt);
+        element.replace(id ? formatImageMarker(id, alt) : "", { html: false });
       },
     })
-    .transform(response)
+    .transform(importPageBodyToResponse(page))
     .text();
+
+  extraction.markdownContent = html2md4llm(htmlWithImageMarkers, {
+    strategy: "article",
+    outputFormat: "markdown",
+  });
 
   return {
     ...extraction,
@@ -1054,7 +1046,6 @@ const extractHtmlImportData = async (
     recipeStructuredEvidence: dedupeRecipeStructuredEvidence(
       extraction.recipeStructuredEvidence,
     ).slice(0, 20),
-    imageCandidates: extraction.imageCandidates.slice(0, 100),
   };
 };
 
@@ -1405,13 +1396,20 @@ const normalizeMetaKey = (key: string | null) => {
 const normalizeReadableText = (value: string) =>
   decodeHtml(value).replace(/\s+/g, " ").trim().slice(0, 24_000);
 
-const normalizeStructuredContent = (value: string) =>
+const normalizeImageAlt = (value: string) => normalizeReadableText(value).slice(0, 120);
+
+const formatImageMarker = (id: string, alt?: string) => {
+  const normalizedAlt = alt ? normalizeImageAlt(alt) : "";
+  return normalizedAlt
+    ? `\nRS_IMAGE id=${id} alt="${escapeImageMarkerAttribute(normalizedAlt)}"\n`
+    : `\nRS_IMAGE id=${id}\n`;
+};
+
+const escapeImageMarkerAttribute = (value: string) =>
+  value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+const normalizeMarkdownContent = (value: string) =>
   value.replace(/\s+/g, " ").trim().slice(0, 24_000);
-
-const escapeHtmlText = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-const escapeHtmlAttribute = (value: string) => escapeHtmlText(value).replace(/"/g, "&quot;");
 
 const hasDescriptionMetadata = (meta: HtmlImportExtraction["meta"]) =>
   Boolean(meta.description || meta["og:description"] || meta["twitter:description"]);
@@ -1635,38 +1633,31 @@ const extractJsonLdImageUrls = (value: unknown, baseUrl: string): string[] => {
   );
 };
 
-const appendStructuredEvidenceImageCandidates = (
-  candidates: ExtractedImageCandidate[],
+const buildImportStructuredEvidence = (
   recipes: ExtractedRecipeStructuredEvidence[],
-): ExtractedImageCandidate[] => {
-  const nextCandidates = [...candidates];
-  const seenUrls = new Set(nextCandidates.map((candidate) => candidate.rawUrl));
-  const appendCandidate = (rawUrl: string, alt?: string) => {
-    if (seenUrls.has(rawUrl)) return;
-
-    seenUrls.add(rawUrl);
-    nextCandidates.push({
-      id: `img_${nextCandidates.length + 1}`,
-      rawUrl,
-      alt,
-    });
-  };
-
-  for (const recipe of recipes) {
-    for (const url of recipe.imageUrls) {
-      appendCandidate(url, recipe.name);
-    }
-
-    for (const instruction of recipe.structuredInstructions) {
-      const alt = buildStructuredInstructionImageAlt(recipe, instruction);
-      for (const url of instruction.imageUrls) {
-        appendCandidate(url, alt);
-      }
-    }
-  }
-
-  return nextCandidates;
-};
+  imageRegistry: ImportImageRegistry,
+): RecipeImportStructuredEvidence[] =>
+  recipes.map((recipe) => ({
+    format: recipe.format,
+    name: recipe.name,
+    servingsText: recipe.servingsText,
+    imageIds: recipe.imageUrls.flatMap((url) => {
+      const id = imageRegistry.getOrCreateId(url, recipe.name);
+      return id ? [id] : [];
+    }),
+    rawIngredients: recipe.rawIngredients,
+    rawInstructions: recipe.rawInstructions,
+    structuredInstructions: recipe.structuredInstructions.map((instruction) => ({
+      text: instruction.text,
+      imageIds: instruction.imageUrls.flatMap((url) => {
+        const id = imageRegistry.getOrCreateId(
+          url,
+          buildStructuredInstructionImageAlt(recipe, instruction),
+        );
+        return id ? [id] : [];
+      }),
+    })),
+  }));
 
 const buildStructuredInstructionImageAlt = (
   recipe: ExtractedRecipeStructuredEvidence,
@@ -1709,40 +1700,6 @@ const dedupeStrings = (values: string[]) => {
   }
 
   return deduped;
-};
-
-const resolveImageCandidates = (
-  extractedCandidates: ExtractedImageCandidate[],
-  baseUrl: string,
-): RecipeImportImageCandidate[] => {
-  const candidates: RecipeImportImageCandidate[] = [];
-  const seenUrls = new Set<string>();
-  const pushCandidate = (candidate: ExtractedImageCandidate) => {
-    const { rawUrl } = candidate;
-    if (!rawUrl) return;
-
-    try {
-      const url = new URL(decodeHtml(rawUrl), baseUrl).toString();
-      if (seenUrls.has(url)) return;
-
-      seenUrls.add(url);
-      candidates.push({
-        id: candidate.id,
-        url,
-        alt: candidate.alt,
-        position: candidates.length,
-      });
-    } catch {
-      return;
-    }
-  };
-
-  for (const candidate of extractedCandidates) {
-    pushCandidate(candidate);
-    if (candidates.length >= 100) break;
-  }
-
-  return candidates;
 };
 
 const decodeHtml = (value: string) =>

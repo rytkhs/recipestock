@@ -53,6 +53,9 @@ importers:
       hono:
         specifier: ^4.10.7
         version: 4.12.22
+      html2md4llm:
+        specifier: ^1.2.0
+        version: 1.2.0
       ipaddr.js:
         specifier: ^2.4.0
         version: 2.4.0
@@ -2622,6 +2625,11 @@ packages:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
 
+  html2md4llm@1.2.0:
+    resolution: {integrity: sha512-+nAq3AK65Ep6ngoY+QjNSUyBSh8C996cqTZozGZuCaZ8T5aD9LS4c2tnoe/IigMIS0utQML4bfmygd7iqhl5Pg==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
   http-proxy-agent@7.0.2:
     resolution: {integrity: sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig==}
     engines: {node: '>= 14'}
@@ -5158,6 +5166,8 @@ snapshots:
       '@exodus/bytes': 1.15.1(@noble/hashes@2.2.0)
     transitivePeerDependencies:
       - '@noble/hashes'
+
+  html2md4llm@1.2.0: {}
 
   http-proxy-agent@7.0.2:
     dependencies:
