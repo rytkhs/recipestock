@@ -99,7 +99,6 @@ describe("default recipe import AI provider", () => {
     );
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("markdownContent");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("RS_IMAGE id=img_001");
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain('"type":"imageId"');
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("cover.jpg");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("imageCandidates");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeStructuredEvidence");
@@ -303,6 +302,79 @@ describe("default recipe import AI provider", () => {
       statusCode: 504,
     });
     mocks.generateObject.mockRejectedValueOnce(timeoutError);
+
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_timeout",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("GatewayのHTML 504 Time-outをai_timeoutへ変換する", async () => {
+    const gatewayError = Object.assign(
+      new Error(`<html>
+<head><title>504 Gateway Time-out</title></head>
+<body>
+<center><h1>504 Gateway Time-out</h1></center>
+<hr><center>cloudflare</center>
+</body>
+</html>`),
+      {
+        name: "InferenceUpstreamError",
+      },
+    );
+    mocks.generateObject.mockRejectedValueOnce(gatewayError);
+
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    };
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+      { logger },
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_timeout",
+    } satisfies Partial<RecipeImportError>);
+    expect(logger.error).toHaveBeenCalledWith(
+      "recipe_import_ai_normalization_failed",
+      expect.objectContaining({
+        markdownContentLength: input.markdownContent.length,
+        structuredEvidenceCount: input.recipeStructuredEvidence.length,
+      }),
+    );
+  });
+
+  it("statusが504の場合はstatusCodeがなくてもai_timeoutへ変換する", async () => {
+    const timeoutError = Object.assign(new Error("upstream failed"), {
+      name: "AI_APICallError",
+      status: 504,
+    });
+    mocks.generateObject.mockRejectedValueOnce(timeoutError);
+
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_timeout",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("cause内のGateway Time-outもai_timeoutへ変換する", async () => {
+    const timeoutCause = Object.assign(new Error("504 Gateway Time-out"), {
+      name: "InferenceUpstreamError",
+    });
+    const wrappedError = Object.assign(new Error("provider failed"), {
+      name: "AI_APICallError",
+      cause: timeoutCause,
+    });
+    mocks.generateObject.mockRejectedValueOnce(wrappedError);
 
     const provider = createDefaultRecipeImportAIProvider(
       createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),

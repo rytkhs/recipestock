@@ -457,16 +457,9 @@ export const createDefaultRecipeImportAIProvider = (
         timeoutMs,
       });
 
-      if (didTimeout || isAiTimeoutError(error)) {
-        throw new RecipeImportError("ai_timeout", "AI normalization timed out.");
-      }
-
-      if (isAiSchemaError(error)) {
-        throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
-      }
-
-      if (error instanceof z.ZodError) {
-        throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
+      const importError = classifyImportAiError(error, { didTimeout });
+      if (importError) {
+        throw importError;
       }
 
       throw error;
@@ -621,6 +614,8 @@ const logImportAiFailure = (
     timeoutMs,
     sourceHost: input.source.host,
     sourceUrl: input.source.finalUrl,
+    markdownContentLength: input.markdownContent.length,
+    structuredEvidenceCount: input.recipeStructuredEvidence.length,
     gatewayBaseUrl:
       providerKind === "openrouter" ? resolveOpenRouterGatewayBaseUrlForLog(env) : undefined,
     gatewayName: env.AI_GATEWAY_NAME?.trim() || undefined,
@@ -748,10 +743,29 @@ const errorCause = (error: unknown) =>
     ? (error as { cause?: unknown }).cause
     : undefined;
 
-const errorStatusCode = (error: unknown) =>
-  typeof error === "object" && error !== null && "statusCode" in error
-    ? Number((error as { statusCode?: unknown }).statusCode)
-    : undefined;
+const errorStatusCode = (error: unknown) => {
+  if (typeof error !== "object" || error === null) return undefined;
+
+  const record = error as { statusCode?: unknown; status?: unknown };
+  const statusCode = Number(record.statusCode ?? record.status);
+
+  return Number.isFinite(statusCode) ? statusCode : undefined;
+};
+
+const classifyImportAiError = (
+  error: unknown,
+  { didTimeout }: { didTimeout: boolean },
+): RecipeImportError | null => {
+  if (didTimeout || isAiTimeoutError(error)) {
+    return new RecipeImportError("ai_timeout", "AI normalization timed out.");
+  }
+
+  if (isAiSchemaError(error)) {
+    return new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
+  }
+
+  return null;
+};
 
 const isAiTimeoutError = (error: unknown): boolean => {
   if (isAbortError(error)) return true;
@@ -761,14 +775,22 @@ const isAiTimeoutError = (error: unknown): boolean => {
   const statusCode = errorStatusCode(error);
 
   if (statusCode === 408 || statusCode === 504) return true;
-  if (name.includes("abort") || name.includes("timeout")) return true;
-  if (message.includes("abort") || message.includes("timeout") || message.includes("timed out")) {
+  if (includesAiTimeoutSignal(name) || includesAiTimeoutSignal(message)) {
     return true;
   }
 
   const cause = errorCause(error);
   return cause ? isAiTimeoutError(cause) : false;
 };
+
+const includesAiTimeoutSignal = (value: string) =>
+  value.includes("abort") ||
+  value.includes("timeout") ||
+  value.includes("timed out") ||
+  value.includes("time-out") ||
+  value.includes("gateway timeout") ||
+  value.includes("gateway time-out") ||
+  value.includes("504 gateway");
 
 const isAiSchemaError = (error: unknown): boolean => {
   if (error instanceof z.ZodError) return true;
