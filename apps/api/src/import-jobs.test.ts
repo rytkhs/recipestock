@@ -16,6 +16,7 @@ const htmlPage = `<!doctype html>
     <main>
       <h1>Tomato pasta</h1>
       <p>トマト缶とオリーブオイルで作るパスタです。材料を煮詰めて麺と合わせます。</p>
+      <img src="/cover.jpg" alt="Tomato pasta">
     </main>
   </body>
 </html>`;
@@ -184,9 +185,10 @@ describe("processImportJob", () => {
   it("画像コピー後にRecipe作成で予期しない例外が起きた場合はコピー済み画像を削除して例外を再throwする", async () => {
     const events: string[] = [];
     const imageService = {
-      getObjectSize: async () => 100,
-      copyObject: async (sourceKey: string, destinationKey: string) => {
-        events.push(`copy:${sourceKey}:${destinationKey}`);
+      copyExternalImageUrl: async ({ sourceUrl, destinationKeyPrefix }) => {
+        const objectKey = `${destinationKeyPrefix}/image_123.png`;
+        events.push(`copyExternal:${sourceUrl}:${objectKey}`);
+        return { objectKey };
       },
       deleteObject: async (objectKey: string) => {
         events.push(`delete:${objectKey}`);
@@ -208,7 +210,7 @@ describe("processImportJob", () => {
         aiProvider: {
           normalize: async () => ({
             title: "Tomato pasta",
-            coverImage: { type: "tmpObjectKey", key: "tmp/user_123/cover.png" },
+            coverImage: { type: "imageId", id: "img_001" },
             ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
             steps: [{ text: "煮詰める", images: [] }],
           }),
@@ -221,8 +223,8 @@ describe("processImportJob", () => {
 
     expect(events).toEqual([
       "claim",
-      "copy:tmp/user_123/cover.png:recipes/user_123/recipe_123/image_123.png",
-      "delete:recipes/user_123/recipe_123/image_123.png",
+      "copyExternal:https://example.com/cover.jpg:recipes/user_123/recipe_123/image_123/image_123.png",
+      "delete:recipes/user_123/recipe_123/image_123/image_123.png",
     ]);
   });
 

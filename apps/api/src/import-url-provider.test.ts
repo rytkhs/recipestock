@@ -28,13 +28,13 @@ const input: RecipeImportAIInput = {
     finalUrl: "https://example.com/recipes/tomato",
     host: "example.com",
   },
-  structuredContent:
-    '<main><h1>Tomato pasta</h1><p>トマト缶とオリーブオイルで作るパスタです。</p><img src="/cover.jpg" alt="Tomato pasta"></main>',
+  markdownContent:
+    '# Tomato pasta\n\nトマト缶とオリーブオイルで作るパスタです。\n\nRS_IMAGE id=img_001 alt="Tomato pasta"',
   recipeStructuredEvidence: [
     {
       format: "jsonLd",
       name: "Tomato pasta",
-      imageUrls: [],
+      imageIds: [],
       rawIngredients: ["トマト缶 1缶"],
       rawInstructions: ["煮詰める"],
       structuredInstructions: [],
@@ -97,18 +97,18 @@ describe("default recipe import AI provider", () => {
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain(
       "https://example.com/recipes/tomato",
     );
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("structuredContent");
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain('src="/cover.jpg"');
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("data-image-id");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("markdownContent");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("RS_IMAGE id=img_001");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("cover.jpg");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("imageCandidates");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeStructuredEvidence");
   });
 
-  it("AIがcoverImageにtype urlを返した場合はexternalImageUrlへ正規化する", async () => {
+  it("AIがcoverImageにimageIdを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: {
         title: "Tomato pasta",
-        coverImage: { type: "url", url: "https://example.com/cover.jpg" },
+        coverImage: { type: "imageId", id: "img_001" },
         ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
         steps: [{ text: "煮詰める" }],
       },
@@ -117,11 +117,11 @@ describe("default recipe import AI provider", () => {
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
     await expect(provider.normalize(input)).resolves.toMatchObject({
-      coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
+      coverImage: { type: "imageId", id: "img_001" },
     });
   });
 
-  it("AIがcoverImageにurlだけを返した場合はexternalImageUrlへ正規化する", async () => {
+  it("AIがURLベースのcoverImageを返した場合はai_schema_invalidへ変換する", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: {
         title: "Tomato pasta",
@@ -133,12 +133,12 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).resolves.toMatchObject({
-      coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
-    });
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_schema_invalid",
+    } satisfies Partial<RecipeImportError>);
   });
 
-  it("AIがstepsの画像にtype urlやurlだけを返した場合はexternalImageUrlへ正規化する", async () => {
+  it("AIがstepsの画像にimageIdを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: {
         title: "Tomato pasta",
@@ -147,8 +147,8 @@ describe("default recipe import AI provider", () => {
           {
             text: "煮詰める",
             images: [
-              { type: "url", url: "https://example.com/step-1.jpg" },
-              { url: "https://example.com/step-2.jpg" },
+              { type: "imageId", id: "img_002" },
+              { type: "imageId", id: "img_003" },
             ],
           },
         ],
@@ -161,15 +161,15 @@ describe("default recipe import AI provider", () => {
       steps: [
         {
           images: [
-            { type: "externalImageUrl", url: "https://example.com/step-1.jpg" },
-            { type: "externalImageUrl", url: "https://example.com/step-2.jpg" },
+            { type: "imageId", id: "img_002" },
+            { type: "imageId", id: "img_003" },
           ],
         },
       ],
     });
   });
 
-  it("AIが不正URLの画像を返した場合はai_schema_invalidへ変換する", async () => {
+  it("AIがURL typeの画像を返した場合はai_schema_invalidへ変換する", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: {
         title: "Tomato pasta",
@@ -302,6 +302,79 @@ describe("default recipe import AI provider", () => {
       statusCode: 504,
     });
     mocks.generateObject.mockRejectedValueOnce(timeoutError);
+
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_timeout",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("GatewayのHTML 504 Time-outをai_timeoutへ変換する", async () => {
+    const gatewayError = Object.assign(
+      new Error(`<html>
+<head><title>504 Gateway Time-out</title></head>
+<body>
+<center><h1>504 Gateway Time-out</h1></center>
+<hr><center>cloudflare</center>
+</body>
+</html>`),
+      {
+        name: "InferenceUpstreamError",
+      },
+    );
+    mocks.generateObject.mockRejectedValueOnce(gatewayError);
+
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    };
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+      { logger },
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_timeout",
+    } satisfies Partial<RecipeImportError>);
+    expect(logger.error).toHaveBeenCalledWith(
+      "recipe_import_ai_normalization_failed",
+      expect.objectContaining({
+        markdownContentLength: input.markdownContent.length,
+        structuredEvidenceCount: input.recipeStructuredEvidence.length,
+      }),
+    );
+  });
+
+  it("statusが504の場合はstatusCodeがなくてもai_timeoutへ変換する", async () => {
+    const timeoutError = Object.assign(new Error("upstream failed"), {
+      name: "AI_APICallError",
+      status: 504,
+    });
+    mocks.generateObject.mockRejectedValueOnce(timeoutError);
+
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "ai_timeout",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("cause内のGateway Time-outもai_timeoutへ変換する", async () => {
+    const timeoutCause = Object.assign(new Error("504 Gateway Time-out"), {
+      name: "InferenceUpstreamError",
+    });
+    const wrappedError = Object.assign(new Error("provider failed"), {
+      name: "AI_APICallError",
+      cause: timeoutCause,
+    });
+    mocks.generateObject.mockRejectedValueOnce(wrappedError);
 
     const provider = createDefaultRecipeImportAIProvider(
       createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),

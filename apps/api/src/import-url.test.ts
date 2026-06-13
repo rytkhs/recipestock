@@ -106,6 +106,79 @@ describe("assertImportUrlAllowed", () => {
 });
 
 describe("generic HTML import converter", () => {
+  it("本文画像をMarkdown内のIDマーカーに置換し、画像URLをAI入力から除外する", async () => {
+    const conversion = await convertRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">
+            {
+              "@context": "https://schema.org",
+              "@type": "Recipe",
+              "name": "Tomato pasta",
+              "image": "/cover.jpg",
+              "recipeIngredient": ["Tomato 1 can"],
+              "recipeInstructions": ["Simmer the tomato sauce."]
+            }
+          </script>
+        </head>
+        <body>
+          <article>
+            <h1>Tomato pasta</h1>
+            <p>Enough visible recipe content for extraction.</p>
+            <img src="/cover.jpg" alt="Tomato pasta cover">
+          </article>
+        </body>
+      </html>
+    `);
+
+    expect(conversion.input.markdownContent).toContain("Tomato pasta");
+    expect(conversion.input.markdownContent).toContain(
+      'RS_IMAGE id=img_001 alt="Tomato pasta cover"',
+    );
+    expect(conversion.input.markdownContent).not.toContain("/cover.jpg");
+    expect(JSON.stringify(conversion.input.recipeStructuredEvidence)).not.toContain(
+      "https://example.com/cover.jpg",
+    );
+    expect(conversion.input.recipeStructuredEvidence).toContainEqual(
+      expect.objectContaining({
+        imageIds: ["img_001"],
+      }),
+    );
+    expect(conversion.imageCandidates).toContainEqual({
+      id: "img_001",
+      url: "https://example.com/cover.jpg",
+      alt: "Tomato pasta cover",
+      position: 0,
+    });
+  });
+
+  it("Markdownのリスト構造をAI入力で保持する", async () => {
+    const conversion = await convertRecipeHtml(`
+      <html>
+        <body>
+          <article>
+            <h1>Simple pancakes</h1>
+            <h2>Ingredients</h2>
+            <ul>
+              <li>1 cup flour</li>
+              <li>2 eggs</li>
+            </ul>
+            <h2>Instructions</h2>
+            <ol>
+              <li>Mix the batter.</li>
+              <li>Bake until golden.</li>
+            </ol>
+          </article>
+        </body>
+      </html>
+    `);
+
+    expect(conversion.input.markdownContent).toMatch(/- 1 cup flour\n- 2 eggs/);
+    expect(conversion.input.markdownContent).toMatch(
+      /1\. Mix the batter\.\n2\. Bake until golden\./,
+    );
+  });
+
   it("JSON-LD Recipeをstructured evidenceとして抽出する", async () => {
     const conversion = await convertRecipeHtml(`
       <html>
@@ -142,17 +215,17 @@ describe("generic HTML import converter", () => {
         format: "jsonLd",
         name: "Tomato pasta",
         servingsText: "2 servings",
-        imageUrls: ["https://example.com/jsonld.jpg"],
+        imageIds: ["img_001"],
         rawIngredients: ["Tomato 1 can", "Olive oil 1 tbsp"],
         rawInstructions: ["Simmer the tomato sauce.", "Toss with pasta."],
         structuredInstructions: [
           {
             text: "Simmer the tomato sauce.",
-            imageUrls: ["https://example.com/step-1.jpg"],
+            imageIds: ["img_002"],
           },
           {
             text: "Toss with pasta.",
-            imageUrls: ["https://example.com/step-2a.jpg", "https://example.com/step-2b.jpg"],
+            imageIds: ["img_003", "img_004"],
           },
         ],
       },
@@ -204,17 +277,17 @@ describe("generic HTML import converter", () => {
         format: "jsonLd",
         name: "Layered pasta",
         servingsText: undefined,
-        imageUrls: [],
+        imageIds: [],
         rawIngredients: ["Pasta 100g"],
         rawInstructions: ["Warm the sauce.", "Serve with pasta."],
         structuredInstructions: [
           {
             text: "Warm the sauce.",
-            imageUrls: ["https://example.com/section-step.jpg"],
+            imageIds: ["img_001"],
           },
           {
             text: "Serve with pasta.",
-            imageUrls: ["https://example.com/item-list-step.jpg"],
+            imageIds: ["img_002"],
           },
         ],
       },
@@ -252,7 +325,7 @@ describe("generic HTML import converter", () => {
       format: "microdata",
       name: "Miso soup",
       servingsText: "2 bowls",
-      imageUrls: ["https://example.com/miso.jpg"],
+      imageIds: ["img_001"],
       rawIngredients: ["Miso 2 tbsp", "Tofu 150g"],
       rawInstructions: ["Warm the broth.", "Dissolve the miso."],
       structuredInstructions: [],
@@ -287,7 +360,7 @@ describe("generic HTML import converter", () => {
     expect(conversion.input.recipeStructuredEvidence).toContainEqual({
       format: "microdata",
       name: "Same node soup",
-      imageUrls: [],
+      imageIds: [],
       rawIngredients: ["Same-node ingredient text for extraction and import conversion."],
       rawInstructions: [],
       structuredInstructions: [],
@@ -324,7 +397,7 @@ describe("generic HTML import converter", () => {
       format: "rdfa",
       name: "Rice bowl",
       servingsText: "1 serving",
-      imageUrls: ["https://example.com/rice.jpg"],
+      imageIds: ["img_001"],
       rawIngredients: ["Rice 200g", "Egg 1"],
       rawInstructions: ["Steam the rice.", "Add the egg."],
       structuredInstructions: [],
@@ -360,12 +433,19 @@ describe("generic HTML import converter", () => {
           `,
         }),
         aiProvider: {
-          async normalize() {
+          async normalize(input) {
+            expect(input.recipeStructuredEvidence).toContainEqual(
+              expect.objectContaining({ imageIds: ["img_001"] }),
+            );
+            expect(JSON.stringify(input.recipeStructuredEvidence)).not.toContain(
+              "https://example.com/structured.jpg",
+            );
+
             return {
               title: "Structured image recipe",
               coverImage: {
-                type: "externalImageUrl",
-                url: "https://example.com/structured.jpg",
+                type: "imageId",
+                id: "img_001",
               },
               ingredientGroups: [{ ingredients: [{ name: "Flour", amount: "100g" }] }],
               steps: [{ text: "Mix and bake.", images: [] }],
@@ -430,6 +510,9 @@ describe("generic HTML import converter", () => {
         aiProvider: {
           async normalize(input) {
             expect(JSON.stringify(input.recipeStructuredEvidence)).toContain(
+              '"imageIds":["img_001"]',
+            );
+            expect(JSON.stringify(input.recipeStructuredEvidence)).not.toContain(
               "https://example.com/step.jpg",
             );
 
@@ -439,7 +522,7 @@ describe("generic HTML import converter", () => {
               steps: [
                 {
                   text: "Mix and bake.",
-                  images: [{ type: "externalImageUrl", url: "https://example.com/step.jpg" }],
+                  images: [{ type: "imageId", id: "img_001" }],
                 },
               ],
             };
@@ -455,6 +538,58 @@ describe("generic HTML import converter", () => {
         ],
       },
       warnings: [],
+    });
+  });
+
+  it("AIが不明な画像IDを返した場合は画像を破棄してwarningを返す", async () => {
+    const usageRepository = createUsageRepositoryStub();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/unknown-image-id",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository,
+        fetcher: async () => ({
+          finalUrl: "https://example.com/recipes/unknown-image-id",
+          contentType: "text/html",
+          body: `
+            <article>
+              <h1>Unknown image ID recipe</h1>
+              <p>Enough visible recipe content for extraction and import conversion.</p>
+              <img src="/known.jpg" alt="Known">
+            </article>
+          `,
+        }),
+        aiProvider: {
+          async normalize() {
+            return {
+              title: "Unknown image ID recipe",
+              coverImage: { type: "imageId", id: "img_999" },
+              ingredientGroups: [],
+              steps: [
+                {
+                  text: "Serve.",
+                  images: [{ type: "imageId", id: "img_001" }],
+                },
+              ],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        coverImage: undefined,
+        steps: [
+          {
+            images: [{ type: "externalImageUrl", url: "https://example.com/known.jpg" }],
+          },
+        ],
+      },
+      warnings: ["AI returned unknown image ID: img_999"],
     });
   });
 });
