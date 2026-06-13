@@ -152,6 +152,33 @@ describe("generic HTML import converter", () => {
     });
   });
 
+  it("Markdownのリスト構造をAI入力で保持する", async () => {
+    const conversion = await convertRecipeHtml(`
+      <html>
+        <body>
+          <article>
+            <h1>Simple pancakes</h1>
+            <h2>Ingredients</h2>
+            <ul>
+              <li>1 cup flour</li>
+              <li>2 eggs</li>
+            </ul>
+            <h2>Instructions</h2>
+            <ol>
+              <li>Mix the batter.</li>
+              <li>Bake until golden.</li>
+            </ol>
+          </article>
+        </body>
+      </html>
+    `);
+
+    expect(conversion.input.markdownContent).toMatch(/- 1 cup flour\n- 2 eggs/);
+    expect(conversion.input.markdownContent).toMatch(
+      /1\. Mix the batter\.\n2\. Bake until golden\./,
+    );
+  });
+
   it("JSON-LD Recipeをstructured evidenceとして抽出する", async () => {
     const conversion = await convertRecipeHtml(`
       <html>

@@ -1431,7 +1431,12 @@ const escapeImageMarkerAttribute = (value: string) =>
   value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
 const normalizeMarkdownContent = (value: string) =>
-  value.replace(/\s+/g, " ").trim().slice(0, 24_000);
+  value
+    .replace(/\r\n?/g, "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 24_000);
 
 const hasDescriptionMetadata = (meta: HtmlImportExtraction["meta"]) =>
   Boolean(meta.description || meta["og:description"] || meta["twitter:description"]);
