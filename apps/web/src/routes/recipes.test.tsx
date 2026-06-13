@@ -474,7 +474,8 @@ describe("RecipesRoute", () => {
       screen.getByLabelText("手順1の画像"),
       new File(["step"], "step.webp", { type: "image/webp" }),
     );
-    await screen.findAllByText("画像あり");
+    await screen.findByAltText("カバー画像プレビュー");
+    await screen.findByAltText("手順1の画像1プレビュー");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {

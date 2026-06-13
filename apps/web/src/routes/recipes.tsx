@@ -634,9 +634,11 @@ export const EditRecipeRoute = () => {
       <h1 className="font-semibold text-3xl">レシピ編集</h1>
       <RecipeDraftForm
         key={recipe.id}
+        coverImagePreviewUrl={recipe.content.coverImageUrl}
         defaultValues={recipeDetailToFormValues(recipe)}
         submitError={submitError}
         submitLabel="更新"
+        stepImagePreviewUrls={recipe.content.steps.map((step) => step.imageUrls)}
         onSubmit={onSubmit}
       />
     </section>
