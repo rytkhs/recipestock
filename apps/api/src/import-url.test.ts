@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertImportUrlAllowed,
   fetchImportPage,
-  genericHtmlImportConverter,
   importRecipeFromUrl,
+  normalizeImportableUrl,
   type RecipeImportError,
 } from "./import-url";
 import { type UsageRepository } from "./usage";
@@ -105,40 +105,74 @@ describe("assertImportUrlAllowed", () => {
   });
 });
 
-describe("generic HTML import converter", () => {
-  it("HTML page evidenceをAI入力へ渡す", async () => {
-    const conversion = await convertRecipeHtml(`
-      <html>
-        <head>
-          <meta property="og:site_name" content="Example Kitchen">
-        </head>
-        <body>
-          <article>
-            <h1>Tomato pasta</h1>
-            <p>Enough visible recipe content for extraction and import conversion.</p>
-            <img src="/cover.jpg" alt="Tomato pasta cover">
-          </article>
-        </body>
-      </html>
-    `);
+describe("normalizeImportableUrl", () => {
+  it("raw URLを正規化してURL import policyを適用する", () => {
+    expect(normalizeImportableUrl("https://www.example.com/recipe?b=2&a=1")).toBe(
+      "https://www.example.com/recipe?b=2&a=1",
+    );
+    expect(() => normalizeImportableUrl("ftp://example.com/recipe")).toThrow("Import URL");
+    expect(() => normalizeImportableUrl("http://localhost/recipe")).toThrow("Import URL");
+  });
+});
 
-    expect(conversion).toMatchObject({
-      type: "requiresAi",
-      input: {
-        source: {
+describe("URL import flow", () => {
+  it("HTML page evidenceをAI入力へ渡す", async () => {
+    const usageRepository = createUsageRepositoryStub();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/test",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository,
+        fetcher: async () => ({
           finalUrl: "https://example.com/recipes/test",
-          host: "example.com",
+          contentType: "text/html",
+          body: `
+            <html>
+              <head>
+                <meta property="og:site_name" content="Example Kitchen">
+              </head>
+              <body>
+                <article>
+                  <h1>Tomato pasta</h1>
+                  <p>Enough visible recipe content for extraction and import conversion.</p>
+                  <img src="/cover.jpg" alt="Tomato pasta cover">
+                </article>
+              </body>
+            </html>
+          `,
+        }),
+        aiProvider: {
+          async normalize(input) {
+            expect(input).toMatchObject({
+              source: {
+                finalUrl: "https://example.com/recipes/test",
+                host: "example.com",
+              },
+              markdownContent: expect.stringContaining("Tomato pasta"),
+            });
+
+            return {
+              title: "Tomato pasta",
+              coverImage: { type: "imageId", id: "img_001" },
+              ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
+              steps: [{ text: "Cook.", images: [] }],
+            };
+          },
         },
-        markdownContent: expect.stringContaining("Tomato pasta"),
-      },
-      imageCandidates: [
-        {
-          id: "img_001",
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "Tomato pasta",
+        coverImage: {
+          type: "externalImageUrl",
           url: "https://example.com/cover.jpg",
-          alt: "Tomato pasta cover",
-          position: 0,
         },
-      ],
+      },
       source: {
         sourceUrl: "https://example.com/recipes/test",
         sourceName: "Example Kitchen",
@@ -332,20 +366,6 @@ describe("generic HTML import converter", () => {
     });
   });
 });
-
-const convertRecipeHtml = async (body: string) => {
-  const conversion = await genericHtmlImportConverter.convert({
-    finalUrl: "https://example.com/recipes/test",
-    contentType: "text/html",
-    body,
-  });
-
-  if (conversion.type !== "requiresAi") {
-    throw new Error(`Expected requiresAi conversion, received ${conversion.type}`);
-  }
-
-  return conversion;
-};
 
 const createUsageRepositoryStub = (): UsageRepository => ({
   async getOrCreateAppUser(userId) {

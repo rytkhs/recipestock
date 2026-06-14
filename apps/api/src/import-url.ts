@@ -100,7 +100,7 @@ export type RecipeImportResult = {
   warnings: string[];
 };
 
-export type RecipeImportConverterResult =
+type RecipeImportConverterResult =
   | {
       type: "deterministic";
       recipeDraftContent: RecipeDraftContent;
@@ -115,7 +115,7 @@ export type RecipeImportConverterResult =
       warnings: string[];
     };
 
-export type RecipeImportConverter = {
+type RecipeImportConverter = {
   convert(page: FetchedImportPage): Promise<RecipeImportConverterResult>;
 };
 
@@ -258,7 +258,17 @@ export const assertImportUrlAllowed = (sourceUrl: string) => {
   }
 };
 
-export const genericHtmlImportConverter: RecipeImportConverter = {
+export const normalizeImportableUrl = (rawUrl: string) => {
+  try {
+    const normalizedUrl = normalizeUrl(rawUrl);
+    assertImportUrlAllowed(normalizedUrl);
+    return normalizedUrl;
+  } catch {
+    throw new RecipeImportError("invalid_url", "Import URL is invalid.");
+  }
+};
+
+const genericHtmlImportConverter: RecipeImportConverter = {
   async convert(page) {
     if (page.contentType && !/html/i.test(page.contentType)) {
       throw new RecipeImportError("unsupported_page", "Import URL is not an HTML page.");
@@ -303,7 +313,6 @@ export const importRecipeFromUrl = async ({
   usageRepository,
   aiProvider,
   fetcher = fetchImportPage,
-  converters = [genericHtmlImportConverter],
   now = new Date(),
   logger = createLogger(),
 }: {
@@ -313,23 +322,16 @@ export const importRecipeFromUrl = async ({
   usageRepository: UsageRepository;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
-  converters?: RecipeImportConverter[];
   now?: Date;
   logger?: Logger;
 }): Promise<RecipeImportResult> => {
-  let normalizedUrl: string;
-
-  try {
-    normalizedUrl = normalizeUrl(rawUrl);
-  } catch {
-    throw new RecipeImportError("invalid_url", "Import URL is invalid.");
-  }
+  const normalizedUrl = normalizeImportableUrl(rawUrl);
 
   const page = await fetcher(normalizedUrl, {
     timeoutMs: resolveImportTimeoutMs(env),
     maxBytes: resolveImportMaxHtmlBytes(env),
   });
-  const conversion = await convertImportPage(page, converters);
+  const conversion = await convertFetchedPageToRecipeImportInput(page);
 
   if (conversion.type === "deterministic") {
     return conversion;
@@ -383,16 +385,9 @@ export const importRecipeFromUrl = async ({
   };
 };
 
-const convertImportPage = (
+const convertFetchedPageToRecipeImportInput = (
   page: FetchedImportPage,
-  converters: RecipeImportConverter[],
-): Promise<RecipeImportConverterResult> => {
-  for (const converter of converters) {
-    return converter.convert(page);
-  }
-
-  throw new RecipeImportError("unsupported_page", "No import converter is available.");
-};
+): Promise<RecipeImportConverterResult> => genericHtmlImportConverter.convert(page);
 
 type ImportAiProviderKind = "workers-ai" | "openrouter";
 
