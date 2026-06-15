@@ -158,9 +158,9 @@ describe("URL import flow", () => {
 
             return {
               title: "Tomato pasta",
-              coverImage: { type: "imageId", id: "img_001" },
+              coverImageId: "img_001",
               ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
-              steps: [{ text: "Cook.", images: [] }],
+              steps: [{ text: "Cook.", imageIds: [] }],
             };
           },
         },
@@ -216,12 +216,9 @@ describe("URL import flow", () => {
 
             return {
               title: "Structured image recipe",
-              coverImage: {
-                type: "imageId",
-                id: "img_001",
-              },
+              coverImageId: "img_001",
               ingredientGroups: [{ ingredients: [{ name: "Flour", amount: "100g" }] }],
-              steps: [{ text: "Mix and bake.", images: [] }],
+              steps: [{ text: "Mix and bake.", imageIds: [] }],
             };
           },
         },
@@ -295,7 +292,7 @@ describe("URL import flow", () => {
               steps: [
                 {
                   text: "Mix and bake.",
-                  images: [{ type: "imageId", id: "img_001" }],
+                  imageIds: ["img_001"],
                 },
               ],
             };
@@ -341,12 +338,12 @@ describe("URL import flow", () => {
           async normalize() {
             return {
               title: "Unknown image ID recipe",
-              coverImage: { type: "imageId", id: "img_999" },
+              coverImageId: "img_999",
               ingredientGroups: [],
               steps: [
                 {
                   text: "Serve.",
-                  images: [{ type: "imageId", id: "img_001" }],
+                  imageIds: ["img_001"],
                 },
               ],
             };

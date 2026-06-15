@@ -92,7 +92,7 @@ const aiProvider: RecipeImportAIProvider = {
   normalize: async () => ({
     title: "Tomato pasta",
     ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-    steps: [{ text: "煮詰める", images: [] }],
+    steps: [{ text: "煮詰める", imageIds: [] }],
   }),
 };
 
@@ -210,9 +210,9 @@ describe("processImportJob", () => {
         aiProvider: {
           normalize: async () => ({
             title: "Tomato pasta",
-            coverImage: { type: "imageId", id: "img_001" },
+            coverImageId: "img_001",
             ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-            steps: [{ text: "煮詰める", images: [] }],
+            steps: [{ text: "煮詰める", imageIds: [] }],
           }),
         },
         fetcher: async (url) => ({ finalUrl: url, contentType: "text/html", body: htmlPage }),

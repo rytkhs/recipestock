@@ -70,7 +70,7 @@ describe("default recipe import AI provider", () => {
 
     await expect(provider.normalize(input)).resolves.toEqual({
       ...draft,
-      steps: [{ text: "煮詰める", images: [] }],
+      steps: [{ text: "煮詰める", imageIds: [] }],
     });
     expect(mocks.createWorkersAI).toHaveBeenCalledWith({
       binding: expect.objectContaining({ run: expect.any(Function) }),
@@ -104,11 +104,11 @@ describe("default recipe import AI provider", () => {
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeStructuredEvidence");
   });
 
-  it("AIがcoverImageにimageIdを返した場合は受け付ける", async () => {
+  it("AIがcoverImageIdを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: {
         title: "Tomato pasta",
-        coverImage: { type: "imageId", id: "img_001" },
+        coverImageId: "img_001",
         ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
         steps: [{ text: "煮詰める" }],
       },
@@ -117,7 +117,7 @@ describe("default recipe import AI provider", () => {
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
     await expect(provider.normalize(input)).resolves.toMatchObject({
-      coverImage: { type: "imageId", id: "img_001" },
+      coverImageId: "img_001",
     });
   });
 
@@ -138,7 +138,7 @@ describe("default recipe import AI provider", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("AIがstepsの画像にimageIdを返した場合は受け付ける", async () => {
+  it("AIがstepsの画像IDを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: {
         title: "Tomato pasta",
@@ -146,10 +146,7 @@ describe("default recipe import AI provider", () => {
         steps: [
           {
             text: "煮詰める",
-            images: [
-              { type: "imageId", id: "img_002" },
-              { type: "imageId", id: "img_003" },
-            ],
+            imageIds: ["img_002", "img_003"],
           },
         ],
       },
@@ -160,10 +157,7 @@ describe("default recipe import AI provider", () => {
     await expect(provider.normalize(input)).resolves.toMatchObject({
       steps: [
         {
-          images: [
-            { type: "imageId", id: "img_002" },
-            { type: "imageId", id: "img_003" },
-          ],
+          imageIds: ["img_002", "img_003"],
         },
       ],
     });

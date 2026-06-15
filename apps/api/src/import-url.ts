@@ -65,20 +65,17 @@ export type RecipeImportAIInput = {
   recipeStructuredEvidence: RecipeImportStructuredEvidence[];
 };
 
-export type RecipeImportAIImageRef = {
-  type: "imageId";
-  id: string;
-};
+export type RecipeImportAIImageId = string;
 
 export type RecipeImportAIDraftStep = {
   text?: string;
-  images: RecipeImportAIImageRef[];
+  imageIds: RecipeImportAIImageId[];
 };
 
 export type RecipeImportAIDraftContent = {
   title: string;
   servingsText?: string;
-  coverImage?: RecipeImportAIImageRef;
+  coverImageId?: RecipeImportAIImageId;
   ingredientGroups: Array<{
     label?: string;
     ingredients: Array<{
@@ -132,10 +129,7 @@ export type RecipeImportFetcher = (
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
 
-const importAiImageRefSchema = z.strictObject({
-  type: z.literal("imageId"),
-  id: z.string().min(1),
-});
+const importAiImageIdSchema = z.string().min(1);
 
 const importAiIngredientSchema = z.object({
   name: z.string().min(1),
@@ -148,16 +142,16 @@ const importAiIngredientGroupSchema = z.object({
 });
 
 const importAiDraftStepSchema = z
-  .object({
+  .strictObject({
     text: z.string().min(1).optional(),
-    images: z.array(importAiImageRefSchema).default([]),
+    imageIds: z.array(importAiImageIdSchema).default([]),
   })
-  .refine((step) => step.text || step.images.length > 0);
+  .refine((step) => step.text || step.imageIds.length > 0);
 
-const importAiDraftContentSchema = z.object({
+const importAiDraftContentSchema = z.strictObject({
   title: z.string().min(1),
   servingsText: z.string().optional(),
-  coverImage: importAiImageRefSchema.optional(),
+  coverImageId: importAiImageIdSchema.optional(),
   ingredientGroups: z.array(importAiIngredientGroupSchema).default([]),
   steps: z.array(importAiDraftStepSchema).default([]),
   note: z.string().optional(),
@@ -170,7 +164,7 @@ const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftConte
     ...draft,
     steps: draft.steps.map((step) => ({
       ...step,
-      images: step.images,
+      imageIds: step.imageIds,
     })),
   };
 };
@@ -791,10 +785,10 @@ const resolveDraftImageIds = (
 ): { draft: RecipeDraftContent; warnings: string[] } => {
   const urlsById = new Map(candidates.map((candidate) => [candidate.id, candidate.url]));
   const warnings: string[] = [];
-  const resolveImage = (image: RecipeImportAIImageRef | undefined) => {
-    if (!image) return undefined;
+  const resolveImage = (imageId: RecipeImportAIImageId | undefined) => {
+    if (!imageId) return undefined;
 
-    const url = urlsById.get(image.id);
+    const url = urlsById.get(imageId);
     if (url) {
       return {
         type: "externalImageUrl" as const,
@@ -802,20 +796,23 @@ const resolveDraftImageIds = (
       };
     }
 
-    warnings.push(`AI returned unknown image ID: ${image.id}`);
+    warnings.push(`AI returned unknown image ID: ${imageId}`);
     return undefined;
   };
 
   return {
     draft: recipeDraftContentSchema.parse({
-      ...draft,
-      coverImage: resolveImage(draft.coverImage),
+      title: draft.title,
+      servingsText: draft.servingsText,
+      coverImage: resolveImage(draft.coverImageId),
+      ingredientGroups: draft.ingredientGroups,
       steps: draft.steps.map((step) => ({
-        ...step,
-        images: step.images
+        text: step.text,
+        images: step.imageIds
           .map(resolveImage)
           .filter((image): image is NonNullable<typeof image> => Boolean(image)),
       })),
+      note: draft.note,
     }),
     warnings,
   };
