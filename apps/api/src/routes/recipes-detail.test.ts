@@ -163,6 +163,91 @@ describe("Recipe detail routes", () => {
     });
   });
 
+  it("一部の手順画像URL作成に失敗した場合は対応が崩れたURL配列を返さない", async () => {
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123", email: "user@example.com" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async (userId, recipeId) => ({
+          id: recipeId,
+          userId,
+          title: "Tomato pasta",
+          content: {
+            title: "Tomato pasta",
+            ingredientGroups: [],
+            steps: [
+              {
+                text: "煮詰める",
+                imageKeys: [
+                  "recipes/user_123/recipe_123/step-a.webp",
+                  "recipes/user_123/recipe_123/step-b.webp",
+                ],
+              },
+            ],
+          },
+          originType: "manual",
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+          searchText: "tomato pasta",
+          createdAt: new Date("2026-05-26T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+        }),
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async ({ objectKey }) => {
+          if (objectKey.endsWith("step-a.webp")) {
+            throw new Error("signed URL failed");
+          }
+
+          return {
+            url: `https://images.example/${objectKey}`,
+            expiresAt: new Date("2026-05-31T00:15:00.000Z"),
+          };
+        },
+        copyObject: async () => {
+          throw new Error("should not copy an object");
+        },
+        deleteObject: async () => undefined,
+        deletePrefixBestEffort: async () => undefined,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes/recipe_123", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      recipe: {
+        content: {
+          steps: [
+            {
+              imageKeys: [
+                "recipes/user_123/recipe_123/step-a.webp",
+                "recipes/user_123/recipe_123/step-b.webp",
+              ],
+              imageUrls: [],
+            },
+          ],
+        },
+      },
+    });
+  });
+
   it("ロック中Recipe詳細は本文を返さない", async () => {
     const testApp = createApp({
       auth: {

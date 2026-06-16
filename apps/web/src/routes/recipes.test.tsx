@@ -827,6 +827,94 @@ describe("RecipesRoute", () => {
     expect(screen.queryByAltText("手順1の画像2プレビュー")).not.toBeInTheDocument();
   });
 
+  it("編集画面で手順画像URLが欠けた場合は誤った保存済み画像プレビューを表示しない", async () => {
+    const recipeResponse = {
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          ingredientGroups: [],
+          steps: [
+            {
+              text: "煮詰める",
+              imageKeys: [
+                "recipes/user_123/recipe_123/step-a.webp",
+                "recipes/user_123/recipe_123/step-b.webp",
+              ],
+              imageUrls: ["https://images.example/step-b.webp"],
+            },
+          ],
+        },
+        source: {
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    };
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT") {
+          return jsonResponse(recipeResponse);
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(recipeResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await waitFor(() => {
+      expect(screen.getAllByText("保存済み画像")).toHaveLength(2);
+    });
+    expect(screen.queryByAltText("手順1の画像1プレビュー")).not.toBeInTheDocument();
+    expect(screen.queryByAltText("手順1の画像2プレビュー")).not.toBeInTheDocument();
+
+    const firstSavedImageCard = screen.getAllByText("保存済み画像")[0]?.closest(".group");
+    expect(firstSavedImageCard).not.toBeNull();
+    await userEvent.click(
+      within(firstSavedImageCard as HTMLElement).getByRole("button", { name: "削除" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/recipes/recipe_123",
+        expect.objectContaining({
+          method: "PUT",
+          credentials: "include",
+        }),
+      );
+    });
+    const updateRecipeCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(updateRecipeCall?.[1]?.body))).toMatchObject({
+      content: {
+        steps: [
+          {
+            images: [
+              {
+                type: "existingObjectKey",
+                key: "recipes/user_123/recipe_123/step-b.webp",
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it("更新成功後の詳細再取得に失敗しても更新失敗として扱わない", async () => {
     const recipeResponse = {
       recipe: {

@@ -40,8 +40,14 @@ const createStepImagePreviewUrlsByImageId = (
   const previewUrlsByImageId: ImagePreviewUrlsByImageId = {};
 
   defaultValues.steps.forEach((step, stepIndex) => {
+    const previewUrls = stepImagePreviewUrls?.[stepIndex];
+
+    if (!previewUrls || previewUrls.length !== step.images.length) {
+      return;
+    }
+
     step.images.forEach((image, imageIndex) => {
-      const previewUrl = stepImagePreviewUrls?.[stepIndex]?.[imageIndex];
+      const previewUrl = previewUrls[imageIndex];
 
       if (previewUrl) {
         previewUrlsByImageId[imageRefId(image)] = previewUrl;
