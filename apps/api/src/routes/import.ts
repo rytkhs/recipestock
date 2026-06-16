@@ -11,13 +11,12 @@ import { invalidUrlResponse, notFoundResponse, recipeLimitExceededResponse } fro
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
 import {
-  assertImportableUrl,
   createImportJobId,
   createImportJobRepository,
   type ImportJobRepository,
   toImportJobSummary,
 } from "../import-jobs";
-import { RecipeImportError } from "../import-url";
+import { normalizeImportableUrl, RecipeImportError } from "../import-url";
 import { requireAuth } from "../middleware/auth";
 
 type ImportRouteDependencies = {
@@ -50,7 +49,7 @@ export const createImportRoutes = ({
       let normalizedUrl: string;
 
       try {
-        normalizedUrl = assertImportableUrl(request.data.url);
+        normalizedUrl = normalizeImportableUrl(request.data.url);
       } catch (error) {
         if (error instanceof RecipeImportError && error.code === "invalid_url") {
           return invalidUrlResponse();

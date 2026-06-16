@@ -5,14 +5,13 @@ import {
   type ImportJobStatus,
   type ImportJobSummary,
 } from "@recipestock/schemas";
-import { normalizeUrl, PLAN_LIMITS } from "@recipestock/shared";
+import { PLAN_LIMITS } from "@recipestock/shared";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
 import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
 import { type Bindings } from "./env";
 import { type RecipeImageService } from "./images";
 import {
-  assertImportUrlAllowed,
   createDefaultRecipeImportAIProvider,
   importRecipeFromUrl,
   type RecipeImportAIProvider,
@@ -619,14 +618,4 @@ const mapImportJobFailure = (
     code: "unknown",
     message: error instanceof Error ? error.message : "Unexpected error occurred.",
   };
-};
-
-export const assertImportableUrl = (rawUrl: string) => {
-  try {
-    const normalizedUrl = normalizeUrl(rawUrl);
-    assertImportUrlAllowed(normalizedUrl);
-    return normalizedUrl;
-  } catch {
-    throw new RecipeImportError("invalid_url", "Import URL is invalid.");
-  }
 };

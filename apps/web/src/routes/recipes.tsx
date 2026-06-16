@@ -478,7 +478,13 @@ export const RecipeDetailRoute = () => {
   return (
     <article className="mx-auto w-full max-w-3xl px-6 py-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <h1 className="font-semibold text-3xl">{recipe.title}</h1>
+        {recipe.content.coverImageUrl ? (
+          <img
+            alt={recipe.title}
+            className="mt-6 aspect-video w-full rounded-lg object-cover"
+            src={recipe.content.coverImageUrl}
+          />
+        ) : null}
         <div className="flex gap-2">
           <Link
             className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border px-4 font-semibold text-sm"
@@ -501,13 +507,7 @@ export const RecipeDetailRoute = () => {
         <p className="mt-3 text-default-600">{recipe.content.servingsText}</p>
       ) : null}
 
-      {recipe.content.coverImageUrl ? (
-        <img
-          alt={recipe.title}
-          className="mt-6 aspect-video w-full rounded-lg object-cover"
-          src={recipe.content.coverImageUrl}
-        />
-      ) : null}
+      <h1 className="font-semibold text-3xl">{recipe.title}</h1>
 
       {recipe.content.ingredientGroups.length > 0 ? (
         <section className="mt-8">
@@ -634,9 +634,11 @@ export const EditRecipeRoute = () => {
       <h1 className="font-semibold text-3xl">レシピ編集</h1>
       <RecipeDraftForm
         key={recipe.id}
+        coverImagePreviewUrl={recipe.content.coverImageUrl}
         defaultValues={recipeDetailToFormValues(recipe)}
         submitError={submitError}
         submitLabel="更新"
+        stepImagePreviewUrls={recipe.content.steps.map((step) => step.imageUrls)}
         onSubmit={onSubmit}
       />
     </section>

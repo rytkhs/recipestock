@@ -261,16 +261,11 @@ export const attachRecipeImageUrls = async (
   const steps = await Promise.all(
     content.steps.map(async (step) => ({
       ...step,
-      imageUrls: (
-        await Promise.all(
-          step.imageKeys.map((imageKey) =>
-            imageService
-              .createSignedGetUrl({ objectKey: imageKey })
-              .then((result) => result.url)
-              .catch(() => undefined),
-          ),
-        )
-      ).filter((imageUrl): imageUrl is string => Boolean(imageUrl)),
+      imageUrls: await Promise.all(
+        step.imageKeys.map((imageKey) =>
+          imageService.createSignedGetUrl({ objectKey: imageKey }).then((result) => result.url),
+        ),
+      ).catch(() => []),
     })),
   );
 
