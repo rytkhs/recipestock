@@ -1,7 +1,7 @@
 import { Button, Input, Label, ProgressBar, TextArea, TextField } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { type DraftImageRef } from "@recipestock/schemas";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type FieldPathByValue, useController, useFieldArray, useForm } from "react-hook-form";
 import { RecipeImageUploadError, uploadRecipeImage } from "./image-upload";
 import {
@@ -25,12 +25,32 @@ type RecipeDraftFormControl = ReturnType<typeof useForm<RecipeDraftFormValues>>[
 type RecipeDraftTextFieldPath = FieldPathByValue<RecipeDraftFormValues, string | undefined>;
 type RecipeDraftImageFieldPath = FieldPathByValue<RecipeDraftFormValues, DraftImageRef | undefined>;
 type RecipeDraftImageArrayFieldPath = FieldPathByValue<RecipeDraftFormValues, DraftImageRef[]>;
+type ImagePreviewUrlsByImageId = Record<string, string>;
 
 const imageInputAccept = "image/jpeg,image/png,image/webp";
 const imageInputHelpText = "JPEG / PNG / WebP、5MBまで";
 
 const imageRefId = (image: DraftImageRef) =>
   `${image.type}:${"key" in image ? image.key : image.url}`;
+
+const createStepImagePreviewUrlsByImageId = (
+  defaultValues: RecipeDraftFormValues,
+  stepImagePreviewUrls?: string[][],
+): ImagePreviewUrlsByImageId => {
+  const previewUrlsByImageId: ImagePreviewUrlsByImageId = {};
+
+  defaultValues.steps.forEach((step, stepIndex) => {
+    step.images.forEach((image, imageIndex) => {
+      const previewUrl = stepImagePreviewUrls?.[stepIndex]?.[imageIndex];
+
+      if (previewUrl) {
+        previewUrlsByImageId[imageRefId(image)] = previewUrl;
+      }
+    });
+  });
+
+  return previewUrlsByImageId;
+};
 
 const createLocalPreviewUrl = (file: File) => URL.createObjectURL(file);
 
@@ -193,14 +213,14 @@ const StepImagesInput = ({
   label,
   name,
   onUploadStateChange,
-  previewUrls,
+  previewUrlsByImageId,
   uploadImage,
 }: {
   control: RecipeDraftFormControl;
   label: string;
   name: RecipeDraftImageArrayFieldPath;
   onUploadStateChange(isUploading: boolean): void;
-  previewUrls?: string[];
+  previewUrlsByImageId?: ImagePreviewUrlsByImageId;
   uploadImage: (file: File) => Promise<DraftImageRef>;
 }) => {
   const { field } = useController({ control, name });
@@ -291,7 +311,8 @@ const StepImagesInput = ({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {images.map((image, imageIndex) => {
             const imageId = imageRefId(image);
-            const imagePreviewUrl = localPreviewUrlsByImageId[imageId] ?? previewUrls?.[imageIndex];
+            const imagePreviewUrl =
+              localPreviewUrlsByImageId[imageId] ?? previewUrlsByImageId?.[imageId];
 
             return (
               <div
@@ -442,6 +463,10 @@ export const RecipeDraftForm = ({
   const ingredientGroups = useFieldArray({ control, name: "ingredientGroups" });
   const steps = useFieldArray({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
+  const stepImagePreviewUrlsByImageId = useMemo(
+    () => createStepImagePreviewUrlsByImageId(defaultValues, stepImagePreviewUrls),
+    [defaultValues, stepImagePreviewUrls],
+  );
   const handleFormSubmit = handleSubmit(onSubmit);
   const handleUploadStateChange = (isUploading: boolean) => {
     setUploadingImageCount((count) => Math.max(0, count + (isUploading ? 1 : -1)));
@@ -491,11 +516,15 @@ export const RecipeDraftForm = ({
                   label={`手順${stepIndex + 1}の画像`}
                   name={`steps.${stepIndex}.images`}
                   onUploadStateChange={handleUploadStateChange}
-                  previewUrls={stepImagePreviewUrls?.[stepIndex]}
+                  previewUrlsByImageId={stepImagePreviewUrlsByImageId}
                   uploadImage={uploadImage}
                 />
               </div>
-              <Button variant="secondary" onPress={() => steps.remove(stepIndex)}>
+              <Button
+                isDisabled={uploadingImageCount > 0}
+                variant="secondary"
+                onPress={() => steps.remove(stepIndex)}
+              >
                 削除
               </Button>
             </div>

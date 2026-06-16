@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -759,6 +759,72 @@ describe("RecipesRoute", () => {
       "src",
       "https://images.example/step.webp",
     );
+  });
+
+  it("編集画面で手順画像を削除しても残った画像のプレビューURLを保つ", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_123",
+              title: "Tomato pasta",
+              content: {
+                title: "Tomato pasta",
+                ingredientGroups: [],
+                steps: [
+                  {
+                    text: "煮詰める",
+                    imageKeys: [
+                      "recipes/user_123/recipe_123/step-a.webp",
+                      "recipes/user_123/recipe_123/step-b.webp",
+                    ],
+                    imageUrls: [
+                      "https://images.example/step-a.webp",
+                      "https://images.example/step-b.webp",
+                    ],
+                  },
+                ],
+              },
+              source: {
+                sourceUrl: null,
+                normalizedSourceUrl: null,
+                sourceName: null,
+              },
+              createdAt: "2026-05-26T00:00:00.000Z",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    const firstPreview = await screen.findByAltText("手順1の画像1プレビュー");
+    expect(firstPreview).toHaveAttribute("src", "https://images.example/step-a.webp");
+    expect(screen.getByAltText("手順1の画像2プレビュー")).toHaveAttribute(
+      "src",
+      "https://images.example/step-b.webp",
+    );
+
+    const firstPreviewCard = firstPreview.closest(".group");
+    expect(firstPreviewCard).not.toBeNull();
+    await userEvent.click(
+      within(firstPreviewCard as HTMLElement).getByRole("button", { name: "削除" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByAltText("手順1の画像1プレビュー")).toHaveAttribute(
+        "src",
+        "https://images.example/step-b.webp",
+      );
+    });
+    expect(screen.queryByAltText("手順1の画像2プレビュー")).not.toBeInTheDocument();
   });
 
   it("更新成功後の詳細再取得に失敗しても更新失敗として扱わない", async () => {
