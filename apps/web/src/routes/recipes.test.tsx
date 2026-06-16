@@ -509,6 +509,109 @@ describe("RecipesRoute", () => {
     );
   });
 
+  it("カバー画像の差し替えアップロードに失敗したら前のプレビューと値を保つ", async () => {
+    vi.mocked(URL.createObjectURL)
+      .mockReturnValueOnce("blob:first-cover-preview")
+      .mockReturnValueOnce("blob:failed-cover-preview");
+
+    const recipeResponse = {
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          coverImageKey: "recipes/user_123/recipe_123/cover.webp",
+          coverImageUrl: "https://images.example/cover.webp",
+          ingredientGroups: [],
+          steps: [],
+          note: null,
+        },
+        source: {
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    };
+    let uploadUrlRequests = 0;
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/images/upload-url" && init?.method === "POST") {
+          uploadUrlRequests += 1;
+          return jsonResponse({
+            uploadUrl: `https://upload.example/${uploadUrlRequests}`,
+            objectKey: `tmp/user_123/cover-${uploadUrlRequests}.webp`,
+            expiresAt: "2026-05-31T00:15:00.000Z",
+          });
+        }
+
+        if (input === "https://upload.example/1") {
+          return new Response(null, { status: 200 });
+        }
+
+        if (input === "https://upload.example/2") {
+          return new Response(null, { status: 500 });
+        }
+
+        if (getRequestPath(input) === "/api/recipes" && init?.method === "POST") {
+          return jsonResponse(recipeResponse, { status: 201 });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(recipeResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/new");
+
+    await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
+    await userEvent.upload(
+      screen.getByLabelText("カバー画像"),
+      new File(["cover"], "cover.webp", { type: "image/webp" }),
+    );
+    await expect(screen.findByAltText("カバー画像プレビュー")).resolves.toHaveAttribute(
+      "src",
+      "blob:first-cover-preview",
+    );
+
+    await userEvent.upload(
+      screen.getByLabelText("カバー画像"),
+      new File(["replacement"], "replacement.webp", { type: "image/webp" }),
+    );
+    await expect(
+      screen.findByText("画像をアップロードできませんでした。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByAltText("カバー画像プレビュー")).toHaveAttribute(
+      "src",
+      "blob:first-cover-preview",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/recipes",
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+        }),
+      );
+    });
+    const createRecipeCall = findFetchCall(fetchMock, "/api/recipes");
+    expect(JSON.parse(String(createRecipeCall?.[1]?.body))).toMatchObject({
+      content: {
+        coverImage: { type: "tmpObjectKey", key: "tmp/user_123/cover-1.webp" },
+      },
+    });
+  });
+
   it("詳細画面でカバー画像と手順画像を表示する", async () => {
     mockFetch(
       async (input) => {

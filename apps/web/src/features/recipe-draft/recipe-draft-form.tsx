@@ -127,18 +127,18 @@ const ImageInput = ({
 
     setError(null);
     const nextPreviewUrl = createLocalPreviewUrl(file);
-    setLocalPreviewUrl((currentUrl) => {
-      revokeLocalPreviewUrl(currentUrl);
-      return nextPreviewUrl;
-    });
     setIsUploading(true);
     onUploadStateChange(true);
 
     try {
-      field.onChange(await uploadImage(file));
+      const uploadedImage = await uploadImage(file);
+      setLocalPreviewUrl((currentUrl) => {
+        revokeLocalPreviewUrl(currentUrl);
+        return nextPreviewUrl;
+      });
+      field.onChange(uploadedImage);
     } catch (uploadError) {
       revokeLocalPreviewUrl(nextPreviewUrl);
-      setLocalPreviewUrl(null);
       setError(
         uploadError instanceof RecipeImageUploadError && uploadError.code === "image_too_large"
           ? "画像は5MB以下にしてください。"
