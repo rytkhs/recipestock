@@ -19,8 +19,11 @@ import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute }
 import { SettingsBillingRoute, SettingsIndexRoute } from "./settings";
 
 const LoadingPage = () => (
-  <section className="mx-auto w-full max-w-5xl px-6 py-10">
-    <p className="text-default-600">読み込み中</p>
+  <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-10">
+    <div className="flex items-center gap-3">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
+      <p className="text-brand-muted text-sm">読み込み中</p>
+    </div>
   </section>
 );
 
@@ -77,9 +80,9 @@ const RedirectAuthenticated = ({ children }: { children: ReactNode }) => {
 };
 
 const RootLayout = () => (
-  <div className="min-h-screen bg-background text-foreground">
+  <div className="min-h-screen bg-brand-cream text-brand-ink">
     <Header />
-    <main>
+    <main className="pb-8">
       <Outlet />
     </main>
   </div>
@@ -94,10 +97,12 @@ const indexRoute = createRoute({
   path: "/",
   component: () => (
     <RedirectAuthenticated>
-      <section className="mx-auto w-full max-w-5xl px-6 py-10">
-        <h1 className="font-semibold text-3xl">Recipe Stock</h1>
-        <p className="mt-3 max-w-xl text-default-600">
-          Import, confirm, save, search, and view recipes from one workspace.
+      <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-16 text-center">
+        <h1 className="text-brand-ink font-extrabold text-4xl sm:text-5xl tracking-tight">
+          Recipe Stock
+        </h1>
+        <p className="mt-4 mx-auto max-w-xl text-brand-muted text-lg leading-relaxed">
+          レシピサイト、YouTube、SNS、書籍、画像からレシピを取り込んで、ひとつの場所で検索・閲覧できるPWA
         </p>
       </section>
     </RedirectAuthenticated>

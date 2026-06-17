@@ -1,0 +1,98 @@
+/*
+ * Recipe Stock "Warm Pantry" Theme
+ *
+ * HeroUI v3 semantic variables mapped to the DESIGN.md palette.
+ * Hex references are kept in comments for visual checking.
+ */
+
+@layer base {
+  [data-theme="pantry"] {
+    color-scheme: light;
+
+    /* ── Primitive ── */
+    --white: oklch(100% 0 0);
+    --black: oklch(0% 0 0);
+    --snow: oklch(0.9911 0 0);
+    --eclipse: oklch(0.2371 0.0404 52.87); /* #2F2418 ink */
+
+    /* ── Spacing & Layout ── */
+    --spacing: 0.25rem;
+    --border-width: 1px;
+    --field-border-width: 1px;
+    --disabled-opacity: 0.5;
+    --ring-offset-width: 2px;
+    --cursor-interactive: pointer;
+    --cursor-disabled: not-allowed;
+
+    /* ── Radius ── */
+    --radius: 0.875rem; /* 14px base — pantryMd */
+    --field-radius: calc(var(--radius) * 1);
+
+    /* ── Base Colors ── */
+    --background: oklch(0.9639 0.0148 76.08); /* #FBF3E9 cream */
+    --foreground: var(--eclipse);
+
+    /* ── Surface (cards, panels) ── */
+    --surface: oklch(0.9812 0.0105 82.74); /* #FEF9F2 paper */
+    --surface-foreground: var(--foreground);
+
+    /* ── Overlay (modals, drawers) ── */
+    --overlay: oklch(0.9812 0.0105 82.74); /* #FEF9F2 */
+    --overlay-foreground: var(--foreground);
+
+    /* ── Muted ── */
+    --muted: oklch(0.5127 0.038 63); /* #7A6A56 */
+
+    /* ── Scrollbar ── */
+    --scrollbar-thumb: color-mix(in oklch, var(--foreground) 15%, transparent);
+    --scrollbar-track: transparent;
+    --scrollbar-gutter: auto;
+    --scrollbar-width: thin;
+    --scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    --scrollbar: var(--scrollbar-thumb);
+
+    /* ── Default (chips, tags) ── */
+    --default: oklch(0.9508 0.0166 76.08); /* #F7EFE4 paper-muted */
+    --default-foreground: var(--eclipse);
+
+    /* ── Accent / Sage Green ── */
+    --accent: oklch(0.5567 0.0682 118.85); /* #768055 sage */
+    --accent-foreground: var(--white);
+
+    /* ── Form Field ── */
+    --field-background: var(--surface);
+    --field-foreground: var(--foreground);
+    --field-placeholder: var(--muted);
+    --field-border: oklch(0.8707 0.0275 76.57); /* #E1D2BE line */
+
+    /* ── Success (same as sage) ── */
+    --success: oklch(0.5567 0.0682 118.85); /* #768055 */
+    --success-foreground: var(--white);
+
+    /* ── Warning / Orange ── */
+    --warning: oklch(0.6577 0.1575 55.59); /* #E47D25 */
+    --warning-foreground: var(--eclipse);
+
+    /* ── Danger ── */
+    --danger: oklch(0.52 0.13 28); /* #B5533D */
+    --danger-foreground: var(--snow);
+
+    /* ── Component ── */
+    --segment: var(--surface);
+    --segment-foreground: var(--foreground);
+
+    /* ── Misc ── */
+    --border: oklch(0.8707 0.0275 76.57 / 60%); /* warm line */
+    --separator: oklch(0.91 0.02 76.57); /* soft line */
+    --focus: oklch(0.6577 0.1575 55.59); /* orange focus ring */
+    --link: oklch(0.5567 0.0682 118.85); /* sage */
+
+    /* ── Shadows (warm walnut-based) ── */
+    --surface-shadow: 0 4px 14px rgba(83, 62, 29, 0.07);
+    --overlay-shadow: 0 18px 50px rgba(83, 62, 29, 0.12);
+    --field-shadow: 0 2px 6px rgba(83, 62, 29, 0.05);
+
+    /* ── Skeleton ── */
+    --skeleton-animation: shimmer;
+  }
+}

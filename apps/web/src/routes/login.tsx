@@ -1,4 +1,5 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
+import { EnvelopeSimple, GoogleLogo, Key } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import {
@@ -105,163 +106,251 @@ export const LoginRoute = () => {
     }
   };
 
+  const modeTitle = {
+    signIn: "ログイン",
+    signUp: "アカウント作成",
+    verifySignUp: "メール確認",
+    requestReset: "パスワード再設定",
+    resetPassword: "パスワード再設定",
+  }[mode];
+
   return (
-    <section className="mx-auto w-full max-w-md px-6 py-10">
-      <h1 className="font-semibold text-3xl">ログイン</h1>
-      <div className="mt-6 grid gap-4">
-        <Button variant="primary" onPress={() => void startGoogleLogin()}>
-          Googleでログイン
-        </Button>
+    <section className="min-h-[calc(100vh-60px)] flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md rounded-[28px] border border-brand-line-soft bg-brand-paper p-8 shadow-pantry">
+        <h1 className="text-brand-ink font-bold text-2xl text-center">{modeTitle}</h1>
+        <p className="mt-2 text-brand-muted text-sm text-center">Recipe Stockにようこそ</p>
 
-        {mode === "signIn" ? (
-          <form className="grid gap-3" onSubmit={handleSignIn}>
-            <TextField isRequired type="email">
-              <Label>メールアドレス</Label>
-              <Input
-                autoComplete="email"
-                inputMode="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </TextField>
+        <div className="mt-8 grid gap-4">
+          <Button
+            className="w-full rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold gap-2 hover:bg-brand-paper-muted"
+            variant="secondary"
+            onPress={() => void startGoogleLogin()}
+          >
+            <GoogleLogo size={20} weight="bold" />
+            Googleでログイン
+          </Button>
 
-            <TextField isRequired type="password">
-              <Label>パスワード</Label>
-              <Input
-                autoComplete="current-password"
-                maxLength={128}
-                minLength={8}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </TextField>
+          <div className="relative flex items-center gap-3 py-2">
+            <div className="flex-1 border-t border-brand-line" />
+            <span className="text-brand-muted text-xs font-medium">または</span>
+            <div className="flex-1 border-t border-brand-line" />
+          </div>
 
-            <Button type="submit" variant="secondary">
-              ログイン
-            </Button>
-          </form>
-        ) : null}
+          {mode === "signIn" ? (
+            <form className="grid gap-4" onSubmit={handleSignIn}>
+              <TextField isRequired type="email">
+                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+                  <EnvelopeSimple size={14} weight="bold" />
+                  メールアドレス
+                </Label>
+                <Input
+                  autoComplete="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </TextField>
 
-        {mode === "signUp" ? (
-          <form className="grid gap-3" onSubmit={handleSignUp}>
-            <TextField isRequired type="email">
-              <Label>メールアドレス</Label>
-              <Input
-                autoComplete="email"
-                inputMode="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </TextField>
+              <TextField isRequired type="password">
+                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+                  <Key size={14} weight="bold" />
+                  パスワード
+                </Label>
+                <Input
+                  autoComplete="current-password"
+                  maxLength={128}
+                  minLength={8}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </TextField>
 
-            <TextField isRequired type="password">
-              <Label>パスワード</Label>
-              <Input
-                autoComplete="new-password"
-                maxLength={128}
-                minLength={8}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </TextField>
-
-            <Button type="submit" variant="secondary">
-              登録してコードを送信
-            </Button>
-          </form>
-        ) : null}
-
-        {mode === "verifySignUp" ? (
-          <form className="grid gap-3" onSubmit={handleVerifySignUp}>
-            <TextField isRequired>
-              <Label>確認コード</Label>
-              <Input
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                maxLength={6}
-                minLength={6}
-                pattern="[0-9]{6}"
-                value={otp}
-                onChange={(event) => setOtp(event.target.value)}
-              />
-            </TextField>
-
-            <Button type="submit" variant="secondary">
-              登録を完了
-            </Button>
-          </form>
-        ) : null}
-
-        {mode === "requestReset" ? (
-          <form className="grid gap-3" onSubmit={handleRequestReset}>
-            <TextField isRequired type="email">
-              <Label>メールアドレス</Label>
-              <Input
-                autoComplete="email"
-                inputMode="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </TextField>
-
-            <Button type="submit" variant="secondary">
-              再設定コードを送信
-            </Button>
-          </form>
-        ) : null}
-
-        {mode === "resetPassword" ? (
-          <form className="grid gap-3" onSubmit={handleResetPassword}>
-            <TextField isRequired>
-              <Label>確認コード</Label>
-              <Input
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                maxLength={6}
-                minLength={6}
-                pattern="[0-9]{6}"
-                value={otp}
-                onChange={(event) => setOtp(event.target.value)}
-              />
-            </TextField>
-
-            <TextField isRequired type="password">
-              <Label>新しいパスワード</Label>
-              <Input
-                autoComplete="new-password"
-                maxLength={128}
-                minLength={8}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </TextField>
-
-            <Button type="submit" variant="secondary">
-              パスワードを再設定
-            </Button>
-          </form>
-        ) : null}
-
-        <div className="flex flex-wrap gap-3">
-          {mode !== "signIn" ? (
-            <Button size="sm" variant="ghost" onPress={() => switchMode("signIn")}>
-              ログインに戻る
-            </Button>
+              <Button
+                className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+                type="submit"
+                variant="primary"
+              >
+                ログイン
+              </Button>
+            </form>
           ) : null}
-          {mode !== "signUp" && mode !== "verifySignUp" ? (
-            <Button size="sm" variant="ghost" onPress={() => switchMode("signUp")}>
-              アカウントを作成
-            </Button>
+
+          {mode === "signUp" ? (
+            <form className="grid gap-4" onSubmit={handleSignUp}>
+              <TextField isRequired type="email">
+                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+                  <EnvelopeSimple size={14} weight="bold" />
+                  メールアドレス
+                </Label>
+                <Input
+                  autoComplete="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </TextField>
+
+              <TextField isRequired type="password">
+                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+                  <Key size={14} weight="bold" />
+                  パスワード
+                </Label>
+                <Input
+                  autoComplete="new-password"
+                  maxLength={128}
+                  minLength={8}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </TextField>
+
+              <Button
+                className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+                type="submit"
+                variant="primary"
+              >
+                登録してコードを送信
+              </Button>
+            </form>
           ) : null}
-          {mode !== "requestReset" && mode !== "resetPassword" ? (
-            <Button size="sm" variant="ghost" onPress={() => switchMode("requestReset")}>
-              パスワードを忘れた場合
-            </Button>
+
+          {mode === "verifySignUp" ? (
+            <form className="grid gap-4" onSubmit={handleVerifySignUp}>
+              <TextField isRequired>
+                <Label className="text-brand-walnut font-semibold text-sm">確認コード</Label>
+                <Input
+                  autoComplete="one-time-code"
+                  className="text-center text-lg tracking-[0.3em] font-bold"
+                  inputMode="numeric"
+                  maxLength={6}
+                  minLength={6}
+                  pattern="[0-9]{6}"
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value)}
+                />
+              </TextField>
+
+              <Button
+                className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+                type="submit"
+                variant="primary"
+              >
+                登録を完了
+              </Button>
+            </form>
+          ) : null}
+
+          {mode === "requestReset" ? (
+            <form className="grid gap-4" onSubmit={handleRequestReset}>
+              <TextField isRequired type="email">
+                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+                  <EnvelopeSimple size={14} weight="bold" />
+                  メールアドレス
+                </Label>
+                <Input
+                  autoComplete="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </TextField>
+
+              <Button
+                className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+                type="submit"
+                variant="primary"
+              >
+                再設定コードを送信
+              </Button>
+            </form>
+          ) : null}
+
+          {mode === "resetPassword" ? (
+            <form className="grid gap-4" onSubmit={handleResetPassword}>
+              <TextField isRequired>
+                <Label className="text-brand-walnut font-semibold text-sm">確認コード</Label>
+                <Input
+                  autoComplete="one-time-code"
+                  className="text-center text-lg tracking-[0.3em] font-bold"
+                  inputMode="numeric"
+                  maxLength={6}
+                  minLength={6}
+                  pattern="[0-9]{6}"
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value)}
+                />
+              </TextField>
+
+              <TextField isRequired type="password">
+                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+                  <Key size={14} weight="bold" />
+                  新しいパスワード
+                </Label>
+                <Input
+                  autoComplete="new-password"
+                  maxLength={128}
+                  minLength={8}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </TextField>
+
+              <Button
+                className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+                type="submit"
+                variant="primary"
+              >
+                パスワードを再設定
+              </Button>
+            </form>
+          ) : null}
+
+          <div className="flex flex-wrap justify-center gap-3 pt-2">
+            {mode !== "signIn" ? (
+              <Button
+                className="text-brand-sage text-sm rounded-full hover:bg-brand-sage-soft/50"
+                size="sm"
+                variant="ghost"
+                onPress={() => switchMode("signIn")}
+              >
+                ログインに戻る
+              </Button>
+            ) : null}
+            {mode !== "signUp" && mode !== "verifySignUp" ? (
+              <Button
+                className="text-brand-sage text-sm rounded-full hover:bg-brand-sage-soft/50"
+                size="sm"
+                variant="ghost"
+                onPress={() => switchMode("signUp")}
+              >
+                アカウントを作成
+              </Button>
+            ) : null}
+            {mode !== "requestReset" && mode !== "resetPassword" ? (
+              <Button
+                className="text-brand-muted text-sm rounded-full hover:bg-brand-paper-muted"
+                size="sm"
+                variant="ghost"
+                onPress={() => switchMode("requestReset")}
+              >
+                パスワードを忘れた場合
+              </Button>
+            ) : null}
+          </div>
+
+          {message ? (
+            <div className="rounded-[14px] bg-brand-sage-soft/30 border border-brand-sage-soft p-3">
+              <p className="font-medium text-brand-sage-dark text-sm">{message}</p>
+            </div>
+          ) : null}
+          {error ? (
+            <div className="rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+              <p className="text-brand-danger text-sm" role="alert">
+                {error}
+              </p>
+            </div>
           ) : null}
         </div>
-
-        {message ? <p className="font-medium text-success">{message}</p> : null}
-        {error ? <p role="alert">{error}</p> : null}
       </div>
     </section>
   );

@@ -1,13 +1,20 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" data-theme="pantry">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#256f5a" />
+    <meta name="theme-color" content="#768055" />
+    <meta name="description" content="Webサイトや動画、画像からレシピを保存し、材料や作り方をまとめて検索・閲覧できるレシピ管理アプリです。" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <title>Recipe Stock</title>
   </head>
-  <body>
+  <body class="bg-background text-foreground">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

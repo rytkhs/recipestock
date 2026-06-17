@@ -1,5 +1,5 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
-import { Globe } from "@phosphor-icons/react";
+import { Globe, LockSimple, MagnifyingGlass } from "@phosphor-icons/react";
 import {
   type CreateRecipeResponse,
   type DeleteRecipeResponse,
@@ -184,16 +184,16 @@ const ImportJobBanner = () => {
         if (job.status === "succeeded") {
           return (
             <div
-              className="rounded-lg border border-success bg-success-50 p-4 text-sm"
+              className="rounded-[14px] border border-brand-sage-soft bg-brand-sage-soft/30 p-4 text-sm"
               key={job.id}
               role="status"
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="font-medium text-success-700">取り込みが完了しました。</p>
+                <p className="font-semibold text-brand-sage-dark">取り込みが完了しました。</p>
                 <div className="flex gap-2">
                   {job.recipeId ? (
                     <Link
-                      className="inline-flex min-h-9 items-center justify-center rounded-lg bg-accent px-3 font-semibold text-accent-foreground text-sm"
+                      className="inline-flex min-h-9 items-center justify-center rounded-full bg-brand-sage px-4 font-semibold text-white text-sm hover:bg-brand-sage-dark transition-colors"
                       params={{ recipeId: job.recipeId }}
                       to="/recipes/$recipeId"
                     >
@@ -201,6 +201,7 @@ const ImportJobBanner = () => {
                     </Link>
                   ) : null}
                   <Button
+                    className="rounded-full"
                     size="sm"
                     variant="secondary"
                     onPress={() => dismissMutation.mutate(job.id)}
@@ -216,14 +217,17 @@ const ImportJobBanner = () => {
         if (job.status === "failed") {
           return (
             <div
-              className="rounded-lg border border-danger bg-danger-50 p-4 text-danger-700 text-sm"
+              className="rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-4 text-sm"
               key={job.id}
               role="alert"
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="font-medium">取り込みに失敗しました。{importJobErrorMessage(job)}</p>
+                <p className="font-semibold text-brand-danger">
+                  取り込みに失敗しました。{importJobErrorMessage(job)}
+                </p>
                 <div className="flex gap-2">
                   <Button
+                    className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
                     isDisabled={!job.url || retryMutation.isPending}
                     size="sm"
                     variant="primary"
@@ -232,6 +236,7 @@ const ImportJobBanner = () => {
                     再試行
                   </Button>
                   <Button
+                    className="rounded-full"
                     size="sm"
                     variant="secondary"
                     onPress={() => dismissMutation.mutate(job.id)}
@@ -246,12 +251,15 @@ const ImportJobBanner = () => {
 
         return (
           <div
-            className="rounded-lg border border-border bg-surface p-4 text-default-700 text-sm"
+            className="rounded-[14px] border border-brand-line bg-brand-paper p-4 text-sm"
             key={job.id}
             role="status"
           >
-            <p className="font-medium">取り込み中...</p>
-            {job.url ? <p className="mt-1 break-all text-default-500">{job.url}</p> : null}
+            <div className="flex items-center gap-3">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
+              <p className="font-semibold text-brand-walnut">取り込み中...</p>
+            </div>
+            {job.url ? <p className="mt-2 break-all text-brand-muted text-xs">{job.url}</p> : null}
           </div>
         );
       })}
@@ -260,7 +268,7 @@ const ImportJobBanner = () => {
 };
 
 const SourceIcon = () => {
-  return <Globe className="h-4 w-4 text-default-500" />;
+  return <Globe className="h-3.5 w-3.5 text-brand-wheat" weight="bold" />;
 };
 
 export const RecipesIndexRoute = () => {
@@ -296,16 +304,31 @@ export const RecipesIndexRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-5xl px-6 py-10">
-      <form
-        className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
-        onSubmit={submitSearch}
-      >
-        <TextField>
-          <Label className="sr-only">検索</Label>
-          <Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />
-        </TextField>
-        <Button type="submit" variant="secondary">
+    <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-8">
+      <form className="mt-2 flex gap-3 items-end" onSubmit={submitSearch}>
+        <div className="flex-1 relative">
+          <TextField>
+            <Label className="sr-only">検索</Label>
+            <div className="relative">
+              <MagnifyingGlass
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-wheat"
+                size={18}
+                weight="bold"
+              />
+              <Input
+                className="pl-10"
+                placeholder="レシピを検索..."
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+              />
+            </div>
+          </TextField>
+        </div>
+        <Button
+          className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold hover:bg-brand-paper-muted"
+          type="submit"
+          variant="secondary"
+        >
           検索
         </Button>
       </form>
@@ -313,37 +336,52 @@ export const RecipesIndexRoute = () => {
       <ImportJobBanner />
 
       {error ? (
-        <p className="mt-6 text-danger" role="alert">
-          レシピ一覧を読み込めませんでした。
-        </p>
+        <div className="mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-4">
+          <p className="text-brand-danger text-sm" role="alert">
+            レシピ一覧を読み込めませんでした。
+          </p>
+        </div>
       ) : null}
       {isFetching && recipes.length === 0 ? (
-        <p className="mt-6 text-default-600">読み込み中</p>
+        <div className="mt-10 flex items-center justify-center gap-3">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
+          <p className="text-brand-muted text-sm">読み込み中</p>
+        </div>
       ) : null}
       {!isFetching && recipes.length === 0 && !error ? (
-        <p className="mt-6 text-default-600">レシピがありません。</p>
+        <div className="mt-16 flex flex-col items-center justify-center text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-sage-soft">
+            <MagnifyingGlass size={28} className="text-brand-sage" weight="bold" />
+          </div>
+          <p className="mt-4 text-brand-walnut font-semibold">レシピがありません</p>
+          <p className="mt-1 text-brand-muted text-sm">最初のレシピを追加してみましょう</p>
+        </div>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {recipes.map((recipe) => {
           const content = (
             <>
-              <div className="relative aspect-video w-full bg-default-100 overflow-hidden">
+              <div className="relative aspect-video w-full bg-brand-paper-muted overflow-hidden rounded-t-[20px]">
                 {recipe.coverImageUrl ? (
                   <img
                     src={recipe.coverImageUrl}
                     alt={recipe.title}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
-                ) : null}
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <div className="text-brand-line text-4xl">🍳</div>
+                  </div>
+                )}
               </div>
               <div className="flex flex-1 flex-col p-4">
-                <h2 className="line-clamp-2 font-bold text-lg leading-tight text-default-foreground">
+                <h2 className="line-clamp-2 font-bold text-base leading-tight text-brand-ink">
                   {recipe.title}
                 </h2>
-                <div className="mt-auto pt-4 flex items-center justify-between">
+                <div className="mt-auto pt-3 flex items-center justify-between">
                   {recipe.sourceName ? (
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-default-100 px-2.5 py-1 text-xs font-medium text-default-600">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-paper-muted px-2.5 py-1 text-xs font-medium text-brand-muted">
                       <SourceIcon />
                       {recipe.sourceName}
                     </div>
@@ -351,7 +389,8 @@ export const RecipesIndexRoute = () => {
                     <div />
                   )}
                   {recipe.locked ? (
-                    <span className="inline-flex rounded-md border border-border px-2 py-1 font-medium text-default-600 text-xs">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-brand-line px-2 py-1 font-medium text-brand-muted text-xs">
+                      <LockSimple size={12} weight="bold" />
                       ロック中
                     </span>
                   ) : null}
@@ -364,7 +403,7 @@ export const RecipesIndexRoute = () => {
             return (
               <div
                 key={recipe.id}
-                className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface opacity-75"
+                className="flex flex-col overflow-hidden rounded-[20px] border border-brand-line-soft bg-brand-paper opacity-60"
               >
                 {content}
               </div>
@@ -376,7 +415,7 @@ export const RecipesIndexRoute = () => {
               key={recipe.id}
               to="/recipes/$recipeId"
               params={{ recipeId: recipe.id }}
-              className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface transition-shadow hover:shadow-md"
+              className="group flex flex-col overflow-hidden rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm transition-shadow duration-200 hover:shadow-pantry"
             >
               {content}
             </Link>
@@ -385,9 +424,16 @@ export const RecipesIndexRoute = () => {
       </div>
 
       {nextCursor ? (
-        <Button className="mt-6" isDisabled={isFetching} variant="secondary" onPress={loadNextPage}>
-          もっと見る
-        </Button>
+        <div className="mt-8 flex justify-center">
+          <Button
+            className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold hover:bg-brand-paper-muted"
+            isDisabled={isFetching}
+            variant="secondary"
+            onPress={loadNextPage}
+          >
+            もっと見る
+          </Button>
+        </div>
       ) : null}
     </section>
   );
@@ -411,8 +457,8 @@ export const NewRecipeRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-6 py-10">
-      <h1 className="font-semibold text-3xl">レシピ作成</h1>
+    <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
+      <h1 className="text-brand-ink font-bold text-2xl">レシピ作成</h1>
       <RecipeDraftForm
         defaultValues={createEmptyRecipeDraftFormValues()}
         submitError={submitError}
@@ -452,66 +498,84 @@ export const RecipeDetailRoute = () => {
 
   if (isLoading) {
     return (
-      <section className="mx-auto w-full max-w-5xl px-6 py-10">
-        <p className="text-default-600">読み込み中</p>
+      <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-10">
+        <div className="flex items-center gap-3">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
+          <p className="text-brand-muted text-sm">読み込み中</p>
+        </div>
       </section>
     );
   }
 
   if (error || !recipe) {
     return (
-      <section className="mx-auto w-full max-w-5xl px-6 py-10">
-        <h1 className="font-semibold text-3xl">レシピを表示できません</h1>
+      <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-10">
+        <h1 className="text-brand-ink font-bold text-2xl">レシピを表示できません</h1>
       </section>
     );
   }
 
   if (recipe.locked) {
     return (
-      <article className="mx-auto w-full max-w-3xl px-6 py-10">
-        <h1 className="font-semibold text-3xl">ロック中のレシピ</h1>
-        <p className="mt-4 text-default-600">このレシピの詳細は現在表示できません。</p>
+      <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-10">
+        <div className="flex items-center gap-2">
+          <LockSimple size={20} className="text-brand-muted" weight="bold" />
+          <h1 className="text-brand-ink font-bold text-2xl">ロック中のレシピ</h1>
+        </div>
+        <p className="mt-4 text-brand-muted">このレシピの詳細は現在表示できません。</p>
       </article>
     );
   }
 
   return (
-    <article className="mx-auto w-full max-w-3xl px-6 py-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        {recipe.content.coverImageUrl ? (
-          <img
-            alt={recipe.title}
-            className="mt-6 aspect-video w-full rounded-lg object-cover"
-            src={recipe.content.coverImageUrl}
-          />
-        ) : null}
-        <div className="flex gap-2">
+    <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
+      {recipe.content.coverImageUrl ? (
+        <img
+          alt={recipe.title}
+          className="w-full rounded-[20px] object-cover aspect-video shadow-pantry-sm"
+          src={recipe.content.coverImageUrl}
+        />
+      ) : null}
+
+      <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-brand-ink font-bold text-2xl sm:text-3xl leading-tight">
+            {recipe.title}
+          </h1>
+          {recipe.content.servingsText ? (
+            <p className="mt-2 text-brand-muted text-sm">{recipe.content.servingsText}</p>
+          ) : null}
+        </div>
+        <div className="flex gap-2 shrink-0">
           <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border px-4 font-semibold text-sm"
+            className="inline-flex min-h-10 items-center justify-center rounded-full border border-brand-line bg-brand-paper-raised px-5 font-semibold text-brand-walnut text-sm hover:bg-brand-paper-muted transition-colors"
             params={{ recipeId }}
             to="/recipes/$recipeId/edit"
           >
             編集
           </Link>
-          <Button isDisabled={deleteMutation.isPending} variant="danger" onPress={confirmDelete}>
+          <Button
+            className="rounded-full"
+            isDisabled={deleteMutation.isPending}
+            variant="danger"
+            onPress={confirmDelete}
+          >
             削除
           </Button>
         </div>
       </div>
-      {deleteMutation.error ? (
-        <p className="mt-4 text-danger" role="alert">
-          レシピを削除できませんでした。
-        </p>
-      ) : null}
-      {recipe.content.servingsText ? (
-        <p className="mt-3 text-default-600">{recipe.content.servingsText}</p>
-      ) : null}
 
-      <h1 className="font-semibold text-3xl">{recipe.title}</h1>
+      {deleteMutation.error ? (
+        <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+          <p className="text-brand-danger text-sm" role="alert">
+            レシピを削除できませんでした。
+          </p>
+        </div>
+      ) : null}
 
       {recipe.content.ingredientGroups.length > 0 ? (
-        <section className="mt-8">
-          <h2 className="font-semibold text-xl">材料</h2>
+        <section className="mt-8 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
+          <h2 className="text-brand-walnut font-bold text-lg">材料</h2>
           {recipe.content.ingredientGroups.map((group) => (
             <div
               className="mt-4"
@@ -522,12 +586,17 @@ export const RecipeDetailRoute = () => {
                   .join("|")
               }
             >
-              {group.label ? <h3 className="font-medium">{group.label}</h3> : null}
-              <ul className="mt-2 list-disc space-y-1 pl-5">
+              {group.label ? (
+                <h3 className="font-semibold text-brand-walnut text-sm">{group.label}</h3>
+              ) : null}
+              <ul className="mt-2 space-y-1.5">
                 {group.ingredients.map((ingredient) => (
-                  <li key={`${ingredient.name}:${ingredient.amount}`}>
-                    {ingredient.name}
-                    {ingredient.amount ? ` ${ingredient.amount}` : ""}
+                  <li
+                    className="flex items-center justify-between border-b border-brand-line-soft/60 pb-1.5 text-sm last:border-0"
+                    key={`${ingredient.name}:${ingredient.amount}`}
+                  >
+                    <span className="text-brand-ink">{ingredient.name}</span>
+                    <span className="text-brand-muted font-medium">{ingredient.amount || ""}</span>
                   </li>
                 ))}
               </ul>
@@ -538,23 +607,33 @@ export const RecipeDetailRoute = () => {
 
       {recipe.content.steps.length > 0 ? (
         <section className="mt-8">
-          <h2 className="font-semibold text-xl">手順</h2>
-          <ol className="mt-3 list-decimal space-y-4 pl-5">
+          <h2 className="text-brand-walnut font-bold text-lg">手順</h2>
+          <ol className="mt-4 space-y-5">
             {recipe.content.steps.map((step, stepIndex) => (
-              <li key={step.imageKeys.join(":") || step.imageUrls.join(":") || step.text}>
-                {step.text ? <p>{step.text}</p> : null}
-                {step.imageUrls.length > 0 ? (
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {step.imageUrls.map((imageUrl, imageIndex) => (
-                      <img
-                        alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
-                        className="aspect-video w-full rounded-lg object-cover"
-                        key={imageUrl}
-                        src={imageUrl}
-                      />
-                    ))}
-                  </div>
-                ) : null}
+              <li
+                className="flex gap-4"
+                key={step.imageKeys.join(":") || step.imageUrls.join(":") || step.text}
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-sage text-white text-xs font-bold">
+                  {stepIndex + 1}
+                </div>
+                <div className="flex-1 pt-0.5">
+                  {step.text ? (
+                    <p className="text-brand-ink text-sm leading-relaxed">{step.text}</p>
+                  ) : null}
+                  {step.imageUrls.length > 0 ? (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {step.imageUrls.map((imageUrl, imageIndex) => (
+                        <img
+                          alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
+                          className="aspect-video w-full rounded-[14px] object-cover"
+                          key={imageUrl}
+                          src={imageUrl}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ol>
@@ -562,21 +641,33 @@ export const RecipeDetailRoute = () => {
       ) : null}
 
       {recipe.content.note ? (
-        <section className="mt-8">
-          <h2 className="font-semibold text-xl">メモ</h2>
-          <p className="mt-3 whitespace-pre-wrap text-default-700">{recipe.content.note}</p>
+        <section className="mt-8 rounded-[20px] border border-brand-line-soft bg-brand-paper-muted p-5">
+          <h2 className="text-brand-walnut font-bold text-lg">メモ</h2>
+          <p className="mt-3 whitespace-pre-wrap text-brand-ink text-sm leading-relaxed">
+            {recipe.content.note}
+          </p>
         </section>
       ) : null}
 
       {recipe.source.sourceName || recipe.source.sourceUrl ? (
         <section className="mt-8">
-          <h2 className="font-semibold text-xl">出典</h2>
-          {recipe.source.sourceName ? <p className="mt-3">{recipe.source.sourceName}</p> : null}
-          {recipe.source.sourceUrl ? (
-            <a className="break-all text-accent" href={recipe.source.sourceUrl}>
-              {recipe.source.sourceUrl}
-            </a>
-          ) : null}
+          <h2 className="text-brand-walnut font-bold text-lg">出典</h2>
+          <div className="mt-3 flex items-center gap-2">
+            <Globe size={16} className="text-brand-wheat" weight="bold" />
+            <div>
+              {recipe.source.sourceName ? (
+                <p className="text-brand-ink text-sm font-medium">{recipe.source.sourceName}</p>
+              ) : null}
+              {recipe.source.sourceUrl ? (
+                <a
+                  className="break-all text-brand-sage text-sm hover:text-brand-sage-dark transition-colors"
+                  href={recipe.source.sourceUrl}
+                >
+                  {recipe.source.sourceUrl}
+                </a>
+              ) : null}
+            </div>
+          </div>
         </section>
       ) : null}
     </article>
@@ -615,23 +706,26 @@ export const EditRecipeRoute = () => {
 
   if (isLoading) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-6 py-10">
-        <p className="text-default-600">読み込み中</p>
+      <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-10">
+        <div className="flex items-center gap-3">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
+          <p className="text-brand-muted text-sm">読み込み中</p>
+        </div>
       </section>
     );
   }
 
   if (error || !recipe || recipe.locked) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-6 py-10">
-        <h1 className="font-semibold text-3xl">レシピを編集できません</h1>
+      <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-10">
+        <h1 className="text-brand-ink font-bold text-2xl">レシピを編集できません</h1>
       </section>
     );
   }
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-6 py-10">
-      <h1 className="font-semibold text-3xl">レシピ編集</h1>
+    <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
+      <h1 className="text-brand-ink font-bold text-2xl">レシピ編集</h1>
       <RecipeDraftForm
         key={recipe.id}
         coverImagePreviewUrl={recipe.content.coverImageUrl}
