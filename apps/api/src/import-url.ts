@@ -424,6 +424,8 @@ const convertFetchedPageToRecipeImportInput = (
 
 type ImportAiProviderKind = "workers-ai" | "openrouter" | "groq";
 
+const IMPORT_AI_MAX_OUTPUT_TOKENS = 8192;
+
 export const createDefaultRecipeImportAIProvider = (
   env: Bindings,
   { logger = createLogger() }: { logger?: Logger } = {},
@@ -447,6 +449,7 @@ export const createDefaultRecipeImportAIProvider = (
         prompt: buildImportUserPrompt(input),
         providerOptions: createImportProviderOptions(providerKind),
         temperature: 0,
+        maxOutputTokens: IMPORT_AI_MAX_OUTPUT_TOKENS,
         maxRetries: 0,
         timeout: timeoutMs,
         abortSignal: controller.signal,

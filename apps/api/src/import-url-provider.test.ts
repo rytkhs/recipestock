@@ -107,6 +107,7 @@ describe("default recipe import AI provider", () => {
         system: expect.stringContaining("RecipeDraftContent"),
         prompt: expect.not.stringContaining("metadataCandidates"),
         temperature: 0,
+        maxOutputTokens: 4096,
         maxRetries: 0,
         timeout: 180000,
         abortSignal: expect.any(AbortSignal),
