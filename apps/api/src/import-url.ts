@@ -10,6 +10,10 @@ import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
 import { type Bindings } from "./env";
 import { extractRecipePageEvidence } from "./import-page-evidence";
+import {
+  createDeterministicImportRegistry,
+  type DeterministicImportRegistry,
+} from "./lib/import/deterministic";
 import { createLogger, type Logger } from "./logger";
 import { isHttpFetchUrlAllowed } from "./url-safety";
 import { consumeAiUsage, type UsageRepository } from "./usage";
@@ -111,10 +115,6 @@ type RecipeImportConverterResult =
       source: RecipeSourceDraft;
       warnings: string[];
     };
-
-type RecipeImportConverter = {
-  convert(page: FetchedImportPage): Promise<RecipeImportConverterResult>;
-};
 
 export type FetchedImportPage = {
   finalUrl: string;
@@ -262,39 +262,66 @@ export const normalizeImportableUrl = (rawUrl: string) => {
   }
 };
 
-const genericHtmlImportConverter: RecipeImportConverter = {
-  async convert(page) {
-    if (page.contentType && !/html/i.test(page.contentType)) {
-      throw new RecipeImportError("unsupported_page", "Import URL is not an HTML page.");
-    }
+const defaultDeterministicImportRegistry = createDeterministicImportRegistry();
 
-    const normalizedUrl = normalizeUrl(page.finalUrl);
-    const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
-    const evidence = await extractRecipePageEvidence(page, normalizedUrl);
-    const sourceName = evidence.meta["og:site_name"] ?? host;
+const convertFetchedHtmlPage = async (
+  page: FetchedImportPage,
+  deterministicImportRegistry: DeterministicImportRegistry,
+): Promise<RecipeImportConverterResult> => {
+  if (page.contentType && !/html/i.test(page.contentType)) {
+    throw new RecipeImportError("unsupported_page", "Import URL is not an HTML page.");
+  }
 
-    if (evidence.markdownContent.length < 40 && !hasDescriptionMetadata(evidence.meta)) {
-      throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
-    }
+  const normalizedUrl = normalizeUrl(page.finalUrl);
+  const finalUrl = page.finalUrl;
+  const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
+  const evidence = await extractRecipePageEvidence(page, normalizedUrl);
+  const deterministicAdapter = deterministicImportRegistry.select({
+    finalUrl,
+    normalizedUrl,
+    host,
+  });
+
+  if (deterministicAdapter) {
+    const result = await deterministicAdapter.convert({
+      page,
+      finalUrl,
+      normalizedUrl,
+      host,
+      evidence,
+    });
 
     return {
-      type: "requiresAi",
-      input: {
-        source: {
-          finalUrl: normalizedUrl,
-          host,
-        },
-        markdownContent: evidence.markdownContent,
-        recipeStructuredEvidence: evidence.recipeStructuredEvidence,
-      },
-      imageCandidates: evidence.imageCandidates,
-      source: {
-        sourceUrl: normalizedUrl,
-        sourceName,
-      },
-      warnings: [],
+      type: "deterministic",
+      recipeDraftContent: recipeDraftContentSchema.parse(result.recipeDraftContent),
+      source: result.source,
+      warnings: result.warnings,
     };
-  },
+  }
+
+  const sourceName = evidence.meta["og:site_name"] ?? host;
+
+  if (evidence.markdownContent.length < 40 && !hasDescriptionMetadata(evidence.meta)) {
+    throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
+  }
+
+  return {
+    type: "requiresAi",
+    input: {
+      source: {
+        finalUrl: normalizedUrl,
+        host,
+      },
+      markdownContent: evidence.markdownContent,
+      recipeStructuredEvidence: evidence.recipeStructuredEvidence,
+    },
+    imageCandidates: evidence.imageCandidates,
+    source: {
+      sourceUrl: normalizedUrl,
+      sourceName,
+    },
+    warnings: [],
+  };
 };
 
 const hasDescriptionMetadata = (meta: Record<string, string | undefined>) =>
@@ -307,6 +334,7 @@ export const importRecipeFromUrl = async ({
   usageRepository,
   aiProvider,
   fetcher = fetchImportPage,
+  deterministicImportRegistry = defaultDeterministicImportRegistry,
   now = new Date(),
   logger = createLogger(),
 }: {
@@ -316,6 +344,7 @@ export const importRecipeFromUrl = async ({
   usageRepository: UsageRepository;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
+  deterministicImportRegistry?: DeterministicImportRegistry;
   now?: Date;
   logger?: Logger;
 }): Promise<RecipeImportResult> => {
@@ -325,7 +354,7 @@ export const importRecipeFromUrl = async ({
     timeoutMs: resolveImportTimeoutMs(env),
     maxBytes: resolveImportMaxHtmlBytes(env),
   });
-  const conversion = await convertFetchedPageToRecipeImportInput(page);
+  const conversion = await convertFetchedPageToRecipeImportInput(page, deterministicImportRegistry);
 
   if (conversion.type === "deterministic") {
     return conversion;
@@ -381,7 +410,9 @@ export const importRecipeFromUrl = async ({
 
 const convertFetchedPageToRecipeImportInput = (
   page: FetchedImportPage,
-): Promise<RecipeImportConverterResult> => genericHtmlImportConverter.convert(page);
+  deterministicImportRegistry: DeterministicImportRegistry = defaultDeterministicImportRegistry,
+): Promise<RecipeImportConverterResult> =>
+  convertFetchedHtmlPage(page, deterministicImportRegistry);
 
 type ImportAiProviderKind = "workers-ai" | "openrouter";
 
