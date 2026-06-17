@@ -1,4 +1,5 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
+import { CreditCard, Gear, SignOut, User } from "@phosphor-icons/react";
 import {
   type CreateBillingPortalResponse,
   type CreateCheckoutResponse,
@@ -114,19 +115,30 @@ export const SettingsIndexRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-5xl px-6 py-10">
-      <h1 className="font-semibold text-3xl">Settings</h1>
-      <div className="mt-6 grid gap-4">
-        <div className="rounded-lg border border-border bg-surface p-5">
-          <h2 className="font-semibold text-xl">アカウント</h2>
-          <p className="mt-2 text-default-600 text-sm">
+    <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-8">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-sage-soft text-brand-sage">
+          <Gear size={20} weight="bold" />
+        </div>
+        <h1 className="text-brand-ink font-bold text-2xl">設定</h1>
+      </div>
+
+      <div className="grid gap-5">
+        <div className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <User size={18} weight="bold" className="text-brand-walnut" />
+            <h2 className="text-brand-walnut font-bold text-lg">アカウント</h2>
+          </div>
+          <p className="text-brand-muted text-sm">
             現在のメールアドレス: {viewer.data?.email ?? ""}
           </p>
           <div className="mt-5 grid gap-6 md:grid-cols-2">
-            <form className="grid content-start gap-3" onSubmit={handleEmailChange}>
-              <h3 className="font-semibold text-base">メールアドレス変更</h3>
+            <form className="grid content-start gap-4" onSubmit={handleEmailChange}>
+              <h3 className="text-brand-walnut font-semibold text-base">メールアドレス変更</h3>
               <TextField isRequired type="email">
-                <Label>新しいメールアドレス</Label>
+                <Label className="text-brand-walnut font-semibold text-sm">
+                  新しいメールアドレス
+                </Label>
                 <Input
                   autoComplete="email"
                   inputMode="email"
@@ -134,25 +146,34 @@ export const SettingsIndexRoute = () => {
                   onChange={(event) => setNewEmail(event.target.value)}
                 />
               </TextField>
-              <Button isDisabled={isEmailSubmitting} type="submit" variant="secondary">
+              <Button
+                className="rounded-full font-semibold"
+                isDisabled={isEmailSubmitting}
+                type="submit"
+                variant="secondary"
+              >
                 確認メールを送信
               </Button>
               {emailMessage ? (
-                <p className="font-medium text-success" role="status">
-                  {emailMessage}
-                </p>
+                <div className="rounded-[14px] bg-brand-sage-soft/30 border border-brand-sage-soft p-3">
+                  <p className="font-medium text-brand-sage-dark text-sm" role="status">
+                    {emailMessage}
+                  </p>
+                </div>
               ) : null}
               {emailError ? (
-                <p className="text-danger" role="alert">
-                  {emailError}
-                </p>
+                <div className="rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+                  <p className="text-brand-danger text-sm" role="alert">
+                    {emailError}
+                  </p>
+                </div>
               ) : null}
             </form>
 
-            <form className="grid content-start gap-3" onSubmit={handlePasswordChange}>
-              <h3 className="font-semibold text-base">パスワード変更</h3>
+            <form className="grid content-start gap-4" onSubmit={handlePasswordChange}>
+              <h3 className="text-brand-walnut font-semibold text-base">パスワード変更</h3>
               <TextField isRequired type="password">
-                <Label>現在のパスワード</Label>
+                <Label className="text-brand-walnut font-semibold text-sm">現在のパスワード</Label>
                 <Input
                   autoComplete="current-password"
                   maxLength={128}
@@ -162,7 +183,7 @@ export const SettingsIndexRoute = () => {
                 />
               </TextField>
               <TextField isRequired type="password">
-                <Label>新しいパスワード</Label>
+                <Label className="text-brand-walnut font-semibold text-sm">新しいパスワード</Label>
                 <Input
                   autoComplete="new-password"
                   maxLength={128}
@@ -171,41 +192,59 @@ export const SettingsIndexRoute = () => {
                   onChange={(event) => setNewPassword(event.target.value)}
                 />
               </TextField>
-              <Button isDisabled={isPasswordSubmitting} type="submit" variant="secondary">
+              <Button
+                className="rounded-full font-semibold"
+                isDisabled={isPasswordSubmitting}
+                type="submit"
+                variant="secondary"
+              >
                 パスワードを変更
               </Button>
               {passwordMessage ? (
-                <p className="font-medium text-success" role="status">
-                  {passwordMessage}
-                </p>
+                <div className="rounded-[14px] bg-brand-sage-soft/30 border border-brand-sage-soft p-3">
+                  <p className="font-medium text-brand-sage-dark text-sm" role="status">
+                    {passwordMessage}
+                  </p>
+                </div>
               ) : null}
               {passwordError ? (
-                <p className="text-danger" role="alert">
-                  {passwordError}
-                </p>
+                <div className="rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+                  <p className="text-brand-danger text-sm" role="alert">
+                    {passwordError}
+                  </p>
+                </div>
               ) : null}
             </form>
           </div>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-5">
-          <h2 className="font-semibold text-xl">プラン</h2>
-          <p className="mt-2 text-default-600 text-sm">
-            現在のプラン: {viewer.data?.plan === "pro" ? "Pro" : "Free"}
+
+        <div className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <CreditCard size={18} weight="bold" className="text-brand-walnut" />
+            <h2 className="text-brand-walnut font-bold text-lg">プラン</h2>
+          </div>
+          <p className="text-brand-muted text-sm">
+            現在のプラン:{" "}
+            <span className="font-semibold text-brand-ink">
+              {viewer.data?.plan === "pro" ? "Pro" : "Free"}
+            </span>
           </p>
           <Link
-            className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg bg-accent px-4 font-semibold text-accent-foreground text-sm"
+            className="mt-4 inline-flex min-h-10 items-center justify-center rounded-full bg-brand-sage px-5 font-semibold text-white text-sm hover:bg-brand-sage-dark transition-colors"
             to="/settings/billing"
           >
             課金設定
           </Link>
         </div>
       </div>
+
       <div className="mt-8 flex justify-center">
         <Button
-          className="text-danger border-none bg-transparent hover:bg-danger-50"
+          className="rounded-full text-brand-danger border-none bg-transparent hover:bg-brand-danger/5 gap-1.5"
           variant="ghost"
           onPress={() => void handleSignOut()}
         >
+          <SignOut size={16} weight="bold" />
           ログアウト
         </Button>
       </div>
@@ -271,42 +310,54 @@ export const SettingsBillingRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-5xl px-6 py-10">
-      <h1 className="font-semibold text-3xl">課金設定</h1>
+    <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-8">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-orange-soft text-brand-orange">
+          <CreditCard size={20} weight="bold" />
+        </div>
+        <h1 className="text-brand-ink font-bold text-2xl">課金設定</h1>
+      </div>
+
       {message ? (
-        <p className="mt-4 rounded-lg border border-border bg-surface px-4 py-3 text-default-700">
-          {message}
-        </p>
+        <div className="mb-6 rounded-[14px] border border-brand-line-soft bg-brand-paper p-4">
+          <p className="text-brand-walnut text-sm">{message}</p>
+        </div>
       ) : null}
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-border bg-surface p-5">
-          <h2 className="font-semibold text-xl">現在のプラン</h2>
-          <p className="mt-3 font-semibold text-2xl">{isPro ? "Pro" : "Free"}</p>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+          <h2 className="text-brand-walnut font-bold text-lg">現在のプラン</h2>
+          <p className="mt-3 font-bold text-2xl text-brand-ink">{isPro ? "Pro" : "Free"}</p>
           {cancellationMessage ? (
-            <p className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-default-700 text-sm">
-              {cancellationMessage}
-            </p>
+            <div className="mt-3 rounded-[14px] bg-brand-paper-muted p-3">
+              <p className="text-brand-walnut text-sm">{cancellationMessage}</p>
+            </div>
           ) : null}
-          <p className="mt-2 text-default-600 text-sm">
-            保存件数: {viewer.data?.recipeCount ?? 0}
+          <p className="mt-3 text-brand-muted text-sm">
+            保存件数:{" "}
+            <span className="font-semibold text-brand-ink">{viewer.data?.recipeCount ?? 0}</span>
             {viewer.data?.recipeLimit === null ? "" : ` / ${viewer.data?.recipeLimit ?? 5}`}
           </p>
-          <p className="mt-1 text-default-600 text-sm">
-            AI月次上限: {viewer.data?.aiUsage.limit ?? 0} 回
+          <p className="mt-1 text-brand-muted text-sm">
+            AI月次上限:{" "}
+            <span className="font-semibold text-brand-ink">
+              {viewer.data?.aiUsage.limit ?? 0} 回
+            </span>
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-5">
-          <h2 className="font-semibold text-xl">Pro</h2>
-          <p className="mt-2 text-default-600 text-sm">
+
+        <div className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+          <h2 className="text-brand-walnut font-bold text-lg">Pro</h2>
+          <p className="mt-2 text-brand-muted text-sm">
             保存件数の上限なしでレシピを保存できます。
           </p>
           {isPro ? (
             <div className="mt-4">
-              <p className="font-semibold text-accent">
+              <p className="font-semibold text-brand-sage text-sm">
                 {cancellationMessage ? "Proは請求期間終了まで利用できます。" : "Pro契約中です。"}
               </p>
               <Button
-                className="mt-4"
+                className="mt-4 rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
                 isDisabled={isPortalSubmitting}
                 type="button"
                 variant="primary"
@@ -317,24 +368,28 @@ export const SettingsBillingRoute = () => {
             </div>
           ) : (
             <Button
-              className="mt-4"
+              className="mt-4 rounded-full bg-brand-orange text-white font-semibold hover:bg-brand-orange-dark"
               isDisabled={isSubmitting}
               type="button"
               variant="primary"
               onPress={() => void startCheckout()}
             >
-              Pro契約
+              Proにアップグレード
             </Button>
           )}
           {error ? (
-            <p className="mt-4 text-danger" role="alert">
-              {error}
-            </p>
+            <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+              <p className="text-brand-danger text-sm" role="alert">
+                {error}
+              </p>
+            </div>
           ) : null}
           {portalError ? (
-            <p className="mt-4 text-danger" role="alert">
-              {portalError}
-            </p>
+            <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+              <p className="text-brand-danger text-sm" role="alert">
+                {portalError}
+              </p>
+            </div>
           ) : null}
         </div>
       </div>

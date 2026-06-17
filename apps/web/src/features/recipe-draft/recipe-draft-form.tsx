@@ -81,7 +81,7 @@ const FormInput = ({
 
   return (
     <TextField isRequired={isRequired}>
-      <Label>{label}</Label>
+      <Label className="text-brand-walnut font-semibold text-sm">{label}</Label>
       <Input
         name={field.name}
         ref={field.ref}
@@ -162,11 +162,11 @@ const ImageInput = ({
   return (
     <div className="grid gap-3">
       <div className="grid gap-1">
-        <Label>{label}</Label>
-        <p className="text-default-600 text-sm">{imageInputHelpText}</p>
+        <Label className="text-brand-walnut font-semibold text-sm">{label}</Label>
+        <p className="text-brand-muted text-sm">{imageInputHelpText}</p>
       </div>
-      <div className="overflow-hidden rounded-lg border border-border bg-surface">
-        <div className="grid aspect-video place-items-center bg-default-100">
+      <div className="overflow-hidden rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm">
+        <div className="grid aspect-video place-items-center bg-brand-paper-muted">
           {currentPreviewUrl ? (
             <img
               alt={`${label}プレビュー`}
@@ -174,13 +174,13 @@ const ImageInput = ({
               src={currentPreviewUrl}
             />
           ) : (
-            <div className="px-4 text-center text-default-600 text-sm">
+            <div className="px-4 text-center text-brand-muted text-sm">
               画像が選択されていません
             </div>
           )}
         </div>
         {isUploading ? <ProgressBar aria-label={`${label}アップロード中`} isIndeterminate /> : null}
-        <div className="flex flex-wrap items-center gap-2 p-3">
+        <div className="flex flex-wrap items-center gap-2 p-4">
           <input
             ref={inputRef}
             accept={imageInputAccept}
@@ -191,6 +191,7 @@ const ImageInput = ({
             onChange={(event) => void handleChange(event)}
           />
           <Button
+            className="rounded-full font-semibold"
             isDisabled={isUploading}
             variant={field.value ? "secondary" : "primary"}
             onPress={() => inputRef.current?.click()}
@@ -198,17 +199,24 @@ const ImageInput = ({
             {field.value ? "画像を変更" : "画像を選択"}
           </Button>
           {field.value ? (
-            <Button isDisabled={isUploading} variant="tertiary" onPress={handleRemove}>
+            <Button
+              className="rounded-full"
+              isDisabled={isUploading}
+              variant="tertiary"
+              onPress={handleRemove}
+            >
               画像を削除
             </Button>
           ) : null}
-          {isUploading ? <span className="text-default-600 text-sm">アップロード中</span> : null}
+          {isUploading ? <span className="text-brand-muted text-sm">アップロード中</span> : null}
         </div>
       </div>
       {error ? (
-        <p className="text-danger text-sm" role="alert">
-          {error}
-        </p>
+        <div className="rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+          <p className="text-brand-danger text-sm" role="alert">
+            {error}
+          </p>
+        </div>
       ) : null}
     </div>
   );
@@ -301,8 +309,8 @@ const StepImagesInput = ({
   return (
     <div className="grid gap-3">
       <div className="grid gap-1">
-        <Label>{label}</Label>
-        <p className="text-default-600 text-sm">{imageInputHelpText}</p>
+        <Label className="text-brand-walnut font-semibold text-sm">{label}</Label>
+        <p className="text-brand-muted text-sm">{imageInputHelpText}</p>
       </div>
       <input
         ref={inputRef}
@@ -322,7 +330,7 @@ const StepImagesInput = ({
 
             return (
               <div
-                className="group relative overflow-hidden rounded-lg border border-border bg-default-100"
+                className="group relative overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted"
                 key={imageId}
               >
                 <div className="grid aspect-square place-items-center">
@@ -333,11 +341,11 @@ const StepImagesInput = ({
                       src={imagePreviewUrl}
                     />
                   ) : (
-                    <span className="px-2 text-center text-default-600 text-xs">保存済み画像</span>
+                    <span className="px-2 text-center text-brand-muted text-xs">保存済み画像</span>
                   )}
                 </div>
                 <Button
-                  className="absolute top-2 right-2"
+                  className="absolute top-2 right-2 rounded-full"
                   isDisabled={isUploading}
                   variant="danger"
                   onPress={() => handleRemove(imageIndex)}
@@ -351,20 +359,22 @@ const StepImagesInput = ({
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          className="justify-self-start"
+          className="justify-self-start rounded-full font-semibold"
           isDisabled={isUploading}
           variant="secondary"
           onPress={() => inputRef.current?.click()}
         >
           画像を追加
         </Button>
-        {isUploading ? <span className="text-default-600 text-sm">アップロード中</span> : null}
+        {isUploading ? <span className="text-brand-muted text-sm">アップロード中</span> : null}
       </div>
       {isUploading ? <ProgressBar aria-label={`${label}アップロード中`} isIndeterminate /> : null}
       {error ? (
-        <p className="text-danger text-sm" role="alert">
-          {error}
-        </p>
+        <div className="rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+          <p className="text-brand-danger text-sm" role="alert">
+            {error}
+          </p>
+        </div>
       ) : null}
     </div>
   );
@@ -385,7 +395,7 @@ const FormTextArea = ({
 
   return (
     <TextField>
-      <Label>{label}</Label>
+      <Label className="text-brand-walnut font-semibold text-sm">{label}</Label>
       <TextArea
         name={field.name}
         ref={field.ref}
@@ -411,8 +421,8 @@ const IngredientGroupFields = ({
   });
 
   return (
-    <fieldset className="grid min-w-0 gap-4 rounded-lg border border-border bg-surface p-4">
-      <legend className="px-1 font-semibold">材料グループ</legend>
+    <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
+      <legend className="px-2 font-bold text-brand-walnut">材料グループ</legend>
       <FormInput
         control={control}
         label="グループ名"
@@ -435,7 +445,11 @@ const IngredientGroupFields = ({
               label="分量"
               name={`ingredientGroups.${groupIndex}.ingredients.${ingredientIndex}.amount`}
             />
-            <Button variant="secondary" onPress={() => remove(ingredientIndex)}>
+            <Button
+              className="rounded-full"
+              variant="secondary"
+              onPress={() => remove(ingredientIndex)}
+            >
               削除
             </Button>
           </div>
@@ -443,7 +457,7 @@ const IngredientGroupFields = ({
       </div>
 
       <Button
-        className="justify-self-start"
+        className="justify-self-start rounded-full font-semibold"
         variant="secondary"
         onPress={() => append({ name: "", amount: "" })}
       >
@@ -479,7 +493,7 @@ export const RecipeDraftForm = ({
   };
 
   return (
-    <form className="mt-6 grid gap-4" onSubmit={(event) => void handleFormSubmit(event)}>
+    <form className="mt-6 grid gap-5" onSubmit={(event) => void handleFormSubmit(event)}>
       <FormInput control={control} isRequired label="タイトル" name="title" />
 
       <FormInput control={control} label="人数" name="servingsText" />
@@ -498,16 +512,16 @@ export const RecipeDraftForm = ({
       ))}
 
       <Button
-        className="justify-self-start"
+        className="justify-self-start rounded-full font-semibold"
         variant="secondary"
         onPress={() => ingredientGroups.append(createEmptyIngredientGroup())}
       >
         グループを追加
       </Button>
 
-      <fieldset className="grid min-w-0 gap-4 rounded-lg border border-border bg-surface p-4">
-        <legend className="px-1 font-semibold">手順</legend>
-        <div className="grid gap-3">
+      <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
+        <legend className="px-2 font-bold text-brand-walnut">手順</legend>
+        <div className="grid gap-4">
           {steps.fields.map((field, stepIndex) => (
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]" key={field.id}>
               <div className="grid gap-3">
@@ -527,6 +541,7 @@ export const RecipeDraftForm = ({
                 />
               </div>
               <Button
+                className="rounded-full"
                 isDisabled={uploadingImageCount > 0}
                 variant="secondary"
                 onPress={() => steps.remove(stepIndex)}
@@ -537,7 +552,7 @@ export const RecipeDraftForm = ({
           ))}
         </div>
         <Button
-          className="justify-self-start"
+          className="justify-self-start rounded-full font-semibold"
           variant="secondary"
           onPress={() => steps.append(createEmptyStep())}
         >
@@ -548,6 +563,7 @@ export const RecipeDraftForm = ({
       <FormTextArea control={control} label="メモ" name="note" rows={4} />
 
       <Button
+        className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
         isDisabled={formState.isSubmitting || uploadingImageCount > 0}
         type="submit"
         variant="primary"
@@ -556,9 +572,11 @@ export const RecipeDraftForm = ({
       </Button>
 
       {submitError ? (
-        <p className="text-danger" role="alert">
-          {submitError}
-        </p>
+        <div className="rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+          <p className="text-brand-danger text-sm" role="alert">
+            {submitError}
+          </p>
+        </div>
       ) : null}
     </form>
   );

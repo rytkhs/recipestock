@@ -3,7 +3,7 @@
   "short_name": "Recipe Stock",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fbfaf6",
-  "theme_color": "#256f5a",
+  "background_color": "#FBF3E9",
+  "theme_color": "#768055",
   "icons": []
 }

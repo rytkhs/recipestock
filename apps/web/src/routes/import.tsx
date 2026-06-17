@@ -1,4 +1,5 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
+import { Link as LinkIcon } from "@phosphor-icons/react";
 import { type CreateImportUrlJobResponse } from "@recipestock/schemas";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
@@ -63,30 +64,49 @@ export const ImportUrlRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-6 py-10">
-      <h1 className="font-semibold text-3xl">URLから取り込む</h1>
-      <form
-        className="mt-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
-        onSubmit={submit}
-      >
-        <TextField isRequired>
-          <Label>URL</Label>
-          <Input
-            inputMode="url"
-            type="url"
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-          />
-        </TextField>
-        <Button isDisabled={isSubmitting} type="submit" variant="primary">
-          取り込む
-        </Button>
-      </form>
-      {error ? (
-        <p className="mt-4 text-danger" role="alert">
-          {error}
-        </p>
-      ) : null}
+    <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-orange-soft text-brand-orange">
+          <LinkIcon size={20} weight="bold" />
+        </div>
+        <div>
+          <h1 className="text-brand-ink font-bold text-2xl">URLから取り込む</h1>
+          <p className="text-brand-muted text-sm">
+            レシピサイトのURLを入力すると、AIがレシピを自動で取り込みます
+          </p>
+        </div>
+      </div>
+      <div className="mt-6 rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+        <form
+          className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+          onSubmit={submit}
+        >
+          <TextField isRequired>
+            <Label className="text-brand-walnut font-semibold text-sm">URL</Label>
+            <Input
+              inputMode="url"
+              type="url"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+            />
+          </TextField>
+          <Button
+            className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+            isDisabled={isSubmitting}
+            type="submit"
+            variant="primary"
+          >
+            取り込む
+          </Button>
+        </form>
+        {error ? (
+          <div className="mt-4 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
+            <p className="text-brand-danger text-sm" role="alert">
+              {error}
+            </p>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 };
