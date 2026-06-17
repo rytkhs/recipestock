@@ -25,6 +25,8 @@ export type Bindings = {
   AI_TEXT_MODEL: string;
   AI_VISION_MODEL: string;
   IMPORT_AI_PROVIDER?: string;
+  GROQ_API_KEY?: string;
+  GROQ_TEXT_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_TEXT_MODEL?: string;
   FREE_AI_MONTHLY_LIMIT?: string;

@@ -26,6 +26,10 @@ Required local secrets:
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 
+URL import AI provider selection is controlled by `IMPORT_AI_PROVIDER`. Set it to `workers-ai`,
+`openrouter`, or `groq`. OpenRouter requires `OPENROUTER_API_KEY` and `OPENROUTER_TEXT_MODEL`.
+Groq requires `GROQ_API_KEY` and `GROQ_TEXT_MODEL`.
+
 ## R2 setup
 
 Create the development R2 bucket after Cloudflare login:
@@ -83,6 +87,8 @@ pnpm --filter @recipestock/api exec wrangler secret put STRIPE_PRO_PRICE_ID
 pnpm --filter @recipestock/api exec wrangler secret put CLOUDFLARE_ACCOUNT_ID
 pnpm --filter @recipestock/api exec wrangler secret put R2_ACCESS_KEY_ID
 pnpm --filter @recipestock/api exec wrangler secret put R2_SECRET_ACCESS_KEY
+pnpm --filter @recipestock/api exec wrangler secret put GROQ_API_KEY
+pnpm --filter @recipestock/api exec wrangler secret put OPENROUTER_API_KEY
 ```
 
 Do not commit `.dev.vars` or other secret files.

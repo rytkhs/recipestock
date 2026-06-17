@@ -6,12 +6,14 @@ import {
 } from "./import-url";
 
 const mocks = vi.hoisted(() => {
-  const model = { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" };
+  const workersAiModel = { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" };
+  const groqModel = { provider: "groq.chat", modelId: "openai/gpt-oss-120b" };
 
   return {
     generateObject: vi.fn(),
-    workersai: vi.fn(() => model),
-    createWorkersAI: vi.fn(() => vi.fn(() => model)),
+    workersai: vi.fn(() => workersAiModel),
+    createGroq: vi.fn(() => vi.fn(() => groqModel)),
+    createWorkersAI: vi.fn(() => vi.fn(() => workersAiModel)),
   };
 });
 
@@ -21,6 +23,10 @@ vi.mock("ai", () => ({
 
 vi.mock("workers-ai-provider", () => ({
   createWorkersAI: mocks.createWorkersAI,
+}));
+
+vi.mock("@ai-sdk/groq", () => ({
+  createGroq: mocks.createGroq,
 }));
 
 const input: RecipeImportAIInput = {
@@ -102,6 +108,50 @@ describe("default recipe import AI provider", () => {
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("cover.jpg");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("imageCandidates");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeStructuredEvidence");
+  });
+
+  it("GroqとAI Gateway経由でRecipeDraftContentを生成する", async () => {
+    const draft = {
+      title: "Tomato pasta",
+      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      steps: [{ text: "煮詰める" }],
+    };
+    mocks.generateObject.mockResolvedValueOnce({ object: draft });
+
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({
+        IMPORT_AI_PROVIDER: "groq",
+        CLOUDFLARE_ACCOUNT_ID: "account-123",
+        CF_AIG_TOKEN: "gateway-token",
+        GROQ_API_KEY: "groq-key",
+        GROQ_TEXT_MODEL: "openai/gpt-oss-120b",
+      }),
+    );
+
+    await expect(provider.normalize(input)).resolves.toEqual({
+      ...draft,
+      steps: [{ text: "煮詰める", imageIds: [] }],
+    });
+    expect(mocks.createGroq).toHaveBeenCalledWith({
+      apiKey: "groq-key",
+      baseURL: "https://gateway.ai.cloudflare.com/v1/account-123/recipestock/groq",
+      headers: {
+        "cf-aig-authorization": "Bearer gateway-token",
+      },
+    });
+    expect(mocks.createGroq.mock.results[0]?.value).toHaveBeenCalledWith("openai/gpt-oss-120b");
+    expect(mocks.generateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: { provider: "groq.chat", modelId: "openai/gpt-oss-120b" },
+        providerOptions: {
+          groq: {
+            structuredOutputs: true,
+            strictJsonSchema: true,
+          },
+        },
+        timeout: 180000,
+      }),
+    );
   });
 
   it("AIがcoverImageIdを返した場合は受け付ける", async () => {
@@ -254,6 +304,44 @@ describe("default recipe import AI provider", () => {
       message: "AI text model is not configured.",
     } satisfies Partial<RecipeImportError>);
     expect(mocks.createWorkersAI).not.toHaveBeenCalled();
+    expect(mocks.generateObject).not.toHaveBeenCalled();
+  });
+
+  it("GROQ_API_KEYが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({
+        IMPORT_AI_PROVIDER: "groq",
+        CLOUDFLARE_ACCOUNT_ID: "account-123",
+        CF_AIG_TOKEN: "gateway-token",
+        GROQ_API_KEY: "",
+        GROQ_TEXT_MODEL: "openai/gpt-oss-120b",
+      }),
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "unknown",
+      message: "Groq API key is not configured.",
+    } satisfies Partial<RecipeImportError>);
+    expect(mocks.createGroq).not.toHaveBeenCalled();
+    expect(mocks.generateObject).not.toHaveBeenCalled();
+  });
+
+  it("GROQ_TEXT_MODELが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({
+        IMPORT_AI_PROVIDER: "groq",
+        CLOUDFLARE_ACCOUNT_ID: "account-123",
+        CF_AIG_TOKEN: "gateway-token",
+        GROQ_API_KEY: "groq-key",
+        GROQ_TEXT_MODEL: "",
+      }),
+    );
+
+    await expect(provider.normalize(input)).rejects.toMatchObject({
+      code: "unknown",
+      message: "Groq text model is not configured.",
+    } satisfies Partial<RecipeImportError>);
+    expect(mocks.createGroq).not.toHaveBeenCalled();
     expect(mocks.generateObject).not.toHaveBeenCalled();
   });
 
