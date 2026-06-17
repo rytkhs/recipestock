@@ -132,41 +132,48 @@ const MAX_IMPORT_PAGE_REDIRECTS = 5;
 
 const importAiImageIdSchema = z.string().min(1);
 
-const importAiIngredientSchema = z.object({
+const importAiIngredientSchema = z.strictObject({
   name: z.string().min(1),
   amount: z.string(),
 });
 
-const importAiIngredientGroupSchema = z.object({
-  label: z.string().optional(),
-  ingredients: z.array(importAiIngredientSchema).default([]),
+const importAiIngredientGroupSchema = z.strictObject({
+  label: z.string().nullable(),
+  ingredients: z.array(importAiIngredientSchema),
 });
 
 const importAiDraftStepSchema = z
   .strictObject({
-    text: z.string().min(1).optional(),
-    imageIds: z.array(importAiImageIdSchema).default([]),
+    text: z.string().min(1).nullable(),
+    imageIds: z.array(importAiImageIdSchema),
   })
-  .refine((step) => step.text || step.imageIds.length > 0);
+  .refine((step) => step.text !== null || step.imageIds.length > 0);
 
 const importAiDraftContentSchema = z.strictObject({
   title: z.string().min(1),
-  servingsText: z.string().optional(),
-  coverImageId: importAiImageIdSchema.optional(),
-  ingredientGroups: z.array(importAiIngredientGroupSchema).default([]),
-  steps: z.array(importAiDraftStepSchema).default([]),
-  note: z.string().optional(),
+  servingsText: z.string().nullable(),
+  coverImageId: importAiImageIdSchema.nullable(),
+  ingredientGroups: z.array(importAiIngredientGroupSchema),
+  steps: z.array(importAiDraftStepSchema),
+  note: z.string().nullable(),
 });
 
 const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftContent => {
   const draft = importAiDraftContentSchema.parse(value);
 
   return {
-    ...draft,
+    title: draft.title,
+    ...(draft.servingsText !== null ? { servingsText: draft.servingsText } : {}),
+    ...(draft.coverImageId !== null ? { coverImageId: draft.coverImageId } : {}),
+    ingredientGroups: draft.ingredientGroups.map((group) => ({
+      ...(group.label !== null ? { label: group.label } : {}),
+      ingredients: group.ingredients,
+    })),
     steps: draft.steps.map((step) => ({
-      ...step,
+      ...(step.text !== null ? { text: step.text } : {}),
       imageIds: step.imageIds,
     })),
+    ...(draft.note !== null ? { note: draft.note } : {}),
   };
 };
 

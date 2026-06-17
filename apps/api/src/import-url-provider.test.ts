@@ -58,6 +58,21 @@ const createEnv = (overrides: Record<string, unknown> = {}) =>
     ...overrides,
   }) as never;
 
+const createStrictAiDraft = (overrides: Record<string, unknown> = {}) => ({
+  title: "Tomato pasta",
+  servingsText: null,
+  coverImageId: null,
+  ingredientGroups: [
+    {
+      label: null,
+      ingredients: [{ name: "トマト缶", amount: "1缶" }],
+    },
+  ],
+  steps: [{ text: "煮詰める", imageIds: [] }],
+  note: null,
+  ...overrides,
+});
+
 describe("default recipe import AI provider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -65,17 +80,14 @@ describe("default recipe import AI provider", () => {
   });
 
   it("Workers AI bindingとAI Gateway経由でRecipeDraftContentを生成する", async () => {
-    const draft = {
-      title: "Tomato pasta",
-      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ text: "煮詰める" }],
-    };
+    const draft = createStrictAiDraft();
     mocks.generateObject.mockResolvedValueOnce({ object: draft });
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
     await expect(provider.normalize(input)).resolves.toEqual({
-      ...draft,
+      title: "Tomato pasta",
+      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ text: "煮詰める", imageIds: [] }],
     });
     expect(mocks.createWorkersAI).toHaveBeenCalledWith({
@@ -111,11 +123,7 @@ describe("default recipe import AI provider", () => {
   });
 
   it("GroqとAI Gateway経由でRecipeDraftContentを生成する", async () => {
-    const draft = {
-      title: "Tomato pasta",
-      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ text: "煮詰める" }],
-    };
+    const draft = createStrictAiDraft();
     mocks.generateObject.mockResolvedValueOnce({ object: draft });
 
     const provider = createDefaultRecipeImportAIProvider(
@@ -129,7 +137,8 @@ describe("default recipe import AI provider", () => {
     );
 
     await expect(provider.normalize(input)).resolves.toEqual({
-      ...draft,
+      title: "Tomato pasta",
+      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ text: "煮詰める", imageIds: [] }],
     });
     expect(mocks.createGroq).toHaveBeenCalledWith({
@@ -156,12 +165,9 @@ describe("default recipe import AI provider", () => {
 
   it("AIがcoverImageIdを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
-      object: {
-        title: "Tomato pasta",
+      object: createStrictAiDraft({
         coverImageId: "img_001",
-        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-        steps: [{ text: "煮詰める" }],
-      },
+      }),
     });
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
@@ -190,16 +196,14 @@ describe("default recipe import AI provider", () => {
 
   it("AIがstepsの画像IDを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
-      object: {
-        title: "Tomato pasta",
-        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      object: createStrictAiDraft({
         steps: [
           {
             text: "煮詰める",
             imageIds: ["img_002", "img_003"],
           },
         ],
-      },
+      }),
     });
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
@@ -210,6 +214,31 @@ describe("default recipe import AI provider", () => {
           imageIds: ["img_002", "img_003"],
         },
       ],
+    });
+  });
+
+  it("AI出力のnullを既存のoptional形式へ正規化する", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: createStrictAiDraft({
+        servingsText: null,
+        coverImageId: null,
+        ingredientGroups: [
+          {
+            label: null,
+            ingredients: [{ name: "トマト缶", amount: "1缶" }],
+          },
+        ],
+        steps: [{ text: null, imageIds: ["img_002"] }],
+        note: null,
+      }),
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(input)).resolves.toEqual({
+      title: "Tomato pasta",
+      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      steps: [{ imageIds: ["img_002"] }],
     });
   });
 
