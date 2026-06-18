@@ -400,7 +400,10 @@ describe("RecipesRoute", () => {
     await expect(
       screen.findByRole("heading", { name: "Tomato pasta" }),
     ).resolves.toBeInTheDocument();
-    expect(screen.getByText("トマト缶 1缶")).toBeInTheDocument();
+    const ingredients = screen.getByRole("heading", { name: "材料" }).parentElement;
+    expect(ingredients).not.toBeNull();
+    expect(within(ingredients as HTMLElement).getByText("トマト缶")).toBeInTheDocument();
+    expect(within(ingredients as HTMLElement).getByText("1缶")).toBeInTheDocument();
     expect(screen.getByText("煮詰める")).toBeInTheDocument();
   });
 
