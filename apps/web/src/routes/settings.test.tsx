@@ -150,9 +150,7 @@ describe("Settings routes", () => {
     const assign = vi.spyOn(checkoutRedirect, "assign").mockImplementation(() => {});
     await renderApp("/settings/billing");
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Proにアップグレード" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Proにアップグレード" }));
 
     await waitFor(() => {
       expect(findFetchCall(fetchMock, "/api/billing/checkout")).toEqual([
@@ -403,9 +401,7 @@ describe("Settings routes", () => {
     });
     await renderApp("/settings/billing");
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Proにアップグレード" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Proにアップグレード" }));
 
     await expect(
       screen.findByText("既にPro契約があります。表示を更新してください。"),

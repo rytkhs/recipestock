@@ -334,11 +334,22 @@ export const importRecipeFromUrl = async ({
       pages,
     });
 
-    return {
-      recipeDraftContent: recipeDraftContentSchema.parse(result.recipeDraftContent),
-      source: result.source,
-      warnings: result.warnings,
-    };
+    try {
+      return {
+        recipeDraftContent: recipeDraftContentSchema.parse(result.recipeDraftContent),
+        source: result.source,
+        warnings: result.warnings,
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new RecipeImportError(
+          "extraction_failed",
+          "Deterministic import result was invalid.",
+        );
+      }
+
+      throw error;
+    }
   }
 
   const page = await fetcher(normalizedUrl, fetchOptions);

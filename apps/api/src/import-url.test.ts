@@ -313,7 +313,7 @@ describe("URL import flow", () => {
     expect(aiNormalize).not.toHaveBeenCalled();
   });
 
-  it("deterministic adapterのRecipeDraftContentをschema validationする", async () => {
+  it("deterministic adapterの不正なRecipeDraftContentはextraction_failedにする", async () => {
     const usageRepository = createUsageRepositoryStub();
     const aiNormalize = vi.fn();
 
@@ -361,7 +361,9 @@ describe("URL import flow", () => {
           normalize: aiNormalize,
         },
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
 
     expect(aiNormalize).not.toHaveBeenCalled();
   });
