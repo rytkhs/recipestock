@@ -14,7 +14,8 @@ import { extractRecipePageEvidence } from "./import-page-evidence";
 import {
   cookpadImportAdapter,
   createDeterministicImportRegistry,
-  type DeterministicImportAdapter,
+  type DeterministicFetchedPage,
+  type DeterministicFetchRequest,
   type DeterministicImportRegistry,
 } from "./lib/import/deterministic";
 import {
@@ -93,20 +94,13 @@ export type RecipeImportAIProvider = {
   normalize(input: RecipeImportAIInput): Promise<RecipeImportAIDraftContent>;
 };
 
-type RecipeImportConverterResult =
-  | {
-      type: "deterministic";
-      recipeDraftContent: RecipeDraftContent;
-      source: RecipeSourceDraft;
-      warnings: string[];
-    }
-  | {
-      type: "requiresAi";
-      input: RecipeImportAIInput;
-      imageCandidates: RecipeImportImageCandidate[];
-      source: RecipeSourceDraft;
-      warnings: string[];
-    };
+type RecipeImportConverterResult = {
+  type: "requiresAi";
+  input: RecipeImportAIInput;
+  imageCandidates: RecipeImportImageCandidate[];
+  source: RecipeSourceDraft;
+  warnings: string[];
+};
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
 
@@ -254,40 +248,16 @@ const defaultDeterministicImportRegistry = createDeterministicImportRegistry([
   cookpadImportAdapter,
 ]);
 
-const convertFetchedHtmlPage = async (
-  page: FetchedImportPage,
-  {
-    deterministicAdapter,
-    fetchUrl,
-    normalizedUrl,
-    host,
-  }: {
-    deterministicAdapter: DeterministicImportAdapter | null;
-    fetchUrl: string;
-    normalizedUrl: string;
-    host: string;
-  },
-): Promise<RecipeImportConverterResult> => {
+const assertFetchedPageIsHtml = (page: FetchedImportPage) => {
   if (page.contentType && !/html/i.test(page.contentType)) {
     throw new RecipeImportError("unsupported_page", "Import URL is not an HTML page.");
   }
+};
 
-  if (deterministicAdapter) {
-    const result = await deterministicAdapter.convert({
-      page,
-      finalUrl: page.finalUrl,
-      fetchUrl,
-      normalizedUrl,
-      host,
-    });
-
-    return {
-      type: "deterministic",
-      recipeDraftContent: recipeDraftContentSchema.parse(result.recipeDraftContent),
-      source: result.source,
-      warnings: result.warnings,
-    };
-  }
+const convertFetchedHtmlPage = async (
+  page: FetchedImportPage,
+): Promise<RecipeImportConverterResult> => {
+  assertFetchedPageIsHtml(page);
 
   const normalizedFinalUrl = normalizeUrl(page.finalUrl);
   const finalHost = new URL(normalizedFinalUrl).hostname.replace(/^www\./, "");
@@ -347,28 +317,32 @@ export const importRecipeFromUrl = async ({
     normalizedUrl,
     host,
   });
-  const fetchUrl =
-    deterministicAdapter?.resolveFetchUrl?.({ normalizedUrl, host }) ?? normalizedUrl;
-  assertImportUrlAllowed(fetchUrl);
-
-  const page = await fetcher(fetchUrl, {
+  const fetchOptions = {
     timeoutMs: resolveImportTimeoutMs(env),
     maxBytes: resolveImportMaxHtmlBytes(env),
-  });
-  const conversion = await convertFetchedPageToRecipeImportInput(page, {
-    deterministicAdapter,
-    fetchUrl,
-    normalizedUrl,
-    host,
-  });
+  };
 
-  if (conversion.type === "deterministic") {
+  if (deterministicAdapter) {
+    const requests = deterministicAdapter.resolveFetchRequests({
+      normalizedUrl,
+      host,
+    });
+    const pages = await fetchDeterministicImportPages(requests, fetcher, fetchOptions);
+    const result = await deterministicAdapter.convert({
+      normalizedUrl,
+      host,
+      pages,
+    });
+
     return {
-      recipeDraftContent: conversion.recipeDraftContent,
-      source: conversion.source,
-      warnings: conversion.warnings,
+      recipeDraftContent: recipeDraftContentSchema.parse(result.recipeDraftContent),
+      source: result.source,
+      warnings: result.warnings,
     };
   }
+
+  const page = await fetcher(normalizedUrl, fetchOptions);
+  const conversion = await convertFetchedHtmlPage(page);
 
   const usage = await consumeAiUsage({
     userId,
@@ -418,15 +392,46 @@ export const importRecipeFromUrl = async ({
   };
 };
 
-const convertFetchedPageToRecipeImportInput = (
-  page: FetchedImportPage,
-  input: {
-    deterministicAdapter: DeterministicImportAdapter | null;
-    fetchUrl: string;
-    normalizedUrl: string;
-    host: string;
-  },
-): Promise<RecipeImportConverterResult> => convertFetchedHtmlPage(page, input);
+const fetchDeterministicImportPages = async (
+  requests: readonly DeterministicFetchRequest[],
+  fetcher: RecipeImportFetcher,
+  options: { timeoutMs: number; maxBytes: number },
+) => {
+  if (requests.length === 0) {
+    throw new RecipeImportError(
+      "extraction_failed",
+      "Deterministic import adapter did not declare any pages.",
+    );
+  }
+
+  const requestIds = new Set<string>();
+  for (const request of requests) {
+    if (!request.id || requestIds.has(request.id)) {
+      throw new RecipeImportError(
+        "extraction_failed",
+        "Deterministic import adapter declared duplicate page IDs.",
+      );
+    }
+    requestIds.add(request.id);
+    assertImportUrlAllowed(request.url);
+  }
+
+  const fetchedPages = await Promise.all(
+    requests.map(async (request): Promise<DeterministicFetchedPage> => {
+      const page = await fetcher(request.url, options);
+      assertFetchedPageIsHtml(page);
+
+      return {
+        requestId: request.id,
+        requestedUrl: request.url,
+        finalUrl: page.finalUrl,
+        page,
+      };
+    }),
+  );
+
+  return new Map(fetchedPages.map((page) => [page.requestId, page]));
+};
 
 type ImportAiProviderKind = "workers-ai" | "openrouter" | "groq";
 

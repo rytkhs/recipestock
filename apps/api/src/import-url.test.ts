@@ -150,6 +150,7 @@ describe("URL import flow", () => {
           {
             id: "no-match",
             match,
+            resolveFetchRequests: () => [],
             async convert() {
               throw new Error("should not convert");
             },
@@ -222,12 +223,16 @@ describe("URL import flow", () => {
           {
             id: "example",
             match: ({ host }) => host === "example.com",
+            resolveFetchRequests: ({ normalizedUrl }) => [{ id: "recipe", url: normalizedUrl }],
             async convert(context) {
               expect(context).toMatchObject({
-                finalUrl: "https://www.example.com/recipes/deterministic",
-                fetchUrl: "https://www.example.com/recipes/deterministic",
                 normalizedUrl: "https://www.example.com/recipes/deterministic",
                 host: "example.com",
+              });
+              expect(context.pages.get("recipe")).toMatchObject({
+                requestId: "recipe",
+                requestedUrl: "https://www.example.com/recipes/deterministic",
+                finalUrl: "https://www.example.com/recipes/deterministic",
               });
 
               return {
@@ -291,6 +296,7 @@ describe("URL import flow", () => {
           {
             id: "example",
             match: () => true,
+            resolveFetchRequests: ({ normalizedUrl }) => [{ id: "recipe", url: normalizedUrl }],
             async convert() {
               throw new RecipeImportError("extraction_failed", "Site structure changed.");
             },
@@ -334,6 +340,7 @@ describe("URL import flow", () => {
           {
             id: "example",
             match: () => true,
+            resolveFetchRequests: ({ normalizedUrl }) => [{ id: "recipe", url: normalizedUrl }],
             async convert() {
               return {
                 recipeDraftContent: {

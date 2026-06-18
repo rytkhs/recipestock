@@ -5,16 +5,26 @@ export type DeterministicImportMatchInput = {
   host: string;
 };
 
-export type DeterministicImportContext = DeterministicImportMatchInput & {
-  page: FetchedImportPage;
-  fetchUrl: string;
+export type DeterministicFetchRequest = {
+  id: string;
+  url: string;
+};
+
+export type DeterministicFetchedPage = {
+  requestId: string;
+  requestedUrl: string;
   finalUrl: string;
+  page: FetchedImportPage;
+};
+
+export type DeterministicImportContext = DeterministicImportMatchInput & {
+  pages: ReadonlyMap<string, DeterministicFetchedPage>;
 };
 
 export type DeterministicImportAdapter = {
   id: string;
   match(input: DeterministicImportMatchInput): boolean;
-  resolveFetchUrl?(input: DeterministicImportMatchInput): string;
+  resolveFetchRequests(input: DeterministicImportMatchInput): readonly DeterministicFetchRequest[];
   convert(context: DeterministicImportContext): Promise<RecipeImportResult>;
 };
 

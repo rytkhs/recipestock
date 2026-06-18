@@ -1,6 +1,7 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
-import { RecipeImportError } from "../types";
+import { type FetchedImportPage, RecipeImportError } from "../types";
 import {
+  type DeterministicFetchedPage,
   type DeterministicImportAdapter,
   type DeterministicImportContext,
   type DeterministicImportMatchInput,
@@ -8,6 +9,8 @@ import {
 
 const COOKPAD_HOST = "cookpad.com";
 const COOKPAD_RECIPE_PATH = /^\/jp\/recipes\/(\d+)(?:\/print)?\/?$/;
+const COOKPAD_PRINT_PAGE_ID = "print";
+const COOKPAD_RECIPE_PAGE_ID = "recipe";
 
 type IngredientCapture = {
   isHeadline: boolean;
@@ -15,18 +18,40 @@ type IngredientCapture = {
   amount: string;
 };
 
-type StepCapture = {
+type PrintStepCapture = {
+  text: string;
+  firstImageId?: string;
+};
+
+type CookpadPrintExtraction = {
+  title: string;
+  servingsText: string;
+  ingredientRows: IngredientCapture[];
+  note: string;
+  steps: PrintStepCapture[];
+};
+
+type ImageCandidate = {
+  url: string;
+  area: number;
+  isQuality80: boolean;
+  position: number;
+};
+
+type ImageCapture = {
+  candidates: ImageCandidate[];
+};
+
+type RecipeStepCapture = {
+  id: string;
   text: string;
   imageUrls: string[];
 };
 
-type CookpadExtraction = {
+type CookpadRecipeExtraction = {
   title: string;
   coverImageUrl?: string;
-  servingsText: string;
-  ingredientRows: IngredientCapture[];
-  note: string;
-  steps: StepCapture[];
+  steps: RecipeStepCapture[];
 };
 
 type HtmlRewriterElement = Parameters<
@@ -49,13 +74,22 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
     return getCookpadRecipeId(normalizedUrl) !== null;
   },
 
-  resolveFetchUrl({ normalizedUrl }: DeterministicImportMatchInput) {
+  resolveFetchRequests({ normalizedUrl }: DeterministicImportMatchInput) {
     const recipeId = getCookpadRecipeId(normalizedUrl);
     if (!recipeId) {
       throw new RecipeImportError("invalid_url", "Cookpad recipe URL is invalid.");
     }
 
-    return createCookpadUrl(recipeId, true);
+    return [
+      {
+        id: COOKPAD_PRINT_PAGE_ID,
+        url: createCookpadUrl(recipeId, true),
+      },
+      {
+        id: COOKPAD_RECIPE_PAGE_ID,
+        url: createCookpadUrl(recipeId, false),
+      },
+    ];
   },
 
   async convert(context: DeterministicImportContext) {
@@ -64,18 +98,24 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
       throw new RecipeImportError("invalid_url", "Cookpad recipe URL is invalid.");
     }
 
-    const extraction = await extractCookpadPrintRecipe(context);
-    const ingredientGroups = buildIngredientGroups(extraction.ingredientRows);
-    const steps = extraction.steps
-      .map((step) => ({
-        text: normalizeText(step.text) || undefined,
-        images: step.imageUrls.map((url) => ({
-          type: "externalImageUrl" as const,
-          url,
-        })),
-      }))
-      .filter((step) => step.text || step.images.length > 0);
-    const title = normalizeText(extraction.title);
+    const printPage = requireCookpadPage(context, COOKPAD_PRINT_PAGE_ID, recipeId);
+    const recipePage = requireCookpadPage(context, COOKPAD_RECIPE_PAGE_ID, recipeId);
+    const [printExtraction, recipeExtraction] = await Promise.all([
+      extractCookpadPrintRecipe(printPage),
+      extractCookpadRecipePage(recipePage),
+    ]);
+
+    assertCookpadExtractionsMatch(printExtraction, recipeExtraction);
+
+    const ingredientGroups = buildIngredientGroups(printExtraction.ingredientRows);
+    const title = normalizeText(printExtraction.title);
+    const steps = printExtraction.steps.map((step, index) => ({
+      ...(normalizeText(step.text) ? { text: normalizeText(step.text) } : {}),
+      images: recipeExtraction.steps[index].imageUrls.map((url) => ({
+        type: "externalImageUrl" as const,
+        url,
+      })),
+    }));
 
     if (
       !title ||
@@ -90,20 +130,20 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
 
     const recipeDraftContent: RecipeDraftContent = {
       title,
-      ...(normalizeText(extraction.servingsText)
-        ? { servingsText: normalizeText(extraction.servingsText) }
+      ...(normalizeText(printExtraction.servingsText)
+        ? { servingsText: normalizeText(printExtraction.servingsText) }
         : {}),
-      ...(extraction.coverImageUrl
+      ...(recipeExtraction.coverImageUrl
         ? {
             coverImage: {
               type: "externalImageUrl",
-              url: extraction.coverImageUrl,
+              url: recipeExtraction.coverImageUrl,
             } as const,
           }
         : {}),
       ingredientGroups,
       steps,
-      ...(normalizeText(extraction.note) ? { note: normalizeText(extraction.note) } : {}),
+      ...(normalizeText(printExtraction.note) ? { note: normalizeText(printExtraction.note) } : {}),
     };
 
     return {
@@ -117,10 +157,26 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
   },
 };
 
-const extractCookpadPrintRecipe = async (
+const requireCookpadPage = (
   context: DeterministicImportContext,
-): Promise<CookpadExtraction> => {
-  const extraction: CookpadExtraction = {
+  pageId: string,
+  recipeId: string,
+) => {
+  const fetchedPage = context.pages.get(pageId);
+  if (!fetchedPage || getCookpadRecipeId(fetchedPage.finalUrl) !== recipeId) {
+    throw new RecipeImportError(
+      "extraction_failed",
+      "Cookpad fetched page did not match the requested recipe.",
+    );
+  }
+
+  return fetchedPage;
+};
+
+const extractCookpadPrintRecipe = async (
+  fetchedPage: DeterministicFetchedPage,
+): Promise<CookpadPrintExtraction> => {
+  const extraction: CookpadPrintExtraction = {
     title: "",
     servingsText: "",
     ingredientRows: [],
@@ -128,7 +184,7 @@ const extractCookpadPrintRecipe = async (
     steps: [],
   };
   const ingredientStack: IngredientCapture[] = [];
-  const stepStack: StepCapture[] = [];
+  const stepStack: PrintStepCapture[] = [];
   let recipeRootFound = false;
 
   await new HTMLRewriter()
@@ -140,12 +196,6 @@ const extractCookpadPrintRecipe = async (
     .on('#recipe-print header span[dir="auto"]', {
       text(text) {
         extraction.title += text.text;
-      },
-    })
-    .on("#recipe-print img.aspect-square", {
-      element(element) {
-        if (extraction.coverImageUrl) return;
-        extraction.coverImageUrl = resolveImageUrl(element.getAttribute("src"), context.finalUrl);
       },
     })
     .on("#recipe-print .mise-icon-text", {
@@ -186,7 +236,7 @@ const extractCookpadPrintRecipe = async (
     })
     .on("#recipe-print ol.grid > li", {
       element(element) {
-        const capture: StepCapture = { text: "", imageUrls: [] };
+        const capture: PrintStepCapture = { text: "" };
         stepStack.push(capture);
         element.onEndTag(() => {
           extraction.steps.push(capture);
@@ -203,11 +253,11 @@ const extractCookpadPrintRecipe = async (
     .on("#recipe-print ol.grid > li img", {
       element(element) {
         const capture = stepStack.at(-1);
-        const url = resolveImageUrl(element.getAttribute("src"), context.finalUrl);
-        if (capture && url) capture.imageUrls.push(url);
+        if (!capture || capture.firstImageId) return;
+        capture.firstImageId = getCookpadStepImageId(element.getAttribute("src"));
       },
     })
-    .transform(importPageBodyToResponse(context.page))
+    .transform(importPageBodyToResponse(fetchedPage.page))
     .text();
 
   if (!recipeRootFound) {
@@ -215,6 +265,148 @@ const extractCookpadPrintRecipe = async (
   }
 
   return extraction;
+};
+
+const extractCookpadRecipePage = async (
+  fetchedPage: DeterministicFetchedPage,
+): Promise<CookpadRecipeExtraction> => {
+  const extraction: CookpadRecipeExtraction = {
+    title: "",
+    steps: [],
+  };
+  const titleStack: string[] = [];
+  const stepStack: RecipeStepCapture[] = [];
+  const coverImageStack: ImageCapture[] = [];
+  const stepImageStack: ImageCapture[] = [];
+  let imageCandidatePosition = 0;
+
+  const addCandidates = (capture: ImageCapture | undefined, rawValue: string | null) => {
+    if (!capture || !rawValue) return;
+    for (const rawUrl of parseSrcsetUrls(rawValue)) {
+      const candidate = createImageCandidate(
+        rawUrl,
+        fetchedPage.finalUrl,
+        imageCandidatePosition++,
+      );
+      if (candidate) capture.candidates.push(candidate);
+    }
+  };
+
+  await new HTMLRewriter()
+    .on('h1[dir="auto"]', {
+      element(element) {
+        titleStack.push("");
+        element.onEndTag(() => {
+          const title = titleStack.pop() ?? "";
+          if (!extraction.title && normalizeText(title)) extraction.title = title;
+        });
+      },
+      text(text) {
+        const index = titleStack.length - 1;
+        if (index >= 0) titleStack[index] += text.text;
+      },
+    })
+    .on(".tofu_image picture", {
+      element(element) {
+        const capture: ImageCapture = { candidates: [] };
+        coverImageStack.push(capture);
+        element.onEndTag(() => {
+          if (!extraction.coverImageUrl) {
+            extraction.coverImageUrl = selectBestImageUrl(capture.candidates);
+          }
+          removeCapture(coverImageStack, capture);
+        });
+      },
+    })
+    .on('.tofu_image picture source[type="image/jpeg"]', {
+      element(element) {
+        addCandidates(coverImageStack.at(-1), element.getAttribute("srcset"));
+      },
+    })
+    .on(".tofu_image picture img", {
+      element(element) {
+        addCandidates(coverImageStack.at(-1), element.getAttribute("src"));
+      },
+    })
+    .on('li[id^="step_"]', {
+      element(element) {
+        const capture: RecipeStepCapture = {
+          id: element.getAttribute("id") ?? "",
+          text: "",
+          imageUrls: [],
+        };
+        stepStack.push(capture);
+        element.onEndTag(() => {
+          extraction.steps.push(capture);
+          removeCapture(stepStack, capture);
+        });
+      },
+    })
+    .on('li[id^="step_"] p', {
+      text(text) {
+        const capture = stepStack.at(-1);
+        if (capture) capture.text += text.text;
+      },
+    })
+    .on('li[id^="step_"] picture', {
+      element(element) {
+        const capture: ImageCapture = { candidates: [] };
+        stepImageStack.push(capture);
+        element.onEndTag(() => {
+          const step = stepStack.at(-1);
+          const imageUrl = selectBestImageUrl(capture.candidates);
+          if (step && imageUrl && !step.imageUrls.includes(imageUrl)) {
+            step.imageUrls.push(imageUrl);
+          }
+          removeCapture(stepImageStack, capture);
+        });
+      },
+    })
+    .on('li[id^="step_"] picture source[type="image/jpeg"]', {
+      element(element) {
+        addCandidates(stepImageStack.at(-1), element.getAttribute("srcset"));
+      },
+    })
+    .on('li[id^="step_"] picture img', {
+      element(element) {
+        addCandidates(stepImageStack.at(-1), element.getAttribute("src"));
+      },
+    })
+    .transform(importPageBodyToResponse(fetchedPage.page))
+    .text();
+
+  return extraction;
+};
+
+const assertCookpadExtractionsMatch = (
+  printExtraction: CookpadPrintExtraction,
+  recipeExtraction: CookpadRecipeExtraction,
+) => {
+  if (
+    !normalizeText(printExtraction.title) ||
+    normalizeText(printExtraction.title) !== normalizeText(recipeExtraction.title) ||
+    printExtraction.steps.length !== recipeExtraction.steps.length
+  ) {
+    throw new RecipeImportError(
+      "extraction_failed",
+      "Cookpad recipe pages did not contain matching recipe content.",
+    );
+  }
+
+  for (const [index, printStep] of printExtraction.steps.entries()) {
+    const recipeStep = recipeExtraction.steps[index];
+    if (
+      !recipeStep?.id ||
+      normalizeText(printStep.text) !== normalizeText(recipeStep.text) ||
+      (printStep.firstImageId &&
+        getCookpadStepImageId(recipeStep.imageUrls[0] ?? null) !== printStep.firstImageId)
+    ) {
+      throw new RecipeImportError(
+        "extraction_failed",
+        "Cookpad recipe steps did not match between fetched pages.",
+      );
+    }
+  }
 };
 
 const buildIngredientGroups = (rows: IngredientCapture[]) => {
@@ -251,6 +443,52 @@ const buildIngredientGroups = (rows: IngredientCapture[]) => {
   return groups;
 };
 
+const parseSrcsetUrls = (srcset: string) =>
+  srcset
+    .split(",")
+    .map((value) => value.trim().split(/\s+/)[0])
+    .filter(Boolean);
+
+const createImageCandidate = (
+  rawUrl: string,
+  baseUrl: string,
+  position: number,
+): ImageCandidate | undefined => {
+  const url = resolveImageUrl(rawUrl, baseUrl);
+  if (!url) return undefined;
+
+  const size = /\/(\d+)x(\d+)[^/]*?(?:q(\d+))?\//.exec(new URL(url).pathname);
+  const width = Number(size?.[1] ?? 0);
+  const height = Number(size?.[2] ?? 0);
+  const quality = Number(size?.[3] ?? 0);
+
+  return {
+    url,
+    area: width * height,
+    isQuality80: quality === 80 || /q80(?:\/|$)/.test(new URL(url).pathname),
+    position,
+  };
+};
+
+const selectBestImageUrl = (candidates: ImageCandidate[]) =>
+  candidates.reduce<ImageCandidate | undefined>((best, candidate) => {
+    if (!best) return candidate;
+    if (candidate.area !== best.area) return candidate.area > best.area ? candidate : best;
+    if (candidate.isQuality80 !== best.isQuality80) {
+      return candidate.isQuality80 ? candidate : best;
+    }
+    return candidate.position > best.position ? candidate : best;
+  }, undefined)?.url;
+
+const getCookpadStepImageId = (rawUrl: string | null) => {
+  if (!rawUrl) return undefined;
+  try {
+    return /\/steps\/([^/]+)\//.exec(new URL(rawUrl, `https://${COOKPAD_HOST}`).pathname)?.[1];
+  } catch {
+    return undefined;
+  }
+};
+
 const normalizeHeadline = (value: string) => value.replace(/^■\s*/, "").trim();
 
 const normalizeText = (value: string) => value.replace(/\s+/g, " ").trim();
@@ -276,7 +514,7 @@ const removeCapture = <T>(stack: T[], capture: T) => {
   if (index >= 0) stack.splice(index, 1);
 };
 
-const importPageBodyToResponse = (page: DeterministicImportContext["page"]) => {
+const importPageBodyToResponse = (page: FetchedImportPage) => {
   if (typeof page.body !== "string") return page.body.clone();
 
   return new Response(page.body, {

@@ -3,31 +3,46 @@ import { importRecipeFromUrl, type RecipeImportError } from "../../../import-url
 import { type UsageRepository } from "../../../usage";
 import { cookpadImportAdapter } from "./cookpad";
 
+const RECIPE_ID = "25844291";
+const RECIPE_URL = `https://cookpad.com/jp/recipes/${RECIPE_ID}`;
+const PRINT_URL = `${RECIPE_URL}/print`;
+const TITLE = "簡単ノンフライヤーで揚げポテト（お弁当）";
+const STEP_TEXTS = [
+  "じゃがいもを切る。",
+  "水にさらす。",
+  "片栗粉をまぶす。",
+  "オイルをかける。",
+  "加熱する。",
+  "盛り付ける。",
+];
+const STEP_IMAGE_IDS = [
+  ["step-1-a", "step-1-b"],
+  ["step-2-a"],
+  ["step-3-a", "step-3-b"],
+  ["step-4-a"],
+  ["step-5-a", "step-5-b"],
+  ["step-6-a", "step-6-b"],
+];
+
 describe("cookpadImportAdapter", () => {
   it.each([
-    [
-      "https://cookpad.com/jp/recipes/25877246?from=share#steps",
-      "https://cookpad.com/jp/recipes/25877246/print",
-    ],
-    [
-      "https://cookpad.com/jp/recipes/25877246/print",
-      "https://cookpad.com/jp/recipes/25877246/print",
-    ],
-    [
-      "https://www.cookpad.com/jp/recipes/25877246",
-      "https://cookpad.com/jp/recipes/25877246/print",
-    ],
-  ])("%s の取得先を %s にする", (normalizedUrl, expected) => {
+    `https://cookpad.com/jp/recipes/${RECIPE_ID}?from=share#steps`,
+    PRINT_URL,
+    `https://www.cookpad.com/jp/recipes/${RECIPE_ID}`,
+  ])("%s を通常ページとprintページの取得へ正規化する", (normalizedUrl) => {
     const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
     expect(cookpadImportAdapter.match({ normalizedUrl, host })).toBe(true);
-    expect(cookpadImportAdapter.resolveFetchUrl?.({ normalizedUrl, host })).toBe(expected);
+    expect(cookpadImportAdapter.resolveFetchRequests({ normalizedUrl, host })).toEqual([
+      { id: "print", url: PRINT_URL },
+      { id: "recipe", url: RECIPE_URL },
+    ]);
   });
 
   it("旧形式やレシピ以外のCookpad URLにはmatchしない", () => {
     for (const normalizedUrl of [
-      "https://cookpad.com/recipe/25877246",
+      `https://cookpad.com/recipe/${RECIPE_ID}`,
       "https://cookpad.com/jp/search/tomato",
-      "https://example.com/jp/recipes/25877246",
+      `https://example.com/jp/recipes/${RECIPE_ID}`,
     ]) {
       expect(
         cookpadImportAdapter.match({
@@ -38,125 +53,165 @@ describe("cookpadImportAdapter", () => {
     }
   });
 
-  it("print DOMからRecipeDraftContentを決定的に抽出する", async () => {
+  it("2ページを並列取得してprintの本文と通常ページの全画像を合成する", async () => {
     const aiNormalize = vi.fn();
     const consumeAiUsage = vi.fn();
     const fetchedUrls: string[] = [];
+    const resolvers = new Map<string, (value: ReturnType<typeof createFetchedPage>) => void>();
+    const importPromise = importRecipeFromUrl({
+      rawUrl: `https://www.cookpad.com/jp/recipes/${RECIPE_ID}?utm_source=share#steps`,
+      userId: "user_123",
+      env: {},
+      usageRepository: createUsageRepositoryStub(consumeAiUsage),
+      fetcher: (url) => {
+        fetchedUrls.push(url);
+        return new Promise((resolve) => resolvers.set(url, resolve));
+      },
+      aiProvider: { normalize: aiNormalize },
+    });
 
-    await expect(
-      importRecipeFromUrl({
-        rawUrl: "https://www.cookpad.com/jp/recipes/25877246?utm_source=share#steps",
-        userId: "user_123",
-        env: {},
-        usageRepository: createUsageRepositoryStub(consumeAiUsage),
-        fetcher: async (url) => {
-          fetchedUrls.push(url);
-          return {
-            finalUrl: url,
-            contentType: "text/html; charset=utf-8",
-            body: createCookpadPrintHtml(),
-          };
-        },
-        aiProvider: { normalize: aiNormalize },
-      }),
-    ).resolves.toEqual({
+    await vi.waitFor(() => expect(fetchedUrls).toHaveLength(2));
+    resolvers.get(PRINT_URL)?.(createFetchedPage(PRINT_URL, createCookpadPrintHtml()));
+    resolvers.get(RECIPE_URL)?.(createFetchedPage(RECIPE_URL, createCookpadRecipeHtml()));
+
+    await expect(importPromise).resolves.toEqual({
       recipeDraftContent: {
-        title: "夏！ささみのバンバンジー冷やし麺簡単タレ",
-        servingsText: "2人分",
+        title: TITLE,
+        servingsText: "2人前",
         coverImage: {
           type: "externalImageUrl",
-          url: "https://img.example/cover.jpg",
+          url: cookpadCoverImageUrl(1360, 1562, 80),
         },
         ingredientGroups: [
           {
             ingredients: [
-              { name: "中華麺", amount: "2袋" },
-              { name: "△塩", amount: "1g" },
+              { name: "じゃがいも", amount: "1個" },
+              { name: "△塩", amount: "少々" },
             ],
           },
           {
-            label: "バンバンジータレ",
-            ingredients: [{ name: "◎白すりごま", amount: "20g" }],
+            label: "仕上げ",
+            ingredients: [{ name: "◎黒胡椒", amount: "少々" }],
           },
         ],
-        steps: [
-          {
-            text: "材料を用意する。",
-            images: [
-              {
-                type: "externalImageUrl",
-                url: "https://cookpad.com/images/step-1.jpg",
-              },
-            ],
-          },
-          {
-            text: "盛り付ける。",
-            images: [],
-          },
-        ],
-        note: "水気をしっかり切ります。",
+        steps: STEP_TEXTS.map((text, index) => ({
+          text,
+          images: STEP_IMAGE_IDS[index].map((imageId) => ({
+            type: "externalImageUrl",
+            url: cookpadStepImageUrl(imageId, 320, 256, 80),
+          })),
+        })),
+        note: "水気をしっかり取ります。",
       },
       source: {
-        sourceUrl: "https://cookpad.com/jp/recipes/25877246",
+        sourceUrl: RECIPE_URL,
         sourceName: "クックパッド",
       },
       warnings: [],
     });
 
-    expect(fetchedUrls).toEqual(["https://cookpad.com/jp/recipes/25877246/print"]);
+    expect(new Set(fetchedUrls)).toEqual(new Set([PRINT_URL, RECIPE_URL]));
     expect(aiNormalize).not.toHaveBeenCalled();
     expect(consumeAiUsage).not.toHaveBeenCalled();
   });
 
-  it("分量・コツ・画像がなくても抽出できる", async () => {
-    await expect(
-      importRecipeFromUrl({
-        rawUrl: "https://cookpad.com/jp/recipes/17952999",
-        userId: "user_123",
-        env: {},
-        usageRepository: createUsageRepositoryStub(),
-        fetcher: async (url) => ({
-          finalUrl: url,
-          contentType: "text/html",
-          body: createCookpadPrintHtml({
-            servings: "",
-            note: "",
-            coverImage: "",
-            stepImage: "",
-          }),
-        }),
-      }),
-    ).resolves.toMatchObject({
-      recipeDraftContent: {
-        title: "夏！ささみのバンバンジー冷やし麺簡単タレ",
-        ingredientGroups: expect.any(Array),
-        steps: expect.any(Array),
-      },
-      source: {
-        sourceUrl: "https://cookpad.com/jp/recipes/17952999",
-      },
+  it("同解像度ならq80を優先し、同一手順内の重複URLを除去する", async () => {
+    const imageIdsByStep = [["duplicate", "duplicate"], [], [], [], [], []];
+    const recipeHtml = createCookpadRecipeHtml({
+      imageIdsByStep,
+      stepImageQualityCandidates: [50, 80],
     });
+
+    const result = await importCookpad({
+      printHtml: createCookpadPrintHtml({ imageIdsByStep }),
+      recipeHtml,
+    });
+
+    expect(result.recipeDraftContent.steps[0].images).toEqual([
+      {
+        type: "externalImageUrl",
+        url: cookpadStepImageUrl("duplicate", 320, 256, 80),
+      },
+    ]);
   });
 
-  it("必須DOMが欠落した場合はAI fallbackしない", async () => {
+  it("カバー画像・手順画像がないレシピも抽出できる", async () => {
+    const result = await importCookpad({
+      printHtml: createCookpadPrintHtml({
+        imageIdsByStep: [[], [], [], [], [], []],
+        servings: "",
+        note: "",
+      }),
+      recipeHtml: createCookpadRecipeHtml({
+        coverImage: false,
+        imageIdsByStep: [[], [], [], [], [], []],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      recipeDraftContent: {
+        title: TITLE,
+        steps: STEP_TEXTS.map((text) => ({ text, images: [] })),
+      },
+    });
+    expect(result.recipeDraftContent).not.toHaveProperty("coverImage");
+  });
+
+  it.each([
+    {
+      name: "タイトル",
+      printHtml: createCookpadPrintHtml(),
+      recipeHtml: createCookpadRecipeHtml({ title: "別のレシピ" }),
+    },
+    {
+      name: "手順数",
+      printHtml: createCookpadPrintHtml(),
+      recipeHtml: createCookpadRecipeHtml({ stepTexts: STEP_TEXTS.slice(0, 5) }),
+    },
+    {
+      name: "手順本文",
+      printHtml: createCookpadPrintHtml(),
+      recipeHtml: createCookpadRecipeHtml({
+        stepTexts: STEP_TEXTS.map((text, index) => (index === 2 ? "異なる本文" : text)),
+      }),
+    },
+    {
+      name: "先頭画像ID",
+      printHtml: createCookpadPrintHtml(),
+      recipeHtml: createCookpadRecipeHtml({
+        imageIdsByStep: STEP_IMAGE_IDS.map((ids, index) =>
+          index === 0 ? ["different", ...ids.slice(1)] : ids,
+        ),
+      }),
+    },
+  ])("$nameが一致しない場合は失敗する", async ({ printHtml, recipeHtml }) => {
+    await expect(importCookpad({ printHtml, recipeHtml })).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("片方が非HTMLの場合はAI fallbackしない", async () => {
     const aiNormalize = vi.fn();
     const consumeAiUsage = vi.fn();
 
     await expect(
       importRecipeFromUrl({
-        rawUrl: "https://cookpad.com/jp/recipes/25877246",
+        rawUrl: RECIPE_URL,
         userId: "user_123",
         env: {},
         usageRepository: createUsageRepositoryStub(consumeAiUsage),
-        fetcher: async (url) => ({
-          finalUrl: url,
-          contentType: "text/html",
-          body: '<html><body><div id="recipe-print"></div></body></html>',
-        }),
+        fetcher: async (url) =>
+          url === PRINT_URL
+            ? createFetchedPage(url, createCookpadPrintHtml())
+            : {
+                finalUrl: url,
+                contentType: "application/json",
+                body: "{}",
+              },
         aiProvider: { normalize: aiNormalize },
       }),
     ).rejects.toMatchObject({
-      code: "extraction_failed",
+      code: "unsupported_page",
     } satisfies Partial<RecipeImportError>);
 
     expect(aiNormalize).not.toHaveBeenCalled();
@@ -164,71 +219,175 @@ describe("cookpadImportAdapter", () => {
   });
 });
 
+const importCookpad = ({
+  printHtml = createCookpadPrintHtml(),
+  recipeHtml = createCookpadRecipeHtml(),
+}: {
+  printHtml?: string;
+  recipeHtml?: string;
+} = {}) =>
+  importRecipeFromUrl({
+    rawUrl: RECIPE_URL,
+    userId: "user_123",
+    env: {},
+    usageRepository: createUsageRepositoryStub(),
+    fetcher: async (url) => createFetchedPage(url, url === PRINT_URL ? printHtml : recipeHtml),
+  });
+
+const createFetchedPage = (url: string, body: string) => ({
+  finalUrl: url,
+  contentType: "text/html; charset=utf-8",
+  body,
+});
+
 const createCookpadPrintHtml = ({
-  servings = '<span class="mise-icon-text">2人分</span>',
+  title = TITLE,
+  stepTexts = STEP_TEXTS,
+  imageIdsByStep = STEP_IMAGE_IDS,
+  servings = '<span class="mise-icon-text">2人前</span>',
   note = `
     <div class="mb-rg">
       <div>コツ・ポイント</div>
-      <div><p>水気をしっかり切ります。</p></div>
+      <div><p>水気をしっかり取ります。</p></div>
     </div>
   `,
-  coverImage = '<img class="w-full aspect-square rounded-lg" src="https://img.example/cover.jpg">',
-  stepImage = '<img src="/images/step-1.jpg">',
 }: {
+  title?: string;
+  stepTexts?: string[];
+  imageIdsByStep?: string[][];
   servings?: string;
   note?: string;
-  coverImage?: string;
-  stepImage?: string;
 } = {}) => `
   <html>
     <body>
       <div id="recipe-print">
-        <header>
-          <span dir="auto">夏！ささみのバンバンジー冷やし麺簡単タレ</span>
-        </header>
+        <header><span dir="auto">${title}</span></header>
         <div class="grid">
           <div>
-            ${coverImage}
-            <div>
-              <span>材料</span>
-              ${servings}
-              <ol dir="auto">
-                <li class="justified-quantity-and-name not-headline">
-                  <span>中華麺</span><bdi>2袋</bdi>
-                </li>
-                <li class="justified-quantity-and-name not-headline">
-                  <span>△塩</span><bdi>1g</bdi>
-                </li>
-                <li class="justified-quantity-and-name headline">
-                  <span>■バンバンジータレ</span><bdi></bdi>
-                </li>
-                <li class="justified-quantity-and-name not-headline">
-                  <span>◎白すりごま</span><bdi>20g</bdi>
-                </li>
-              </ol>
-            </div>
+            <span>材料</span>
+            ${servings}
+            <ol dir="auto">
+              <li class="justified-quantity-and-name not-headline">
+                <span>じゃがいも</span><bdi>1個</bdi>
+              </li>
+              <li class="justified-quantity-and-name not-headline">
+                <span>△塩</span><bdi>少々</bdi>
+              </li>
+              <li class="justified-quantity-and-name headline">
+                <span>■仕上げ</span><bdi></bdi>
+              </li>
+              <li class="justified-quantity-and-name not-headline">
+                <span>◎黒胡椒</span><bdi>少々</bdi>
+              </li>
+            </ol>
           </div>
           <div>
             ${note}
-            <div>
-              <span>作り方</span>
-              <ol class="grid">
-                <li>
-                  <div>1.</div>
-                  <div><p>材料を用意する。</p>${stepImage}</div>
-                </li>
-                <li>
-                  <div>2.</div>
-                  <div><p>盛り付ける。</p></div>
-                </li>
-              </ol>
-            </div>
+            <ol class="grid">
+              ${stepTexts
+                .map(
+                  (text, index) => `
+                    <li>
+                      <div>${index + 1}.</div>
+                      <div>
+                        <p>${text}</p>
+                        ${
+                          imageIdsByStep[index]?.[0]
+                            ? `<img src="${cookpadStepImageUrl(
+                                imageIdsByStep[index][0],
+                                160,
+                                128,
+                                80,
+                              )}">`
+                            : ""
+                        }
+                      </div>
+                    </li>
+                  `,
+                )
+                .join("")}
+            </ol>
           </div>
         </div>
       </div>
     </body>
   </html>
 `;
+
+const createCookpadRecipeHtml = ({
+  title = TITLE,
+  stepTexts = STEP_TEXTS,
+  imageIdsByStep = STEP_IMAGE_IDS,
+  coverImage = true,
+  stepImageQualityCandidates = [50, 80],
+}: {
+  title?: string;
+  stepTexts?: string[];
+  imageIdsByStep?: string[][];
+  coverImage?: boolean;
+  stepImageQualityCandidates?: number[];
+} = {}) => `
+  <html>
+    <body>
+      ${
+        coverImage
+          ? `
+            <div class="tofu_image">
+              <picture>
+                <source type="image/jpeg" srcset="
+                  ${cookpadCoverImageUrl(680, 781, 80)} 1x,
+                  ${cookpadCoverImageUrl(1360, 1562, 80)} 2x
+                ">
+                <img src="${cookpadCoverImageUrl(680, 781, 80)}">
+              </picture>
+            </div>
+          `
+          : ""
+      }
+      <h1 dir="auto">${title}</h1>
+      <ol id="steps">
+        ${stepTexts
+          .map(
+            (text, index) => `
+              <li id="step_${90072264 + index}">
+                <div><p>${text}</p></div>
+                <ul class="step-attachments-list">
+                  ${(imageIdsByStep[index] ?? [])
+                    .map(
+                      (imageId) => `
+                        <li>
+                          <picture>
+                            ${stepImageQualityCandidates
+                              .map(
+                                (quality) => `
+                                  <source type="image/jpeg" srcset="
+                                    ${cookpadStepImageUrl(imageId, 160, 128, quality)} 1x,
+                                    ${cookpadStepImageUrl(imageId, 320, 256, quality)} 2x
+                                  ">
+                                `,
+                              )
+                              .join("")}
+                            <img src="${cookpadStepImageUrl(imageId, 160, 128, 80)}">
+                          </picture>
+                        </li>
+                      `,
+                    )
+                    .join("")}
+                </ul>
+              </li>
+            `,
+          )
+          .join("")}
+      </ol>
+    </body>
+  </html>
+`;
+
+const cookpadCoverImageUrl = (width: number, height: number, quality: number) =>
+  `https://img-global-jp.cpcdn.com/recipes/cover/${width}x${height}f0.5_0.5_1.0q${quality}/photo.jpg`;
+
+const cookpadStepImageUrl = (imageId: string, width: number, height: number, quality: number) =>
+  `https://img-global-jp.cpcdn.com/steps/${imageId}/${width}x${height}cq${quality}/photo.jpg`;
 
 const createUsageRepositoryStub = (
   consumeAiUsage = vi.fn(async ({ month }: { month: string }) => ({
