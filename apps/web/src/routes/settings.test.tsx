@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -22,9 +22,13 @@ describe("Settings routes", () => {
     mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
     await renderApp("/settings");
 
-    await expect(screen.findByRole("heading", { name: "Settings" })).resolves.toBeInTheDocument();
-    expect(screen.getByText("現在のメールアドレス: chef@example.com")).toBeInTheDocument();
-    expect(screen.getByText("現在のプラン: Free")).toBeInTheDocument();
+    await expect(screen.findByRole("heading", { name: "設定" })).resolves.toBeInTheDocument();
+    await expect(
+      screen.findByText("現在のメールアドレス: chef@example.com"),
+    ).resolves.toBeInTheDocument();
+    const plan = screen.getByRole("heading", { name: "プラン" }).parentElement?.parentElement;
+    expect(plan).not.toBeNull();
+    expect(within(plan as HTMLElement).getByText("Free")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "課金設定" })).toHaveAttribute(
       "href",
       "/settings/billing",
@@ -146,7 +150,7 @@ describe("Settings routes", () => {
     const assign = vi.spyOn(checkoutRedirect, "assign").mockImplementation(() => {});
     await renderApp("/settings/billing");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Pro契約" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Proにアップグレード" }));
 
     await waitFor(() => {
       expect(findFetchCall(fetchMock, "/api/billing/checkout")).toEqual([
@@ -397,7 +401,7 @@ describe("Settings routes", () => {
     });
     await renderApp("/settings/billing");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Pro契約" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Proにアップグレード" }));
 
     await expect(
       screen.findByText("既にPro契約があります。表示を更新してください。"),

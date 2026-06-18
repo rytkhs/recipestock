@@ -1,3 +1,4 @@
+import { createGroq } from "@ai-sdk/groq";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
   type RecipeDraftContent,
@@ -10,29 +11,31 @@ import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
 import { type Bindings } from "./env";
 import { extractRecipePageEvidence } from "./import-page-evidence";
+import {
+  cookpadImportAdapter,
+  createDeterministicImportRegistry,
+  type DeterministicFetchedPage,
+  type DeterministicFetchRequest,
+  type DeterministicImportRegistry,
+} from "./lib/import/deterministic";
+import {
+  type FetchedImportPage,
+  type ImportErrorCode,
+  RecipeImportError,
+  type RecipeImportFetcher,
+  type RecipeImportResult,
+} from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
 import { isHttpFetchUrlAllowed } from "./url-safety";
 import { consumeAiUsage, type UsageRepository } from "./usage";
 
-export type ImportErrorCode =
-  | "invalid_url"
-  | "fetch_failed"
-  | "unsupported_page"
-  | "extraction_failed"
-  | "ai_usage_limit_exceeded"
-  | "ai_timeout"
-  | "ai_schema_invalid"
-  | "unknown";
-
-export class RecipeImportError extends Error {
-  readonly code: ImportErrorCode;
-
-  constructor(code: ImportErrorCode, message: string) {
-    super(message);
-    this.name = "RecipeImportError";
-    this.code = code;
-  }
-}
+export {
+  type FetchedImportPage,
+  type ImportErrorCode,
+  RecipeImportError,
+  type RecipeImportFetcher,
+  type RecipeImportResult,
+} from "./lib/import/types";
 
 export type RecipeImportImageCandidate = {
   id: string;
@@ -91,81 +94,60 @@ export type RecipeImportAIProvider = {
   normalize(input: RecipeImportAIInput): Promise<RecipeImportAIDraftContent>;
 };
 
-export type RecipeImportResult = {
-  recipeDraftContent: RecipeDraftContent;
+type RecipeImportConverterResult = {
+  type: "requiresAi";
+  input: RecipeImportAIInput;
+  imageCandidates: RecipeImportImageCandidate[];
   source: RecipeSourceDraft;
   warnings: string[];
 };
-
-type RecipeImportConverterResult =
-  | {
-      type: "deterministic";
-      recipeDraftContent: RecipeDraftContent;
-      source: RecipeSourceDraft;
-      warnings: string[];
-    }
-  | {
-      type: "requiresAi";
-      input: RecipeImportAIInput;
-      imageCandidates: RecipeImportImageCandidate[];
-      source: RecipeSourceDraft;
-      warnings: string[];
-    };
-
-type RecipeImportConverter = {
-  convert(page: FetchedImportPage): Promise<RecipeImportConverterResult>;
-};
-
-export type FetchedImportPage = {
-  finalUrl: string;
-  contentType: string;
-  body: Response | string;
-};
-
-export type RecipeImportFetcher = (
-  url: string,
-  options: { timeoutMs: number; maxBytes: number },
-) => Promise<FetchedImportPage>;
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
 
 const importAiImageIdSchema = z.string().min(1);
 
-const importAiIngredientSchema = z.object({
+const importAiIngredientSchema = z.strictObject({
   name: z.string().min(1),
   amount: z.string(),
 });
 
-const importAiIngredientGroupSchema = z.object({
-  label: z.string().optional(),
-  ingredients: z.array(importAiIngredientSchema).default([]),
+const importAiIngredientGroupSchema = z.strictObject({
+  label: z.string().nullable(),
+  ingredients: z.array(importAiIngredientSchema),
 });
 
 const importAiDraftStepSchema = z
   .strictObject({
-    text: z.string().min(1).optional(),
-    imageIds: z.array(importAiImageIdSchema).default([]),
+    text: z.string().min(1).nullable(),
+    imageIds: z.array(importAiImageIdSchema),
   })
-  .refine((step) => step.text || step.imageIds.length > 0);
+  .refine((step) => step.text !== null || step.imageIds.length > 0);
 
 const importAiDraftContentSchema = z.strictObject({
   title: z.string().min(1),
-  servingsText: z.string().optional(),
-  coverImageId: importAiImageIdSchema.optional(),
-  ingredientGroups: z.array(importAiIngredientGroupSchema).default([]),
-  steps: z.array(importAiDraftStepSchema).default([]),
-  note: z.string().optional(),
+  servingsText: z.string().nullable(),
+  coverImageId: importAiImageIdSchema.nullable(),
+  ingredientGroups: z.array(importAiIngredientGroupSchema),
+  steps: z.array(importAiDraftStepSchema),
+  note: z.string().nullable(),
 });
 
 const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftContent => {
   const draft = importAiDraftContentSchema.parse(value);
 
   return {
-    ...draft,
+    title: draft.title,
+    ...(draft.servingsText !== null ? { servingsText: draft.servingsText } : {}),
+    ...(draft.coverImageId !== null ? { coverImageId: draft.coverImageId } : {}),
+    ingredientGroups: draft.ingredientGroups.map((group) => ({
+      ...(group.label !== null ? { label: group.label } : {}),
+      ingredients: group.ingredients,
+    })),
     steps: draft.steps.map((step) => ({
-      ...step,
+      ...(step.text !== null ? { text: step.text } : {}),
       imageIds: step.imageIds,
     })),
+    ...(draft.note !== null ? { note: draft.note } : {}),
   };
 };
 
@@ -262,39 +244,47 @@ export const normalizeImportableUrl = (rawUrl: string) => {
   }
 };
 
-const genericHtmlImportConverter: RecipeImportConverter = {
-  async convert(page) {
-    if (page.contentType && !/html/i.test(page.contentType)) {
-      throw new RecipeImportError("unsupported_page", "Import URL is not an HTML page.");
-    }
+const defaultDeterministicImportRegistry = createDeterministicImportRegistry([
+  cookpadImportAdapter,
+]);
 
-    const normalizedUrl = normalizeUrl(page.finalUrl);
-    const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
-    const evidence = await extractRecipePageEvidence(page, normalizedUrl);
-    const sourceName = evidence.meta["og:site_name"] ?? host;
+const assertFetchedPageIsHtml = (page: FetchedImportPage) => {
+  if (page.contentType && !/html/i.test(page.contentType)) {
+    throw new RecipeImportError("unsupported_page", "Import URL is not an HTML page.");
+  }
+};
 
-    if (evidence.markdownContent.length < 40 && !hasDescriptionMetadata(evidence.meta)) {
-      throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
-    }
+const convertFetchedHtmlPage = async (
+  page: FetchedImportPage,
+): Promise<RecipeImportConverterResult> => {
+  assertFetchedPageIsHtml(page);
 
-    return {
-      type: "requiresAi",
-      input: {
-        source: {
-          finalUrl: normalizedUrl,
-          host,
-        },
-        markdownContent: evidence.markdownContent,
-        recipeStructuredEvidence: evidence.recipeStructuredEvidence,
-      },
-      imageCandidates: evidence.imageCandidates,
+  const normalizedFinalUrl = normalizeUrl(page.finalUrl);
+  const finalHost = new URL(normalizedFinalUrl).hostname.replace(/^www\./, "");
+  const evidence = await extractRecipePageEvidence(page, normalizedFinalUrl);
+  const sourceName = evidence.meta["og:site_name"] ?? finalHost;
+
+  if (evidence.markdownContent.length < 40 && !hasDescriptionMetadata(evidence.meta)) {
+    throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
+  }
+
+  return {
+    type: "requiresAi",
+    input: {
       source: {
-        sourceUrl: normalizedUrl,
-        sourceName,
+        finalUrl: normalizedFinalUrl,
+        host: finalHost,
       },
-      warnings: [],
-    };
-  },
+      markdownContent: evidence.markdownContent,
+      recipeStructuredEvidence: evidence.recipeStructuredEvidence,
+    },
+    imageCandidates: evidence.imageCandidates,
+    source: {
+      sourceUrl: normalizedFinalUrl,
+      sourceName,
+    },
+    warnings: [],
+  };
 };
 
 const hasDescriptionMetadata = (meta: Record<string, string | undefined>) =>
@@ -307,6 +297,7 @@ export const importRecipeFromUrl = async ({
   usageRepository,
   aiProvider,
   fetcher = fetchImportPage,
+  deterministicImportRegistry = defaultDeterministicImportRegistry,
   now = new Date(),
   logger = createLogger(),
 }: {
@@ -316,20 +307,53 @@ export const importRecipeFromUrl = async ({
   usageRepository: UsageRepository;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
+  deterministicImportRegistry?: DeterministicImportRegistry;
   now?: Date;
   logger?: Logger;
 }): Promise<RecipeImportResult> => {
   const normalizedUrl = normalizeImportableUrl(rawUrl);
-
-  const page = await fetcher(normalizedUrl, {
+  const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
+  const deterministicAdapter = deterministicImportRegistry.select({
+    normalizedUrl,
+    host,
+  });
+  const fetchOptions = {
     timeoutMs: resolveImportTimeoutMs(env),
     maxBytes: resolveImportMaxHtmlBytes(env),
-  });
-  const conversion = await convertFetchedPageToRecipeImportInput(page);
+  };
 
-  if (conversion.type === "deterministic") {
-    return conversion;
+  if (deterministicAdapter) {
+    const requests = deterministicAdapter.resolveFetchRequests({
+      normalizedUrl,
+      host,
+    });
+    const pages = await fetchDeterministicImportPages(requests, fetcher, fetchOptions);
+    const result = await deterministicAdapter.convert({
+      normalizedUrl,
+      host,
+      pages,
+    });
+
+    try {
+      return {
+        recipeDraftContent: recipeDraftContentSchema.parse(result.recipeDraftContent),
+        source: result.source,
+        warnings: result.warnings,
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new RecipeImportError(
+          "extraction_failed",
+          "Deterministic import result was invalid.",
+        );
+      }
+
+      throw error;
+    }
   }
+
+  const page = await fetcher(normalizedUrl, fetchOptions);
+  const conversion = await convertFetchedHtmlPage(page);
 
   const usage = await consumeAiUsage({
     userId,
@@ -379,11 +403,50 @@ export const importRecipeFromUrl = async ({
   };
 };
 
-const convertFetchedPageToRecipeImportInput = (
-  page: FetchedImportPage,
-): Promise<RecipeImportConverterResult> => genericHtmlImportConverter.convert(page);
+const fetchDeterministicImportPages = async (
+  requests: readonly DeterministicFetchRequest[],
+  fetcher: RecipeImportFetcher,
+  options: { timeoutMs: number; maxBytes: number },
+) => {
+  if (requests.length === 0) {
+    throw new RecipeImportError(
+      "extraction_failed",
+      "Deterministic import adapter did not declare any pages.",
+    );
+  }
 
-type ImportAiProviderKind = "workers-ai" | "openrouter";
+  const requestIds = new Set<string>();
+  for (const request of requests) {
+    if (!request.id || requestIds.has(request.id)) {
+      throw new RecipeImportError(
+        "extraction_failed",
+        "Deterministic import adapter declared duplicate page IDs.",
+      );
+    }
+    requestIds.add(request.id);
+    assertImportUrlAllowed(request.url);
+  }
+
+  const fetchedPages = await Promise.all(
+    requests.map(async (request): Promise<DeterministicFetchedPage> => {
+      const page = await fetcher(request.url, options);
+      assertFetchedPageIsHtml(page);
+
+      return {
+        requestId: request.id,
+        requestedUrl: request.url,
+        finalUrl: page.finalUrl,
+        page,
+      };
+    }),
+  );
+
+  return new Map(fetchedPages.map((page) => [page.requestId, page]));
+};
+
+type ImportAiProviderKind = "workers-ai" | "openrouter" | "groq";
+
+const IMPORT_AI_MAX_OUTPUT_TOKENS = 8192;
 
 export const createDefaultRecipeImportAIProvider = (
   env: Bindings,
@@ -406,7 +469,9 @@ export const createDefaultRecipeImportAIProvider = (
         schema: importAiDraftContentSchema,
         system,
         prompt: buildImportUserPrompt(input),
+        providerOptions: createImportProviderOptions(providerKind),
         temperature: 0,
+        maxOutputTokens: IMPORT_AI_MAX_OUTPUT_TOKENS,
         maxRetries: 0,
         timeout: timeoutMs,
         abortSignal: controller.signal,
@@ -439,6 +504,17 @@ const createImportLanguageModel = (
   providerKind: ImportAiProviderKind,
   timeoutMs: number,
 ) => {
+  if (providerKind === "groq") {
+    const model = resolveGroqTextModel(env);
+    const groq = createGroq({
+      apiKey: resolveGroqApiKey(env),
+      baseURL: resolveGroqGatewayBaseUrl(env),
+      headers: resolveAiGatewayAuthHeaders(env),
+    });
+
+    return groq(model) as never;
+  }
+
   if (providerKind === "openrouter") {
     const model = resolveOpenRouterTextModel(env);
     const openrouter = createOpenRouter({
@@ -466,6 +542,17 @@ const createImportLanguageModel = (
   return workersai(model as never, {
     extraHeaders: { "cf-aig-request-timeout": String(timeoutMs) },
   }) as never;
+};
+
+const createImportProviderOptions = (providerKind: ImportAiProviderKind) => {
+  if (providerKind !== "groq") return undefined;
+
+  return {
+    groq: {
+      structuredOutputs: true,
+      strictJsonSchema: true,
+    },
+  };
 };
 
 const buildImportUserPrompt = (input: RecipeImportAIInput) => `
@@ -506,11 +593,29 @@ const resolveImportAiTextModel = (env: Partial<Bindings>) => {
 
 const resolveImportAiProvider = (env: Partial<Bindings>): ImportAiProviderKind => {
   const provider = env.IMPORT_AI_PROVIDER?.trim() || "workers-ai";
-  if (provider === "workers-ai" || provider === "openrouter") {
+  if (provider === "workers-ai" || provider === "openrouter" || provider === "groq") {
     return provider;
   }
 
   throw new RecipeImportError("unknown", "Import AI provider is not configured.");
+};
+
+const resolveGroqApiKey = (env: Partial<Bindings>) => {
+  const apiKey = env.GROQ_API_KEY?.trim();
+  if (!apiKey) {
+    throw new RecipeImportError("unknown", "Groq API key is not configured.");
+  }
+
+  return apiKey;
+};
+
+const resolveGroqTextModel = (env: Partial<Bindings>) => {
+  const model = env.GROQ_TEXT_MODEL?.trim();
+  if (!model) {
+    throw new RecipeImportError("unknown", "Groq text model is not configured.");
+  }
+
+  return model;
 };
 
 const resolveOpenRouterApiKey = (env: Partial<Bindings>) => {
@@ -531,7 +636,17 @@ const resolveOpenRouterTextModel = (env: Partial<Bindings>) => {
   return model;
 };
 
+const resolveGroqGatewayBaseUrl = (env: Partial<Bindings>) =>
+  resolveCloudflareAiGatewayProviderBaseUrl(env, "groq");
+
 const resolveOpenRouterGatewayBaseUrl = (env: Partial<Bindings>) => {
+  return resolveCloudflareAiGatewayProviderBaseUrl(env, "openrouter");
+};
+
+const resolveCloudflareAiGatewayProviderBaseUrl = (
+  env: Partial<Bindings>,
+  providerPath: "groq" | "openrouter",
+) => {
   const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
   const gatewayName = env.AI_GATEWAY_NAME?.trim();
   if (!accountId || !gatewayName) {
@@ -540,7 +655,7 @@ const resolveOpenRouterGatewayBaseUrl = (env: Partial<Bindings>) => {
 
   return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(
     accountId,
-  )}/${encodeURIComponent(gatewayName)}/openrouter`;
+  )}/${encodeURIComponent(gatewayName)}/${providerPath}`;
 };
 
 const resolveAiGatewayAuthHeaders = (env: Partial<Bindings>) => {
@@ -570,8 +685,7 @@ const logImportAiFailure = (
     timeoutMs: number;
   },
 ) => {
-  const model =
-    providerKind === "openrouter" ? env.OPENROUTER_TEXT_MODEL?.trim() : env.AI_TEXT_MODEL?.trim();
+  const model = resolveImportAiTextModelForLog(env, providerKind);
 
   logger.error("recipe_import_ai_normalization_failed", {
     provider: providerKind,
@@ -582,22 +696,37 @@ const logImportAiFailure = (
     markdownContentLength: input.markdownContent.length,
     structuredEvidenceCount: input.recipeStructuredEvidence.length,
     gatewayBaseUrl:
-      providerKind === "openrouter" ? resolveOpenRouterGatewayBaseUrlForLog(env) : undefined,
+      providerKind === "workers-ai"
+        ? undefined
+        : resolveCloudflareAiGatewayProviderBaseUrlForLog(env, providerKind),
     gatewayName: env.AI_GATEWAY_NAME?.trim() || undefined,
     gatewayAuthConfigured:
-      providerKind === "openrouter" ? Boolean(env.CF_AIG_TOKEN?.trim()) : undefined,
+      providerKind === "workers-ai" ? undefined : Boolean(env.CF_AIG_TOKEN?.trim()),
     error: sanitizeErrorDetails(error),
   });
 };
 
-const resolveOpenRouterGatewayBaseUrlForLog = (env: Partial<Bindings>) => {
+const resolveImportAiTextModelForLog = (
+  env: Partial<Bindings>,
+  providerKind: ImportAiProviderKind,
+) => {
+  if (providerKind === "groq") return env.GROQ_TEXT_MODEL?.trim();
+  if (providerKind === "openrouter") return env.OPENROUTER_TEXT_MODEL?.trim();
+
+  return env.AI_TEXT_MODEL?.trim();
+};
+
+const resolveCloudflareAiGatewayProviderBaseUrlForLog = (
+  env: Partial<Bindings>,
+  providerKind: Exclude<ImportAiProviderKind, "workers-ai">,
+) => {
   const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
   const gatewayName = env.AI_GATEWAY_NAME?.trim();
   if (!accountId || !gatewayName) return undefined;
 
   return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(
     accountId,
-  )}/${encodeURIComponent(gatewayName)}/openrouter`;
+  )}/${encodeURIComponent(gatewayName)}/${providerKind}`;
 };
 
 const sanitizeErrorDetails = (error: unknown, depth = 0): unknown => {
