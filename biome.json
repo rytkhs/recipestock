@@ -13,6 +13,7 @@
       "!**/build",
       "!**/coverage",
       "!**/tmp",
+      "!storage",
       "!docs",
       "!**/.env",
       "!**/.env.*",
