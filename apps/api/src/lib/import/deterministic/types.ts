@@ -1,20 +1,20 @@
-import { type RecipePageEvidence } from "../../../import-page-evidence";
-import { type FetchedImportPage, type RecipeImportResult } from "../../../import-url";
+import { type FetchedImportPage, type RecipeImportResult } from "../types";
 
 export type DeterministicImportMatchInput = {
-  finalUrl: string;
   normalizedUrl: string;
   host: string;
 };
 
 export type DeterministicImportContext = DeterministicImportMatchInput & {
   page: FetchedImportPage;
-  evidence: RecipePageEvidence;
+  fetchUrl: string;
+  finalUrl: string;
 };
 
 export type DeterministicImportAdapter = {
   id: string;
   match(input: DeterministicImportMatchInput): boolean;
+  resolveFetchUrl?(input: DeterministicImportMatchInput): string;
   convert(context: DeterministicImportContext): Promise<RecipeImportResult>;
 };
 

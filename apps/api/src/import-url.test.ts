@@ -125,6 +125,16 @@ describe("URL import flow", () => {
       steps: [{ text: "Cook.", imageIds: [] }],
     }));
     const match = vi.fn(() => false);
+    const fetcher = vi.fn(async () => ({
+      finalUrl: "https://example.com/recipes/fallback",
+      contentType: "text/html",
+      body: `
+        <article>
+          <h1>Fallback tomato pasta</h1>
+          <p>Enough visible recipe content for extraction and import conversion.</p>
+        </article>
+      `,
+    }));
 
     await expect(
       importRecipeFromUrl({
@@ -135,16 +145,7 @@ describe("URL import flow", () => {
           IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
-        fetcher: async () => ({
-          finalUrl: "https://example.com/recipes/fallback",
-          contentType: "text/html",
-          body: `
-            <article>
-              <h1>Fallback tomato pasta</h1>
-              <p>Enough visible recipe content for extraction and import conversion.</p>
-            </article>
-          `,
-        }),
+        fetcher,
         deterministicImportRegistry: createDeterministicImportRegistry([
           {
             id: "no-match",
@@ -165,10 +166,13 @@ describe("URL import flow", () => {
     });
 
     expect(match).toHaveBeenCalledWith({
-      finalUrl: "https://example.com/recipes/fallback",
       normalizedUrl: "https://example.com/recipes/fallback",
       host: "example.com",
     });
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://example.com/recipes/fallback",
+      expect.any(Object),
+    );
     expect(aiNormalize).toHaveBeenCalledTimes(1);
   });
 
@@ -221,10 +225,10 @@ describe("URL import flow", () => {
             async convert(context) {
               expect(context).toMatchObject({
                 finalUrl: "https://www.example.com/recipes/deterministic",
+                fetchUrl: "https://www.example.com/recipes/deterministic",
                 normalizedUrl: "https://www.example.com/recipes/deterministic",
                 host: "example.com",
               });
-              expect(context.evidence.markdownContent).toContain("Deterministic soup");
 
               return {
                 recipeDraftContent: {
