@@ -161,9 +161,7 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
     });
     const coverImageUrl = structuredRecipe.imageUrls[0];
     const note = buildAttentionNote(extraction.attentionItems);
-    const servingsText =
-      normalizeText(structuredRecipe.servingsText) ||
-      normalizeServingsText(extraction.servingsText);
+    const servingsText = normalizeServingsText(extraction.servingsText);
 
     const recipeDraftContent: RecipeDraftContent = {
       title,

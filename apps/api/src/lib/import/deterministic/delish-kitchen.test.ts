@@ -129,6 +129,22 @@ describe("delishKitchenImportAdapter", () => {
     expect(result.recipeDraftContent.title).toBe("人気の定番メニュー！ 基本の牛丼");
   });
 
+  it("servingsTextは表示本文を正としてJSON-LDが空でも抽出する", async () => {
+    const result = await importDelishKitchen({
+      jsonLdServingsText: "",
+    });
+
+    expect(result.recipeDraftContent.servingsText).toBe("2人分");
+  });
+
+  it("表示本文に分量がなければJSON-LDだけに存在してもservingsTextを省略する", async () => {
+    const result = await importDelishKitchen({
+      htmlServingsText: "",
+    });
+
+    expect(result.recipeDraftContent).not.toHaveProperty("servingsText");
+  });
+
   it("画像、ポイント、注意事項がなくても成功する", async () => {
     const result = await importDelishKitchen({
       coverImage: false,
@@ -269,6 +285,7 @@ type FixtureOptions = {
   jsonLdStepTexts?: string[];
   points?: Array<string | undefined>;
   attentionItems?: string[];
+  htmlServingsText?: string;
   jsonLdServingsText?: string;
   coverImage?: boolean;
   stepImages?: boolean;
@@ -317,6 +334,7 @@ const createDelishKitchenHtml = ({
   jsonLdStepTexts = stepTexts,
   points = ["加熱する直前に切りましょう。"],
   attentionItems = ["調理中は火元を離れないでください。", "高温になったら火を止めます。"],
+  htmlServingsText = "2人分",
   jsonLdServingsText = "2人分",
   coverImage = true,
   stepImages = true,
@@ -367,7 +385,12 @@ const createDelishKitchenHtml = ({
           </div>
         </main>
         <div class="delish-recipe-ingredients">
-          <h2><span class="recipe-serving">材料 <span>【2人分】</span></span></h2>
+          <h2>
+            <span class="recipe-serving">
+              材料
+              ${htmlServingsText ? `<span>【${htmlServingsText}】</span>` : ""}
+            </span>
+          </h2>
           <ul class="ingredient-list">
             ${ingredients
               .map((ingredient) =>
