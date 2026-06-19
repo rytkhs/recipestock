@@ -7,7 +7,7 @@ import {
 } from "./types";
 
 const DELISH_KITCHEN_HOST = "delishkitchen.tv";
-const DELISH_KITCHEN_RECIPE_PATH = /^\/recipes\/(\d{18})\/?$/;
+const DELISH_KITCHEN_RECIPE_PATH = /^\/recipes\/([0-9]+)\/?$/;
 const DELISH_KITCHEN_RECIPE_PAGE_ID = "recipe";
 
 type IngredientRow =
@@ -58,7 +58,16 @@ type DelishKitchenJsonLdRecipe = {
 
 const getDelishKitchenRecipeId = (rawUrl: string) => {
   const url = new URL(rawUrl);
-  if (url.hostname.replace(/^www\./, "") !== DELISH_KITCHEN_HOST) return null;
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    (url.hostname !== DELISH_KITCHEN_HOST && url.hostname !== `www.${DELISH_KITCHEN_HOST}`) ||
+    url.port ||
+    url.username ||
+    url.password
+  ) {
+    return null;
+  }
+
   return DELISH_KITCHEN_RECIPE_PATH.exec(url.pathname)?.[1] ?? null;
 };
 

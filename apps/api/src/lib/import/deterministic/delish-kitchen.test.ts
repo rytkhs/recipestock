@@ -24,13 +24,31 @@ describe("delishKitchenImportAdapter", () => {
     ]);
   });
 
-  it("レシピ以外、サブドメイン、桁数違い、追加pathnameにはmatchしない", () => {
+  it.each([
+    "1",
+    "123456789012345678",
+    "123456789012345678901234567890",
+  ])("数字の桁数に依存せずrecipe ID %sにmatchする", (recipeId) => {
+    const normalizedUrl = `https://delishkitchen.tv/recipes/${recipeId}`;
+    const host = new URL(normalizedUrl).hostname;
+
+    expect(delishKitchenImportAdapter.match({ normalizedUrl, host })).toBe(true);
+    expect(delishKitchenImportAdapter.resolveFetchRequests({ normalizedUrl, host })).toEqual([
+      {
+        id: "recipe",
+        url: `https://delishkitchen.tv/recipes/${recipeId}`,
+      },
+    ]);
+  });
+
+  it("レシピ以外、非数字ID、追加pathname、非公式hostにはmatchしない", () => {
     for (const normalizedUrl of [
       "https://delishkitchen.tv/search?q=牛丼",
       "https://delishkitchen.tv/categories/19878",
       "https://delishkitchen.tv/articles/2800",
       `https://biz.delishkitchen.tv/recipes/${RECIPE_ID}`,
-      "https://delishkitchen.tv/recipes/123",
+      `https://www.delishkitchen.tv.evil.example/recipes/${RECIPE_ID}`,
+      "https://delishkitchen.tv/recipes/recipe-name",
       `${RECIPE_URL}/print`,
     ]) {
       expect(
@@ -40,6 +58,19 @@ describe("delishKitchenImportAdapter", () => {
         }),
       ).toBe(false);
     }
+  });
+
+  it.each([
+    `https://user@delishkitchen.tv/recipes/${RECIPE_ID}`,
+    `https://user:password@delishkitchen.tv/recipes/${RECIPE_ID}`,
+    `https://delishkitchen.tv:8443/recipes/${RECIPE_ID}`,
+  ])("userinfoまたは非標準portを含むURL %sにはmatchしない", (normalizedUrl) => {
+    expect(
+      delishKitchenImportAdapter.match({
+        normalizedUrl,
+        host: new URL(normalizedUrl).hostname,
+      }),
+    ).toBe(false);
   });
 
   it("表示本文とRecipe JSON-LDを合成してRecipeDraftContentへ変換する", async () => {
