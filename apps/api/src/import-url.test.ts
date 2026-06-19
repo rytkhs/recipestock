@@ -6,7 +6,7 @@ import {
   normalizeImportableUrl,
   RecipeImportError,
 } from "./import-url";
-import { createDeterministicImportRegistry } from "./lib/import/deterministic";
+import { type DeterministicImporter } from "./lib/import/deterministic";
 import { type UsageRepository } from "./usage";
 
 afterEach(() => {
@@ -117,14 +117,14 @@ describe("normalizeImportableUrl", () => {
 });
 
 describe("URL import flow", () => {
-  it("deterministic adapterがmatchしない場合は既存どおりAI normalizationへ進む", async () => {
+  it("deterministic importerが非対応の場合は既存どおりAI normalizationへ進む", async () => {
     const usageRepository = createUsageRepositoryStub();
     const aiNormalize = vi.fn(async () => ({
       title: "Fallback tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
       steps: [{ text: "Cook.", imageIds: [] }],
     }));
-    const match = vi.fn(() => false);
+    const tryImport = vi.fn(async () => null);
     const fetcher = vi.fn(async () => ({
       finalUrl: "https://example.com/recipes/fallback",
       contentType: "text/html",
@@ -146,16 +146,7 @@ describe("URL import flow", () => {
         },
         usageRepository,
         fetcher,
-        deterministicImportRegistry: createDeterministicImportRegistry([
-          {
-            id: "no-match",
-            match,
-            resolveFetchRequests: () => [],
-            async convert() {
-              throw new Error("should not convert");
-            },
-          },
-        ]),
+        deterministicImporter: { tryImport },
         aiProvider: {
           normalize: aiNormalize,
         },
@@ -166,9 +157,10 @@ describe("URL import flow", () => {
       },
     });
 
-    expect(match).toHaveBeenCalledWith({
+    expect(tryImport).toHaveBeenCalledWith({
       normalizedUrl: "https://example.com/recipes/fallback",
-      host: "example.com",
+      fetcher,
+      fetchOptions: expect.any(Object),
     });
     expect(fetcher).toHaveBeenCalledWith(
       "https://example.com/recipes/fallback",
@@ -177,7 +169,7 @@ describe("URL import flow", () => {
     expect(aiNormalize).toHaveBeenCalledTimes(1);
   });
 
-  it("deterministic adapterが成功した場合はAI providerとAI usageを使わない", async () => {
+  it("deterministic importerが成功した場合はAI providerとAI usageを使わない", async () => {
     const consumeAiUsage = vi.fn(async ({ month }: { month: string }) => ({
       status: "consumed" as const,
       usage: { month, used: 1 },
@@ -192,6 +184,22 @@ describe("URL import flow", () => {
       consumeAiUsage,
     };
     const aiNormalize = vi.fn();
+    const deterministicImporter: DeterministicImporter = {
+      async tryImport() {
+        return {
+          recipeDraftContent: {
+            title: "Deterministic soup",
+            ingredientGroups: [{ ingredients: [{ name: "Salt", amount: "1 tsp" }] }],
+            steps: [{ text: "Simmer.", images: [] }],
+          },
+          source: {
+            sourceUrl: "https://www.example.com/recipes/deterministic",
+            sourceName: "Example Kitchen",
+          },
+          warnings: ["deterministic warning"],
+        };
+      },
+    };
 
     await expect(
       importRecipeFromUrl({
@@ -202,54 +210,7 @@ describe("URL import flow", () => {
           IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
-        fetcher: async () => ({
-          finalUrl: "https://www.example.com/recipes/deterministic",
-          contentType: "text/html",
-          body: `
-            <html>
-              <head>
-                <meta property="og:site_name" content="Example Kitchen">
-              </head>
-              <body>
-                <article>
-                  <h1>Deterministic soup</h1>
-                  <p>Enough visible recipe content for extraction and import conversion.</p>
-                </article>
-              </body>
-            </html>
-          `,
-        }),
-        deterministicImportRegistry: createDeterministicImportRegistry([
-          {
-            id: "example",
-            match: ({ host }) => host === "example.com",
-            resolveFetchRequests: ({ normalizedUrl }) => [{ id: "recipe", url: normalizedUrl }],
-            async convert(context) {
-              expect(context).toMatchObject({
-                normalizedUrl: "https://www.example.com/recipes/deterministic",
-                host: "example.com",
-              });
-              expect(context.pages.get("recipe")).toMatchObject({
-                requestId: "recipe",
-                requestedUrl: "https://www.example.com/recipes/deterministic",
-                finalUrl: "https://www.example.com/recipes/deterministic",
-              });
-
-              return {
-                recipeDraftContent: {
-                  title: "Deterministic soup",
-                  ingredientGroups: [{ ingredients: [{ name: "Salt", amount: "1 tsp" }] }],
-                  steps: [{ text: "Simmer.", images: [] }],
-                },
-                source: {
-                  sourceUrl: context.normalizedUrl,
-                  sourceName: "Example Kitchen",
-                },
-                warnings: ["deterministic warning"],
-              };
-            },
-          },
-        ]),
+        deterministicImporter,
         aiProvider: {
           normalize: aiNormalize,
         },
@@ -269,7 +230,7 @@ describe("URL import flow", () => {
     expect(consumeAiUsage).not.toHaveBeenCalled();
   });
 
-  it("deterministic adapterが失敗した場合はAI fallbackしない", async () => {
+  it("deterministic importerが失敗した場合はAI fallbackしない", async () => {
     const usageRepository = createUsageRepositoryStub();
     const aiNormalize = vi.fn();
 
@@ -282,81 +243,11 @@ describe("URL import flow", () => {
           IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
-        fetcher: async () => ({
-          finalUrl: "https://example.com/recipes/failing-deterministic",
-          contentType: "text/html",
-          body: `
-            <article>
-              <h1>Failing deterministic recipe</h1>
-              <p>Enough visible recipe content for extraction and import conversion.</p>
-            </article>
-          `,
-        }),
-        deterministicImportRegistry: createDeterministicImportRegistry([
-          {
-            id: "example",
-            match: () => true,
-            resolveFetchRequests: ({ normalizedUrl }) => [{ id: "recipe", url: normalizedUrl }],
-            async convert() {
-              throw new RecipeImportError("extraction_failed", "Site structure changed.");
-            },
+        deterministicImporter: {
+          async tryImport() {
+            throw new RecipeImportError("extraction_failed", "Site structure changed.");
           },
-        ]),
-        aiProvider: {
-          normalize: aiNormalize,
         },
-      }),
-    ).rejects.toMatchObject({
-      code: "extraction_failed",
-    } satisfies Partial<RecipeImportError>);
-
-    expect(aiNormalize).not.toHaveBeenCalled();
-  });
-
-  it("deterministic adapterの不正なRecipeDraftContentはextraction_failedにする", async () => {
-    const usageRepository = createUsageRepositoryStub();
-    const aiNormalize = vi.fn();
-
-    await expect(
-      importRecipeFromUrl({
-        rawUrl: "https://example.com/recipes/invalid-deterministic-result",
-        userId: "user_123",
-        env: {
-          AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
-        },
-        usageRepository,
-        fetcher: async () => ({
-          finalUrl: "https://example.com/recipes/invalid-deterministic-result",
-          contentType: "text/html",
-          body: `
-            <article>
-              <h1>Invalid deterministic result</h1>
-              <p>Enough visible recipe content for extraction and import conversion.</p>
-            </article>
-          `,
-        }),
-        deterministicImportRegistry: createDeterministicImportRegistry([
-          {
-            id: "example",
-            match: () => true,
-            resolveFetchRequests: ({ normalizedUrl }) => [{ id: "recipe", url: normalizedUrl }],
-            async convert() {
-              return {
-                recipeDraftContent: {
-                  title: "",
-                  ingredientGroups: [],
-                  steps: [],
-                },
-                source: {
-                  sourceUrl: "https://example.com/recipes/invalid-deterministic-result",
-                  sourceName: "Example",
-                },
-                warnings: [],
-              };
-            },
-          },
-        ]),
         aiProvider: {
           normalize: aiNormalize,
         },

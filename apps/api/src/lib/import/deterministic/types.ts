@@ -10,15 +10,9 @@ export type DeterministicFetchRequest = {
   url: string;
 };
 
-export type DeterministicFetchedPage = {
-  requestId: string;
-  requestedUrl: string;
-  finalUrl: string;
-  page: FetchedImportPage;
-};
-
-export type DeterministicImportContext = DeterministicImportMatchInput & {
-  pages: ReadonlyMap<string, DeterministicFetchedPage>;
+export type DeterministicImportContext = {
+  normalizedUrl: string;
+  pages: ReadonlyMap<string, FetchedImportPage>;
 };
 
 export type DeterministicImportAdapter = {
@@ -26,8 +20,4 @@ export type DeterministicImportAdapter = {
   match(input: DeterministicImportMatchInput): boolean;
   resolveFetchRequests(input: DeterministicImportMatchInput): readonly DeterministicFetchRequest[];
   convert(context: DeterministicImportContext): Promise<RecipeImportResult>;
-};
-
-export type DeterministicImportRegistry = {
-  select(input: DeterministicImportMatchInput): DeterministicImportAdapter | null;
 };
