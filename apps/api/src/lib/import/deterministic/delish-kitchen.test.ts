@@ -161,6 +161,72 @@ describe("delishKitchenImportAdapter", () => {
     ]);
   });
 
+  it("制限付きで手順が取得できない場合は材料だけを部分取り込みする", async () => {
+    const result = await importDelishKitchen({
+      restricted: true,
+      stepTexts: [],
+      jsonLdStepTexts: [],
+    });
+
+    expect(result).toEqual({
+      recipeDraftContent: {
+        title: "人気の定番メニュー！ 基本の牛丼",
+        servingsText: "2人分",
+        coverImage: {
+          type: "externalImageUrl",
+          url: COVER_IMAGE_URL,
+        },
+        ingredientGroups: [
+          {
+            ingredients: [{ name: "あたたかいごはん", amount: "どんぶり2杯(400g)" }],
+          },
+          {
+            label: "☆調味料",
+            ingredients: [
+              { name: "しょうゆ", amount: "大さじ2" },
+              { name: "砂糖", amount: "小さじ2" },
+            ],
+          },
+        ],
+        steps: [],
+        note: [
+          "デリッシュキッチンの制限付きレシピのため、手順は取り込まれていません。",
+          "",
+          "注意事項:",
+          "調理中は火元を離れないでください。",
+          "高温になったら火を止めます。",
+        ].join("\n"),
+      },
+      source: {
+        sourceUrl: RECIPE_URL,
+        sourceName: "デリッシュキッチン",
+      },
+      warnings: [],
+    });
+  });
+
+  it("制限表示があっても手順を取得できる場合は完全取り込みする", async () => {
+    const result = await importDelishKitchen({ restricted: true });
+
+    expect(result.recipeDraftContent.steps).toHaveLength(2);
+    expect(result.recipeDraftContent.note).toBe(
+      "注意事項:\n調理中は火元を離れないでください。\n高温になったら火を止めます。",
+    );
+  });
+
+  it("制限付きでも材料がJSON-LDと一致しない場合は失敗する", async () => {
+    await expect(
+      importDelishKitchen({
+        restricted: true,
+        stepTexts: [],
+        jsonLdStepTexts: [],
+        jsonLdIngredients: ["あたたかいごはん 1杯"],
+      }),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
   it.each([
     {
       name: "final URLのrecipe ID",
@@ -217,10 +283,6 @@ describe("delishKitchenImportAdapter", () => {
       name: "HTML手順がない",
       options: { stepTexts: [] },
     },
-    {
-      name: "プレミアム表示がある",
-      options: { restricted: true, stepTexts: [], jsonLdStepTexts: [] },
-    },
   ])("$nameの場合は失敗する", async ({ options }) => {
     await expect(importDelishKitchen(options)).rejects.toMatchObject({
       code: "extraction_failed",
@@ -251,6 +313,37 @@ describe("delishKitchenImportAdapter", () => {
     expect(consumeAiUsage).not.toHaveBeenCalled();
   });
 
+  it("制限付きの部分取り込み時もAI providerとAI usageを使わない", async () => {
+    const aiNormalize = vi.fn();
+    const consumeAiUsage = vi.fn();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: RECIPE_URL,
+        userId: "user_123",
+        env: {},
+        usageRepository: createUsageRepositoryStub(consumeAiUsage),
+        fetcher: async (url) =>
+          createFetchedPage(
+            url,
+            createDelishKitchenHtml({
+              restricted: true,
+              stepTexts: [],
+              jsonLdStepTexts: [],
+            }),
+          ),
+        aiProvider: { normalize: aiNormalize },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        steps: [],
+      },
+    });
+
+    expect(aiNormalize).not.toHaveBeenCalled();
+    expect(consumeAiUsage).not.toHaveBeenCalled();
+  });
+
   it("match後の抽出失敗時はAIへfallbackしない", async () => {
     const aiNormalize = vi.fn();
     const consumeAiUsage = vi.fn();
@@ -262,7 +355,7 @@ describe("delishKitchenImportAdapter", () => {
         env: {},
         usageRepository: createUsageRepositoryStub(consumeAiUsage),
         fetcher: async (url) =>
-          createFetchedPage(url, createDelishKitchenHtml({ restricted: true })),
+          createFetchedPage(url, createDelishKitchenHtml({ stepTexts: [], jsonLdStepTexts: [] })),
         aiProvider: { normalize: aiNormalize },
       }),
     ).rejects.toMatchObject({

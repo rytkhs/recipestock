@@ -9,6 +9,8 @@ import {
 const DELISH_KITCHEN_HOST = "delishkitchen.tv";
 const DELISH_KITCHEN_RECIPE_PATH = /^\/recipes\/([0-9]+)\/?$/;
 const DELISH_KITCHEN_RECIPE_PAGE_ID = "recipe";
+const RESTRICTED_RECIPE_NOTE =
+  "デリッシュキッチンの制限付きレシピのため、手順は取り込まれていません。";
 
 type IngredientRow =
   | {
@@ -110,13 +112,6 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
       canonicalUrl,
     );
 
-    if (extraction.isRestricted) {
-      throw new RecipeImportError(
-        "extraction_failed",
-        "Delish Kitchen recipe instructions are unavailable.",
-      );
-    }
-
     if (extraction.canonicalUrl !== canonicalUrl || !structuredRecipe) {
       throw new RecipeImportError(
         "extraction_failed",
@@ -131,13 +126,14 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
     );
     const htmlStepTexts = extraction.steps.map((step) => normalizeText(step.text));
     const structuredStepTexts = structuredRecipe.steps.map((step) => normalizeText(step.text));
+    const isPartialImport = extraction.isRestricted && htmlStepTexts.length === 0;
 
     if (
       !title ||
       htmlIngredients.length === 0 ||
-      htmlStepTexts.length === 0 ||
       !arraysEqual(htmlIngredients, structuredRecipe.ingredients.map(normalizeText)) ||
-      !arraysEqual(htmlStepTexts, structuredStepTexts) ||
+      (!isPartialImport &&
+        (htmlStepTexts.length === 0 || !arraysEqual(htmlStepTexts, structuredStepTexts))) ||
       (normalizeServingsText(extraction.servingsText) &&
         normalizeText(structuredRecipe.servingsText) &&
         normalizeServingsText(extraction.servingsText) !==
@@ -149,18 +145,20 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
       );
     }
 
-    const steps = extraction.steps.map((step, index) => {
-      const text = buildStepText(step);
-      return {
-        ...(text ? { text } : {}),
-        images: structuredRecipe.steps[index].imageUrls.map((url) => ({
-          type: "externalImageUrl" as const,
-          url,
-        })),
-      };
-    });
+    const steps = isPartialImport
+      ? []
+      : extraction.steps.map((step, index) => {
+          const text = buildStepText(step);
+          return {
+            ...(text ? { text } : {}),
+            images: structuredRecipe.steps[index].imageUrls.map((url) => ({
+              type: "externalImageUrl" as const,
+              url,
+            })),
+          };
+        });
     const coverImageUrl = structuredRecipe.imageUrls[0];
-    const note = buildAttentionNote(extraction.attentionItems);
+    const note = buildRecipeNote(extraction.attentionItems, isPartialImport);
     const servingsText = normalizeServingsText(extraction.servingsText);
 
     const recipeDraftContent: RecipeDraftContent = {
@@ -490,9 +488,13 @@ const buildStepText = (step: StepCapture) => {
   return `${text}\n\nポイント: ${points.join("\n")}`;
 };
 
-const buildAttentionNote = (items: string[]) => {
+const buildRecipeNote = (items: string[], isPartialImport: boolean) => {
   const normalizedItems = items.map(normalizeText).filter(Boolean);
-  return normalizedItems.length > 0 ? `注意事項:\n${normalizedItems.join("\n")}` : "";
+  const sections = [
+    ...(isPartialImport ? [RESTRICTED_RECIPE_NOTE] : []),
+    ...(normalizedItems.length > 0 ? [`注意事項:\n${normalizedItems.join("\n")}`] : []),
+  ];
+  return sections.join("\n\n");
 };
 
 const extractTexts = (value: unknown): string[] =>
