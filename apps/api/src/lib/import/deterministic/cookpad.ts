@@ -436,16 +436,6 @@ const assertCookpadExtractionsMatch = (
   printExtraction: CookpadPrintExtraction,
   recipeExtraction: CookpadRecipeExtraction,
 ) => {
-  if (
-    !normalizeText(printExtraction.title) ||
-    normalizeText(printExtraction.title) !== normalizeText(recipeExtraction.title)
-  ) {
-    throw new RecipeImportError(
-      "extraction_failed",
-      "Cookpad recipe pages did not contain matching recipe content.",
-    );
-  }
-
   if (recipeExtraction.isPremium) return;
 
   if (printExtraction.steps.length !== recipeExtraction.steps.length) {
