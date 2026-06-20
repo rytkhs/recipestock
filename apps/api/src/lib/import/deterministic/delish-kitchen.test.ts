@@ -8,6 +8,7 @@ const RECIPE_ID = "176147753863217510";
 const RECIPE_URL = `https://delishkitchen.tv/recipes/${RECIPE_ID}`;
 const COVER_IMAGE_URL = `https://image.delishkitchen.tv/recipe/${RECIPE_ID}/1.jpg?w=920`;
 const STEP_IMAGE_URL = `https://media.delishkitchen.tv/recipe/${RECIPE_ID}/steps/1.jpg`;
+const SECOND_STEP_IMAGE_URL = `https://media.delishkitchen.tv/recipe/${RECIPE_ID}/steps/2.jpg`;
 
 describe("delishKitchenImportAdapter", () => {
   it.each([
@@ -214,17 +215,16 @@ describe("delishKitchenImportAdapter", () => {
     );
   });
 
-  it("制限付きでも材料がJSON-LDと一致しない場合は失敗する", async () => {
-    await expect(
-      importDelishKitchen({
-        restricted: true,
-        stepTexts: [],
-        jsonLdStepTexts: [],
-        jsonLdIngredients: ["あたたかいごはん 1杯"],
-      }),
-    ).rejects.toMatchObject({
-      code: "extraction_failed",
-    } satisfies Partial<RecipeImportError>);
+  it("制限付きでもJSON-LDの材料と一致せずに部分取り込みできる", async () => {
+    const result = await importDelishKitchen({
+      restricted: true,
+      stepTexts: [],
+      jsonLdStepTexts: [],
+      jsonLdIngredients: ["あたたかいごはん 1杯"],
+    });
+
+    expect(result.recipeDraftContent.ingredientGroups).toHaveLength(2);
+    expect(result.recipeDraftContent.steps).toEqual([]);
   });
 
   it.each([
@@ -236,10 +236,13 @@ describe("delishKitchenImportAdapter", () => {
       name: "canonical URL",
       canonicalUrl: "https://delishkitchen.tv/recipes/999999999999999999",
     },
-    {
-      name: "JSON-LD mainEntityOfPage",
-      jsonLdCanonicalUrl: "https://delishkitchen.tv/recipes/999999999999999999",
-    },
+  ])("$nameが一致しない場合は失敗する", async ({ name: _name, ...options }) => {
+    await expect(importDelishKitchen(options)).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it.each([
     {
       name: "材料内容",
       jsonLdIngredients: ["あたたかいごはん 1杯", "しょうゆ 大さじ2", "砂糖 小さじ2"],
@@ -260,10 +263,11 @@ describe("delishKitchenImportAdapter", () => {
       name: "分量",
       jsonLdServingsText: "4人分",
     },
-  ])("$nameが一致しない場合は失敗する", async ({ name: _name, ...options }) => {
-    await expect(importDelishKitchen(options)).rejects.toMatchObject({
-      code: "extraction_failed",
-    } satisfies Partial<RecipeImportError>);
+  ])("JSON-LDの$nameがHTMLと一致しなくても成功する", async ({ name: _name, ...options }) => {
+    const result = await importDelishKitchen(options);
+
+    expect(result.recipeDraftContent.title).toBe("人気の定番メニュー！ 基本の牛丼");
+    expect(result.recipeDraftContent.ingredientGroups).toHaveLength(2);
   });
 
   it.each([
@@ -272,8 +276,64 @@ describe("delishKitchenImportAdapter", () => {
       options: { includeJsonLd: false },
     },
     {
-      name: "同じRecipe JSON-LDが複数ある",
-      options: { duplicateJsonLd: true },
+      name: "Recipe JSON-LDが不正",
+      options: { invalidJsonLd: true },
+    },
+    {
+      name: "Recipe JSON-LDのcanonical URLが異なる",
+      options: {
+        jsonLdCanonicalUrl: "https://delishkitchen.tv/recipes/999999999999999999",
+      },
+    },
+  ])("$nameの場合は画像なしで成功する", async ({ options }) => {
+    const result = await importDelishKitchen(options);
+
+    expect(result.recipeDraftContent).not.toHaveProperty("coverImage");
+    expect(result.recipeDraftContent.steps.every((step) => step.images.length === 0)).toBe(true);
+  });
+
+  it("同じRecipe JSON-LDが複数あっても最初の一致候補を使う", async () => {
+    const result = await importDelishKitchen({ duplicateJsonLd: true });
+
+    expect(result.recipeDraftContent.coverImage).toEqual({
+      type: "externalImageUrl",
+      url: COVER_IMAGE_URL,
+    });
+    expect(result.recipeDraftContent.steps[0]?.images).toEqual([
+      {
+        type: "externalImageUrl",
+        url: STEP_IMAGE_URL,
+      },
+    ]);
+  });
+
+  it("JSON-LDと本文が一致した手順だけ画像を付与する", async () => {
+    const result = await importDelishKitchen({
+      jsonLdStepTexts: ["玉ねぎを薄切りにする。", "鍋で煮る。"],
+      jsonLdStepImageIndexes: [0, 1],
+    });
+
+    expect(result.recipeDraftContent.steps).toEqual([
+      {
+        text: "玉ねぎを切る。\n\nポイント: 加熱する直前に切りましょう。",
+        images: [],
+      },
+      {
+        text: "鍋で煮る。",
+        images: [
+          {
+            type: "externalImageUrl",
+            url: SECOND_STEP_IMAGE_URL,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it.each([
+    {
+      name: "HTMLタイトルがない",
+      options: { lead: "", title: "" },
     },
     {
       name: "HTML材料がない",
@@ -372,6 +432,8 @@ type FixtureOptions = {
   canonicalUrl?: string;
   jsonLdCanonicalUrl?: string;
   jsonLdName?: string;
+  lead?: string;
+  title?: string;
   ingredients?: Array<{ group?: string; name?: string; amount?: string }>;
   jsonLdIngredients?: string[];
   stepTexts?: string[];
@@ -382,7 +444,9 @@ type FixtureOptions = {
   jsonLdServingsText?: string;
   coverImage?: boolean;
   stepImages?: boolean;
+  jsonLdStepImageIndexes?: number[];
   includeJsonLd?: boolean;
+  invalidJsonLd?: boolean;
   duplicateJsonLd?: boolean;
   restricted?: boolean;
 };
@@ -421,6 +485,8 @@ const createDelishKitchenHtml = ({
   canonicalUrl = RECIPE_URL,
   jsonLdCanonicalUrl = RECIPE_URL,
   jsonLdName = "自宅で作る！牛丼の王道レシピ",
+  lead = "人気の定番メニュー！",
+  title = "基本の牛丼",
   ingredients = DEFAULT_INGREDIENTS,
   jsonLdIngredients = DEFAULT_JSON_LD_INGREDIENTS,
   stepTexts = DEFAULT_STEP_TEXTS,
@@ -431,7 +497,9 @@ const createDelishKitchenHtml = ({
   jsonLdServingsText = "2人分",
   coverImage = true,
   stepImages = true,
+  jsonLdStepImageIndexes = [0],
   includeJsonLd = true,
+  invalidJsonLd = false,
   duplicateJsonLd = false,
   restricted = false,
 }: FixtureOptions = {}) => {
@@ -444,7 +512,14 @@ const createDelishKitchenHtml = ({
     recipeInstructions: jsonLdStepTexts.map((text, index) => ({
       "@type": "HowToStep",
       text,
-      ...(stepImages && index === 0 ? { image: STEP_IMAGE_URL } : {}),
+      ...(stepImages && jsonLdStepImageIndexes.includes(index)
+        ? {
+            image:
+              index === 0
+                ? STEP_IMAGE_URL
+                : `https://media.delishkitchen.tv/recipe/${RECIPE_ID}/steps/${index + 1}.jpg`,
+          }
+        : {}),
     })),
     ...(coverImage ? { image: COVER_IMAGE_URL } : {}),
     mainEntityOfPage: {
@@ -452,9 +527,9 @@ const createDelishKitchenHtml = ({
       "@id": jsonLdCanonicalUrl,
     },
   };
-  const jsonLdScript = `<script type="application/ld+json">${JSON.stringify(
-    recipeJsonLd,
-  )}</script>`;
+  const jsonLdScript = `<script type="application/ld+json">${
+    invalidJsonLd ? "{" : JSON.stringify(recipeJsonLd)
+  }</script>`;
 
   return `
     <html>
@@ -472,8 +547,8 @@ const createDelishKitchenHtml = ({
           }
           <div class="title-box">
             <h1>
-              <span class="lead">人気の定番メニュー！</span>
-              <span class="title">基本の牛丼</span>
+              <span class="lead">${lead}</span>
+              <span class="title">${title}</span>
             </h1>
           </div>
         </main>

@@ -52,8 +52,6 @@ type DelishKitchenJsonLdStep = {
 
 type DelishKitchenJsonLdRecipe = {
   canonicalUrl?: string;
-  servingsText: string;
-  ingredients: string[];
   steps: DelishKitchenJsonLdStep[];
   imageUrls: string[];
 };
@@ -106,13 +104,13 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
     const canonicalUrl = createDelishKitchenRecipeUrl(recipeId);
     const page = requireDelishKitchenPage(context, recipeId);
     const extraction = await extractDelishKitchenRecipe(page);
-    const structuredRecipe = extractMatchingJsonLdRecipe(
+    const structuredRecipe = findMatchingJsonLdRecipe(
       extraction.jsonLdDocuments,
       page.finalUrl,
       canonicalUrl,
     );
 
-    if (extraction.canonicalUrl !== canonicalUrl || !structuredRecipe) {
+    if (extraction.canonicalUrl !== canonicalUrl) {
       throw new RecipeImportError(
         "extraction_failed",
         "Delish Kitchen recipe identity could not be verified.",
@@ -121,23 +119,13 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
 
     const title = normalizeText([extraction.lead, extraction.title].join(" "));
     const ingredientGroups = buildIngredientGroups(extraction.ingredientRows);
-    const htmlIngredients = ingredientGroups.flatMap((group) =>
-      group.ingredients.map(({ name, amount }) => normalizeText(`${name} ${amount}`)),
-    );
     const htmlStepTexts = extraction.steps.map((step) => normalizeText(step.text));
-    const structuredStepTexts = structuredRecipe.steps.map((step) => normalizeText(step.text));
     const isPartialImport = extraction.isRestricted && htmlStepTexts.length === 0;
 
     if (
       !title ||
-      htmlIngredients.length === 0 ||
-      !arraysEqual(htmlIngredients, structuredRecipe.ingredients.map(normalizeText)) ||
-      (!isPartialImport &&
-        (htmlStepTexts.length === 0 || !arraysEqual(htmlStepTexts, structuredStepTexts))) ||
-      (normalizeServingsText(extraction.servingsText) &&
-        normalizeText(structuredRecipe.servingsText) &&
-        normalizeServingsText(extraction.servingsText) !==
-          normalizeText(structuredRecipe.servingsText))
+      ingredientGroups.length === 0 ||
+      (!isPartialImport && htmlStepTexts.length === 0)
     ) {
       throw new RecipeImportError(
         "extraction_failed",
@@ -149,15 +137,20 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
       ? []
       : extraction.steps.map((step, index) => {
           const text = buildStepText(step);
+          const structuredStep = structuredRecipe?.steps[index];
+          const imageUrls =
+            structuredStep && normalizeText(step.text) === normalizeText(structuredStep.text)
+              ? structuredStep.imageUrls
+              : [];
           return {
             ...(text ? { text } : {}),
-            images: structuredRecipe.steps[index].imageUrls.map((url) => ({
+            images: imageUrls.map((url) => ({
               type: "externalImageUrl" as const,
               url,
             })),
           };
         });
-    const coverImageUrl = structuredRecipe.imageUrls[0];
+    const coverImageUrl = structuredRecipe?.imageUrls[0];
     const note = buildRecipeNote(extraction.attentionItems, isPartialImport);
     const servingsText = normalizeServingsText(extraction.servingsText);
 
@@ -350,23 +343,21 @@ const extractDelishKitchenRecipe = async (
   return extraction;
 };
 
-const extractMatchingJsonLdRecipe = (
+const findMatchingJsonLdRecipe = (
   documents: string[],
   baseUrl: string,
   canonicalUrl: string,
 ): DelishKitchenJsonLdRecipe | undefined => {
-  const matches: DelishKitchenJsonLdRecipe[] = [];
-
   for (const document of documents) {
     try {
       for (const node of collectJsonLdRecipeNodes(JSON.parse(document))) {
         const recipe = normalizeJsonLdRecipe(node, baseUrl);
-        if (recipe.canonicalUrl === canonicalUrl) matches.push(recipe);
+        if (recipe.canonicalUrl === canonicalUrl) return recipe;
       }
     } catch {}
   }
 
-  return matches.length === 1 ? matches[0] : undefined;
+  return undefined;
 };
 
 const collectJsonLdRecipeNodes = (value: unknown): Record<string, unknown>[] => {
@@ -395,8 +386,6 @@ const normalizeJsonLdRecipe = (
   baseUrl: string,
 ): DelishKitchenJsonLdRecipe => ({
   canonicalUrl: extractJsonLdCanonicalUrl(recipe.mainEntityOfPage, baseUrl),
-  servingsText: firstText(recipe.recipeYield),
-  ingredients: extractTexts(recipe.recipeIngredient),
   steps: extractJsonLdSteps(recipe.recipeInstructions, baseUrl),
   imageUrls: extractJsonLdImageUrls(recipe.image, baseUrl),
 });
@@ -505,9 +494,6 @@ const extractTexts = (value: unknown): string[] =>
     : [];
 
 const firstText = (value: unknown) => extractTexts(Array.isArray(value) ? value : [value])[0] ?? "";
-
-const arraysEqual = (left: string[], right: string[]) =>
-  left.length === right.length && left.every((value, index) => value === right[index]);
 
 const normalizeText = (value: string) => value.replace(/\s+/g, " ").trim();
 
