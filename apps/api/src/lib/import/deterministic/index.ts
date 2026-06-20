@@ -1,10 +1,10 @@
-export { cookpadImportAdapter } from "./cookpad";
-export { createDeterministicImportRegistry } from "./registry";
-export type {
-  DeterministicFetchedPage,
-  DeterministicFetchRequest,
-  DeterministicImportAdapter,
-  DeterministicImportContext,
-  DeterministicImportMatchInput,
-  DeterministicImportRegistry,
-} from "./types";
+import { cookpadImportAdapter } from "./cookpad";
+import { delishKitchenImportAdapter } from "./delish-kitchen";
+import { createDeterministicImporter } from "./importer";
+
+export { createDeterministicImporter, type DeterministicImporter } from "./importer";
+
+export const defaultDeterministicImporter = createDeterministicImporter([
+  cookpadImportAdapter,
+  delishKitchenImportAdapter,
+]);

@@ -209,21 +209,28 @@ describe("cookpadImportAdapter", () => {
     expect(result.recipeDraftContent.steps[0].text).toBe(PREMIUM_STEP_TEXTS[0]);
   });
 
-  it("プレミアムでもprintと通常ページのタイトルが一致しない場合は失敗する", async () => {
-    await expect(
-      importCookpad({
-        recipeId: PREMIUM_RECIPE_ID,
-        printHtml: createCookpadPrintHtml({
-          title: PREMIUM_TITLE,
-          stepTexts: PREMIUM_STEP_TEXTS,
-          imageIdsByStep: PREMIUM_STEP_IMAGE_IDS,
-          pictureStepImages: true,
-        }),
-        recipeHtml: createCookpadPremiumRecipeHtml({ title: "別のレシピ" }),
+  it("printと通常ページのタイトルが異なってもprintのタイトルで抽出する", async () => {
+    const result = await importCookpad({
+      printHtml: createCookpadPrintHtml(),
+      recipeHtml: createCookpadRecipeHtml({ title: "別のレシピ" }),
+    });
+
+    expect(result.recipeDraftContent.title).toBe(TITLE);
+  });
+
+  it("プレミアムでも通常ページのタイトルを整合性検証に使わない", async () => {
+    const result = await importCookpad({
+      recipeId: PREMIUM_RECIPE_ID,
+      printHtml: createCookpadPrintHtml({
+        title: PREMIUM_TITLE,
+        stepTexts: PREMIUM_STEP_TEXTS,
+        imageIdsByStep: PREMIUM_STEP_IMAGE_IDS,
+        pictureStepImages: true,
       }),
-    ).rejects.toMatchObject({
-      code: "extraction_failed",
-    } satisfies Partial<RecipeImportError>);
+      recipeHtml: createCookpadPremiumRecipeHtml({ title: "別のレシピ" }),
+    });
+
+    expect(result.recipeDraftContent.title).toBe(PREMIUM_TITLE);
   });
 
   it("カバー画像・手順画像がないレシピも抽出できる", async () => {
@@ -249,11 +256,6 @@ describe("cookpadImportAdapter", () => {
   });
 
   it.each([
-    {
-      name: "タイトル",
-      printHtml: createCookpadPrintHtml(),
-      recipeHtml: createCookpadRecipeHtml({ title: "別のレシピ" }),
-    },
     {
       name: "手順数",
       printHtml: createCookpadPrintHtml(),

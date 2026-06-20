@@ -12,12 +12,10 @@ import { z } from "zod";
 import { type Bindings } from "./env";
 import { extractRecipePageEvidence } from "./import-page-evidence";
 import {
-  cookpadImportAdapter,
-  createDeterministicImportRegistry,
-  type DeterministicFetchedPage,
-  type DeterministicFetchRequest,
-  type DeterministicImportRegistry,
+  type DeterministicImporter,
+  defaultDeterministicImporter,
 } from "./lib/import/deterministic";
+import { assertFetchedPageIsHtml, assertImportUrlAllowed } from "./lib/import/policy";
 import {
   type FetchedImportPage,
   type ImportErrorCode,
@@ -26,9 +24,9 @@ import {
   type RecipeImportResult,
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
-import { isHttpFetchUrlAllowed } from "./url-safety";
 import { consumeAiUsage, type UsageRepository } from "./usage";
 
+export { assertImportUrlAllowed } from "./lib/import/policy";
 export {
   type FetchedImportPage,
   type ImportErrorCode,
@@ -228,12 +226,6 @@ const fetchImportPageFollowingAllowedRedirects = async (sourceUrl: string, signa
 const isRedirectStatus = (status: number) =>
   status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 
-export const assertImportUrlAllowed = (sourceUrl: string) => {
-  if (!isHttpFetchUrlAllowed(sourceUrl)) {
-    throw new RecipeImportError("invalid_url", "Import URL is invalid.");
-  }
-};
-
 export const normalizeImportableUrl = (rawUrl: string) => {
   try {
     const normalizedUrl = normalizeUrl(rawUrl);
@@ -241,16 +233,6 @@ export const normalizeImportableUrl = (rawUrl: string) => {
     return normalizedUrl;
   } catch {
     throw new RecipeImportError("invalid_url", "Import URL is invalid.");
-  }
-};
-
-const defaultDeterministicImportRegistry = createDeterministicImportRegistry([
-  cookpadImportAdapter,
-]);
-
-const assertFetchedPageIsHtml = (page: FetchedImportPage) => {
-  if (page.contentType && !/html/i.test(page.contentType)) {
-    throw new RecipeImportError("unsupported_page", "Import URL is not an HTML page.");
   }
 };
 
@@ -297,7 +279,7 @@ export const importRecipeFromUrl = async ({
   usageRepository,
   aiProvider,
   fetcher = fetchImportPage,
-  deterministicImportRegistry = defaultDeterministicImportRegistry,
+  deterministicImporter = defaultDeterministicImporter,
   now = new Date(),
   logger = createLogger(),
 }: {
@@ -307,50 +289,21 @@ export const importRecipeFromUrl = async ({
   usageRepository: UsageRepository;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
-  deterministicImportRegistry?: DeterministicImportRegistry;
+  deterministicImporter?: DeterministicImporter;
   now?: Date;
   logger?: Logger;
 }): Promise<RecipeImportResult> => {
   const normalizedUrl = normalizeImportableUrl(rawUrl);
-  const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
-  const deterministicAdapter = deterministicImportRegistry.select({
-    normalizedUrl,
-    host,
-  });
   const fetchOptions = {
     timeoutMs: resolveImportTimeoutMs(env),
     maxBytes: resolveImportMaxHtmlBytes(env),
   };
-
-  if (deterministicAdapter) {
-    const requests = deterministicAdapter.resolveFetchRequests({
-      normalizedUrl,
-      host,
-    });
-    const pages = await fetchDeterministicImportPages(requests, fetcher, fetchOptions);
-    const result = await deterministicAdapter.convert({
-      normalizedUrl,
-      host,
-      pages,
-    });
-
-    try {
-      return {
-        recipeDraftContent: recipeDraftContentSchema.parse(result.recipeDraftContent),
-        source: result.source,
-        warnings: result.warnings,
-      };
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new RecipeImportError(
-          "extraction_failed",
-          "Deterministic import result was invalid.",
-        );
-      }
-
-      throw error;
-    }
-  }
+  const deterministicResult = await deterministicImporter.tryImport({
+    normalizedUrl,
+    fetcher,
+    fetchOptions,
+  });
+  if (deterministicResult) return deterministicResult;
 
   const page = await fetcher(normalizedUrl, fetchOptions);
   const conversion = await convertFetchedHtmlPage(page);
@@ -401,47 +354,6 @@ export const importRecipeFromUrl = async ({
     source: conversion.source,
     warnings: conversion.warnings.concat(imageResult.warnings),
   };
-};
-
-const fetchDeterministicImportPages = async (
-  requests: readonly DeterministicFetchRequest[],
-  fetcher: RecipeImportFetcher,
-  options: { timeoutMs: number; maxBytes: number },
-) => {
-  if (requests.length === 0) {
-    throw new RecipeImportError(
-      "extraction_failed",
-      "Deterministic import adapter did not declare any pages.",
-    );
-  }
-
-  const requestIds = new Set<string>();
-  for (const request of requests) {
-    if (!request.id || requestIds.has(request.id)) {
-      throw new RecipeImportError(
-        "extraction_failed",
-        "Deterministic import adapter declared duplicate page IDs.",
-      );
-    }
-    requestIds.add(request.id);
-    assertImportUrlAllowed(request.url);
-  }
-
-  const fetchedPages = await Promise.all(
-    requests.map(async (request): Promise<DeterministicFetchedPage> => {
-      const page = await fetcher(request.url, options);
-      assertFetchedPageIsHtml(page);
-
-      return {
-        requestId: request.id,
-        requestedUrl: request.url,
-        finalUrl: page.finalUrl,
-        page,
-      };
-    }),
-  );
-
-  return new Map(fetchedPages.map((page) => [page.requestId, page]));
 };
 
 type ImportAiProviderKind = "workers-ai" | "openrouter" | "groq";

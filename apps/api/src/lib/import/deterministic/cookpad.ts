@@ -1,7 +1,6 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
 import { type FetchedImportPage, RecipeImportError } from "../types";
 import {
-  type DeterministicFetchedPage,
   type DeterministicImportAdapter,
   type DeterministicImportContext,
   type DeterministicImportMatchInput,
@@ -178,7 +177,7 @@ const requireCookpadPage = (
 };
 
 const extractCookpadPrintRecipe = async (
-  fetchedPage: DeterministicFetchedPage,
+  fetchedPage: FetchedImportPage,
 ): Promise<CookpadPrintExtraction> => {
   const extraction: CookpadPrintExtraction = {
     title: "",
@@ -306,7 +305,7 @@ const extractCookpadPrintRecipe = async (
         }
       },
     })
-    .transform(importPageBodyToResponse(fetchedPage.page))
+    .transform(importPageBodyToResponse(fetchedPage))
     .text();
 
   if (!recipeRootFound) {
@@ -317,7 +316,7 @@ const extractCookpadPrintRecipe = async (
 };
 
 const extractCookpadRecipePage = async (
-  fetchedPage: DeterministicFetchedPage,
+  fetchedPage: FetchedImportPage,
 ): Promise<CookpadRecipeExtraction> => {
   const extraction: CookpadRecipeExtraction = {
     isPremium: false,
@@ -427,7 +426,7 @@ const extractCookpadRecipePage = async (
         addCandidates(stepImageStack.at(-1), element.getAttribute("src"));
       },
     })
-    .transform(importPageBodyToResponse(fetchedPage.page))
+    .transform(importPageBodyToResponse(fetchedPage))
     .text();
 
   return extraction;
@@ -437,16 +436,6 @@ const assertCookpadExtractionsMatch = (
   printExtraction: CookpadPrintExtraction,
   recipeExtraction: CookpadRecipeExtraction,
 ) => {
-  if (
-    !normalizeText(printExtraction.title) ||
-    normalizeText(printExtraction.title) !== normalizeText(recipeExtraction.title)
-  ) {
-    throw new RecipeImportError(
-      "extraction_failed",
-      "Cookpad recipe pages did not contain matching recipe content.",
-    );
-  }
-
   if (recipeExtraction.isPremium) return;
 
   if (printExtraction.steps.length !== recipeExtraction.steps.length) {
