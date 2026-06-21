@@ -44,14 +44,14 @@ export type RecipeImportImageCandidate = {
 
 export type RecipeImportStructuredInstructionEvidence = {
   text: string;
-  imageIds: string[];
+  imageUrls: string[];
 };
 
 export type RecipeImportStructuredEvidence = {
   format: "jsonLd" | "microdata" | "rdfa";
   name?: string;
   servingsText?: string;
-  imageIds: string[];
+  imageUrls: string[];
   rawIngredients: string[];
   rawInstructions: string[];
   structuredInstructions: RecipeImportStructuredInstructionEvidence[];
@@ -66,17 +66,17 @@ export type RecipeImportAIInput = {
   recipeStructuredEvidence: RecipeImportStructuredEvidence[];
 };
 
-export type RecipeImportAIImageId = string;
+export type RecipeImportAIImageUrl = string;
 
 export type RecipeImportAIDraftStep = {
   text?: string;
-  imageIds: RecipeImportAIImageId[];
+  imageUrls: RecipeImportAIImageUrl[];
 };
 
 export type RecipeImportAIDraftContent = {
   title: string;
   servingsText?: string;
-  coverImageId?: RecipeImportAIImageId;
+  coverImageUrl?: RecipeImportAIImageUrl;
   ingredientGroups: Array<{
     label?: string;
     ingredients: Array<{
@@ -102,7 +102,7 @@ type RecipeImportConverterResult = {
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
 
-const importAiImageIdSchema = z.string().min(1);
+const importAiImageUrlSchema = z.string().min(1);
 
 const importAiIngredientSchema = z.strictObject({
   name: z.string().min(1),
@@ -117,14 +117,14 @@ const importAiIngredientGroupSchema = z.strictObject({
 const importAiDraftStepSchema = z
   .strictObject({
     text: z.string().min(1).nullable(),
-    imageIds: z.array(importAiImageIdSchema),
+    imageUrls: z.array(importAiImageUrlSchema),
   })
-  .refine((step) => step.text !== null || step.imageIds.length > 0);
+  .refine((step) => step.text !== null || step.imageUrls.length > 0);
 
 const importAiDraftContentSchema = z.strictObject({
   title: z.string().min(1),
   servingsText: z.string().nullable(),
-  coverImageId: importAiImageIdSchema.nullable(),
+  coverImageUrl: importAiImageUrlSchema.nullable(),
   ingredientGroups: z.array(importAiIngredientGroupSchema),
   steps: z.array(importAiDraftStepSchema),
   note: z.string().nullable(),
@@ -136,14 +136,14 @@ const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftConte
   return {
     title: draft.title,
     ...(draft.servingsText !== null ? { servingsText: draft.servingsText } : {}),
-    ...(draft.coverImageId !== null ? { coverImageId: draft.coverImageId } : {}),
+    ...(draft.coverImageUrl !== null ? { coverImageUrl: draft.coverImageUrl } : {}),
     ingredientGroups: draft.ingredientGroups.map((group) => ({
       ...(group.label !== null ? { label: group.label } : {}),
       ingredients: group.ingredients,
     })),
     steps: draft.steps.map((step) => ({
       ...(step.text !== null ? { text: step.text } : {}),
-      imageIds: step.imageIds,
+      imageUrls: step.imageUrls,
     })),
     ...(draft.note !== null ? { note: draft.note } : {}),
   };
@@ -340,7 +340,7 @@ export const importRecipeFromUrl = async ({
   let imageResult: { draft: RecipeDraftContent; warnings: string[] };
 
   try {
-    imageResult = resolveDraftImageIds(draft, conversion.imageCandidates);
+    imageResult = resolveDraftImageUrls(draft, conversion.imageCandidates);
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
@@ -366,7 +366,7 @@ export const createDefaultRecipeImportAIProvider = (
 ): RecipeImportAIProvider => ({
   async normalize(input) {
     const providerKind = resolveImportAiProvider(env);
-    const system = resolveImportRecipeSystemPrompt(env);
+    const system = `${resolveImportRecipeSystemPrompt(env)}\n\n${IMPORT_IMAGE_SELECTION_INSTRUCTIONS}`;
     const timeoutMs = resolveImportAiTimeoutMs(env);
     const controller = new AbortController();
     let didTimeout = false;
@@ -466,6 +466,17 @@ const createImportProviderOptions = (providerKind: ImportAiProviderKind) => {
     },
   };
 };
+
+const IMPORT_IMAGE_SELECTION_INSTRUCTIONS = `
+imageSelection:
+- Return only image URLs that appear verbatim in markdownContent or recipeStructuredEvidence.
+- Do not generate, complete, normalize, decode, shorten, or otherwise modify image URLs.
+- For coverImageUrl, choose an image that the page content indicates is the finished dish. Do not prioritize an Open Graph image merely because it is Open Graph metadata.
+- For steps[].imageUrls, prefer images directly associated with the instruction in structured evidence, then images located near the corresponding instruction in markdownContent.
+- Consider the URL string, alt text, and surrounding content together. Do not decide from the URL string alone.
+- Exclude logos, icons, advertisements, profile images, related-content thumbnails, banners, and social-sharing artwork.
+- If the relationship is unclear, return null for coverImageUrl or an empty array for steps[].imageUrls.
+`.trim();
 
 const buildImportUserPrompt = (input: RecipeImportAIInput) => `
 source:
@@ -820,24 +831,23 @@ const isAiSchemaError = (error: unknown): boolean => {
   return cause ? isAiSchemaError(cause) : false;
 };
 
-const resolveDraftImageIds = (
+const resolveDraftImageUrls = (
   draft: RecipeImportAIDraftContent,
   candidates: RecipeImportImageCandidate[],
 ): { draft: RecipeDraftContent; warnings: string[] } => {
-  const urlsById = new Map(candidates.map((candidate) => [candidate.id, candidate.url]));
+  const candidateUrls = new Set(candidates.map((candidate) => candidate.url));
   const warnings: string[] = [];
-  const resolveImage = (imageId: RecipeImportAIImageId | undefined) => {
-    if (!imageId) return undefined;
+  const resolveImage = (imageUrl: RecipeImportAIImageUrl | undefined) => {
+    if (!imageUrl) return undefined;
 
-    const url = urlsById.get(imageId);
-    if (url) {
+    if (candidateUrls.has(imageUrl)) {
       return {
         type: "externalImageUrl" as const,
-        url,
+        url: imageUrl,
       };
     }
 
-    warnings.push(`AI returned unknown image ID: ${imageId}`);
+    warnings.push(`AI returned unknown image URL: ${imageUrl}`);
     return undefined;
   };
 
@@ -845,11 +855,11 @@ const resolveDraftImageIds = (
     draft: recipeDraftContentSchema.parse({
       title: draft.title,
       servingsText: draft.servingsText,
-      coverImage: resolveImage(draft.coverImageId),
+      coverImage: resolveImage(draft.coverImageUrl),
       ingredientGroups: draft.ingredientGroups,
       steps: draft.steps.map((step) => ({
         text: step.text,
-        images: step.imageIds
+        images: step.imageUrls
           .map(resolveImage)
           .filter((image): image is NonNullable<typeof image> => Boolean(image)),
       })),

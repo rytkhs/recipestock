@@ -122,7 +122,7 @@ describe("URL import flow", () => {
     const aiNormalize = vi.fn(async () => ({
       title: "Fallback tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
-      steps: [{ text: "Cook.", imageIds: [] }],
+      steps: [{ text: "Cook.", imageUrls: [] }],
     }));
     const tryImport = vi.fn(async () => null);
     const fetcher = vi.fn(async () => ({
@@ -301,9 +301,9 @@ describe("URL import flow", () => {
 
             return {
               title: "Tomato pasta",
-              coverImageId: "img_001",
+              coverImageUrl: "https://example.com/cover.jpg",
               ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
-              steps: [{ text: "Cook.", imageIds: [] }],
+              steps: [{ text: "Cook.", imageUrls: [] }],
             };
           },
         },
@@ -351,17 +351,19 @@ describe("URL import flow", () => {
         aiProvider: {
           async normalize(input) {
             expect(input.recipeStructuredEvidence).toContainEqual(
-              expect.objectContaining({ imageIds: ["img_001"] }),
+              expect.objectContaining({
+                imageUrls: ["https://example.com/structured.jpg"],
+              }),
             );
-            expect(JSON.stringify(input.recipeStructuredEvidence)).not.toContain(
+            expect(JSON.stringify(input.recipeStructuredEvidence)).toContain(
               "https://example.com/structured.jpg",
             );
 
             return {
               title: "Structured image recipe",
-              coverImageId: "img_001",
+              coverImageUrl: "https://example.com/structured.jpg",
               ingredientGroups: [{ ingredients: [{ name: "Flour", amount: "100g" }] }],
-              steps: [{ text: "Mix and bake.", imageIds: [] }],
+              steps: [{ text: "Mix and bake.", imageUrls: [] }],
             };
           },
         },
@@ -423,10 +425,7 @@ describe("URL import flow", () => {
         aiProvider: {
           async normalize(input) {
             expect(JSON.stringify(input.recipeStructuredEvidence)).toContain(
-              '"imageIds":["img_001"]',
-            );
-            expect(JSON.stringify(input.recipeStructuredEvidence)).not.toContain(
-              "https://example.com/step.jpg",
+              '"imageUrls":["https://example.com/step.jpg"]',
             );
 
             return {
@@ -435,7 +434,7 @@ describe("URL import flow", () => {
               steps: [
                 {
                   text: "Mix and bake.",
-                  imageIds: ["img_001"],
+                  imageUrls: ["https://example.com/step.jpg"],
                 },
               ],
             };
@@ -454,12 +453,12 @@ describe("URL import flow", () => {
     });
   });
 
-  it("AIが不明な画像IDを返した場合は画像を破棄してwarningを返す", async () => {
+  it("AIが候補外または改変した画像URLを返した場合は画像を破棄してwarningを返す", async () => {
     const usageRepository = createUsageRepositoryStub();
 
     await expect(
       importRecipeFromUrl({
-        rawUrl: "https://example.com/recipes/unknown-image-id",
+        rawUrl: "https://example.com/recipes/unknown-image-url",
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
@@ -467,11 +466,11 @@ describe("URL import flow", () => {
         },
         usageRepository,
         fetcher: async () => ({
-          finalUrl: "https://example.com/recipes/unknown-image-id",
+          finalUrl: "https://example.com/recipes/unknown-image-url",
           contentType: "text/html",
           body: `
             <article>
-              <h1>Unknown image ID recipe</h1>
+              <h1>Unknown image URL recipe</h1>
               <p>Enough visible recipe content for extraction and import conversion.</p>
               <img src="/known.jpg" alt="Known">
             </article>
@@ -480,13 +479,13 @@ describe("URL import flow", () => {
         aiProvider: {
           async normalize() {
             return {
-              title: "Unknown image ID recipe",
-              coverImageId: "img_999",
+              title: "Unknown image URL recipe",
+              coverImageUrl: "https://example.com/generated.jpg",
               ingredientGroups: [],
               steps: [
                 {
                   text: "Serve.",
-                  imageIds: ["img_001"],
+                  imageUrls: ["https://example.com/known.jpg?modified=1"],
                 },
               ],
             };
@@ -498,11 +497,14 @@ describe("URL import flow", () => {
         coverImage: undefined,
         steps: [
           {
-            images: [{ type: "externalImageUrl", url: "https://example.com/known.jpg" }],
+            images: [],
           },
         ],
       },
-      warnings: ["AI returned unknown image ID: img_999"],
+      warnings: [
+        "AI returned unknown image URL: https://example.com/generated.jpg",
+        "AI returned unknown image URL: https://example.com/known.jpg?modified=1",
+      ],
     });
   });
 });
