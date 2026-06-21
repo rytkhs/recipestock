@@ -191,13 +191,13 @@ describe("URL import flow", () => {
   });
 
   it("browser-runではAI経路にrendered HTMLを使う", async () => {
+    const renderedHtml =
+      "<article><h1>Browser Run recipe</h1><p>Enough rendered recipe content for import.</p></article>";
     const quickAction = vi.fn(async () => {
-      return new Response(
-        "<article><h1>Browser Run recipe</h1><p>Enough rendered recipe content for import.</p></article>",
-        {
-          headers: { "content-type": "text/html; charset=UTF-8" },
-        },
-      );
+      return Response.json({
+        success: true,
+        result: renderedHtml,
+      });
     });
 
     await importRecipeFromUrl({
@@ -284,6 +284,8 @@ describe("URL import flow", () => {
     ["API failure", async () => new Response("failed", { status: 500 })],
     ["timeout", async () => Promise.reject(new Error("timeout"))],
     ["invalid response", async () => ({ result: "<html></html>" }) as never],
+    ["invalid JSON", async () => new Response("<html></html>")],
+    ["failed payload", async () => Response.json({ success: false, result: null })],
   ])("browser-runの%sをfetch_failedへ変換する", async (_name, implementation) => {
     await expect(
       importRecipeFromUrl({
@@ -313,7 +315,10 @@ describe("URL import flow", () => {
         env: {
           BROWSER: {
             async quickAction() {
-              return new Response("too large");
+              return Response.json({
+                success: true,
+                result: "<html></html>",
+              });
             },
           },
           IMPORT_FETCH_MODE: "browser-run",

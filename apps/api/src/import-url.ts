@@ -139,6 +139,11 @@ const importAiDraftContentSchema = z.strictObject({
   note: z.string().nullable(),
 });
 
+const browserRunContentResponseSchema = z.object({
+  success: z.literal(true),
+  result: z.string(),
+});
+
 const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftContent => {
   const draft = importAiDraftContentSchema.parse(value);
 
@@ -214,12 +219,13 @@ const createBrowserRunImportFetcher =
         throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
       }
 
-      assertContentLengthAllowed(response, maxBytes);
+      const payload = browserRunContentResponseSchema.parse(await response.json());
+      assertTextByteLengthAllowed(payload.result, maxBytes);
 
       return {
         finalUrl: url,
-        contentType: response.headers.get("content-type") ?? "text/html",
-        body: await readResponseTextWithLimit(response, maxBytes),
+        contentType: "text/html",
+        body: payload.result,
       };
     } catch (error) {
       if (error instanceof RecipeImportError) {
@@ -757,12 +763,16 @@ const assertContentLengthAllowed = (response: Response, maxBytes: number) => {
   }
 };
 
+const assertTextByteLengthAllowed = (text: string, maxBytes: number) => {
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw new RecipeImportError("unsupported_page", "Import page is too large.");
+  }
+};
+
 const readResponseTextWithLimit = async (response: Response, maxBytes: number) => {
   if (!response.body) {
     const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > maxBytes) {
-      throw new RecipeImportError("unsupported_page", "Import page is too large.");
-    }
+    assertTextByteLengthAllowed(text, maxBytes);
 
     return text;
   }
