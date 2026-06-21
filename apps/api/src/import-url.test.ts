@@ -95,6 +95,46 @@ describe("URL import fetcher", () => {
       expect.objectContaining({ redirect: "manual" }),
     );
   });
+
+  it("明確な非HTMLは本文サイズの確認前に拒否する", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response("{}".repeat(1024), {
+          headers: {
+            "content-type": "application/json",
+            "content-length": "2048",
+          },
+        });
+      }),
+    );
+
+    await expect(
+      fetchImportPage("https://example.com/recipe", { timeoutMs: 1000, maxBytes: 16 }),
+    ).rejects.toMatchObject({
+      code: "unsupported_page",
+      message: "Import URL is not an HTML page.",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("text/plainでもHTMLらしい本文なら取得する", async () => {
+    const body = "<!doctype html><html><body>Tomato pasta</body></html>";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(body, {
+          headers: { "content-type": "text/plain" },
+        });
+      }),
+    );
+
+    await expect(
+      fetchImportPage("https://example.com/recipe", { timeoutMs: 1000, maxBytes: 1024 }),
+    ).resolves.toMatchObject({
+      contentType: "text/plain",
+      body,
+    });
+  });
 });
 
 describe("assertImportUrlAllowed", () => {

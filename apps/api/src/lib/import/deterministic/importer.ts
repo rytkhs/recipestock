@@ -78,7 +78,7 @@ const fetchPages = async (
   const fetchedPages = await Promise.all(
     requests.map(async (request) => {
       const page = await fetcher(request.url, options);
-      assertFetchedPageIsHtml(page);
+      await assertFetchedPageIsHtml(page);
 
       return [request.id, page] as const;
     }),

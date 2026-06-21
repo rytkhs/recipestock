@@ -15,7 +15,11 @@ import {
   type DeterministicImporter,
   defaultDeterministicImporter,
 } from "./lib/import/deterministic";
-import { assertFetchedPageIsHtml, assertImportUrlAllowed } from "./lib/import/policy";
+import {
+  assertFetchedPageIsHtml,
+  assertImportContentTypeMayBeHtml,
+  assertImportUrlAllowed,
+} from "./lib/import/policy";
 import {
   type FetchedImportPage,
   type ImportErrorCode,
@@ -163,13 +167,18 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, max
       throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
     }
 
+    const contentType = response.headers.get("content-type") ?? "";
+    assertImportContentTypeMayBeHtml(contentType);
     assertContentLengthAllowed(response, maxBytes);
 
-    return {
+    const page = {
       finalUrl,
-      contentType: response.headers.get("content-type") ?? "",
+      contentType,
       body: await readResponseTextWithLimit(response, maxBytes),
     };
+    await assertFetchedPageIsHtml(page);
+
+    return page;
   } catch (error) {
     if (error instanceof RecipeImportError) {
       throw error;
@@ -239,7 +248,7 @@ export const normalizeImportableUrl = (rawUrl: string) => {
 const convertFetchedHtmlPage = async (
   page: FetchedImportPage,
 ): Promise<RecipeImportConverterResult> => {
-  assertFetchedPageIsHtml(page);
+  await assertFetchedPageIsHtml(page);
 
   const normalizedFinalUrl = normalizeUrl(page.finalUrl);
   const finalHost = new URL(normalizedFinalUrl).hostname.replace(/^www\./, "");
