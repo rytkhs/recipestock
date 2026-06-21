@@ -9,7 +9,7 @@ import { normalizeUrl } from "@recipestock/shared";
 import { generateObject } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
-import { type Bindings } from "./env";
+import { type Bindings, type BrowserRunBinding } from "./env";
 import { extractRecipePageEvidence } from "./import-page-evidence";
 import {
   type DeterministicImporter,
@@ -105,6 +105,11 @@ type RecipeImportConverterResult = {
 };
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
+const MAX_BROWSER_RUN_GOTO_TIMEOUT_MS = 60_000;
+const DEFAULT_IMPORT_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+  "AppleWebKit/537.36 (KHTML, like Gecko) " +
+  "Chrome/125.0.0.0 Safari/537.36";
 
 const importAiImageUrlSchema = z.string().min(1);
 
@@ -190,16 +195,46 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, max
   }
 };
 
+const createBrowserRunImportFetcher =
+  (browser: BrowserRunBinding): RecipeImportFetcher =>
+  async (url, { timeoutMs, maxBytes }) => {
+    assertImportUrlAllowed(url);
+
+    try {
+      const response = await browser.quickAction("content", {
+        url,
+        gotoOptions: {
+          timeout: Math.min(timeoutMs, MAX_BROWSER_RUN_GOTO_TIMEOUT_MS),
+          waitUntil: "networkidle2",
+        },
+        userAgent: DEFAULT_IMPORT_USER_AGENT,
+      });
+
+      if (!(response instanceof Response) || !response.ok) {
+        throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
+      }
+
+      assertContentLengthAllowed(response, maxBytes);
+
+      return {
+        finalUrl: url,
+        contentType: response.headers.get("content-type") ?? "text/html",
+        body: await readResponseTextWithLimit(response, maxBytes),
+      };
+    } catch (error) {
+      if (error instanceof RecipeImportError) {
+        throw error;
+      }
+
+      throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
+    }
+  };
+
 const fetchImportPageFollowingAllowedRedirects = async (sourceUrl: string, signal: AbortSignal) => {
   let currentUrl = sourceUrl;
 
   for (let redirectCount = 0; redirectCount <= MAX_IMPORT_PAGE_REDIRECTS; redirectCount++) {
     assertImportUrlAllowed(currentUrl);
-
-    const DEFAULT_IMPORT_USER_AGENT =
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-      "AppleWebKit/537.36 (KHTML, like Gecko) " +
-      "Chrome/125.0.0.0 Safari/537.36";
 
     const response = await fetch(currentUrl, {
       headers: {
@@ -287,7 +322,7 @@ export const importRecipeFromUrl = async ({
   env,
   usageRepository,
   aiProvider,
-  fetcher = fetchImportPage,
+  fetcher,
   deterministicImporter = defaultDeterministicImporter,
   now = new Date(),
   logger = createLogger(),
@@ -307,14 +342,16 @@ export const importRecipeFromUrl = async ({
     timeoutMs: resolveImportTimeoutMs(env),
     maxBytes: resolveImportMaxHtmlBytes(env),
   };
+  const deterministicFetcher = fetcher ?? fetchImportPage;
   const deterministicResult = await deterministicImporter.tryImport({
     normalizedUrl,
-    fetcher,
+    fetcher: deterministicFetcher,
     fetchOptions,
   });
   if (deterministicResult) return deterministicResult;
 
-  const page = await fetcher(normalizedUrl, fetchOptions);
+  const importFetcher = fetcher ?? resolveImportFetcher(env);
+  const page = await importFetcher(normalizedUrl, fetchOptions);
   const conversion = await convertFetchedHtmlPage(page);
 
   const usage = await consumeAiUsage({
@@ -496,6 +533,24 @@ const resolveImportTimeoutMs = (env: Partial<Bindings>) => {
 const resolveImportMaxHtmlBytes = (env: Partial<Bindings>) => {
   const value = Number(env.IMPORT_MAX_HTML_BYTES ?? 2_000_000);
   return Number.isInteger(value) && value > 0 ? value : 2_000_000;
+};
+
+const resolveImportFetcher = (env: Partial<Bindings>): RecipeImportFetcher => {
+  const mode = env.IMPORT_FETCH_MODE?.trim() || "standard";
+
+  if (mode === "standard") {
+    return fetchImportPage;
+  }
+
+  if (mode === "browser-run") {
+    if (!env.BROWSER) {
+      throw new RecipeImportError("unknown", "Browser Run binding is not configured.");
+    }
+
+    return createBrowserRunImportFetcher(env.BROWSER);
+  }
+
+  throw new RecipeImportError("unknown", "Import fetch mode is invalid.");
 };
 
 const resolveImportAiTimeoutMs = (env: Partial<Bindings>) => {

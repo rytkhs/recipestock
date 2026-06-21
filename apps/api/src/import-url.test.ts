@@ -157,6 +157,200 @@ describe("normalizeImportableUrl", () => {
 });
 
 describe("URL import flow", () => {
+  it("未指定またはstandardではAI経路に標準fetchを使う", async () => {
+    for (const mode of [undefined, "standard"]) {
+      const fetchMock = vi.fn(async () => {
+        return new Response(
+          "<article><h1>Standard fetch recipe</h1><p>Enough recipe content for import.</p></article>",
+          {
+            headers: { "content-type": "text/html" },
+          },
+        );
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      await importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/standard",
+        userId: "user_123",
+        env: {
+          IMPORT_FETCH_MODE: mode,
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: createAiProviderStub("Standard fetch recipe"),
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("browser-runではAI経路にrendered HTMLを使う", async () => {
+    const quickAction = vi.fn(async () => {
+      return new Response(
+        "<article><h1>Browser Run recipe</h1><p>Enough rendered recipe content for import.</p></article>",
+        {
+          headers: { "content-type": "text/html; charset=UTF-8" },
+        },
+      );
+    });
+
+    await importRecipeFromUrl({
+      rawUrl: "https://example.com/recipes/browser-run",
+      userId: "user_123",
+      env: {
+        BROWSER: { quickAction },
+        IMPORT_FETCH_MODE: "browser-run",
+        IMPORT_TIMEOUT_MS: "90000",
+        IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+      },
+      usageRepository: createUsageRepositoryStub(),
+      deterministicImporter: {
+        async tryImport() {
+          return null;
+        },
+      },
+      aiProvider: createAiProviderStub("Browser Run recipe"),
+    });
+
+    expect(quickAction).toHaveBeenCalledWith("content", {
+      url: "https://example.com/recipes/browser-run",
+      gotoOptions: {
+        timeout: 60_000,
+        waitUntil: "networkidle2",
+      },
+      userAgent: expect.stringContaining("Chrome/125"),
+    });
+  });
+
+  it("browser-runでもdeterministic importerには標準fetcherを渡す", async () => {
+    const quickAction = vi.fn();
+    const tryImport = vi.fn(async ({ fetcher }: { fetcher: unknown }) => {
+      expect(fetcher).toBe(fetchImportPage);
+      return {
+        recipeDraftContent: {
+          title: "Deterministic recipe",
+          ingredientGroups: [],
+          steps: [],
+        },
+        source: {
+          sourceUrl: "https://example.com/recipes/deterministic",
+          sourceName: "Example",
+        },
+        warnings: [],
+      };
+    });
+
+    await importRecipeFromUrl({
+      rawUrl: "https://example.com/recipes/deterministic",
+      userId: "user_123",
+      env: {
+        BROWSER: { quickAction },
+        IMPORT_FETCH_MODE: "browser-run",
+      },
+      usageRepository: createUsageRepositoryStub(),
+      deterministicImporter: { tryImport },
+    });
+
+    expect(quickAction).not.toHaveBeenCalled();
+  });
+
+  it("browser-runは不正URLを呼び出さない", async () => {
+    const quickAction = vi.fn();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "http://127.0.0.1/recipe",
+        userId: "user_123",
+        env: {
+          BROWSER: { quickAction },
+          IMPORT_FETCH_MODE: "browser-run",
+        },
+        usageRepository: createUsageRepositoryStub(),
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_url",
+    } satisfies Partial<RecipeImportError>);
+
+    expect(quickAction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["API failure", async () => new Response("failed", { status: 500 })],
+    ["timeout", async () => Promise.reject(new Error("timeout"))],
+    ["invalid response", async () => ({ result: "<html></html>" }) as never],
+  ])("browser-runの%sをfetch_failedへ変換する", async (_name, implementation) => {
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/browser-run-failure",
+        userId: "user_123",
+        env: {
+          BROWSER: { quickAction: vi.fn(implementation) },
+          IMPORT_FETCH_MODE: "browser-run",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "fetch_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("browser-runのHTMLが上限を超えた場合はunsupported_pageを返す", async () => {
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/large",
+        userId: "user_123",
+        env: {
+          BROWSER: {
+            async quickAction() {
+              return new Response("too large");
+            },
+          },
+          IMPORT_FETCH_MODE: "browser-run",
+          IMPORT_MAX_HTML_BYTES: "4",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "unsupported_page",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("不正なfetch modeはunknownを返す", async () => {
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/invalid-mode",
+        userId: "user_123",
+        env: {
+          IMPORT_FETCH_MODE: "invalid",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "unknown",
+    } satisfies Partial<RecipeImportError>);
+  });
+
   it("deterministic importerが非対応の場合は既存どおりAI normalizationへ進む", async () => {
     const usageRepository = createUsageRepositoryStub();
     const aiNormalize = vi.fn(async () => ({
@@ -558,5 +752,15 @@ const createUsageRepositoryStub = (): UsageRepository => ({
   },
   async consumeAiUsage({ month }) {
     return { status: "consumed", usage: { month, used: 1 } };
+  },
+});
+
+const createAiProviderStub = (title: string) => ({
+  async normalize() {
+    return {
+      title,
+      ingredientGroups: [],
+      steps: [],
+    };
   },
 });
