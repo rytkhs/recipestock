@@ -146,7 +146,9 @@ describe("Import routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("別のレシピを取り込み中です。しばらく待ってから再度実行してください。");
+    expect(alert).toHaveTextContent(
+      "別のレシピを取り込み中です。しばらく待ってから再度実行してください。",
+    );
     expect(alert).toHaveTextContent("https://example.com/recipes/active");
     expect(input).toHaveValue("https://example.com/recipes/new");
     expect(screen.getByRole("heading", { name: "URLから取り込む" })).toBeInTheDocument();

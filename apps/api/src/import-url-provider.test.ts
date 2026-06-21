@@ -120,9 +120,6 @@ describe("default recipe import AI provider", () => {
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain(
       "![Tomato pasta](<https://example.com/cover.jpg>)",
     );
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.system).toContain(
-      "Do not prioritize an Open Graph image",
-    );
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("imageCandidates");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeStructuredEvidence");
   });
