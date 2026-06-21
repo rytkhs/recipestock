@@ -366,7 +366,7 @@ export const createDefaultRecipeImportAIProvider = (
 ): RecipeImportAIProvider => ({
   async normalize(input) {
     const providerKind = resolveImportAiProvider(env);
-    const system = `${resolveImportRecipeSystemPrompt(env)}\n\n${IMPORT_IMAGE_SELECTION_INSTRUCTIONS}`;
+    const system = resolveImportRecipeSystemPrompt(env);
     const timeoutMs = resolveImportAiTimeoutMs(env);
     const controller = new AbortController();
     let didTimeout = false;
@@ -466,17 +466,6 @@ const createImportProviderOptions = (providerKind: ImportAiProviderKind) => {
     },
   };
 };
-
-const IMPORT_IMAGE_SELECTION_INSTRUCTIONS = `
-imageSelection:
-- Return only image URLs that appear verbatim in markdownContent or recipeStructuredEvidence.
-- Do not generate, complete, normalize, decode, shorten, or otherwise modify image URLs.
-- For coverImageUrl, choose an image that the page content indicates is the finished dish. Do not prioritize an Open Graph image merely because it is Open Graph metadata.
-- For steps[].imageUrls, prefer images directly associated with the instruction in structured evidence, then images located near the corresponding instruction in markdownContent.
-- Consider the URL string, alt text, and surrounding content together. Do not decide from the URL string alone.
-- Exclude logos, icons, advertisements, profile images, related-content thumbnails, banners, and social-sharing artwork.
-- If the relationship is unclear, return null for coverImageUrl or an empty array for steps[].imageUrls.
-`.trim();
 
 const buildImportUserPrompt = (input: RecipeImportAIInput) => `
 source:
