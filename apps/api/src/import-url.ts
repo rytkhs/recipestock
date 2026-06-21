@@ -246,7 +246,7 @@ const convertFetchedHtmlPage = async (
   const evidence = await extractRecipePageEvidence(page, normalizedFinalUrl);
   const sourceName = evidence.meta["og:site_name"] ?? finalHost;
 
-  if (evidence.markdownContent.length < 40 && !hasDescriptionMetadata(evidence.meta)) {
+  if (evidence.markdownContent.length < 20 && !hasDescriptionMetadata(evidence.meta)) {
     throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
   }
 
