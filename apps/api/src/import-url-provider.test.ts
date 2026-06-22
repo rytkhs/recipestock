@@ -35,12 +35,12 @@ const input: RecipeImportAIInput = {
     host: "example.com",
   },
   markdownContent:
-    '# Tomato pasta\n\nトマト缶とオリーブオイルで作るパスタです。\n\nRS_IMAGE id=img_001 alt="Tomato pasta"',
+    "# Tomato pasta\n\nトマト缶とオリーブオイルで作るパスタです。\n\n![Tomato pasta](<https://example.com/cover.jpg>)",
   recipeStructuredEvidence: [
     {
       format: "jsonLd",
       name: "Tomato pasta",
-      imageIds: [],
+      imageUrls: [],
       rawIngredients: ["トマト缶 1缶"],
       rawInstructions: ["煮詰める"],
       structuredInstructions: [],
@@ -61,14 +61,14 @@ const createEnv = (overrides: Record<string, unknown> = {}) =>
 const createStrictAiDraft = (overrides: Record<string, unknown> = {}) => ({
   title: "Tomato pasta",
   servingsText: null,
-  coverImageId: null,
+  coverImageUrl: null,
   ingredientGroups: [
     {
       label: null,
       ingredients: [{ name: "トマト缶", amount: "1缶" }],
     },
   ],
-  steps: [{ text: "煮詰める", imageIds: [] }],
+  steps: [{ text: "煮詰める", imageUrls: [] }],
   note: null,
   ...overrides,
 });
@@ -88,7 +88,7 @@ describe("default recipe import AI provider", () => {
     await expect(provider.normalize(input)).resolves.toEqual({
       title: "Tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ text: "煮詰める", imageIds: [] }],
+      steps: [{ text: "煮詰める", imageUrls: [] }],
     });
     expect(mocks.createWorkersAI).toHaveBeenCalledWith({
       binding: expect.objectContaining({ run: expect.any(Function) }),
@@ -117,8 +117,9 @@ describe("default recipe import AI provider", () => {
       "https://example.com/recipes/tomato",
     );
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("markdownContent");
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("RS_IMAGE id=img_001");
-    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("cover.jpg");
+    expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain(
+      "![Tomato pasta](<https://example.com/cover.jpg>)",
+    );
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).not.toContain("imageCandidates");
     expect(mocks.generateObject.mock.calls[0]?.[0]?.prompt).toContain("recipeStructuredEvidence");
   });
@@ -140,7 +141,7 @@ describe("default recipe import AI provider", () => {
     await expect(provider.normalize(input)).resolves.toEqual({
       title: "Tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ text: "煮詰める", imageIds: [] }],
+      steps: [{ text: "煮詰める", imageUrls: [] }],
     });
     expect(mocks.createGroq).toHaveBeenCalledWith({
       apiKey: "groq-key",
@@ -164,17 +165,17 @@ describe("default recipe import AI provider", () => {
     );
   });
 
-  it("AIがcoverImageIdを返した場合は受け付ける", async () => {
+  it("AIがcoverImageUrlを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: createStrictAiDraft({
-        coverImageId: "img_001",
+        coverImageUrl: "https://example.com/cover.jpg",
       }),
     });
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
     await expect(provider.normalize(input)).resolves.toMatchObject({
-      coverImageId: "img_001",
+      coverImageUrl: "https://example.com/cover.jpg",
     });
   });
 
@@ -195,13 +196,13 @@ describe("default recipe import AI provider", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("AIがstepsの画像IDを返した場合は受け付ける", async () => {
+  it("AIがstepsの画像URLを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: createStrictAiDraft({
         steps: [
           {
             text: "煮詰める",
-            imageIds: ["img_002", "img_003"],
+            imageUrls: ["https://example.com/step-2.jpg", "https://example.com/step-3.jpg"],
           },
         ],
       }),
@@ -212,7 +213,7 @@ describe("default recipe import AI provider", () => {
     await expect(provider.normalize(input)).resolves.toMatchObject({
       steps: [
         {
-          imageIds: ["img_002", "img_003"],
+          imageUrls: ["https://example.com/step-2.jpg", "https://example.com/step-3.jpg"],
         },
       ],
     });
@@ -222,14 +223,14 @@ describe("default recipe import AI provider", () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: createStrictAiDraft({
         servingsText: null,
-        coverImageId: null,
+        coverImageUrl: null,
         ingredientGroups: [
           {
             label: null,
             ingredients: [{ name: "トマト缶", amount: "1缶" }],
           },
         ],
-        steps: [{ text: null, imageIds: ["img_002"] }],
+        steps: [{ text: null, imageUrls: ["https://example.com/step-2.jpg"] }],
         note: null,
       }),
     });
@@ -239,7 +240,7 @@ describe("default recipe import AI provider", () => {
     await expect(provider.normalize(input)).resolves.toEqual({
       title: "Tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ imageIds: ["img_002"] }],
+      steps: [{ imageUrls: ["https://example.com/step-2.jpg"] }],
     });
   });
 

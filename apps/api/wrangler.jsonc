@@ -41,5 +41,9 @@
   "ai": {
     "binding": "AI",
     "remote": true
+  },
+  "browser": {
+    "binding": "BROWSER",
+    "remote": true
   }
 }

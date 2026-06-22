@@ -9,13 +9,17 @@ import { normalizeUrl } from "@recipestock/shared";
 import { generateObject } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
-import { type Bindings } from "./env";
+import { type Bindings, type BrowserRunBinding } from "./env";
 import { extractRecipePageEvidence } from "./import-page-evidence";
 import {
   type DeterministicImporter,
   defaultDeterministicImporter,
 } from "./lib/import/deterministic";
-import { assertFetchedPageIsHtml, assertImportUrlAllowed } from "./lib/import/policy";
+import {
+  assertFetchedPageIsHtml,
+  assertImportContentTypeMayBeHtml,
+  assertImportUrlAllowed,
+} from "./lib/import/policy";
 import {
   type FetchedImportPage,
   type ImportErrorCode,
@@ -44,14 +48,14 @@ export type RecipeImportImageCandidate = {
 
 export type RecipeImportStructuredInstructionEvidence = {
   text: string;
-  imageIds: string[];
+  imageUrls: string[];
 };
 
 export type RecipeImportStructuredEvidence = {
   format: "jsonLd" | "microdata" | "rdfa";
   name?: string;
   servingsText?: string;
-  imageIds: string[];
+  imageUrls: string[];
   rawIngredients: string[];
   rawInstructions: string[];
   structuredInstructions: RecipeImportStructuredInstructionEvidence[];
@@ -66,17 +70,17 @@ export type RecipeImportAIInput = {
   recipeStructuredEvidence: RecipeImportStructuredEvidence[];
 };
 
-export type RecipeImportAIImageId = string;
+export type RecipeImportAIImageUrl = string;
 
 export type RecipeImportAIDraftStep = {
   text?: string;
-  imageIds: RecipeImportAIImageId[];
+  imageUrls: RecipeImportAIImageUrl[];
 };
 
 export type RecipeImportAIDraftContent = {
   title: string;
   servingsText?: string;
-  coverImageId?: RecipeImportAIImageId;
+  coverImageUrl?: RecipeImportAIImageUrl;
   ingredientGroups: Array<{
     label?: string;
     ingredients: Array<{
@@ -101,8 +105,13 @@ type RecipeImportConverterResult = {
 };
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
+const MAX_BROWSER_RUN_GOTO_TIMEOUT_MS = 60_000;
+const DEFAULT_IMPORT_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+  "AppleWebKit/537.36 (KHTML, like Gecko) " +
+  "Chrome/125.0.0.0 Safari/537.36";
 
-const importAiImageIdSchema = z.string().min(1);
+const importAiImageUrlSchema = z.string().min(1);
 
 const importAiIngredientSchema = z.strictObject({
   name: z.string().min(1),
@@ -117,17 +126,22 @@ const importAiIngredientGroupSchema = z.strictObject({
 const importAiDraftStepSchema = z
   .strictObject({
     text: z.string().min(1).nullable(),
-    imageIds: z.array(importAiImageIdSchema),
+    imageUrls: z.array(importAiImageUrlSchema),
   })
-  .refine((step) => step.text !== null || step.imageIds.length > 0);
+  .refine((step) => step.text !== null || step.imageUrls.length > 0);
 
 const importAiDraftContentSchema = z.strictObject({
   title: z.string().min(1),
   servingsText: z.string().nullable(),
-  coverImageId: importAiImageIdSchema.nullable(),
+  coverImageUrl: importAiImageUrlSchema.nullable(),
   ingredientGroups: z.array(importAiIngredientGroupSchema),
   steps: z.array(importAiDraftStepSchema),
   note: z.string().nullable(),
+});
+
+const browserRunContentResponseSchema = z.object({
+  success: z.literal(true),
+  result: z.string(),
 });
 
 const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftContent => {
@@ -136,14 +150,14 @@ const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftConte
   return {
     title: draft.title,
     ...(draft.servingsText !== null ? { servingsText: draft.servingsText } : {}),
-    ...(draft.coverImageId !== null ? { coverImageId: draft.coverImageId } : {}),
+    ...(draft.coverImageUrl !== null ? { coverImageUrl: draft.coverImageUrl } : {}),
     ingredientGroups: draft.ingredientGroups.map((group) => ({
       ...(group.label !== null ? { label: group.label } : {}),
       ingredients: group.ingredients,
     })),
     steps: draft.steps.map((step) => ({
       ...(step.text !== null ? { text: step.text } : {}),
-      imageIds: step.imageIds,
+      imageUrls: step.imageUrls,
     })),
     ...(draft.note !== null ? { note: draft.note } : {}),
   };
@@ -163,13 +177,18 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, max
       throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
     }
 
+    const contentType = response.headers.get("content-type") ?? "";
+    assertImportContentTypeMayBeHtml(contentType);
     assertContentLengthAllowed(response, maxBytes);
 
-    return {
+    const page = {
       finalUrl,
-      contentType: response.headers.get("content-type") ?? "",
+      contentType,
       body: await readResponseTextWithLimit(response, maxBytes),
     };
+    await assertFetchedPageIsHtml(page);
+
+    return page;
   } catch (error) {
     if (error instanceof RecipeImportError) {
       throw error;
@@ -181,16 +200,47 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, max
   }
 };
 
+const createBrowserRunImportFetcher =
+  (browser: BrowserRunBinding): RecipeImportFetcher =>
+  async (url, { timeoutMs, maxBytes }) => {
+    assertImportUrlAllowed(url);
+
+    try {
+      const response = await browser.quickAction("content", {
+        url,
+        gotoOptions: {
+          timeout: Math.min(timeoutMs, MAX_BROWSER_RUN_GOTO_TIMEOUT_MS),
+          waitUntil: "networkidle2",
+        },
+        userAgent: DEFAULT_IMPORT_USER_AGENT,
+      });
+
+      if (!(response instanceof Response) || !response.ok) {
+        throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
+      }
+
+      const payload = browserRunContentResponseSchema.parse(await response.json());
+      assertTextByteLengthAllowed(payload.result, maxBytes);
+
+      return {
+        finalUrl: url,
+        contentType: "text/html",
+        body: payload.result,
+      };
+    } catch (error) {
+      if (error instanceof RecipeImportError) {
+        throw error;
+      }
+
+      throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
+    }
+  };
+
 const fetchImportPageFollowingAllowedRedirects = async (sourceUrl: string, signal: AbortSignal) => {
   let currentUrl = sourceUrl;
 
   for (let redirectCount = 0; redirectCount <= MAX_IMPORT_PAGE_REDIRECTS; redirectCount++) {
     assertImportUrlAllowed(currentUrl);
-
-    const DEFAULT_IMPORT_USER_AGENT =
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-      "AppleWebKit/537.36 (KHTML, like Gecko) " +
-      "Chrome/125.0.0.0 Safari/537.36";
 
     const response = await fetch(currentUrl, {
       headers: {
@@ -239,14 +289,14 @@ export const normalizeImportableUrl = (rawUrl: string) => {
 const convertFetchedHtmlPage = async (
   page: FetchedImportPage,
 ): Promise<RecipeImportConverterResult> => {
-  assertFetchedPageIsHtml(page);
+  await assertFetchedPageIsHtml(page);
 
   const normalizedFinalUrl = normalizeUrl(page.finalUrl);
   const finalHost = new URL(normalizedFinalUrl).hostname.replace(/^www\./, "");
   const evidence = await extractRecipePageEvidence(page, normalizedFinalUrl);
   const sourceName = evidence.meta["og:site_name"] ?? finalHost;
 
-  if (evidence.markdownContent.length < 40 && !hasDescriptionMetadata(evidence.meta)) {
+  if (evidence.markdownContent.length < 20 && !hasDescriptionMetadata(evidence.meta)) {
     throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
   }
 
@@ -278,9 +328,11 @@ export const importRecipeFromUrl = async ({
   env,
   usageRepository,
   aiProvider,
-  fetcher = fetchImportPage,
+  fetcher,
   deterministicImporter = defaultDeterministicImporter,
   now = new Date(),
+  deadline,
+  getCurrentDate,
   logger = createLogger(),
 }: {
   rawUrl: string;
@@ -291,22 +343,35 @@ export const importRecipeFromUrl = async ({
   fetcher?: RecipeImportFetcher;
   deterministicImporter?: DeterministicImporter;
   now?: Date;
+  deadline?: Date;
+  getCurrentDate?: () => Date;
   logger?: Logger;
 }): Promise<RecipeImportResult> => {
+  const currentDate = () => getCurrentDate?.() ?? new Date();
+  assertImportJobDeadline(deadline, currentDate());
   const normalizedUrl = normalizeImportableUrl(rawUrl);
-  const fetchOptions = {
-    timeoutMs: resolveImportTimeoutMs(env),
+  const deterministicFetchOptions = {
+    timeoutMs: resolveBoundedTimeoutMs(resolveImportTimeoutMs(env), deadline, currentDate()),
     maxBytes: resolveImportMaxHtmlBytes(env),
   };
+  const deterministicFetcher = fetcher ?? fetchImportPage;
   const deterministicResult = await deterministicImporter.tryImport({
     normalizedUrl,
-    fetcher,
-    fetchOptions,
+    fetcher: deterministicFetcher,
+    fetchOptions: deterministicFetchOptions,
   });
+  assertImportJobDeadline(deadline, currentDate());
   if (deterministicResult) return deterministicResult;
 
-  const page = await fetcher(normalizedUrl, fetchOptions);
+  const fetchOptions = {
+    timeoutMs: resolveBoundedTimeoutMs(resolveImportTimeoutMs(env), deadline, currentDate()),
+    maxBytes: resolveImportMaxHtmlBytes(env),
+  };
+  const importFetcher = fetcher ?? resolveImportFetcher(env);
+  const page = await importFetcher(normalizedUrl, fetchOptions);
+  assertImportJobDeadline(deadline, currentDate());
   const conversion = await convertFetchedHtmlPage(page);
+  assertImportJobDeadline(deadline, currentDate());
 
   const usage = await consumeAiUsage({
     userId,
@@ -319,12 +384,23 @@ export const importRecipeFromUrl = async ({
     throw new RecipeImportError("ai_usage_limit_exceeded", "AI usage limit exceeded.");
   }
 
+  assertImportJobDeadline(deadline, currentDate());
+  const aiTimeoutMs = resolveBoundedTimeoutMs(
+    resolveImportAiTimeoutMs(env),
+    deadline,
+    currentDate(),
+  );
+  const boundedEnv = {
+    ...env,
+    IMPORT_AI_TIMEOUT_MS: String(aiTimeoutMs),
+  };
   const importAIProvider =
-    aiProvider ?? createDefaultRecipeImportAIProvider(env as Bindings, { logger });
+    aiProvider ?? createDefaultRecipeImportAIProvider(boundedEnv as Bindings, { logger });
   let draft: RecipeImportAIDraftContent;
 
   try {
     draft = await importAIProvider.normalize(conversion.input);
+    assertImportJobDeadline(deadline, currentDate());
   } catch (error) {
     if (error instanceof RecipeImportError) {
       throw error;
@@ -340,7 +416,7 @@ export const importRecipeFromUrl = async ({
   let imageResult: { draft: RecipeDraftContent; warnings: string[] };
 
   try {
-    imageResult = resolveDraftImageIds(draft, conversion.imageCandidates);
+    imageResult = resolveDraftImageUrls(draft, conversion.imageCandidates);
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
@@ -354,6 +430,23 @@ export const importRecipeFromUrl = async ({
     source: conversion.source,
     warnings: conversion.warnings.concat(imageResult.warnings),
   };
+};
+
+const assertImportJobDeadline = (deadline: Date | undefined, now: Date) => {
+  if (deadline && now.getTime() >= deadline.getTime()) {
+    throw new RecipeImportError("job_timeout", "Import job timed out.");
+  }
+};
+
+const resolveBoundedTimeoutMs = (timeoutMs: number, deadline: Date | undefined, now: Date) => {
+  if (!deadline) return timeoutMs;
+
+  const remainingMs = deadline.getTime() - now.getTime();
+  if (remainingMs <= 0) {
+    throw new RecipeImportError("job_timeout", "Import job timed out.");
+  }
+
+  return Math.min(timeoutMs, remainingMs);
 };
 
 type ImportAiProviderKind = "workers-ai" | "openrouter" | "groq";
@@ -487,6 +580,24 @@ const resolveImportTimeoutMs = (env: Partial<Bindings>) => {
 const resolveImportMaxHtmlBytes = (env: Partial<Bindings>) => {
   const value = Number(env.IMPORT_MAX_HTML_BYTES ?? 2_000_000);
   return Number.isInteger(value) && value > 0 ? value : 2_000_000;
+};
+
+const resolveImportFetcher = (env: Partial<Bindings>): RecipeImportFetcher => {
+  const mode = env.IMPORT_FETCH_MODE?.trim() || "standard";
+
+  if (mode === "standard") {
+    return fetchImportPage;
+  }
+
+  if (mode === "browser-run") {
+    if (!env.BROWSER) {
+      throw new RecipeImportError("unknown", "Browser Run binding is not configured.");
+    }
+
+    return createBrowserRunImportFetcher(env.BROWSER);
+  }
+
+  throw new RecipeImportError("unknown", "Import fetch mode is invalid.");
 };
 
 const resolveImportAiTimeoutMs = (env: Partial<Bindings>) => {
@@ -693,12 +804,16 @@ const assertContentLengthAllowed = (response: Response, maxBytes: number) => {
   }
 };
 
+const assertTextByteLengthAllowed = (text: string, maxBytes: number) => {
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw new RecipeImportError("unsupported_page", "Import page is too large.");
+  }
+};
+
 const readResponseTextWithLimit = async (response: Response, maxBytes: number) => {
   if (!response.body) {
     const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > maxBytes) {
-      throw new RecipeImportError("unsupported_page", "Import page is too large.");
-    }
+    assertTextByteLengthAllowed(text, maxBytes);
 
     return text;
   }
@@ -820,24 +935,23 @@ const isAiSchemaError = (error: unknown): boolean => {
   return cause ? isAiSchemaError(cause) : false;
 };
 
-const resolveDraftImageIds = (
+const resolveDraftImageUrls = (
   draft: RecipeImportAIDraftContent,
   candidates: RecipeImportImageCandidate[],
 ): { draft: RecipeDraftContent; warnings: string[] } => {
-  const urlsById = new Map(candidates.map((candidate) => [candidate.id, candidate.url]));
+  const candidateUrls = new Set(candidates.map((candidate) => candidate.url));
   const warnings: string[] = [];
-  const resolveImage = (imageId: RecipeImportAIImageId | undefined) => {
-    if (!imageId) return undefined;
+  const resolveImage = (imageUrl: RecipeImportAIImageUrl | undefined) => {
+    if (!imageUrl) return undefined;
 
-    const url = urlsById.get(imageId);
-    if (url) {
+    if (candidateUrls.has(imageUrl)) {
       return {
         type: "externalImageUrl" as const,
-        url,
+        url: imageUrl,
       };
     }
 
-    warnings.push(`AI returned unknown image ID: ${imageId}`);
+    warnings.push(`AI returned unknown image URL: ${imageUrl}`);
     return undefined;
   };
 
@@ -845,11 +959,11 @@ const resolveDraftImageIds = (
     draft: recipeDraftContentSchema.parse({
       title: draft.title,
       servingsText: draft.servingsText,
-      coverImage: resolveImage(draft.coverImageId),
+      coverImage: resolveImage(draft.coverImageUrl),
       ingredientGroups: draft.ingredientGroups,
       steps: draft.steps.map((step) => ({
         text: step.text,
-        images: step.imageIds
+        images: step.imageUrls
           .map(resolveImage)
           .filter((image): image is NonNullable<typeof image> => Boolean(image)),
       })),

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { extractRecipePageEvidence } from "./import-page-evidence";
 
 describe("Recipe page evidence", () => {
-  it("本文画像をMarkdown内のIDマーカーに置換し、画像URLをAI入力から除外する", async () => {
+  it("本文画像を絶対URL付きMarkdown画像としてAI入力に残す", async () => {
     const evidence = await extractRecipeHtml(`
       <html>
         <head>
@@ -11,7 +11,7 @@ describe("Recipe page evidence", () => {
               "@context": "https://schema.org",
               "@type": "Recipe",
               "name": "Tomato pasta",
-              "image": "/cover.jpg",
+              "image": "/cover.jpg?width=1200&format=webp",
               "recipeIngredient": ["Tomato 1 can"],
               "recipeInstructions": ["Simmer the tomato sauce."]
             }
@@ -21,26 +21,27 @@ describe("Recipe page evidence", () => {
           <article>
             <h1>Tomato pasta</h1>
             <p>Enough visible recipe content for extraction.</p>
-            <img src="/cover.jpg" alt="Tomato pasta cover">
+            <img src="/cover.jpg?width=1200&amp;format=webp" alt="Tomato pasta cover">
           </article>
         </body>
       </html>
     `);
 
     expect(evidence.markdownContent).toContain("Tomato pasta");
-    expect(evidence.markdownContent).toContain('RS_IMAGE id=img_001 alt="Tomato pasta cover"');
-    expect(evidence.markdownContent).not.toContain("/cover.jpg");
-    expect(JSON.stringify(evidence.recipeStructuredEvidence)).not.toContain(
-      "https://example.com/cover.jpg",
+    expect(evidence.markdownContent).toContain(
+      "![Tomato pasta cover](<https://example.com/cover.jpg?width=1200&format=webp>)",
+    );
+    expect(JSON.stringify(evidence.recipeStructuredEvidence)).toContain(
+      "https://example.com/cover.jpg?width=1200&format=webp",
     );
     expect(evidence.recipeStructuredEvidence).toContainEqual(
       expect.objectContaining({
-        imageIds: ["img_001"],
+        imageUrls: ["https://example.com/cover.jpg?width=1200&format=webp"],
       }),
     );
     expect(evidence.imageCandidates).toContainEqual({
       id: "img_001",
-      url: "https://example.com/cover.jpg",
+      url: "https://example.com/cover.jpg?width=1200&format=webp",
       alt: "Tomato pasta cover",
       position: 0,
     });
@@ -107,17 +108,17 @@ describe("Recipe page evidence", () => {
         format: "jsonLd",
         name: "Tomato pasta",
         servingsText: "2 servings",
-        imageIds: ["img_001"],
+        imageUrls: ["https://example.com/jsonld.jpg"],
         rawIngredients: ["Tomato 1 can", "Olive oil 1 tbsp"],
         rawInstructions: ["Simmer the tomato sauce.", "Toss with pasta."],
         structuredInstructions: [
           {
             text: "Simmer the tomato sauce.",
-            imageIds: ["img_002"],
+            imageUrls: ["https://example.com/step-1.jpg"],
           },
           {
             text: "Toss with pasta.",
-            imageIds: ["img_003", "img_004"],
+            imageUrls: ["https://example.com/step-2a.jpg", "https://example.com/step-2b.jpg"],
           },
         ],
       },
@@ -169,17 +170,17 @@ describe("Recipe page evidence", () => {
         format: "jsonLd",
         name: "Layered pasta",
         servingsText: undefined,
-        imageIds: [],
+        imageUrls: [],
         rawIngredients: ["Pasta 100g"],
         rawInstructions: ["Warm the sauce.", "Serve with pasta."],
         structuredInstructions: [
           {
             text: "Warm the sauce.",
-            imageIds: ["img_001"],
+            imageUrls: ["https://example.com/section-step.jpg"],
           },
           {
             text: "Serve with pasta.",
-            imageIds: ["img_002"],
+            imageUrls: ["https://example.com/item-list-step.jpg"],
           },
         ],
       },
@@ -217,7 +218,7 @@ describe("Recipe page evidence", () => {
       format: "microdata",
       name: "Miso soup",
       servingsText: "2 bowls",
-      imageIds: ["img_001"],
+      imageUrls: ["https://example.com/miso.jpg"],
       rawIngredients: ["Miso 2 tbsp", "Tofu 150g"],
       rawInstructions: ["Warm the broth.", "Dissolve the miso."],
       structuredInstructions: [],
@@ -252,7 +253,7 @@ describe("Recipe page evidence", () => {
     expect(evidence.recipeStructuredEvidence).toContainEqual({
       format: "microdata",
       name: "Same node soup",
-      imageIds: [],
+      imageUrls: [],
       rawIngredients: ["Same-node ingredient text for extraction and import conversion."],
       rawInstructions: [],
       structuredInstructions: [],
@@ -289,7 +290,7 @@ describe("Recipe page evidence", () => {
       format: "rdfa",
       name: "Rice bowl",
       servingsText: "1 serving",
-      imageIds: ["img_001"],
+      imageUrls: ["https://example.com/rice.jpg"],
       rawIngredients: ["Rice 200g", "Egg 1"],
       rawInstructions: ["Steam the rice.", "Add the egg."],
       structuredInstructions: [],

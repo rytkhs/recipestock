@@ -91,7 +91,7 @@ type HtmlImportExtraction = {
 class ImportImageRegistry {
   readonly #baseUrl: string;
   readonly #candidates: RecipeImportImageCandidate[] = [];
-  readonly #idsByUrl = new Map<string, string>();
+  readonly #candidatesByUrl = new Map<string, RecipeImportImageCandidate>();
 
   constructor(baseUrl: string) {
     this.#baseUrl = baseUrl;
@@ -101,8 +101,8 @@ class ImportImageRegistry {
     return this.#candidates;
   }
 
-  getOrCreateId(rawUrl: string | undefined, alt?: string): string | undefined {
-    if (!rawUrl || this.#candidates.length >= 100) return undefined;
+  getOrCreate(rawUrl: string | undefined, alt?: string): RecipeImportImageCandidate | undefined {
+    if (!rawUrl) return undefined;
 
     let url: string;
     try {
@@ -111,20 +111,22 @@ class ImportImageRegistry {
       return undefined;
     }
 
-    const existingId = this.#idsByUrl.get(url);
-    if (existingId) return existingId;
+    const existingCandidate = this.#candidatesByUrl.get(url);
+    if (existingCandidate) return existingCandidate;
+    if (this.#candidates.length >= 100) return undefined;
 
     const id = `img_${String(this.#candidates.length + 1).padStart(3, "0")}`;
     const normalizedAlt = alt ? normalizeImageAlt(alt) : undefined;
-    this.#idsByUrl.set(url, id);
-    this.#candidates.push({
+    const candidate = {
       id,
       url,
       alt: normalizedAlt || undefined,
       position: this.#candidates.length,
-    });
+    };
+    this.#candidatesByUrl.set(url, candidate);
+    this.#candidates.push(candidate);
 
-    return id;
+    return candidate;
   }
 }
 
@@ -214,7 +216,7 @@ const extractHtmlImportData = async (
 
         extraction.meta[key] = normalizeReadableText(content);
         if (key === "og:image" || key === "twitter:image") {
-          imageRegistry.getOrCreateId(content);
+          imageRegistry.getOrCreate(content);
         }
       },
     })
@@ -252,8 +254,10 @@ const extractHtmlImportData = async (
       element(element) {
         const rawUrl = element.getAttribute("src") ?? element.getAttribute("data-src") ?? undefined;
         const alt = element.getAttribute("alt") ?? undefined;
-        const id = imageRegistry.getOrCreateId(rawUrl, alt);
-        element.replace(id ? formatImageMarker(id, alt) : "", { html: false });
+        const candidate = imageRegistry.getOrCreate(rawUrl, alt);
+        element.replace(candidate ? formatMarkdownImage(candidate.url, alt) : "", {
+          html: false,
+        });
       },
     })
     .transform(importPageBodyToResponse(page))
@@ -622,15 +626,13 @@ const normalizeReadableText = (value: string) =>
 
 const normalizeImageAlt = (value: string) => normalizeReadableText(value).slice(0, 120);
 
-const formatImageMarker = (id: string, alt?: string) => {
+const formatMarkdownImage = (url: string, alt?: string) => {
   const normalizedAlt = alt ? normalizeImageAlt(alt) : "";
-  return normalizedAlt
-    ? `\nRS_IMAGE id=${id} alt="${escapeImageMarkerAttribute(normalizedAlt)}"\n`
-    : `\nRS_IMAGE id=${id}\n`;
+  return `\n![${escapeMarkdownImageAlt(normalizedAlt)}](<${url}>)\n`;
 };
 
-const escapeImageMarkerAttribute = (value: string) =>
-  value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+const escapeMarkdownImageAlt = (value: string) =>
+  value.replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
 
 const normalizeMarkdownContent = (value: string) =>
   value
@@ -867,20 +869,20 @@ const buildImportStructuredEvidence = (
     format: recipe.format,
     name: recipe.name,
     servingsText: recipe.servingsText,
-    imageIds: recipe.imageUrls.flatMap((url) => {
-      const id = imageRegistry.getOrCreateId(url, recipe.name);
-      return id ? [id] : [];
+    imageUrls: recipe.imageUrls.flatMap((url) => {
+      const candidate = imageRegistry.getOrCreate(url, recipe.name);
+      return candidate ? [candidate.url] : [];
     }),
     rawIngredients: recipe.rawIngredients,
     rawInstructions: recipe.rawInstructions,
     structuredInstructions: recipe.structuredInstructions.map((instruction) => ({
       text: instruction.text,
-      imageIds: instruction.imageUrls.flatMap((url) => {
-        const id = imageRegistry.getOrCreateId(
+      imageUrls: instruction.imageUrls.flatMap((url) => {
+        const candidate = imageRegistry.getOrCreate(
           url,
           buildStructuredInstructionImageAlt(recipe, instruction),
         );
-        return id ? [id] : [];
+        return candidate ? [candidate.url] : [];
       }),
     })),
   }));

@@ -1,7 +1,7 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
 import { Link as LinkIcon } from "@phosphor-icons/react";
-import { type CreateImportUrlJobResponse } from "@recipestock/schemas";
-import { useNavigate } from "@tanstack/react-router";
+import { type CreateImportUrlJobResponse, type ImportJobSummary } from "@recipestock/schemas";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { ApiClientError, parseApiResponse } from "../lib/api";
 
@@ -46,15 +46,23 @@ export const ImportUrlRoute = () => {
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [activeJob, setActiveJob] = useState<ImportJobSummary | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setActiveJob(null);
     setIsSubmitting(true);
 
     try {
-      await createImportUrlJob(url);
+      const response = await createImportUrlJob(url);
+
+      if (response.kind === "existing_active_job") {
+        setActiveJob(response.job);
+        return;
+      }
+
       await navigate({ to: "/recipes" });
     } catch (submitError) {
       setError(importErrorMessage(submitError));
@@ -104,6 +112,25 @@ export const ImportUrlRoute = () => {
             <p className="text-brand-danger text-sm" role="alert">
               {error}
             </p>
+          </div>
+        ) : null}
+        {activeJob ? (
+          <div
+            className="mt-4 rounded-[14px] border border-brand-orange/20 bg-brand-orange-soft/40 p-4"
+            role="alert"
+          >
+            <p className="font-semibold text-brand-walnut">
+              別のレシピを取り込み中です。しばらく待ってから再度実行してください。
+            </p>
+            {activeJob.url ? (
+              <p className="mt-2 break-all text-brand-muted text-xs">{activeJob.url}</p>
+            ) : null}
+            <Link
+              className="mt-3 inline-flex min-h-9 items-center justify-center rounded-full border border-brand-line bg-brand-paper px-4 font-semibold text-brand-walnut text-sm no-underline hover:bg-brand-paper-muted"
+              to="/recipes"
+            >
+              処理状況を見る
+            </Link>
           </div>
         ) : null}
       </div>

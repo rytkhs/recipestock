@@ -131,6 +131,8 @@ const importJobErrorMessage = (job: ImportJobSummary) => {
       return "今月のAI利用回数の上限に達しています。";
     case "ai_timeout":
       return "タイムアウトしました。";
+    case "job_timeout":
+      return "取り込み処理が時間内に完了しませんでした。再試行してください。";
     case "ai_schema_invalid":
       return "解析結果を保存できませんでした。";
     case "recipe_limit_exceeded":

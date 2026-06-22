@@ -20,6 +20,14 @@ _Avoid_: Draft, saved draft, temporary recipe
 Metadata describing where a **Recipe** came from, such as the source URL, normalized source URL, and source name. **Source** is stored outside **RecipeContent**.
 _Avoid_: Origin, reference, citation
 
+**Import Job**:
+A user-requested attempt to create one **Recipe** from an external source. An **Import Job** may finish successfully, fail, or be canceled before producing a **Recipe**.
+_Avoid_: Import task, background import
+
+**Import Cancellation**:
+A user's request that an active **Import Job** must not produce a **Recipe**. Cancellation does not imply that already-started external processing stops immediately.
+_Avoid_: Dismiss, close, force stop
+
 ## Example Dialogue
 
 Developer: "Should `sourceName` be part of `RecipeContent`?"
@@ -29,3 +37,7 @@ Domain expert: "No. `sourceName` is part of the Source metadata on the Recipe re
 Developer: "Can we save a RecipeDraftContent so users can come back later?"
 
 Domain expert: "No. A RecipeDraftContent is temporary pre-save content."
+
+Developer: "The AI request may still be running. Is the Import Job really canceled?"
+
+Domain expert: "Yes. Import Cancellation guarantees that the Import Job will not produce a Recipe, not that external processing stops immediately."
