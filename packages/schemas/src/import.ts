@@ -7,6 +7,7 @@ export const importErrorCodeSchema = z.enum([
   "extraction_failed",
   "ai_usage_limit_exceeded",
   "ai_timeout",
+  "job_timeout",
   "ai_schema_invalid",
   "recipe_limit_exceeded",
   "unknown",

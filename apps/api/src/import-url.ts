@@ -331,6 +331,8 @@ export const importRecipeFromUrl = async ({
   fetcher,
   deterministicImporter = defaultDeterministicImporter,
   now = new Date(),
+  deadline,
+  getCurrentDate,
   logger = createLogger(),
 }: {
   rawUrl: string;
@@ -341,24 +343,35 @@ export const importRecipeFromUrl = async ({
   fetcher?: RecipeImportFetcher;
   deterministicImporter?: DeterministicImporter;
   now?: Date;
+  deadline?: Date;
+  getCurrentDate?: () => Date;
   logger?: Logger;
 }): Promise<RecipeImportResult> => {
+  const currentDate = () => getCurrentDate?.() ?? new Date();
+  assertImportJobDeadline(deadline, currentDate());
   const normalizedUrl = normalizeImportableUrl(rawUrl);
-  const fetchOptions = {
-    timeoutMs: resolveImportTimeoutMs(env),
+  const deterministicFetchOptions = {
+    timeoutMs: resolveBoundedTimeoutMs(resolveImportTimeoutMs(env), deadline, currentDate()),
     maxBytes: resolveImportMaxHtmlBytes(env),
   };
   const deterministicFetcher = fetcher ?? fetchImportPage;
   const deterministicResult = await deterministicImporter.tryImport({
     normalizedUrl,
     fetcher: deterministicFetcher,
-    fetchOptions,
+    fetchOptions: deterministicFetchOptions,
   });
+  assertImportJobDeadline(deadline, currentDate());
   if (deterministicResult) return deterministicResult;
 
+  const fetchOptions = {
+    timeoutMs: resolveBoundedTimeoutMs(resolveImportTimeoutMs(env), deadline, currentDate()),
+    maxBytes: resolveImportMaxHtmlBytes(env),
+  };
   const importFetcher = fetcher ?? resolveImportFetcher(env);
   const page = await importFetcher(normalizedUrl, fetchOptions);
+  assertImportJobDeadline(deadline, currentDate());
   const conversion = await convertFetchedHtmlPage(page);
+  assertImportJobDeadline(deadline, currentDate());
 
   const usage = await consumeAiUsage({
     userId,
@@ -371,12 +384,23 @@ export const importRecipeFromUrl = async ({
     throw new RecipeImportError("ai_usage_limit_exceeded", "AI usage limit exceeded.");
   }
 
+  assertImportJobDeadline(deadline, currentDate());
+  const aiTimeoutMs = resolveBoundedTimeoutMs(
+    resolveImportAiTimeoutMs(env),
+    deadline,
+    currentDate(),
+  );
+  const boundedEnv = {
+    ...env,
+    IMPORT_AI_TIMEOUT_MS: String(aiTimeoutMs),
+  };
   const importAIProvider =
-    aiProvider ?? createDefaultRecipeImportAIProvider(env as Bindings, { logger });
+    aiProvider ?? createDefaultRecipeImportAIProvider(boundedEnv as Bindings, { logger });
   let draft: RecipeImportAIDraftContent;
 
   try {
     draft = await importAIProvider.normalize(conversion.input);
+    assertImportJobDeadline(deadline, currentDate());
   } catch (error) {
     if (error instanceof RecipeImportError) {
       throw error;
@@ -406,6 +430,23 @@ export const importRecipeFromUrl = async ({
     source: conversion.source,
     warnings: conversion.warnings.concat(imageResult.warnings),
   };
+};
+
+const assertImportJobDeadline = (deadline: Date | undefined, now: Date) => {
+  if (deadline && now.getTime() >= deadline.getTime()) {
+    throw new RecipeImportError("job_timeout", "Import job timed out.");
+  }
+};
+
+const resolveBoundedTimeoutMs = (timeoutMs: number, deadline: Date | undefined, now: Date) => {
+  if (!deadline) return timeoutMs;
+
+  const remainingMs = deadline.getTime() - now.getTime();
+  if (remainingMs <= 0) {
+    throw new RecipeImportError("job_timeout", "Import job timed out.");
+  }
+
+  return Math.min(timeoutMs, remainingMs);
 };
 
 type ImportAiProviderKind = "workers-ai" | "openrouter" | "groq";

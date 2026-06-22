@@ -13,7 +13,9 @@ import { type ApiEnv } from "../context";
 import {
   createImportJobId,
   createImportJobRepository,
+  getImportJobExpiresBefore,
   type ImportJobRepository,
+  resolveImportJobTimeoutMs,
   toImportJobSummary,
 } from "../import-jobs";
 import { normalizeImportableUrl, RecipeImportError } from "../import-url";
@@ -65,6 +67,11 @@ export const createImportRoutes = ({
           proPriceId: c.env.STRIPE_PRO_PRICE_ID,
           now,
         });
+      await repository.expireActiveJobsForUser({
+        userId,
+        expiresBefore: getImportJobExpiresBefore(now, resolveImportJobTimeoutMs(c.env)),
+        now,
+      });
       const result = await repository.createUrlJob({
         id: createJobId?.() ?? createImportJobId(),
         userId,
@@ -104,8 +111,14 @@ export const createImportRoutes = ({
     })
     .get("/jobs/recent", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
+      const now = getCurrentDate?.() ?? new Date();
       const repository =
         importJobRepository ?? createImportJobRepository(createDb(c.env.DATABASE_URL));
+      await repository.expireActiveJobsForUser({
+        userId,
+        expiresBefore: getImportJobExpiresBefore(now, resolveImportJobTimeoutMs(c.env)),
+        now,
+      });
       const jobs = await repository.listRecentJobs(userId);
 
       return c.json(

@@ -152,6 +152,7 @@ pnpm --filter @recipestock/api exec wrangler deploy --dry-run
 - `AI_TEXT_MODEL`
 - `AI_VISION_MODEL`
 - `IMPORT_TIMEOUT_MS`
+- `IMPORT_JOB_TIMEOUT_MS`
 
 ## Verification
 

@@ -248,6 +248,43 @@ describe("RecipesRoute", () => {
     ]);
   });
 
+  it("URL import jobの全体期限切れを表示する", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_timed_out",
+                kind: "url",
+                status: "failed",
+                url: "https://example.com/recipes/tomato",
+                recipeId: null,
+                errorCode: "job_timeout",
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: "2026-06-01T00:10:00.000Z",
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "取り込み処理が時間内に完了しませんでした。再試行してください。",
+    );
+  });
+
   it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {
     let nextPageRequests = 0;
     const fetchMock = mockFetch(

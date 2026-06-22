@@ -37,7 +37,10 @@ const createRepository = (overrides: Partial<ImportJobRepository> = {}): ImportJ
   listRecentJobs: async () => [],
   getJob: async () => null,
   getJobById: async () => null,
+  expireActiveJobsForUser: async () => 0,
+  expireJob: async () => false,
   claimQueuedJob: async () => null,
+  completeJobWithRecipe: async () => ({ status: "inactive" }),
   markJobSucceeded: async () => undefined,
   markJobFailed: async () => undefined,
   dismissJob: async () => null,
@@ -47,13 +50,14 @@ const createRepository = (overrides: Partial<ImportJobRepository> = {}): ImportJ
 describe("Import job routes", () => {
   it("URL import jobを作成してQueueに送る", async () => {
     const send = vi.fn(async () => undefined);
+    const expireActiveJobsForUser = vi.fn(async () => 0);
     const createUrlJob = vi.fn(async () => ({
       status: "created" as const,
       job: createJob(),
     }));
     const testApp = createApp({
       auth,
-      importJobRepository: createRepository({ createUrlJob }),
+      importJobRepository: createRepository({ createUrlJob, expireActiveJobsForUser }),
       importQueue: { send } as unknown as Queue<{ jobId: string }>,
       createImportJobId: () => "job_123",
       getCurrentDate: () => new Date("2026-06-01T00:00:00.000Z"),
@@ -87,6 +91,14 @@ describe("Import job routes", () => {
       normalizedUrl: "https://example.com/recipe",
       now: new Date("2026-06-01T00:00:00.000Z"),
     });
+    expect(expireActiveJobsForUser).toHaveBeenCalledWith({
+      userId: "user_123",
+      expiresBefore: new Date("2026-05-31T23:50:00.000Z"),
+      now: new Date("2026-06-01T00:00:00.000Z"),
+    });
+    expect(expireActiveJobsForUser.mock.invocationCallOrder[0] ?? 0).toBeLessThan(
+      createUrlJob.mock.invocationCallOrder[0] ?? 0,
+    );
     expect(send).toHaveBeenCalledWith({ jobId: "job_123" }, { contentType: "json" });
   });
 
@@ -161,9 +173,11 @@ describe("Import job routes", () => {
   });
 
   it("recent jobsはactiveと未dismissの完了jobを返す", async () => {
+    const expireActiveJobsForUser = vi.fn(async () => 1);
     const testApp = createApp({
       auth,
       importJobRepository: createRepository({
+        expireActiveJobsForUser,
         listRecentJobs: async () => [
           createJob({ id: "job_running", status: "running" }),
           createJob({
@@ -174,6 +188,7 @@ describe("Import job routes", () => {
           }),
         ],
       }),
+      getCurrentDate: () => new Date("2026-06-01T00:10:00.000Z"),
     });
 
     const response = await testApp.request("/api/import/jobs/recent");
@@ -184,6 +199,11 @@ describe("Import job routes", () => {
         { id: "job_running", status: "running", recipeId: null },
         { id: "job_done", status: "succeeded", recipeId: "recipe_123" },
       ],
+    });
+    expect(expireActiveJobsForUser).toHaveBeenCalledWith({
+      userId: "user_123",
+      expiresBefore: new Date("2026-06-01T00:00:00.000Z"),
+      now: new Date("2026-06-01T00:10:00.000Z"),
     });
   });
 

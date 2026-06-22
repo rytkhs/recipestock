@@ -12,7 +12,6 @@ import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
 import { type Bindings } from "./env";
 import { type RecipeImageService } from "./images";
 import {
-  createDefaultRecipeImportAIProvider,
   importRecipeFromUrl,
   type RecipeImportAIProvider,
   RecipeImportError,
@@ -28,6 +27,7 @@ import {
 import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
+  type NewRecipeRecord,
   normalizeRecipeSource,
   type RecipeRepository,
 } from "./recipes";
@@ -63,6 +63,12 @@ export type CreateImportUrlJobResult =
       status: "limitExceeded";
     };
 
+export type CompleteImportJobResult =
+  | { status: "succeeded" }
+  | { status: "limitExceeded" }
+  | { status: "timedOut" }
+  | { status: "inactive" };
+
 export type ImportJobRepository = {
   createUrlJob(params: {
     id: string;
@@ -74,11 +80,24 @@ export type ImportJobRepository = {
   listRecentJobs(userId: string): Promise<ImportJobRecord[]>;
   getJob(userId: string, jobId: string): Promise<ImportJobRecord | null>;
   getJobById(jobId: string): Promise<ImportJobRecord | null>;
+  expireActiveJobsForUser(params: {
+    userId: string;
+    expiresBefore: Date;
+    now: Date;
+  }): Promise<number>;
+  expireJob(params: { jobId: string; expiresBefore: Date; now: Date }): Promise<boolean>;
   claimQueuedJob(params: {
     jobId: string;
     recipeId: string;
+    expiresBefore: Date;
     now: Date;
   }): Promise<ImportJobRecord | null>;
+  completeJobWithRecipe(params: {
+    jobId: string;
+    recipe: NewRecipeRecord;
+    expiresBefore: Date;
+    now: Date;
+  }): Promise<CompleteImportJobResult>;
   markJobSucceeded(params: { jobId: string; recipeId: string; now: Date }): Promise<void>;
   markJobFailed(params: {
     jobId: string;
@@ -107,8 +126,20 @@ type ImportJobSqlRow = {
 };
 
 const activeStatuses: ImportJobStatus[] = ["queued", "running"];
+const DEFAULT_IMPORT_JOB_TIMEOUT_MS = 600_000;
 
 export const createImportJobId = () => ulid();
+
+export const resolveImportJobTimeoutMs = (env?: Partial<Bindings>) => {
+  const value = Number(env?.IMPORT_JOB_TIMEOUT_MS ?? DEFAULT_IMPORT_JOB_TIMEOUT_MS);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_IMPORT_JOB_TIMEOUT_MS;
+};
+
+export const getImportJobExpiresBefore = (now: Date, timeoutMs: number) =>
+  new Date(now.getTime() - timeoutMs);
+
+const getImportJobDeadline = (job: ImportJobRecord, timeoutMs: number) =>
+  new Date(job.createdAt.getTime() + timeoutMs);
 
 export const toImportJobSummary = (job: ImportJobRecord): ImportJobSummary => ({
   id: job.id,
@@ -351,7 +382,49 @@ export const createImportJobRepository = (
     const [row] = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).limit(1);
     return row ? mapImportJobRow(row) : null;
   },
-  async claimQueuedJob({ jobId, recipeId, now }) {
+  async expireActiveJobsForUser({ userId, expiresBefore, now }) {
+    const rows = await db
+      .update(importJobs)
+      .set({
+        status: "failed",
+        errorCode: "job_timeout",
+        errorMessage: "Import job timed out.",
+        finishedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(importJobs.userId, userId),
+          inArray(importJobs.status, activeStatuses),
+          sql`${importJobs.createdAt} <= ${expiresBefore}`,
+        ),
+      )
+      .returning({ id: importJobs.id });
+
+    return rows.length;
+  },
+  async expireJob({ jobId, expiresBefore, now }) {
+    const [row] = await db
+      .update(importJobs)
+      .set({
+        status: "failed",
+        errorCode: "job_timeout",
+        errorMessage: "Import job timed out.",
+        finishedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(importJobs.id, jobId),
+          inArray(importJobs.status, activeStatuses),
+          sql`${importJobs.createdAt} <= ${expiresBefore}`,
+        ),
+      )
+      .returning({ id: importJobs.id });
+
+    return Boolean(row);
+  },
+  async claimQueuedJob({ jobId, recipeId, expiresBefore, now }) {
     const [row] = await db
       .update(importJobs)
       .set({
@@ -360,10 +433,152 @@ export const createImportJobRepository = (
         startedAt: now,
         updatedAt: now,
       })
-      .where(and(eq(importJobs.id, jobId), eq(importJobs.status, "queued")))
+      .where(
+        and(
+          eq(importJobs.id, jobId),
+          eq(importJobs.status, "queued"),
+          sql`${importJobs.createdAt} > ${expiresBefore}`,
+        ),
+      )
       .returning();
 
     return row ? mapImportJobRow(row) : null;
+  },
+  async completeJobWithRecipe({ jobId, recipe, expiresBefore, now }) {
+    await syncAppUserPlanForDb(db, recipe.userId, {
+      ...planSyncOptions,
+      now: planSyncOptions?.now ?? now,
+    });
+
+    const result = await db.execute<{ resultStatus: string }>(sql`
+      with locked_job as materialized (
+        select id, status, created_at
+        from import_jobs
+        where id = ${jobId}
+          and user_id = ${recipe.userId}
+        for update
+      ),
+      selected_user as (
+        select plan
+        from app_users
+        where user_id = ${recipe.userId}
+      ),
+      eligible_job as (
+        select locked_job.id
+        from locked_job
+        where locked_job.status = 'running'
+          and locked_job.created_at > ${expiresBefore.toISOString()}::timestamptz
+      ),
+      recipe_limit as (
+        select
+          case
+            when selected_user.plan = 'pro' then false
+            else (
+              select count(*)
+              from recipes
+              where recipes.user_id = ${recipe.userId}
+            ) >= ${PLAN_LIMITS.free.savedRecipes}
+          end as exceeded
+        from selected_user
+      ),
+      inserted_recipe as (
+        insert into recipes (
+          id,
+          user_id,
+          title,
+          content,
+          origin_type,
+          source_url,
+          normalized_source_url,
+          source_name,
+          search_text,
+          created_at,
+          updated_at
+        )
+        select
+          ${recipe.id},
+          ${recipe.userId},
+          ${recipe.title},
+          ${JSON.stringify(recipe.content)}::jsonb,
+          ${recipe.originType},
+          ${recipe.sourceUrl},
+          ${recipe.normalizedSourceUrl},
+          ${recipe.sourceName},
+          ${recipe.searchText},
+          ${recipe.createdAt.toISOString()}::timestamptz,
+          ${recipe.updatedAt.toISOString()}::timestamptz
+        from eligible_job
+        cross join recipe_limit
+        where recipe_limit.exceeded = false
+        returning id
+      ),
+      succeeded_job as (
+        update import_jobs
+        set
+          status = 'succeeded',
+          recipe_id = ${recipe.id},
+          error_code = null,
+          error_message = null,
+          finished_at = ${now.toISOString()}::timestamptz,
+          updated_at = ${now.toISOString()}::timestamptz
+        where id in (select id from eligible_job)
+          and exists (select 1 from inserted_recipe)
+        returning id
+      ),
+      limit_failed_job as (
+        update import_jobs
+        set
+          status = 'failed',
+          error_code = 'recipe_limit_exceeded',
+          error_message = 'Recipe limit exceeded.',
+          finished_at = ${now.toISOString()}::timestamptz,
+          updated_at = ${now.toISOString()}::timestamptz
+        where id in (select id from eligible_job)
+          and exists (select 1 from recipe_limit where exceeded = true)
+        returning id
+      ),
+      timed_out_job as (
+        update import_jobs
+        set
+          status = 'failed',
+          error_code = 'job_timeout',
+          error_message = 'Import job timed out.',
+          finished_at = ${now.toISOString()}::timestamptz,
+          updated_at = ${now.toISOString()}::timestamptz
+        where id in (
+          select id
+          from locked_job
+          where status in ('queued', 'running')
+            and created_at <= ${expiresBefore.toISOString()}::timestamptz
+        )
+        returning id
+      )
+      select 'succeeded'::text as "resultStatus"
+      where exists (select 1 from succeeded_job)
+      union all
+      select 'limitExceeded'::text as "resultStatus"
+      where exists (select 1 from limit_failed_job)
+      union all
+      select 'timedOut'::text as "resultStatus"
+      where exists (select 1 from timed_out_job)
+      union all
+      select 'inactive'::text as "resultStatus"
+      where not exists (select 1 from succeeded_job)
+        and not exists (select 1 from limit_failed_job)
+        and not exists (select 1 from timed_out_job)
+      limit 1
+    `);
+
+    const resultStatus = result.rows[0]?.resultStatus;
+    if (
+      resultStatus === "succeeded" ||
+      resultStatus === "limitExceeded" ||
+      resultStatus === "timedOut"
+    ) {
+      return { status: resultStatus };
+    }
+
+    return { status: "inactive" };
   },
   async markJobSucceeded({ jobId, recipeId, now }) {
     await db
@@ -376,7 +591,7 @@ export const createImportJobRepository = (
         finishedAt: now,
         updatedAt: now,
       })
-      .where(eq(importJobs.id, jobId));
+      .where(and(eq(importJobs.id, jobId), eq(importJobs.status, "running")));
   },
   async markJobFailed({ jobId, errorCode, errorMessage, now }) {
     await db
@@ -388,7 +603,7 @@ export const createImportJobRepository = (
         finishedAt: now,
         updatedAt: now,
       })
-      .where(eq(importJobs.id, jobId));
+      .where(and(eq(importJobs.id, jobId), inArray(importJobs.status, activeStatuses)));
   },
   async dismissJob({ userId, jobId, now }) {
     const [row] = await db
@@ -439,14 +654,28 @@ export const processImportJob = async ({
   logger,
 }: ProcessImportJobDependencies & { jobId: string }) => {
   const now = getCurrentDate?.() ?? new Date();
+  const timeoutMs = resolveImportJobTimeoutMs(env);
+  const expiresBefore = getImportJobExpiresBefore(now, timeoutMs);
+  const expired = await importJobRepository.expireJob({ jobId, expiresBefore, now });
+
+  if (expired) {
+    return;
+  }
+
   const recipeId = createRecipeId?.() ?? createDefaultRecipeId();
-  const claimedJob = await importJobRepository.claimQueuedJob({ jobId, recipeId, now });
+  const claimedJob = await importJobRepository.claimQueuedJob({
+    jobId,
+    recipeId,
+    expiresBefore,
+    now,
+  });
   const job = claimedJob ?? (await importJobRepository.getJobById(jobId));
 
   if (!job || job.status !== "running") {
     return;
   }
 
+  const deadline = getImportJobDeadline(job, timeoutMs);
   const sourceHost = resolveImportSourceHost(job.normalizedUrl ?? job.url);
   const jobLogger =
     logger ??
@@ -481,6 +710,13 @@ export const processImportJob = async ({
       const existingRecipe = await recipeRepository.getRecipe(job.userId, job.recipeId);
 
       if (existingRecipe) {
+        await assertImportJobIsActive({
+          deadline,
+          getCurrentDate,
+          importJobRepository,
+          jobId,
+          timeoutMs,
+        });
         await importJobRepository.markJobSucceeded({
           jobId,
           recipeId: job.recipeId,
@@ -495,10 +731,19 @@ export const processImportJob = async ({
       userId: job.userId,
       env,
       usageRepository,
-      aiProvider: aiProvider ?? createDefaultRecipeImportAIProvider(env, { logger: jobLogger }),
+      aiProvider,
       fetcher,
       now,
+      deadline,
+      getCurrentDate,
       logger: jobLogger,
+    });
+    await assertImportJobIsActive({
+      deadline,
+      getCurrentDate,
+      importJobRepository,
+      jobId,
+      timeoutMs,
     });
     finalized = await finalizeRecipeDraftImages({
       draft: importResult.recipeDraftContent,
@@ -507,33 +752,39 @@ export const processImportJob = async ({
       imageService,
       createImageId,
     });
+    await assertImportJobIsActive({
+      deadline,
+      getCurrentDate,
+      importJobRepository,
+      jobId,
+      timeoutMs,
+    });
     const source = normalizeRecipeSource(importResult.source);
     const createdAt = getCurrentDate?.() ?? new Date();
-    const result = await recipeRepository.createRecipeEnforcingPlanLimit({
-      id: job.recipeId ?? recipeId,
-      userId: job.userId,
-      title: finalized.content.title,
-      content: finalized.content,
-      originType: "url",
-      sourceUrl: source.sourceUrl,
-      normalizedSourceUrl: source.normalizedSourceUrl,
-      sourceName: source.sourceName,
-      searchText: buildRecipeSearchText({
+    const result = await importJobRepository.completeJobWithRecipe({
+      jobId,
+      expiresBefore: getImportJobExpiresBefore(createdAt, timeoutMs),
+      now: createdAt,
+      recipe: {
+        id: job.recipeId ?? recipeId,
+        userId: job.userId,
+        title: finalized.content.title,
         content: finalized.content,
+        originType: "url",
+        sourceUrl: source.sourceUrl,
+        normalizedSourceUrl: source.normalizedSourceUrl,
         sourceName: source.sourceName,
-      }),
-      createdAt,
-      updatedAt: createdAt,
+        searchText: buildRecipeSearchText({
+          content: finalized.content,
+          sourceName: source.sourceName,
+        }),
+        createdAt,
+        updatedAt: createdAt,
+      },
     });
 
     if (result.status === "limitExceeded") {
       await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
-      await importJobRepository.markJobFailed({
-        jobId,
-        errorCode: "recipe_limit_exceeded",
-        errorMessage: "Recipe limit exceeded.",
-        now: getCurrentDate?.() ?? new Date(),
-      });
       jobLogger.warn("recipe_import_job_failed", {
         errorCode: "recipe_limit_exceeded",
         errorMessage: "Recipe limit exceeded.",
@@ -544,29 +795,52 @@ export const processImportJob = async ({
       return;
     }
 
+    if (result.status === "timedOut") {
+      await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
+      jobLogger.warn("recipe_import_job_failed", {
+        errorCode: "job_timeout",
+        errorMessage: "Import job timed out.",
+        jobId,
+        sourceHost,
+        userId: job.userId,
+      });
+      return;
+    }
+
+    if (result.status === "inactive") {
+      await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
+      return;
+    }
+
     recipeCreated = true;
     await deleteObjectsBestEffort(imageService, finalized.tmpKeys);
-    await importJobRepository.markJobSucceeded({
-      jobId,
-      recipeId: result.recipe.id,
-      now: getCurrentDate?.() ?? new Date(),
-    });
   } catch (error) {
     if (finalized && !recipeCreated) {
       await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
     }
 
-    if (!(error instanceof RecipeImportError) && !(error instanceof RecipeImageFinalizeError)) {
+    let failure = error;
+    const failedAt = getCurrentDate?.() ?? new Date();
+    if (failedAt.getTime() >= deadline.getTime()) {
+      await importJobRepository.expireJob({
+        jobId,
+        expiresBefore: getImportJobExpiresBefore(failedAt, timeoutMs),
+        now: failedAt,
+      });
+      failure = new RecipeImportError("job_timeout", "Import job timed out.");
+    }
+
+    if (!(failure instanceof RecipeImportError) && !(failure instanceof RecipeImageFinalizeError)) {
       jobLogger.error("recipe_import_job_unexpected_error", {
-        error,
+        error: failure,
         jobId,
         sourceHost,
         userId: job.userId,
       });
-      throw error;
+      throw failure;
     }
 
-    const mapped = mapImportJobFailure(error);
+    const mapped = mapImportJobFailure(failure);
     await importJobRepository.markJobFailed({
       jobId,
       errorCode: mapped.code,
@@ -574,7 +848,7 @@ export const processImportJob = async ({
       now: getCurrentDate?.() ?? new Date(),
     });
     jobLogger.warn("recipe_import_job_failed", {
-      error,
+      error: failure,
       errorCode: mapped.code,
       errorMessage: mapped.message,
       jobId,
@@ -582,6 +856,30 @@ export const processImportJob = async ({
       userId: job.userId,
     });
   }
+};
+
+const assertImportJobIsActive = async ({
+  deadline,
+  getCurrentDate,
+  importJobRepository,
+  jobId,
+  timeoutMs,
+}: {
+  deadline: Date;
+  getCurrentDate?: () => Date;
+  importJobRepository: ImportJobRepository;
+  jobId: string;
+  timeoutMs: number;
+}) => {
+  const now = getCurrentDate?.() ?? new Date();
+  if (now.getTime() < deadline.getTime()) return;
+
+  await importJobRepository.expireJob({
+    jobId,
+    expiresBefore: getImportJobExpiresBefore(now, timeoutMs),
+    now,
+  });
+  throw new RecipeImportError("job_timeout", "Import job timed out.");
 };
 
 const resolveImportSourceHost = (sourceUrl: string | null) => {
