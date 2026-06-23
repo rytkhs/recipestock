@@ -4,6 +4,12 @@ import { createApp } from "../index";
 import { type RecipeRecord } from "../recipes";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
+const recipeImage = (objectKey: string, width = 1200, height = 800) => ({
+  objectKey,
+  width,
+  height,
+});
+
 const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
   id: "recipe_123",
   userId: "user_123",
@@ -11,7 +17,7 @@ const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
   content: {
     title: "Tomato pasta",
     ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-    steps: [{ text: "煮詰める", imageKeys: [] }],
+    steps: [{ text: "煮詰める", images: [] }],
   },
   originType: "manual",
   sourceUrl: "https://example.com/recipes/tomato",
@@ -312,9 +318,14 @@ describe("Recipe mutation routes", () => {
     const existing = baseRecipe({
       content: {
         title: "Tomato pasta",
-        coverImageKey: "recipes/user_123/recipe_123/old-cover.webp",
+        coverImage: recipeImage("recipes/user_123/recipe_123/old-cover.webp"),
         ingredientGroups: [],
-        steps: [{ text: "煮詰める", imageKeys: ["recipes/user_123/recipe_123/old-step.webp"] }],
+        steps: [
+          {
+            text: "煮詰める",
+            images: [recipeImage("recipes/user_123/recipe_123/old-step.webp", 800, 1200)],
+          },
+        ],
       },
     });
     const testApp = createApp({
@@ -353,6 +364,7 @@ describe("Recipe mutation routes", () => {
         getObjectSize: async () => 1024,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
+          return { width: 900, height: 1200 };
         },
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
@@ -403,11 +415,11 @@ describe("Recipe mutation routes", () => {
     expect(updates).toEqual([
       expect.objectContaining({
         content: expect.objectContaining({
-          coverImageKey: "recipes/user_123/recipe_123/old-cover.webp",
+          coverImage: recipeImage("recipes/user_123/recipe_123/old-cover.webp"),
           steps: [
             {
               text: "盛り付ける",
-              imageKeys: ["recipes/user_123/recipe_123/new-step.webp"],
+              images: [recipeImage("recipes/user_123/recipe_123/new-step.webp", 900, 1200)],
             },
           ],
         }),
@@ -422,9 +434,14 @@ describe("Recipe mutation routes", () => {
     const existing = baseRecipe({
       content: {
         title: "Tomato pasta",
-        coverImageKey: "recipes/user_123/recipe_123/old-cover.webp",
+        coverImage: recipeImage("recipes/user_123/recipe_123/old-cover.webp"),
         ingredientGroups: [],
-        steps: [{ text: "煮詰める", imageKeys: ["recipes/user_123/recipe_123/old-step.webp"] }],
+        steps: [
+          {
+            text: "煮詰める",
+            images: [recipeImage("recipes/user_123/recipe_123/old-step.webp", 800, 1200)],
+          },
+        ],
       },
     });
     const testApp = createApp({
@@ -465,7 +482,7 @@ describe("Recipe mutation routes", () => {
         },
         copyExternalImageUrl: async (params) => {
           externalCopies.push(params);
-          return { objectKey: `${params.destinationKeyPrefix}.png` };
+          return { objectKey: `${params.destinationKeyPrefix}.png`, width: 900, height: 1200 };
         },
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
@@ -517,11 +534,11 @@ describe("Recipe mutation routes", () => {
     expect(updates).toEqual([
       expect.objectContaining({
         content: expect.objectContaining({
-          coverImageKey: "recipes/user_123/recipe_123/old-cover.webp",
+          coverImage: recipeImage("recipes/user_123/recipe_123/old-cover.webp"),
           steps: [
             {
               text: "盛り付ける",
-              imageKeys: ["recipes/user_123/recipe_123/new-step.png"],
+              images: [recipeImage("recipes/user_123/recipe_123/new-step.png", 900, 1200)],
             },
           ],
         }),
@@ -558,7 +575,7 @@ describe("Recipe mutation routes", () => {
           throw new Error("should not create a signed GET URL");
         },
         getObjectSize: async () => 1024,
-        copyObject: async () => undefined,
+        copyObject: async () => ({ width: 1200, height: 800 }),
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
         },
@@ -702,6 +719,7 @@ describe("Recipe mutation routes", () => {
           objectKey === "tmp/user_123/step.webp" ? MAX_IMAGE_UPLOAD_SIZE_BYTES + 1 : 1024,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
+          return { width: 1200, height: 800 };
         },
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
@@ -781,6 +799,7 @@ describe("Recipe mutation routes", () => {
         getObjectSize: async () => MAX_IMAGE_UPLOAD_SIZE_BYTES + 1,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
+          return { width: 1200, height: 800 };
         },
         deleteObject: async () => {
           throw new Error("should not delete an object");

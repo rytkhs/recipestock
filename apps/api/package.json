@@ -28,6 +28,7 @@
     "drizzle-orm": "^0.45.1",
     "hono": "^4.10.7",
     "html2md4llm": "^1.2.0",
+    "image-size": "^2.0.2",
     "ipaddr.js": "^2.4.0",
     "resend": "^6.6.0",
     "stripe": "^20.0.0",

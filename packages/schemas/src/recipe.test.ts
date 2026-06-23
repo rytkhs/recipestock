@@ -18,6 +18,30 @@ describe("recipeContentSchema", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("保存画像の正の整数寸法を検証する", () => {
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        coverImage: {
+          objectKey: "recipes/user/recipe/cover.webp",
+          width: 1200,
+          height: 800,
+        },
+      }).success,
+    ).toBe(true);
+
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        coverImage: {
+          objectKey: "recipes/user/recipe/cover.webp",
+          width: 0,
+          height: 800,
+        },
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("recipeDraftContentSchema", () => {

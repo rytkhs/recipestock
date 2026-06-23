@@ -5,6 +5,7 @@ import {
   MAX_IMAGE_UPLOAD_SIZE_BYTES,
 } from "@recipestock/schemas";
 import { AwsClient } from "aws4fetch";
+import { imageSize } from "image-size";
 import { type Bindings } from "./env";
 import { isHttpFetchUrlAllowed } from "./url-safety";
 
@@ -27,12 +28,19 @@ export type CopyExternalImageUrlParams = {
   destinationKeyPrefix: string;
 };
 
+export type ImageDimensions = {
+  width: number;
+  height: number;
+};
+
 export type RecipeImageService = {
   createUploadUrl(params: CreateUploadUrlParams): Promise<ImageUrlResult>;
   createSignedGetUrl(params: CreateSignedGetUrlParams): Promise<ImageUrlResult>;
   getObjectSize?(objectKey: string): Promise<number | null>;
-  copyObject(sourceKey: string, destinationKey: string): Promise<void>;
-  copyExternalImageUrl?(params: CopyExternalImageUrlParams): Promise<{ objectKey: string }>;
+  copyObject(sourceKey: string, destinationKey: string): Promise<ImageDimensions>;
+  copyExternalImageUrl?(
+    params: CopyExternalImageUrlParams,
+  ): Promise<{ objectKey: string } & ImageDimensions>;
   deleteObject(objectKey: string): Promise<void>;
   deletePrefixBestEffort(prefix: string): Promise<void>;
 };
@@ -177,6 +185,27 @@ const readResponseBodyWithinLimit = async (response: Response) => {
   return body;
 };
 
+export const getImageDimensions = (body: Uint8Array): ImageDimensions => {
+  const result = imageSize(body);
+  if (result.type !== "jpg" && result.type !== "png" && result.type !== "webp") {
+    throw new Error("Image format is not supported.");
+  }
+
+  const swapDimensions =
+    result.orientation === 5 ||
+    result.orientation === 6 ||
+    result.orientation === 7 ||
+    result.orientation === 8;
+  const width = swapDimensions ? result.height : result.width;
+  const height = swapDimensions ? result.width : result.height;
+
+  if (!Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0) {
+    throw new Error("Image dimensions could not be determined.");
+  }
+
+  return { width, height };
+};
+
 export const createRecipeImageService = (env: Bindings): RecipeImageService => ({
   async createUploadUrl({ objectKey, contentType }) {
     return {
@@ -205,10 +234,15 @@ export const createRecipeImageService = (env: Bindings): RecipeImageService => (
       throw new Error(`R2 object is too large: ${sourceKey}`);
     }
 
-    await env.RECIPE_IMAGES.put(destinationKey, sourceObject.body, {
+    const body = new Uint8Array(await sourceObject.arrayBuffer());
+    const dimensions = getImageDimensions(body);
+
+    await env.RECIPE_IMAGES.put(destinationKey, body, {
       httpMetadata: sourceObject.httpMetadata,
       customMetadata: sourceObject.customMetadata,
     });
+
+    return dimensions;
   },
   async copyExternalImageUrl({ sourceUrl, destinationKeyPrefix }) {
     assertExternalImageUrlAllowed(sourceUrl);
@@ -228,12 +262,13 @@ export const createRecipeImageService = (env: Bindings): RecipeImageService => (
 
       const objectKey = `${destinationKeyPrefix}.${imageExtensionFromContentType(contentType)}`;
       const body = await readResponseBodyWithinLimit(response);
+      const dimensions = getImageDimensions(body);
 
       await env.RECIPE_IMAGES.put(objectKey, body, {
         httpMetadata: { contentType },
       });
 
-      return { objectKey };
+      return { objectKey, ...dimensions };
     } finally {
       clearTimeout(timeout);
     }
@@ -264,12 +299,12 @@ export const imageExtensionFromContentType = (contentType: ImageContentType) => 
 };
 
 export const getRecipeImageKeys = (content: {
-  coverImageKey?: string;
-  steps: { imageKeys: string[] }[];
+  coverImage?: { objectKey: string };
+  steps: { images: { objectKey: string }[] }[];
 }) =>
   new Set([
-    ...(content.coverImageKey ? [content.coverImageKey] : []),
-    ...content.steps.flatMap((step) => step.imageKeys),
+    ...(content.coverImage ? [content.coverImage.objectKey] : []),
+    ...content.steps.flatMap((step) => step.images.map((image) => image.objectKey)),
   ]);
 
 export const recipeIdFromImageObjectKey = (userId: string, objectKey: string) => {

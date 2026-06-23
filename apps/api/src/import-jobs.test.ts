@@ -214,7 +214,7 @@ describe("processImportJob", () => {
       copyExternalImageUrl: async ({ sourceUrl, destinationKeyPrefix }) => {
         const objectKey = `${destinationKeyPrefix}/image_123.png`;
         events.push(`copyExternal:${sourceUrl}:${objectKey}`);
-        return { objectKey };
+        return { objectKey, width: 1200, height: 800 };
       },
       deleteObject: async (objectKey: string) => {
         events.push(`delete:${objectKey}`);
@@ -327,7 +327,7 @@ describe("processImportJob", () => {
       copyExternalImageUrl: async ({ destinationKeyPrefix }) => {
         const objectKey = `${destinationKeyPrefix}.png`;
         events.push(`copy:${objectKey}`);
-        return { objectKey };
+        return { objectKey, width: 1200, height: 800 };
       },
       deleteObject: async (objectKey: string) => {
         events.push(`delete:${objectKey}`);

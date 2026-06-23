@@ -9,6 +9,13 @@ import {
   renderApp,
 } from "../test/router-test-utils";
 
+const savedImage = (objectKey: string, url?: string, width = 1200, height = 800) => ({
+  objectKey,
+  width,
+  height,
+  ...(url ? { url } : {}),
+});
+
 describe("RecipesRoute", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -367,14 +374,22 @@ describe("RecipesRoute", () => {
         content: {
           title: "Tomato pasta",
           servingsText: "2人分",
-          coverImageKey: "recipes/user_123/recipe_123/cover.webp",
-          coverImageUrl: "https://images.example/cover.webp",
+          coverImage: savedImage(
+            "recipes/user_123/recipe_123/cover.webp",
+            "https://images.example/cover.webp",
+          ),
           ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
           steps: [
             {
               text: "煮詰める",
-              imageKeys: ["recipes/user_123/recipe_123/step.webp"],
-              imageUrls: ["https://images.example/step.webp"],
+              images: [
+                savedImage(
+                  "recipes/user_123/recipe_123/step.webp",
+                  "https://images.example/step.webp",
+                  800,
+                  1200,
+                ),
+              ],
             },
           ],
           note: "仕上げにオリーブオイル。",
@@ -451,14 +466,22 @@ describe("RecipesRoute", () => {
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          coverImageKey: "recipes/user_123/recipe_123/cover.webp",
-          coverImageUrl: "https://images.example/cover.webp",
+          coverImage: savedImage(
+            "recipes/user_123/recipe_123/cover.webp",
+            "https://images.example/cover.webp",
+          ),
           ingredientGroups: [],
           steps: [
             {
               text: "煮詰める",
-              imageKeys: ["recipes/user_123/recipe_123/step.webp"],
-              imageUrls: ["https://images.example/step.webp"],
+              images: [
+                savedImage(
+                  "recipes/user_123/recipe_123/step.webp",
+                  "https://images.example/step.webp",
+                  800,
+                  1200,
+                ),
+              ],
             },
           ],
         },
@@ -560,8 +583,10 @@ describe("RecipesRoute", () => {
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          coverImageKey: "recipes/user_123/recipe_123/cover.webp",
-          coverImageUrl: "https://images.example/cover.webp",
+          coverImage: savedImage(
+            "recipes/user_123/recipe_123/cover.webp",
+            "https://images.example/cover.webp",
+          ),
           ingredientGroups: [],
           steps: [],
           note: null,
@@ -662,15 +687,33 @@ describe("RecipesRoute", () => {
               title: "Tomato pasta",
               content: {
                 title: "Tomato pasta",
-                coverImageUrl: "https://images.example/cover.webp",
+                coverImage: savedImage(
+                  "recipes/user_123/recipe_123/cover.webp",
+                  "https://images.example/cover.webp",
+                ),
                 ingredientGroups: [],
                 steps: [
                   {
                     text: "煮詰める",
-                    imageKeys: [],
-                    imageUrls: ["https://images.example/step.webp"],
+                    images: [
+                      savedImage(
+                        "recipes/user_123/recipe_123/step.webp",
+                        "https://images.example/step.webp",
+                        800,
+                        1200,
+                      ),
+                    ],
                   },
-                  { imageKeys: [], imageUrls: ["https://images.example/step-only.webp"] },
+                  {
+                    images: [
+                      savedImage(
+                        "recipes/user_123/recipe_123/step-only.webp",
+                        "https://images.example/step-only.webp",
+                        900,
+                        1200,
+                      ),
+                    ],
+                  },
                 ],
               },
               source: {
@@ -692,14 +735,16 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123");
 
-    await expect(screen.findByAltText("Tomato pasta")).resolves.toHaveAttribute(
-      "src",
-      "https://images.example/cover.webp",
-    );
-    expect(screen.getByAltText("手順1の画像1")).toHaveAttribute(
-      "src",
-      "https://images.example/step.webp",
-    );
+    const coverImage = await screen.findByAltText("Tomato pasta");
+    expect(coverImage).toHaveAttribute("src", "https://images.example/cover.webp");
+    expect(coverImage).toHaveAttribute("width", "1200");
+    expect(coverImage).toHaveAttribute("height", "800");
+    expect(coverImage).toHaveStyle({ aspectRatio: "1200 / 800" });
+    const stepImage = screen.getByAltText("手順1の画像1");
+    expect(stepImage).toHaveAttribute("src", "https://images.example/step.webp");
+    expect(stepImage).toHaveAttribute("width", "800");
+    expect(stepImage).toHaveAttribute("height", "1200");
+    expect(stepImage).toHaveStyle({ aspectRatio: "800 / 1200" });
     expect(screen.getByAltText("手順2の画像1")).toHaveAttribute(
       "src",
       "https://images.example/step-only.webp",
@@ -766,14 +811,22 @@ describe("RecipesRoute", () => {
         content: {
           title: "Tomato pasta",
           servingsText: "2人分",
-          coverImageKey: "recipes/user_123/recipe_123/cover.webp",
-          coverImageUrl: "https://images.example/cover.webp",
+          coverImage: savedImage(
+            "recipes/user_123/recipe_123/cover.webp",
+            "https://images.example/cover.webp",
+          ),
           ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
           steps: [
             {
               text: "煮詰める",
-              imageKeys: ["recipes/user_123/recipe_123/step.webp"],
-              imageUrls: ["https://images.example/step.webp"],
+              images: [
+                savedImage(
+                  "recipes/user_123/recipe_123/step.webp",
+                  "https://images.example/step.webp",
+                  800,
+                  1200,
+                ),
+              ],
             },
           ],
           note: "仕上げにオリーブオイル。",
@@ -795,12 +848,12 @@ describe("RecipesRoute", () => {
         content: {
           title: "Potato salad",
           servingsText: "3人分",
-          coverImageKey: "recipes/user_123/recipe_123/cover.webp",
+          coverImage: savedImage("recipes/user_123/recipe_123/cover.webp"),
           ingredientGroups: recipeResponse.recipe.content.ingredientGroups,
           steps: [
             {
               text: "煮詰める",
-              imageKeys: ["recipes/user_123/recipe_123/step.webp"],
+              images: [savedImage("recipes/user_123/recipe_123/step.webp", undefined, 800, 1200)],
             },
           ],
           note: "仕上げにオリーブオイル。",
@@ -918,13 +971,15 @@ describe("RecipesRoute", () => {
                 steps: [
                   {
                     text: "煮詰める",
-                    imageKeys: [
-                      "recipes/user_123/recipe_123/step-a.webp",
-                      "recipes/user_123/recipe_123/step-b.webp",
-                    ],
-                    imageUrls: [
-                      "https://images.example/step-a.webp",
-                      "https://images.example/step-b.webp",
+                    images: [
+                      savedImage(
+                        "recipes/user_123/recipe_123/step-a.webp",
+                        "https://images.example/step-a.webp",
+                      ),
+                      savedImage(
+                        "recipes/user_123/recipe_123/step-b.webp",
+                        "https://images.example/step-b.webp",
+                      ),
                     ],
                   },
                 ],
@@ -981,11 +1036,13 @@ describe("RecipesRoute", () => {
           steps: [
             {
               text: "煮詰める",
-              imageKeys: [
-                "recipes/user_123/recipe_123/step-a.webp",
-                "recipes/user_123/recipe_123/step-b.webp",
+              images: [
+                savedImage("recipes/user_123/recipe_123/step-a.webp"),
+                savedImage(
+                  "recipes/user_123/recipe_123/step-b.webp",
+                  "https://images.example/step-b.webp",
+                ),
               ],
-              imageUrls: ["https://images.example/step-b.webp"],
             },
           ],
         },
@@ -1017,10 +1074,13 @@ describe("RecipesRoute", () => {
     await renderApp("/recipes/recipe_123/edit");
 
     await waitFor(() => {
-      expect(screen.getAllByText("保存済み画像")).toHaveLength(2);
+      expect(screen.getAllByText("保存済み画像")).toHaveLength(1);
     });
     expect(screen.queryByAltText("手順1の画像1プレビュー")).not.toBeInTheDocument();
-    expect(screen.queryByAltText("手順1の画像2プレビュー")).not.toBeInTheDocument();
+    expect(screen.getByAltText("手順1の画像2プレビュー")).toHaveAttribute(
+      "src",
+      "https://images.example/step-b.webp",
+    );
 
     const firstSavedImageCard = screen.getAllByText("保存済み画像")[0]?.closest(".group");
     expect(firstSavedImageCard).not.toBeNull();
@@ -1067,7 +1127,7 @@ describe("RecipesRoute", () => {
           title: "Tomato pasta",
           servingsText: "2人分",
           ingredientGroups: [],
-          steps: [{ text: "煮詰める", imageKeys: [], imageUrls: [] }],
+          steps: [{ text: "煮詰める", images: [] }],
         },
         source: {
           sourceUrl: null,

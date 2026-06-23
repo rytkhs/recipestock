@@ -4,6 +4,7 @@ import {
   type RecipeContent,
   type RecipeContentWithUrls,
   type RecipeDraftContent,
+  type RecipeImage,
   recipeContentSchema,
   recipeContentWithUrlsSchema,
 } from "@recipestock/schemas";
@@ -79,7 +80,7 @@ const resolveImageRef = async ({
   userId,
   recipeId,
   imageService,
-  existingKeys,
+  existingImages,
   createImageId,
   copiedKeys,
   tmpKeys,
@@ -88,21 +89,23 @@ const resolveImageRef = async ({
   userId: string;
   recipeId: string;
   imageService?: RecipeImageService;
-  existingKeys: Set<string>;
+  existingImages: Map<string, RecipeImage>;
   createImageId: () => string;
   copiedKeys: string[];
   tmpKeys: string[];
-}) => {
+}): Promise<RecipeImage | undefined> => {
   if (!image) {
     return undefined;
   }
 
   if (image.type === "existingObjectKey") {
-    if (!existingKeys.has(image.key)) {
+    const existingImage = existingImages.get(image.key);
+
+    if (!existingImage) {
       throw new RecipeImageFinalizeError("Existing image object key is not allowed.");
     }
 
-    return image.key;
+    return existingImage;
   }
 
   if (image.type === "externalImageUrl") {
@@ -120,7 +123,7 @@ const resolveImageRef = async ({
         }),
       });
       copiedKeys.push(result.objectKey);
-      return result.objectKey;
+      return result;
     } catch {
       return undefined;
     }
@@ -139,10 +142,10 @@ const resolveImageRef = async ({
 
   try {
     await assertImageObjectSizeAllowed(imageService, image.key);
-    await imageService.copyObject(image.key, destinationKey);
+    const dimensions = await imageService.copyObject(image.key, destinationKey);
     copiedKeys.push(destinationKey);
     tmpKeys.push(image.key);
-    return destinationKey;
+    return { objectKey: destinationKey, ...dimensions };
   } catch (error) {
     throw new RecipeImageFinalizeError(
       error instanceof Error ? error.message : "Recipe image copy failed.",
@@ -161,13 +164,20 @@ export const finalizeRecipeDraftImages = async ({
   const copiedKeys: string[] = [];
   const tmpKeys: string[] = [];
   try {
-    const existingKeys = existingContent ? getRecipeImageKeys(existingContent) : new Set<string>();
-    const coverImageKey = await resolveImageRef({
+    const existingImages = new Map(
+      existingContent
+        ? [
+            ...(existingContent.coverImage ? [existingContent.coverImage] : []),
+            ...existingContent.steps.flatMap((step) => step.images),
+          ].map((image) => [image.objectKey, image] as const)
+        : [],
+    );
+    const coverImage = await resolveImageRef({
       image: draft.coverImage,
       userId,
       recipeId,
       imageService,
-      existingKeys,
+      existingImages,
       createImageId,
       copiedKeys,
       tmpKeys,
@@ -175,7 +185,7 @@ export const finalizeRecipeDraftImages = async ({
     const steps: RecipeContent["steps"] = [];
 
     for (const step of draft.steps) {
-      const imageKeys = (
+      const images = (
         await Promise.all(
           step.images.map((image) =>
             resolveImageRef({
@@ -183,22 +193,22 @@ export const finalizeRecipeDraftImages = async ({
               userId,
               recipeId,
               imageService,
-              existingKeys,
+              existingImages,
               createImageId,
               copiedKeys,
               tmpKeys,
             }),
           ),
         )
-      ).filter((imageKey): imageKey is string => Boolean(imageKey));
+      ).filter((image): image is RecipeImage => Boolean(image));
 
-      if (!step.text && imageKeys.length === 0) {
+      if (!step.text && images.length === 0) {
         continue;
       }
 
       steps.push({
         text: step.text,
-        imageKeys,
+        images,
       });
     }
 
@@ -206,7 +216,7 @@ export const finalizeRecipeDraftImages = async ({
       content: recipeContentSchema.parse({
         title: draft.title,
         servingsText: draft.servingsText,
-        coverImageKey,
+        coverImage,
         ingredientGroups: draft.ingredientGroups,
         steps,
         note: draft.note,
@@ -252,26 +262,31 @@ export const attachRecipeImageUrls = async (
     return recipeContentWithUrlsSchema.parse(content);
   }
 
-  const coverImageUrl = content.coverImageKey
+  const coverImage = content.coverImage
     ? await imageService
-        .createSignedGetUrl({ objectKey: content.coverImageKey })
-        .then((result) => result.url)
-        .catch(() => undefined)
+        .createSignedGetUrl({ objectKey: content.coverImage.objectKey })
+        .then((result) => ({ ...content.coverImage, url: result.url }))
+        .catch(() => content.coverImage)
     : undefined;
   const steps = await Promise.all(
     content.steps.map(async (step) => ({
       ...step,
-      imageUrls: await Promise.all(
-        step.imageKeys.map((imageKey) =>
-          imageService.createSignedGetUrl({ objectKey: imageKey }).then((result) => result.url),
-        ),
-      ).catch(() => []),
+      images: await Promise.all(
+        step.images.map(async (image) => {
+          try {
+            const result = await imageService.createSignedGetUrl({ objectKey: image.objectKey });
+            return { ...image, url: result.url };
+          } catch {
+            return image;
+          }
+        }),
+      ),
     })),
   );
 
-  return {
+  return recipeContentWithUrlsSchema.parse({
     ...content,
-    coverImageUrl,
+    coverImage,
     steps,
-  };
+  });
 };

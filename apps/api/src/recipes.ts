@@ -3,7 +3,6 @@ import {
   type LockedRecipeDetail,
   type RecipeContent,
   type RecipeDetail,
-  type RecipeDraftContent,
   type RecipeListItem,
   type RecipeSourceDraft,
   recipeContentSchema,
@@ -33,7 +32,7 @@ export type RecipeListRecord = Pick<
   RecipeRecord,
   "id" | "title" | "sourceName" | "createdAt" | "updatedAt"
 > & {
-  coverImageKey?: string | null;
+  coverImageObjectKey?: string | null;
   locked?: boolean;
 };
 
@@ -110,30 +109,6 @@ export type NormalizedRecipeSource = {
 };
 
 export const createRecipeId = () => ulid();
-
-const objectKeyFromDraftImage = (image: RecipeDraftContent["coverImage"]) => {
-  if (!image) {
-    return undefined;
-  }
-
-  return image.type === "externalImageUrl" ? undefined : image.key;
-};
-
-export const toRecipeContent = (draft: RecipeDraftContent): RecipeContent => {
-  return recipeContentSchema.parse({
-    title: draft.title,
-    servingsText: draft.servingsText,
-    coverImageKey: objectKeyFromDraftImage(draft.coverImage),
-    ingredientGroups: draft.ingredientGroups,
-    steps: draft.steps.map((step) => ({
-      text: step.text,
-      imageKeys: step.images
-        .map((image) => objectKeyFromDraftImage(image))
-        .filter((imageKey): imageKey is string => Boolean(imageKey)),
-    })),
-    note: draft.note,
-  });
-};
 
 export const normalizeRecipeSource = (source: RecipeSourceDraft): NormalizedRecipeSource => {
   const sourceUrl = source.sourceUrl ?? null;
@@ -411,10 +386,10 @@ export const createRecipeRepository = (
         sourceName: recipes.sourceName,
         createdAt: recipes.createdAt,
         updatedAt: recipes.updatedAt,
-        coverImageKey: sql<string | null>`
+        coverImageObjectKey: sql<string | null>`
           case
-            when jsonb_typeof(${recipes.content}->'coverImageKey') = 'string'
-              then ${recipes.content}->>'coverImageKey'
+            when jsonb_typeof(${recipes.content}->'coverImage'->'objectKey') = 'string'
+              then ${recipes.content}->'coverImage'->>'objectKey'
             else null
           end
         `,

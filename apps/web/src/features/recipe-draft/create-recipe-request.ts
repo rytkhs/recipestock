@@ -51,8 +51,8 @@ export const formValuesToRecipeDraftContent = (
 export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormValues => ({
   title: recipe.content.title,
   servingsText: recipe.content.servingsText ?? "",
-  coverImage: recipe.content.coverImageKey
-    ? { type: "existingObjectKey", key: recipe.content.coverImageKey }
+  coverImage: recipe.content.coverImage
+    ? { type: "existingObjectKey", key: recipe.content.coverImage.objectKey }
     : undefined,
   note: recipe.content.note ?? "",
   ingredientGroups:
@@ -72,7 +72,10 @@ export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormV
     recipe.content.steps.length > 0
       ? recipe.content.steps.map((step) => ({
           text: step.text ?? "",
-          images: step.imageKeys.map((key) => ({ type: "existingObjectKey", key })),
+          images: step.images.map((image) => ({
+            type: "existingObjectKey",
+            key: image.objectKey,
+          })),
         }))
       : [createEmptyFormStep()],
 });
