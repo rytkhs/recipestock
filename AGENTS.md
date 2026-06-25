@@ -12,7 +12,53 @@ Recipe Stock is a PWA for saving recipes from recipe websites, YouTube, social p
 - Use English for code identifiers, file names, type names, function names, database columns, API fields, and error codes.
 - Add comments only when they explain intent or a non-obvious constraint.
 - When asked to write commit messages, use a short Japanese summary unless the user requests another style.
-- Write PR descriptions and issue bodies in Japanese, including related docs and verification results.
+
+## Response and Explanation Policy
+
+Treat the user as technically proficient.
+
+### 1. Do not add obvious context
+
+Do not state cautions, general principles, or introductory explanations that can reasonably be assumed from the user’s message.
+
+#### Prohibited
+
+* Explaining constraints that follow directly from the user’s design as “important,” “key,” or “something to note.”
+* Adding implementation considerations that a competent engineer would normally account for when the user did not ask about them.
+
+#### When constraints may be stated
+
+State a constraint only when all of the following apply:
+
+* The user’s proposal clearly breaks or cannot work as described.
+* There is a non-obvious constraint involving an external API, legal requirements, billing, or security.
+* The constraint changes the next design decision.
+* Explaining the constraint directly affects a concrete implementation step.
+
+### 2. Do not append evaluative reinforcement after a decision
+
+After stating a design decision, do not add a sentence that evaluates, emphasizes, or generally justifies that decision.
+
+#### Prohibited
+
+When a policy is complete as “Do A,” do not follow it with statements such as:
+
+* 「〜しないことが重要です」
+* 「〜を避けるべきです」
+* 「重要なのは〜」
+
+State reasons or trade-offs only when they are necessary for comparing options, explaining constraints, or resolving an implementation branch. Otherwise, end with the decision.
+
+### 3. Do not infer unstated intent
+
+Do not infer or state any of the following unless the user explicitly provides them:
+
+* Business intent
+* Revenue intent
+* Priorities
+* Evaluations
+* Emotions
+* Background circumstances
 
 ## Work Planning
 
