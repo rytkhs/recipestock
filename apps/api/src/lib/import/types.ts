@@ -37,3 +37,60 @@ export type RecipeImportFetcher = (
   url: string,
   options: { timeoutMs: number; maxBytes: number },
 ) => Promise<FetchedImportPage>;
+
+export type RecipeImportImageCandidate = {
+  id: string;
+  url: string;
+  alt?: string;
+  position: number;
+};
+
+export type RecipeImportStructuredInstructionEvidence = {
+  text: string;
+  imageUrls: string[];
+};
+
+export type RecipeImportStructuredEvidence = {
+  format: "jsonLd" | "microdata" | "rdfa";
+  name?: string;
+  servingsText?: string;
+  imageUrls: string[];
+  rawIngredients: string[];
+  rawInstructions: string[];
+  structuredInstructions: RecipeImportStructuredInstructionEvidence[];
+};
+
+export type RecipeImportAIInput = {
+  source: {
+    finalUrl: string;
+    host: string;
+  };
+  markdownContent: string;
+  recipeStructuredEvidence: RecipeImportStructuredEvidence[];
+};
+
+export type RecipeImportAIImageUrl = string;
+
+export type RecipeImportAIDraftStep = {
+  text?: string;
+  imageUrls: RecipeImportAIImageUrl[];
+};
+
+export type RecipeImportAIDraftContent = {
+  title: string;
+  servingsText?: string;
+  coverImageUrl?: RecipeImportAIImageUrl;
+  ingredientGroups: Array<{
+    label?: string;
+    ingredients: Array<{
+      name: string;
+      amount: string;
+    }>;
+  }>;
+  steps: RecipeImportAIDraftStep[];
+  note?: string;
+};
+
+export type RecipeImportAIProvider = {
+  normalize(input: RecipeImportAIInput): Promise<RecipeImportAIDraftContent>;
+};

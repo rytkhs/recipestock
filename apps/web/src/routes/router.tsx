@@ -86,9 +86,7 @@ const RootLayout = () => {
     <div className="min-h-screen bg-brand-cream text-brand-ink">
       <Header />
       <main
-        className={
-          session.data ? "pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"
-        }
+        className={session.data ? "pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"}
       >
         <Outlet />
       </main>

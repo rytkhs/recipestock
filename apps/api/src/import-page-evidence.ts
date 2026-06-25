@@ -5,7 +5,7 @@ import {
   type FetchedImportPage,
   type RecipeImportImageCandidate,
   type RecipeImportStructuredEvidence,
-} from "./import-url";
+} from "./lib/import/types";
 
 type ExtractedRecipeStructuredInstruction = {
   text: string;

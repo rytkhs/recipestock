@@ -7,7 +7,7 @@ import {
   UserCircle,
 } from "@phosphor-icons/react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useAuthSession } from "../lib/auth";
 
 const PublicNav = () => (
