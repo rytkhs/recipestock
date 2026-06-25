@@ -30,12 +30,22 @@ export const ingredientGroupSchema = z.object({
   ingredients: z.array(ingredientSchema).default([]),
 });
 
+export const recipeImageSchema = z.object({
+  objectKey: z.string().min(1),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
+
+export const recipeImageWithUrlSchema = recipeImageSchema.extend({
+  url: z.string().optional(),
+});
+
 export const recipeStepSchema = z
   .object({
     text: z.string().min(1).optional(),
-    imageKeys: z.array(z.string().min(1)).default([]),
+    images: z.array(recipeImageSchema).default([]),
   })
-  .refine((step) => step.text || step.imageKeys.length > 0);
+  .refine((step) => step.text || step.images.length > 0);
 
 export const recipeDraftStepSchema = z
   .object({
@@ -47,18 +57,18 @@ export const recipeDraftStepSchema = z
 export const recipeContentSchema = z.object({
   title: z.string().min(1),
   servingsText: z.string().optional(),
-  coverImageKey: z.string().min(1).optional(),
+  coverImage: recipeImageSchema.optional(),
   ingredientGroups: z.array(ingredientGroupSchema).default([]),
   steps: z.array(recipeStepSchema).default([]),
   note: z.string().optional(),
 });
 
-export const recipeStepWithUrlSchema = recipeStepSchema.extend({
-  imageUrls: z.array(z.string()).default([]),
+export const recipeStepWithUrlSchema = recipeStepSchema.safeExtend({
+  images: z.array(recipeImageWithUrlSchema).default([]),
 });
 
 export const recipeContentWithUrlsSchema = recipeContentSchema.extend({
-  coverImageUrl: z.string().optional(),
+  coverImage: recipeImageWithUrlSchema.optional(),
   steps: z.array(recipeStepWithUrlSchema).default([]),
 });
 
@@ -144,6 +154,8 @@ export const getRecipeResponseSchema = z.object({
 export type DraftImageRef = z.infer<typeof draftImageRefSchema>;
 export type Ingredient = z.infer<typeof ingredientSchema>;
 export type IngredientGroup = z.infer<typeof ingredientGroupSchema>;
+export type RecipeImage = z.infer<typeof recipeImageSchema>;
+export type RecipeImageWithUrl = z.infer<typeof recipeImageWithUrlSchema>;
 export type RecipeStep = z.infer<typeof recipeStepSchema>;
 export type RecipeStepWithUrl = z.infer<typeof recipeStepWithUrlSchema>;
 export type RecipeDraftStep = z.infer<typeof recipeDraftStepSchema>;

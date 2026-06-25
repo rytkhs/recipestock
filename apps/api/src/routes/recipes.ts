@@ -165,9 +165,11 @@ export const createRecipeRoutes = ({
       const itemsWithImages = await Promise.all(
         result.items.map(async (item) => {
           const base = toRecipeListItem(item);
-          if (!item.locked && item.coverImageKey) {
+          if (!item.locked && item.coverImageObjectKey) {
             try {
-              const urlResult = await images.createSignedGetUrl({ objectKey: item.coverImageKey });
+              const urlResult = await images.createSignedGetUrl({
+                objectKey: item.coverImageObjectKey,
+              });
               base.coverImageUrl = urlResult.url;
             } catch {
               // ignore

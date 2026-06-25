@@ -166,9 +166,24 @@ describe("Image routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
-            coverImageKey: "recipes/user_123/recipe_123/cover.webp",
+            coverImage: {
+              objectKey: "recipes/user_123/recipe_123/cover.webp",
+              width: 1200,
+              height: 800,
+            },
             ingredientGroups: [],
-            steps: [{ text: "煮詰める", imageKeys: ["recipes/user_123/recipe_123/step.webp"] }],
+            steps: [
+              {
+                text: "煮詰める",
+                images: [
+                  {
+                    objectKey: "recipes/user_123/recipe_123/step.webp",
+                    width: 800,
+                    height: 1200,
+                  },
+                ],
+              },
+            ],
           },
           originType: "manual",
           sourceUrl: null,

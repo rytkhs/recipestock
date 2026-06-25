@@ -408,6 +408,7 @@ describe("Recipe create routes", () => {
         getObjectSize: async () => 1024,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
+          return { width: 1200, height: 800 };
         },
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
@@ -448,14 +449,22 @@ describe("Recipe create routes", () => {
     expect(savedRecipes).toEqual([
       expect.objectContaining({
         content: expect.objectContaining({
-          coverImageKey: "recipes/user_123/recipe_123/image_456.webp",
+          coverImage: {
+            objectKey: "recipes/user_123/recipe_123/image_456.webp",
+            width: 1200,
+            height: 800,
+          },
         }),
       }),
     ]);
     await expect(response.json()).resolves.toMatchObject({
       recipe: {
         content: {
-          coverImageKey: "recipes/user_123/recipe_123/image_456.webp",
+          coverImage: {
+            objectKey: "recipes/user_123/recipe_123/image_456.webp",
+            width: 1200,
+            height: 800,
+          },
         },
       },
     });
@@ -498,6 +507,7 @@ describe("Recipe create routes", () => {
         getObjectSize: async () => 1024,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
+          return { width: 800, height: 1200 };
         },
         deleteObject: async () => undefined,
         deletePrefixBestEffort: async () => undefined,
@@ -538,14 +548,34 @@ describe("Recipe create routes", () => {
     expect(savedRecipes).toEqual([
       expect.objectContaining({
         content: expect.objectContaining({
-          steps: [{ imageKeys: ["recipes/user_123/recipe_123/step_image.webp"] }],
+          steps: [
+            {
+              images: [
+                {
+                  objectKey: "recipes/user_123/recipe_123/step_image.webp",
+                  width: 800,
+                  height: 1200,
+                },
+              ],
+            },
+          ],
         }),
       }),
     ]);
     await expect(response.json()).resolves.toMatchObject({
       recipe: {
         content: {
-          steps: [{ imageKeys: ["recipes/user_123/recipe_123/step_image.webp"] }],
+          steps: [
+            {
+              images: [
+                {
+                  objectKey: "recipes/user_123/recipe_123/step_image.webp",
+                  width: 800,
+                  height: 1200,
+                },
+              ],
+            },
+          ],
         },
       },
     });
@@ -590,7 +620,7 @@ describe("Recipe create routes", () => {
         },
         copyExternalImageUrl: async (params) => {
           externalCopies.push(params);
-          return { objectKey: `${params.destinationKeyPrefix}.jpg` };
+          return { objectKey: `${params.destinationKeyPrefix}.jpg`, width: 1200, height: 800 };
         },
         deleteObject: async () => undefined,
         deletePrefixBestEffort: async () => undefined,
@@ -630,14 +660,22 @@ describe("Recipe create routes", () => {
     expect(savedRecipes).toEqual([
       expect.objectContaining({
         content: expect.objectContaining({
-          coverImageKey: "recipes/user_123/recipe_123/cover.jpg",
+          coverImage: {
+            objectKey: "recipes/user_123/recipe_123/cover.jpg",
+            width: 1200,
+            height: 800,
+          },
         }),
       }),
     ]);
     await expect(response.json()).resolves.toMatchObject({
       recipe: {
         content: {
-          coverImageKey: "recipes/user_123/recipe_123/cover.jpg",
+          coverImage: {
+            objectKey: "recipes/user_123/recipe_123/cover.jpg",
+            width: 1200,
+            height: 800,
+          },
         },
       },
     });
@@ -733,8 +771,8 @@ describe("Recipe create routes", () => {
     expect(savedRecipes).toEqual([
       expect.objectContaining({
         content: expect.objectContaining({
-          coverImageKey: undefined,
-          steps: [{ text: "盛り付ける", imageKeys: [] }],
+          coverImage: undefined,
+          steps: [{ text: "盛り付ける", images: [] }],
         }),
       }),
     ]);
@@ -766,7 +804,7 @@ describe("Recipe create routes", () => {
           throw new Error("should not create a signed GET URL");
         },
         getObjectSize: async () => 1024,
-        copyObject: async () => undefined,
+        copyObject: async () => ({ width: 1200, height: 800 }),
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
         },
@@ -831,6 +869,8 @@ describe("Recipe create routes", () => {
         },
         copyExternalImageUrl: async ({ destinationKeyPrefix }) => ({
           objectKey: `${destinationKeyPrefix}.webp`,
+          width: 1200,
+          height: 800,
         }),
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
@@ -894,6 +934,8 @@ describe("Recipe create routes", () => {
         },
         copyExternalImageUrl: async ({ destinationKeyPrefix }) => ({
           objectKey: `${destinationKeyPrefix}.webp`,
+          width: 1200,
+          height: 800,
         }),
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
@@ -1042,6 +1084,7 @@ describe("Recipe create routes", () => {
           objectKey === "tmp/user_123/step.webp" ? MAX_IMAGE_UPLOAD_SIZE_BYTES + 1 : 1024,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
+          return { width: 1200, height: 800 };
         },
         deleteObject: async (objectKey) => {
           deletes.push(objectKey);
@@ -1127,6 +1170,7 @@ describe("Recipe create routes", () => {
         getObjectSize: async () => MAX_IMAGE_UPLOAD_SIZE_BYTES + 1,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
+          return { width: 1200, height: 800 };
         },
         deleteObject: async () => undefined,
         deletePrefixBestEffort: async () => undefined,

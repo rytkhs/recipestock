@@ -55,7 +55,7 @@ describe("Recipe detail routes", () => {
             title: "Tomato pasta",
             servingsText: "2人分",
             ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-            steps: [{ text: "煮詰める", imageKeys: [] }],
+            steps: [{ text: "煮詰める", images: [] }],
             note: "仕上げにオリーブオイル。",
           },
           originType: "manual",
@@ -111,9 +111,24 @@ describe("Recipe detail routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
-            coverImageKey: "recipes/user_123/recipe_123/cover.webp",
+            coverImage: {
+              objectKey: "recipes/user_123/recipe_123/cover.webp",
+              width: 1200,
+              height: 800,
+            },
             ingredientGroups: [],
-            steps: [{ text: "煮詰める", imageKeys: ["recipes/user_123/recipe_123/step.webp"] }],
+            steps: [
+              {
+                text: "煮詰める",
+                images: [
+                  {
+                    objectKey: "recipes/user_123/recipe_123/step.webp",
+                    width: 800,
+                    height: 1200,
+                  },
+                ],
+              },
+            ],
           },
           originType: "manual",
           sourceUrl: null,
@@ -151,11 +166,23 @@ describe("Recipe detail routes", () => {
     await expect(response.json()).resolves.toMatchObject({
       recipe: {
         content: {
-          coverImageUrl: "https://images.example/recipes/user_123/recipe_123/cover.webp",
+          coverImage: {
+            objectKey: "recipes/user_123/recipe_123/cover.webp",
+            width: 1200,
+            height: 800,
+            url: "https://images.example/recipes/user_123/recipe_123/cover.webp",
+          },
           steps: [
             {
               text: "煮詰める",
-              imageUrls: ["https://images.example/recipes/user_123/recipe_123/step.webp"],
+              images: [
+                {
+                  objectKey: "recipes/user_123/recipe_123/step.webp",
+                  width: 800,
+                  height: 1200,
+                  url: "https://images.example/recipes/user_123/recipe_123/step.webp",
+                },
+              ],
             },
           ],
         },
@@ -163,7 +190,7 @@ describe("Recipe detail routes", () => {
     });
   });
 
-  it("一部の手順画像URL作成に失敗した場合は対応が崩れたURL配列を返さない", async () => {
+  it("一部の手順画像URL作成に失敗しても画像情報と対応関係を保持する", async () => {
     const testApp = createApp({
       auth: {
         getSession: async () => ({
@@ -185,9 +212,17 @@ describe("Recipe detail routes", () => {
             steps: [
               {
                 text: "煮詰める",
-                imageKeys: [
-                  "recipes/user_123/recipe_123/step-a.webp",
-                  "recipes/user_123/recipe_123/step-b.webp",
+                images: [
+                  {
+                    objectKey: "recipes/user_123/recipe_123/step-a.webp",
+                    width: 1200,
+                    height: 800,
+                  },
+                  {
+                    objectKey: "recipes/user_123/recipe_123/step-b.webp",
+                    width: 800,
+                    height: 1200,
+                  },
                 ],
               },
             ],
@@ -236,11 +271,19 @@ describe("Recipe detail routes", () => {
         content: {
           steps: [
             {
-              imageKeys: [
-                "recipes/user_123/recipe_123/step-a.webp",
-                "recipes/user_123/recipe_123/step-b.webp",
+              images: [
+                {
+                  objectKey: "recipes/user_123/recipe_123/step-a.webp",
+                  width: 1200,
+                  height: 800,
+                },
+                {
+                  objectKey: "recipes/user_123/recipe_123/step-b.webp",
+                  width: 800,
+                  height: 1200,
+                  url: "https://images.example/recipes/user_123/recipe_123/step-b.webp",
+                },
               ],
-              imageUrls: [],
             },
           ],
         },
@@ -267,7 +310,7 @@ describe("Recipe detail routes", () => {
           content: {
             title: "Locked pasta",
             ingredientGroups: [{ ingredients: [{ name: "秘密の材料", amount: "1つ" }] }],
-            steps: [{ text: "煮る", imageKeys: [] }],
+            steps: [{ text: "煮る", images: [] }],
           },
           originType: "manual",
           sourceUrl: "https://example.com/locked",

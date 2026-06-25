@@ -4,9 +4,11 @@ import {
   fetchImportPage,
   importRecipeFromUrl,
   normalizeImportableUrl,
+  type RecipeImportAIInput,
   RecipeImportError,
 } from "./import-url";
 import { type DeterministicImporter } from "./lib/import/deterministic";
+import { type SourceExtractor } from "./lib/import/source-extraction";
 import { type UsageRepository } from "./usage";
 
 afterEach(() => {
@@ -408,6 +410,123 @@ describe("URL import flow", () => {
     expect(aiNormalize).toHaveBeenCalledTimes(1);
   });
 
+  it("YouTube URLはsource extraction結果をAI normalizationへ渡す", async () => {
+    const usageRepository = createUsageRepositoryStub();
+    const aiNormalize = vi.fn(async (_input: RecipeImportAIInput) => ({
+      title: "鶏むねキャベツ鍋",
+      coverImageUrl: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
+      ingredientGroups: [{ ingredients: [{ name: "キャベツ", amount: "500g" }] }],
+      steps: [{ text: "煮る。", imageUrls: [] }],
+    }));
+    const fetcher = vi.fn(async (url: string) => ({
+      finalUrl: url,
+      contentType: "text/html",
+      body: createYouTubeHtml({
+        videoId: "FyLCRXMANAM",
+        title: "鶏むねキャベツ鍋",
+        author: "Recipe Channel",
+        shortDescription: "材料\nキャベツ 500g\n作り方\n煮る。",
+        thumbnail: {
+          thumbnails: [
+            { url: "https://i.ytimg.com/vi/FyLCRXMANAM/default.jpg", width: 120, height: 90 },
+            {
+              url: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
+              width: 1280,
+              height: 720,
+            },
+          ],
+        },
+      }),
+    }));
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://youtu.be/FyLCRXMANAM?si=vxf25wqv_kohdf4L",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository,
+        fetcher,
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          normalize: aiNormalize,
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "鶏むねキャベツ鍋",
+        coverImage: {
+          type: "externalImageUrl",
+          url: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
+        },
+      },
+      source: {
+        sourceUrl: "https://www.youtube.com/watch?v=FyLCRXMANAM",
+        sourceName: "YouTube",
+      },
+      warnings: [],
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=FyLCRXMANAM",
+      expect.any(Object),
+    );
+    expect(aiNormalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          finalUrl: "https://www.youtube.com/watch?v=FyLCRXMANAM",
+          host: "youtube.com",
+        },
+        markdownContent: expect.stringContaining("## Description\n\n材料\nキャベツ 500g"),
+        recipeStructuredEvidence: [],
+      }),
+    );
+    const aiInput = aiNormalize.mock.calls[0]?.[0];
+    expect(aiInput?.markdownContent).toContain(
+      "![YouTube thumbnail](<https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg>)",
+    );
+  });
+
+  it("YouTube source extraction失敗時はgeneric HTML conversionへfallbackしない", async () => {
+    const aiNormalize = vi.fn();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://www.youtube.com/watch?v=FyLCRXMANAM",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher: async (url) => ({
+          finalUrl: url,
+          contentType: "text/html",
+          body: "<html><article><h1>Generic recipe</h1><p>Enough recipe text.</p></article></html>",
+        }),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          normalize: aiNormalize,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+
+    expect(aiNormalize).not.toHaveBeenCalled();
+  });
+
   it("deterministic importerが成功した場合はAI providerとAI usageを使わない", async () => {
     const consumeAiUsage = vi.fn(async ({ month }: { month: string }) => ({
       status: "consumed" as const,
@@ -423,6 +542,9 @@ describe("URL import flow", () => {
       consumeAiUsage,
     };
     const aiNormalize = vi.fn();
+    const sourceExtractor: SourceExtractor = {
+      tryExtract: vi.fn(),
+    };
     const deterministicImporter: DeterministicImporter = {
       async tryImport() {
         return {
@@ -450,6 +572,7 @@ describe("URL import flow", () => {
         },
         usageRepository,
         deterministicImporter,
+        sourceExtractor,
         aiProvider: {
           normalize: aiNormalize,
         },
@@ -467,6 +590,7 @@ describe("URL import flow", () => {
 
     expect(aiNormalize).not.toHaveBeenCalled();
     expect(consumeAiUsage).not.toHaveBeenCalled();
+    expect(sourceExtractor.tryExtract).not.toHaveBeenCalled();
   });
 
   it("deterministic importerが失敗した場合はAI fallbackしない", async () => {
@@ -769,3 +893,18 @@ const createAiProviderStub = (title: string) => ({
     };
   },
 });
+
+const createYouTubeHtml = (videoDetails: unknown) => `
+  <html>
+    <head>
+      <script>
+        var ytInitialPlayerResponse = ${JSON.stringify({ videoDetails })};
+      </script>
+    </head>
+    <body>
+      <article>
+        <h1>Generic YouTube page text should not be used.</h1>
+      </article>
+    </body>
+  </html>
+`;

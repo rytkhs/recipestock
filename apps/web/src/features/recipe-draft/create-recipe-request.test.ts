@@ -132,7 +132,7 @@ describe("formValuesToCreateRecipeRequest", () => {
           ingredientGroups: [
             { label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] },
           ],
-          steps: [{ text: "煮詰める", imageKeys: [], imageUrls: [] }],
+          steps: [{ text: "煮詰める", images: [] }],
           note: "仕上げにオリーブオイル。",
         },
         source: {

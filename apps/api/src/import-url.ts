@@ -20,11 +20,17 @@ import {
   assertImportContentTypeMayBeHtml,
   assertImportUrlAllowed,
 } from "./lib/import/policy";
+import { defaultSourceExtractor, type SourceExtractor } from "./lib/import/source-extraction";
 import {
   type FetchedImportPage,
   type ImportErrorCode,
+  type RecipeImportAIDraftContent,
+  type RecipeImportAIImageUrl,
+  type RecipeImportAIInput,
+  type RecipeImportAIProvider,
   RecipeImportError,
   type RecipeImportFetcher,
+  type RecipeImportImageCandidate,
   type RecipeImportResult,
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
@@ -34,67 +40,16 @@ export { assertImportUrlAllowed } from "./lib/import/policy";
 export {
   type FetchedImportPage,
   type ImportErrorCode,
+  type RecipeImportAIDraftContent,
+  type RecipeImportAIImageUrl,
+  type RecipeImportAIInput,
+  type RecipeImportAIProvider,
   RecipeImportError,
   type RecipeImportFetcher,
+  type RecipeImportImageCandidate,
   type RecipeImportResult,
+  type RecipeImportStructuredEvidence,
 } from "./lib/import/types";
-
-export type RecipeImportImageCandidate = {
-  id: string;
-  url: string;
-  alt?: string;
-  position: number;
-};
-
-export type RecipeImportStructuredInstructionEvidence = {
-  text: string;
-  imageUrls: string[];
-};
-
-export type RecipeImportStructuredEvidence = {
-  format: "jsonLd" | "microdata" | "rdfa";
-  name?: string;
-  servingsText?: string;
-  imageUrls: string[];
-  rawIngredients: string[];
-  rawInstructions: string[];
-  structuredInstructions: RecipeImportStructuredInstructionEvidence[];
-};
-
-export type RecipeImportAIInput = {
-  source: {
-    finalUrl: string;
-    host: string;
-  };
-  markdownContent: string;
-  recipeStructuredEvidence: RecipeImportStructuredEvidence[];
-};
-
-export type RecipeImportAIImageUrl = string;
-
-export type RecipeImportAIDraftStep = {
-  text?: string;
-  imageUrls: RecipeImportAIImageUrl[];
-};
-
-export type RecipeImportAIDraftContent = {
-  title: string;
-  servingsText?: string;
-  coverImageUrl?: RecipeImportAIImageUrl;
-  ingredientGroups: Array<{
-    label?: string;
-    ingredients: Array<{
-      name: string;
-      amount: string;
-    }>;
-  }>;
-  steps: RecipeImportAIDraftStep[];
-  note?: string;
-};
-
-export type RecipeImportAIProvider = {
-  normalize(input: RecipeImportAIInput): Promise<RecipeImportAIDraftContent>;
-};
 
 type RecipeImportConverterResult = {
   type: "requiresAi";
@@ -330,6 +285,7 @@ export const importRecipeFromUrl = async ({
   aiProvider,
   fetcher,
   deterministicImporter = defaultDeterministicImporter,
+  sourceExtractor = defaultSourceExtractor,
   now = new Date(),
   deadline,
   getCurrentDate,
@@ -342,6 +298,7 @@ export const importRecipeFromUrl = async ({
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
   deterministicImporter?: DeterministicImporter;
+  sourceExtractor?: SourceExtractor;
   now?: Date;
   deadline?: Date;
   getCurrentDate?: () => Date;
@@ -367,10 +324,25 @@ export const importRecipeFromUrl = async ({
     timeoutMs: resolveBoundedTimeoutMs(resolveImportTimeoutMs(env), deadline, currentDate()),
     maxBytes: resolveImportMaxHtmlBytes(env),
   };
-  const importFetcher = fetcher ?? resolveImportFetcher(env);
-  const page = await importFetcher(normalizedUrl, fetchOptions);
+  const sourceExtractionResult = await sourceExtractor.tryExtract({
+    normalizedUrl,
+    fetcher: deterministicFetcher,
+    fetchOptions,
+  });
   assertImportJobDeadline(deadline, currentDate());
-  const conversion = await convertFetchedHtmlPage(page);
+  const conversion = sourceExtractionResult
+    ? {
+        type: "requiresAi" as const,
+        ...sourceExtractionResult,
+      }
+    : undefined;
+  const importFetcher = fetcher ?? resolveImportFetcher(env);
+  const genericConversion = async () => {
+    const page = await importFetcher(normalizedUrl, fetchOptions);
+    assertImportJobDeadline(deadline, currentDate());
+    return convertFetchedHtmlPage(page);
+  };
+  const resolvedConversion = conversion ?? (await genericConversion());
   assertImportJobDeadline(deadline, currentDate());
 
   const usage = await consumeAiUsage({
@@ -399,7 +371,7 @@ export const importRecipeFromUrl = async ({
   let draft: RecipeImportAIDraftContent;
 
   try {
-    draft = await importAIProvider.normalize(conversion.input);
+    draft = await importAIProvider.normalize(resolvedConversion.input);
     assertImportJobDeadline(deadline, currentDate());
   } catch (error) {
     if (error instanceof RecipeImportError) {
@@ -416,7 +388,7 @@ export const importRecipeFromUrl = async ({
   let imageResult: { draft: RecipeDraftContent; warnings: string[] };
 
   try {
-    imageResult = resolveDraftImageUrls(draft, conversion.imageCandidates);
+    imageResult = resolveDraftImageUrls(draft, resolvedConversion.imageCandidates);
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
@@ -427,8 +399,8 @@ export const importRecipeFromUrl = async ({
 
   return {
     recipeDraftContent: imageResult.draft,
-    source: conversion.source,
-    warnings: conversion.warnings.concat(imageResult.warnings),
+    source: resolvedConversion.source,
+    warnings: resolvedConversion.warnings.concat(imageResult.warnings),
   };
 };
 

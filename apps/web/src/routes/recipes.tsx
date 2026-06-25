@@ -531,11 +531,16 @@ export const RecipeDetailRoute = () => {
 
   return (
     <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
-      {recipe.content.coverImageUrl ? (
+      {recipe.content.coverImage?.url ? (
         <img
           alt={recipe.title}
-          className="w-full rounded-[20px] object-cover aspect-video shadow-pantry-sm"
-          src={recipe.content.coverImageUrl}
+          className="mx-auto block h-auto max-h-[32rem] max-w-full rounded-[20px] object-contain shadow-pantry-sm"
+          height={recipe.content.coverImage.height}
+          src={recipe.content.coverImage.url}
+          style={{
+            aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
+          }}
+          width={recipe.content.coverImage.width}
         />
       ) : null}
 
@@ -614,7 +619,7 @@ export const RecipeDetailRoute = () => {
             {recipe.content.steps.map((step, stepIndex) => (
               <li
                 className="flex gap-4"
-                key={step.imageKeys.join(":") || step.imageUrls.join(":") || step.text}
+                key={step.images.map((image) => image.objectKey).join(":") || step.text}
               >
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-sage text-white text-xs font-bold">
                   {stepIndex + 1}
@@ -623,16 +628,21 @@ export const RecipeDetailRoute = () => {
                   {step.text ? (
                     <p className="text-brand-ink text-sm leading-relaxed">{step.text}</p>
                   ) : null}
-                  {step.imageUrls.length > 0 ? (
+                  {step.images.some((image) => image.url) ? (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {step.imageUrls.map((imageUrl, imageIndex) => (
-                        <img
-                          alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
-                          className="aspect-video w-full rounded-[14px] object-cover"
-                          key={imageUrl}
-                          src={imageUrl}
-                        />
-                      ))}
+                      {step.images.map((image, imageIndex) =>
+                        image.url ? (
+                          <img
+                            alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
+                            className="mx-auto block h-auto max-h-80 max-w-full rounded-[14px] object-contain"
+                            height={image.height}
+                            key={image.objectKey}
+                            src={image.url}
+                            style={{ aspectRatio: `${image.width} / ${image.height}` }}
+                            width={image.width}
+                          />
+                        ) : null,
+                      )}
                     </div>
                   ) : null}
                 </div>
@@ -730,11 +740,13 @@ export const EditRecipeRoute = () => {
       <h1 className="text-brand-ink font-bold text-2xl">レシピ編集</h1>
       <RecipeDraftForm
         key={recipe.id}
-        coverImagePreviewUrl={recipe.content.coverImageUrl}
+        coverImagePreviewUrl={recipe.content.coverImage?.url}
         defaultValues={recipeDetailToFormValues(recipe)}
         submitError={submitError}
         submitLabel="更新"
-        stepImagePreviewUrls={recipe.content.steps.map((step) => step.imageUrls)}
+        stepImagePreviewUrls={recipe.content.steps.map((step) =>
+          step.images.map((image) => image.url ?? ""),
+        )}
         onSubmit={onSubmit}
       />
     </section>

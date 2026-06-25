@@ -8,7 +8,7 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
-import { Header } from "../components/header";
+import { Header, MobileBottomNav } from "../components/header";
 import { ApiClientError } from "../lib/api";
 import { useAuthSession } from "../lib/auth";
 import { clearUserScopedCache } from "../lib/query-cache";
@@ -79,14 +79,21 @@ const RedirectAuthenticated = ({ children }: { children: ReactNode }) => {
   return children;
 };
 
-const RootLayout = () => (
-  <div className="min-h-screen bg-brand-cream text-brand-ink">
-    <Header />
-    <main className="pb-8">
-      <Outlet />
-    </main>
-  </div>
-);
+const RootLayout = () => {
+  const session = useAuthSession();
+
+  return (
+    <div className="min-h-screen bg-brand-cream text-brand-ink">
+      <Header />
+      <main
+        className={session.data ? "pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"}
+      >
+        <Outlet />
+      </main>
+      <MobileBottomNav />
+    </div>
+  );
+};
 
 const rootRoute = createRootRoute({
   component: RootLayout,
