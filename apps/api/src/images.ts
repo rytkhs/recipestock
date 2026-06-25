@@ -5,9 +5,12 @@ import {
   MAX_IMAGE_UPLOAD_SIZE_BYTES,
 } from "@recipestock/schemas";
 import { AwsClient } from "aws4fetch";
-import { imageSize } from "image-size";
 import { type Bindings } from "./env";
+import { getImageDimensions, type ImageDimensions } from "./image-dimensions";
 import { isHttpFetchUrlAllowed } from "./url-safety";
+
+export type { ImageDimensions };
+export { getImageDimensions };
 
 export type ImageUrlResult = {
   url: string;
@@ -26,11 +29,6 @@ export type CreateSignedGetUrlParams = {
 export type CopyExternalImageUrlParams = {
   sourceUrl: string;
   destinationKeyPrefix: string;
-};
-
-export type ImageDimensions = {
-  width: number;
-  height: number;
 };
 
 export type RecipeImageService = {
@@ -183,27 +181,6 @@ const readResponseBodyWithinLimit = async (response: Response) => {
   }
 
   return body;
-};
-
-export const getImageDimensions = (body: Uint8Array): ImageDimensions => {
-  const result = imageSize(body);
-  if (result.type !== "jpg" && result.type !== "png" && result.type !== "webp") {
-    throw new Error("Image format is not supported.");
-  }
-
-  const swapDimensions =
-    result.orientation === 5 ||
-    result.orientation === 6 ||
-    result.orientation === 7 ||
-    result.orientation === 8;
-  const width = swapDimensions ? result.height : result.width;
-  const height = swapDimensions ? result.width : result.height;
-
-  if (!Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0) {
-    throw new Error("Image dimensions could not be determined.");
-  }
-
-  return { width, height };
 };
 
 export const createRecipeImageService = (env: Bindings): RecipeImageService => ({
