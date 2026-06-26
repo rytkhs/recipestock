@@ -1,9 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  type YtDlpMetadata,
+  type YtDlpMetadataClient,
+  YtDlpMetadataError,
+} from "../../../ytdlp-metadata";
+import { type RecipeImportError } from "../types";
 import {
   createInstagramCanonicalUrl,
   getInstagramSource,
   instagramSourceExtractionAdapter,
 } from "./instagram";
+import { type SourceExtractionContext } from "./types";
+
+const CANONICAL_URL = "https://www.instagram.com/p/DYsxvKyAZMg/";
+const SHORTCODE = "DYsxvKyAZMg";
+const TIMEOUT_MS = 10_000;
 
 describe("Instagram source extraction URL handling", () => {
   it.each([
@@ -78,4 +89,268 @@ describe("Instagram source extraction URL handling", () => {
       }),
     ).toBe(false);
   });
+});
+
+describe("Instagram source extraction adapter", () => {
+  it("yt-dlp metadataからAI inputと画像候補を作る", async () => {
+    const ytdlpMetadataClient = createYtDlpMetadataClientStub(
+      createYtDlpMetadata({
+        metadata: {
+          title: "Post by mizuki_31cafe",
+          description: "材料\nなす 5本\n作り方\n揚げ焼きにする",
+          uploader: "mizuki_31cafe",
+        },
+        images: [
+          {
+            url: "https://cdn.example.com/cover.jpg",
+            kind: "thumbnail",
+            source: "top_level",
+            width: 1080,
+            height: 1080,
+          },
+          {
+            url: "https://cdn.example.com/cover.jpg",
+            kind: "thumbnail",
+            source: "entry",
+            entryIndex: 0,
+          },
+          {
+            url: "https://cdn.example.com/step.jpg",
+            kind: "thumbnail",
+            source: "entry",
+            entryIndex: 1,
+          },
+        ],
+      }),
+    );
+
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({ ytdlpMetadataClient }),
+    );
+
+    expect(ytdlpMetadataClient.extract).toHaveBeenCalledWith({
+      platform: "instagram",
+      url: CANONICAL_URL,
+      timeoutMs: TIMEOUT_MS,
+    });
+    expect(result).toEqual({
+      input: {
+        source: {
+          finalUrl: CANONICAL_URL,
+          host: "instagram.com",
+        },
+        markdownContent: [
+          "# Post by mizuki_31cafe",
+          "",
+          "Source: Instagram",
+          `URL: ${CANONICAL_URL}`,
+          "Author: mizuki_31cafe",
+          "",
+          "## Caption",
+          "",
+          "材料\nなす 5本\n作り方\n揚げ焼きにする",
+          "",
+          "## Images",
+          "",
+          "![Instagram image 1](<https://cdn.example.com/cover.jpg>)",
+          "![Instagram image 2](<https://cdn.example.com/step.jpg>)",
+        ].join("\n"),
+        recipeStructuredEvidence: [],
+      },
+      imageCandidates: [
+        {
+          id: "instagram_image_0",
+          url: "https://cdn.example.com/cover.jpg",
+          alt: "Post by mizuki_31cafe image 1",
+          position: 0,
+        },
+        {
+          id: "instagram_image_1",
+          url: "https://cdn.example.com/step.jpg",
+          alt: "Post by mizuki_31cafe image 2",
+          position: 1,
+        },
+      ],
+      source: {
+        sourceUrl: CANONICAL_URL,
+        sourceName: "Instagram",
+      },
+      warnings: [],
+    });
+  });
+
+  it("画像0件でもcaptionがあれば成功する", async () => {
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        ytdlpMetadataClient: createYtDlpMetadataClientStub(
+          createYtDlpMetadata({
+            metadata: {
+              title: null,
+              description: "材料\n卵 2個",
+              uploader: null,
+            },
+            images: [],
+          }),
+        ),
+      }),
+    );
+
+    expect(result.input.markdownContent).toBe(
+      [
+        "# Instagram post",
+        "",
+        "Source: Instagram",
+        `URL: ${CANONICAL_URL}`,
+        "",
+        "## Caption",
+        "",
+        "材料\n卵 2個",
+      ].join("\n"),
+    );
+    expect(result.imageCandidates).toEqual([]);
+  });
+
+  it("yt-dlp metadata client未設定はunknownにする", async () => {
+    await expect(instagramSourceExtractionAdapter.extract(createContext())).rejects.toMatchObject({
+      code: "unknown",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("captionが空の場合はextraction_failedにする", async () => {
+    await expect(
+      instagramSourceExtractionAdapter.extract(
+        createContext({
+          ytdlpMetadataClient: createYtDlpMetadataClientStub(
+            createYtDlpMetadata({
+              metadata: {
+                description: "   ",
+              },
+            }),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("metadata identityが一致しない場合はextraction_failedにする", async () => {
+    await expect(
+      instagramSourceExtractionAdapter.extract(
+        createContext({
+          ytdlpMetadataClient: createYtDlpMetadataClientStub(
+            createYtDlpMetadata({
+              source: {
+                canonicalUrl: "https://www.instagram.com/p/OTHER/",
+                shortcode: "OTHER",
+                mediaKind: "post",
+              },
+            }),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("yt-dlp private/login failureはextraction_failedに丸める", async () => {
+    await expect(
+      instagramSourceExtractionAdapter.extract(
+        createContext({
+          ytdlpMetadataClient: createYtDlpMetadataClientErrorStub(
+            new YtDlpMetadataError(
+              "private_or_login_required",
+              "Instagram post is private, unavailable, or requires login.",
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("yt-dlp timeoutはfetch_failedに丸める", async () => {
+    await expect(
+      instagramSourceExtractionAdapter.extract(
+        createContext({
+          ytdlpMetadataClient: createYtDlpMetadataClientErrorStub(
+            new YtDlpMetadataError("timeout", "yt-dlp metadata request timed out."),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "fetch_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("yt-dlp invalid_requestはinvalid_urlに丸める", async () => {
+    await expect(
+      instagramSourceExtractionAdapter.extract(
+        createContext({
+          ytdlpMetadataClient: createYtDlpMetadataClientErrorStub(
+            new YtDlpMetadataError("invalid_request", "Instagram URL is invalid."),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_url",
+    } satisfies Partial<RecipeImportError>);
+  });
+});
+
+const createContext = (
+  overrides: Partial<SourceExtractionContext> = {},
+): SourceExtractionContext => ({
+  normalizedUrl: CANONICAL_URL,
+  host: "instagram.com",
+  timeoutMs: TIMEOUT_MS,
+  async fetchHtml() {
+    throw new Error("Instagram adapter should not fetch HTML.");
+  },
+  ...overrides,
+});
+
+const createYtDlpMetadataClientStub = (metadata: YtDlpMetadata): YtDlpMetadataClient => ({
+  extract: vi.fn(async () => metadata),
+});
+
+const createYtDlpMetadataClientErrorStub = (error: Error): YtDlpMetadataClient => ({
+  extract: vi.fn(async () => {
+    throw error;
+  }),
+});
+
+const createYtDlpMetadata = ({
+  source = {},
+  metadata = {},
+  images = [],
+}: {
+  source?: Partial<YtDlpMetadata["source"]>;
+  metadata?: Partial<YtDlpMetadata["metadata"]>;
+  images?: YtDlpMetadata["images"];
+} = {}): YtDlpMetadata => ({
+  ok: true,
+  source: {
+    platform: "instagram",
+    canonicalUrl: CANONICAL_URL,
+    shortcode: SHORTCODE,
+    mediaKind: "post",
+    ...source,
+  },
+  metadata: {
+    provider: "yt-dlp",
+    extractor: "Instagram",
+    webpageUrl: CANONICAL_URL,
+    title: "Post by mizuki_31cafe",
+    description: "材料\nなす 5本",
+    uploader: "mizuki_31cafe",
+    thumbnail: null,
+    thumbnails: [],
+    duration: null,
+    availability: null,
+    ...metadata,
+  },
+  images,
 });

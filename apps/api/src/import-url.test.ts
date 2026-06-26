@@ -10,6 +10,7 @@ import {
 import { type DeterministicImporter } from "./lib/import/deterministic";
 import { type SourceExtractor } from "./lib/import/source-extraction";
 import { type UsageRepository } from "./usage";
+import { type YtDlpMetadata, type YtDlpMetadataClient } from "./ytdlp-metadata";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -525,6 +526,104 @@ describe("URL import flow", () => {
     } satisfies Partial<RecipeImportError>);
 
     expect(aiNormalize).not.toHaveBeenCalled();
+  });
+
+  it("Instagram source extractionではgeneric HTML conversionへfallbackしない", async () => {
+    const fetcher = vi.fn(async (url: string) => ({
+      finalUrl: url,
+      contentType: "text/html",
+      body: "<html><article><h1>Generic Instagram recipe</h1></article></html>",
+    }));
+    const ytdlpMetadata = {
+      ok: true,
+      source: {
+        platform: "instagram",
+        canonicalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+        shortcode: "DYsxvKyAZMg",
+        mediaKind: "post",
+      },
+      metadata: {
+        provider: "yt-dlp",
+        extractor: "Instagram",
+        webpageUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+        title: "Post by mizuki_31cafe",
+        description: "材料\nなす 5本\n作り方\n揚げ焼きにする",
+        uploader: "mizuki_31cafe",
+        thumbnail: null,
+        thumbnails: [],
+        duration: null,
+        availability: null,
+      },
+      images: [
+        {
+          url: "https://cdn.example.com/cover.jpg",
+          kind: "thumbnail",
+          source: "top_level",
+        },
+      ],
+    } satisfies YtDlpMetadata;
+    const ytdlpMetadataClient = {
+      extract: vi.fn(async () => ytdlpMetadata),
+    } satisfies YtDlpMetadataClient;
+    const aiNormalize = vi.fn(async (input: RecipeImportAIInput) => {
+      expect(input.source).toEqual({
+        finalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+        host: "instagram.com",
+      });
+      expect(input.markdownContent).toContain("Source: Instagram");
+      expect(input.markdownContent).toContain("## Caption\n\n材料\nなす 5本");
+      expect(input.markdownContent).toContain(
+        "![Instagram image 1](<https://cdn.example.com/cover.jpg>)",
+      );
+
+      return {
+        title: "Instagram recipe",
+        coverImageUrl: "https://cdn.example.com/cover.jpg",
+        ingredientGroups: [],
+        steps: [],
+      };
+    });
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://www.instagram.com/p/DYsxvKyAZMg/?hl=ja",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher,
+        ytdlpMetadataClient,
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          normalize: aiNormalize,
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "Instagram recipe",
+        coverImage: {
+          type: "externalImageUrl",
+          url: "https://cdn.example.com/cover.jpg",
+        },
+      },
+      source: {
+        sourceUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+        sourceName: "Instagram",
+      },
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(ytdlpMetadataClient.extract).toHaveBeenCalledWith({
+      platform: "instagram",
+      url: "https://www.instagram.com/p/DYsxvKyAZMg/",
+      timeoutMs: 10_000,
+    });
   });
 
   it("deterministic importerが成功した場合はAI providerとAI usageを使わない", async () => {
