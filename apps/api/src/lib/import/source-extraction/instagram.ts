@@ -193,5 +193,12 @@ const mapYtDlpMetadataError = (error: unknown) => {
     return new RecipeImportError("fetch_failed", "Instagram metadata extraction timed out.");
   }
 
+  if (error.code === "private_or_login_required") {
+    return new RecipeImportError(
+      "private_or_login_required",
+      "Instagram post is private, unavailable, or requires login.",
+    );
+  }
+
   return new RecipeImportError("extraction_failed", error.message);
 };

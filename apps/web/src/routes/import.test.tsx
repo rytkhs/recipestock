@@ -111,6 +111,36 @@ describe("Import routes", () => {
     );
   });
 
+  it("private/login required errorを入力画面に表示する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/import/url/jobs") {
+          return jsonResponse(
+            {
+              error: {
+                code: "private_or_login_required",
+                message: "Instagram post is private, unavailable, or requires login.",
+              },
+            },
+            { status: 422 },
+          );
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/import/url");
+
+    await userEvent.type(await screen.findByLabelText("URL"), "https://www.instagram.com/p/test/");
+    await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "この投稿を取得できませんでした。非公開またはログインが必要な投稿です。",
+    );
+  });
+
   it("active jobがある場合は入力画面に警告を表示して入力URLを保持する", async () => {
     mockFetch(
       async (input) => {

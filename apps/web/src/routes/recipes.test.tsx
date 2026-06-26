@@ -255,6 +255,43 @@ describe("RecipesRoute", () => {
     ]);
   });
 
+  it("private/login required errorをURL import失敗バナーに表示する", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_private",
+                kind: "url",
+                status: "failed",
+                url: "https://www.instagram.com/p/DYsxvKyAZMg/",
+                recipeId: null,
+                errorCode: "private_or_login_required",
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: "2026-06-01T00:00:10.000Z",
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "この投稿を取得できませんでした。非公開またはログインが必要な投稿です。",
+    );
+  });
+
   it("URL import jobの全体期限切れを表示する", async () => {
     mockFetch(
       async (input) => {

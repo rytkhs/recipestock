@@ -127,6 +127,8 @@ const importJobErrorMessage = (job: ImportJobSummary) => {
       return "このページは取り込みに対応していません。";
     case "extraction_failed":
       return "レシピ本文を見つけられませんでした。";
+    case "private_or_login_required":
+      return "この投稿を取得できませんでした。";
     case "ai_usage_limit_exceeded":
       return "今月のAI利用回数の上限に達しています。";
     case "ai_timeout":

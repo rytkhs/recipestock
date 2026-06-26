@@ -254,7 +254,7 @@ describe("Instagram source extraction adapter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("yt-dlp private/login failureはextraction_failedに丸める", async () => {
+  it("yt-dlp private/login failureはprivate_or_login_requiredにする", async () => {
     await expect(
       instagramSourceExtractionAdapter.extract(
         createContext({
@@ -267,7 +267,7 @@ describe("Instagram source extraction adapter", () => {
         }),
       ),
     ).rejects.toMatchObject({
-      code: "extraction_failed",
+      code: "private_or_login_required",
     } satisfies Partial<RecipeImportError>);
   });
 

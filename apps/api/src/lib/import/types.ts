@@ -5,6 +5,7 @@ export type ImportErrorCode =
   | "fetch_failed"
   | "unsupported_page"
   | "extraction_failed"
+  | "private_or_login_required"
   | "ai_usage_limit_exceeded"
   | "ai_timeout"
   | "job_timeout"
