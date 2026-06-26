@@ -48,6 +48,30 @@ describe("Instagram source extraction URL handling", () => {
       shortcode: "DYsxvKyAZMg",
       mediaKind: "post",
     },
+    {
+      url: "https://www.instagram.com/some.user/reel/CWqAgUZgCku/",
+      canonicalUrl: "https://www.instagram.com/reel/CWqAgUZgCku/",
+      shortcode: "CWqAgUZgCku",
+      mediaKind: "reel",
+    },
+    {
+      url: "https://instagram.com/some_user/p/DYsxvKyAZMg/?hl=ja",
+      canonicalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+      shortcode: "DYsxvKyAZMg",
+      mediaKind: "post",
+    },
+    {
+      url: "https://www.instagram.com/reels/Cop84x6u7CP/",
+      canonicalUrl: "https://www.instagram.com/reel/Cop84x6u7CP/",
+      shortcode: "Cop84x6u7CP",
+      mediaKind: "reel",
+    },
+    {
+      url: "https://www.instagram.com/some.user/reels/Cop84x6u7CP/",
+      canonicalUrl: "https://www.instagram.com/reel/Cop84x6u7CP/",
+      shortcode: "Cop84x6u7CP",
+      mediaKind: "reel",
+    },
   ])("$url からInstagram sourceを抽出する", ({ url, canonicalUrl, shortcode, mediaKind }) => {
     expect(getInstagramSource(url)).toEqual({
       canonicalUrl,
@@ -74,11 +98,15 @@ describe("Instagram source extraction URL handling", () => {
     "https://m.instagram.com/p/DYsxvKyAZMg/",
     "https://www.instagram.com/stories/mizuki_31cafe/123456789/",
     "https://www.instagram.com/explore/tags/recipe/",
+    "https://www.instagram.com/tv/BkfuX9UB-eK/",
+    "https://www.instagram.com/user/tv/BkfuX9UB-eK/",
+    "https://www.instagram.com/reels/audio/123/",
     "https://www.instagram.com/p/",
     "https://www.instagram.com/p/DYsxvKyAZMg*/",
     "https://www.instagram.com:444/p/DYsxvKyAZMg/",
     "https://user@www.instagram.com/p/DYsxvKyAZMg/",
     "https://www.instagram.com/p/DYsxvKyAZMg/extra/",
+    "https://www.instagram.com/some-user/reel/CWqAgUZgCku/",
     "not-a-url",
   ])("対象外URLにはmatchしない: %s", (url) => {
     expect(getInstagramSource(url)).toBeNull();

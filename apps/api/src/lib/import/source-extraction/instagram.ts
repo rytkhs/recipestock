@@ -7,7 +7,9 @@ import {
 } from "./types";
 
 const INSTAGRAM_HOSTS = new Set(["instagram.com", "www.instagram.com"]);
+const INSTAGRAM_ROUTES = new Set(["p", "reel", "reels"]);
 const INSTAGRAM_SHORTCODE = /^[A-Za-z0-9_-]+$/;
+const INSTAGRAM_USERNAME = /^[A-Za-z0-9._]+$/;
 const INSTAGRAM_SOURCE_NAME = "Instagram";
 
 type InstagramMediaKind = "post" | "reel";
@@ -95,15 +97,19 @@ export const getInstagramSource = (rawUrl: string): InstagramSource | null => {
   if (url.port || url.username || url.password) return null;
 
   const pathnameParts = url.pathname.split("/").filter(Boolean);
-  if (pathnameParts.length !== 2) return null;
+  if (pathnameParts.length !== 2 && pathnameParts.length !== 3) return null;
 
-  const [route, shortcode] = pathnameParts;
-  if (route !== "p" && route !== "reel") return null;
+  const [route, shortcode] =
+    pathnameParts.length === 2 ? pathnameParts : pathnameParts.slice(1);
+
+  if (pathnameParts.length === 3 && !INSTAGRAM_USERNAME.test(pathnameParts[0])) return null;
+
+  if (!INSTAGRAM_ROUTES.has(route)) return null;
   if (!INSTAGRAM_SHORTCODE.test(shortcode)) return null;
 
   const source = {
     shortcode,
-    mediaKind: route === "reel" ? "reel" : "post",
+    mediaKind: route === "p" ? "post" : "reel",
   } satisfies Omit<InstagramSource, "canonicalUrl">;
 
   return {
