@@ -35,6 +35,7 @@ import {
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
 import { consumeAiUsage, type UsageRepository } from "./usage";
+import { type YtDlpMetadataClient } from "./ytdlp-metadata";
 
 export { assertImportUrlAllowed } from "./lib/import/policy";
 export {
@@ -284,6 +285,7 @@ export const importRecipeFromUrl = async ({
   usageRepository,
   aiProvider,
   fetcher,
+  ytdlpMetadataClient,
   deterministicImporter = defaultDeterministicImporter,
   sourceExtractor = defaultSourceExtractor,
   now = new Date(),
@@ -297,6 +299,7 @@ export const importRecipeFromUrl = async ({
   usageRepository: UsageRepository;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
+  ytdlpMetadataClient?: YtDlpMetadataClient;
   deterministicImporter?: DeterministicImporter;
   sourceExtractor?: SourceExtractor;
   now?: Date;
@@ -328,6 +331,7 @@ export const importRecipeFromUrl = async ({
     normalizedUrl,
     fetcher: deterministicFetcher,
     fetchOptions,
+    ytdlpMetadataClient,
   });
   assertImportJobDeadline(deadline, currentDate());
   const conversion = sourceExtractionResult

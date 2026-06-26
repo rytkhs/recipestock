@@ -27,16 +27,18 @@ describe("createSourceExtractor", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("対応Adapterのfetch requestを取得して変換する", async () => {
-    const convert = vi.fn(async ({ normalizedUrl, page }) => {
+  it("対応Adapterへcontextを渡して変換する", async () => {
+    const extract = vi.fn(async ({ normalizedUrl, host, timeoutMs, fetchHtml }) => {
       expect(normalizedUrl).toBe(NORMALIZED_URL);
+      expect(host).toBe("example.com");
+      expect(timeoutMs).toBe(FETCH_OPTIONS.timeoutMs);
+      const page = await fetchHtml("https://www.example.com/canonical");
       expect(page).toEqual(createPage("https://www.example.com/canonical"));
       return createResult();
     });
     const extractor = createSourceExtractor([
       createAdapter({
-        resolveFetchRequest: () => ({ url: "https://www.example.com/canonical" }),
-        convert,
+        extract,
       }),
     ]);
     const fetcher = vi.fn(async (url) => createPage(url));
@@ -50,14 +52,39 @@ describe("createSourceExtractor", () => {
     ).resolves.toEqual(createResult());
 
     expect(fetcher).toHaveBeenCalledWith("https://www.example.com/canonical", FETCH_OPTIONS);
-    expect(convert).toHaveBeenCalledTimes(1);
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
+  it("ytdlp metadata clientをAdapterのcontextへ渡す", async () => {
+    const ytdlpMetadataClient = {
+      extract: vi.fn(),
+    };
+    const extract = vi.fn(async ({ ytdlpMetadataClient: contextClient }) => {
+      expect(contextClient).toBe(ytdlpMetadataClient);
+      return createResult();
+    });
+    const extractor = createSourceExtractor([createAdapter({ extract })]);
+
+    await expect(
+      extractor.tryExtract({
+        normalizedUrl: NORMALIZED_URL,
+        fetcher: async (url) => createPage(url),
+        fetchOptions: FETCH_OPTIONS,
+        ytdlpMetadataClient,
+      }),
+    ).resolves.toEqual(createResult());
+
+    expect(extract).toHaveBeenCalledTimes(1);
   });
 
   it("unsafeな取得URLを拒否する", async () => {
     const fetcher = vi.fn();
     const extractor = createSourceExtractor([
       createAdapter({
-        resolveFetchRequest: () => ({ url: "http://127.0.0.1/watch?v=abc123" }),
+        async extract({ fetchHtml }) {
+          await fetchHtml("http://127.0.0.1/watch?v=abc123");
+          return createResult();
+        },
       }),
     ]);
 
@@ -77,7 +104,7 @@ describe("createSourceExtractor", () => {
   it("不正なSourceExtractionResultをextraction_failedにする", async () => {
     const extractor = createSourceExtractor([
       createAdapter({
-        async convert() {
+        async extract() {
           return {
             ...createResult(),
             source: {
@@ -104,7 +131,7 @@ describe("createSourceExtractor", () => {
     const expectedError = new Error("Site structure changed.");
     const extractor = createSourceExtractor([
       createAdapter({
-        async convert() {
+        async extract() {
           throw expectedError;
         },
       }),
@@ -125,8 +152,7 @@ const createAdapter = (
 ): SourceExtractionAdapter => ({
   id: "example",
   match: () => true,
-  resolveFetchRequest: ({ normalizedUrl }) => ({ url: normalizedUrl }),
-  async convert() {
+  async extract() {
     return createResult();
   },
   ...overrides,

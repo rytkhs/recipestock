@@ -37,25 +37,15 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
     return getYouTubeVideoId(input.normalizedUrl) !== null;
   },
 
-  resolveFetchRequest(input: SourceExtractionMatchInput) {
-    const videoId = getYouTubeVideoId(input.normalizedUrl);
-    if (!videoId) {
-      throw new RecipeImportError("invalid_url", "YouTube URL is invalid.");
-    }
-
-    return {
-      url: createYouTubeCanonicalUrl(videoId),
-    };
-  },
-
-  async convert(context: SourceExtractionContext) {
+  async extract(context: SourceExtractionContext) {
     const videoId = getYouTubeVideoId(context.normalizedUrl);
     if (!videoId) {
       throw new RecipeImportError("invalid_url", "YouTube URL is invalid.");
     }
 
     const canonicalUrl = createYouTubeCanonicalUrl(videoId);
-    const html = await readFetchedPageText(context.page);
+    const page = await context.fetchHtml(canonicalUrl);
+    const html = await readFetchedPageText(page);
     const playerResponse = extractYouTubePlayerResponse(html);
     const videoDetails = playerResponse.videoDetails;
     if (!videoDetails || typeof videoDetails !== "object") {

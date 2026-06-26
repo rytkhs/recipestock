@@ -1,5 +1,6 @@
 import { type RecipeSourceDraft, recipeSourceDraftSchema } from "@recipestock/schemas";
 import { z } from "zod";
+import { type YtDlpMetadataClient } from "../../../ytdlp-metadata";
 import {
   type FetchedImportPage,
   type RecipeImportAIInput,
@@ -11,13 +12,12 @@ export type SourceExtractionMatchInput = {
   host: string;
 };
 
-export type SourceExtractionFetchRequest = {
-  url: string;
-};
-
 export type SourceExtractionContext = {
   normalizedUrl: string;
-  page: FetchedImportPage;
+  host: string;
+  timeoutMs: number;
+  fetchHtml(url: string): Promise<FetchedImportPage>;
+  ytdlpMetadataClient?: YtDlpMetadataClient;
 };
 
 export type SourceExtractionResult = {
@@ -30,8 +30,7 @@ export type SourceExtractionResult = {
 export type SourceExtractionAdapter = {
   id: string;
   match(input: SourceExtractionMatchInput): boolean;
-  resolveFetchRequest(input: SourceExtractionMatchInput): SourceExtractionFetchRequest;
-  convert(context: SourceExtractionContext): Promise<SourceExtractionResult>;
+  extract(context: SourceExtractionContext): Promise<SourceExtractionResult>;
 };
 
 const sourceExtractionImageCandidateSchema = z.strictObject({
