@@ -13,6 +13,7 @@
       "!**/build",
       "!**/coverage",
       "!**/tmp",
+      "!apps/api/src/worker-configuration.d.ts",
       "!storage",
       "!docs",
       "!**/.env",

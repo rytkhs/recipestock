@@ -38,6 +38,28 @@
       }
     ]
   },
+  "containers": [
+    {
+      "class_name": "YtDlpMetadataContainer",
+      "image": "./containers/ytdlp-metadata/Dockerfile",
+      "instance_type": "basic",
+      "max_instances": 3
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "YTDLP_METADATA_CONTAINER",
+        "class_name": "YtDlpMetadataContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1_ytdlp_metadata_container",
+      "new_sqlite_classes": ["YtDlpMetadataContainer"]
+    }
+  ],
   "ai": {
     "binding": "AI",
     "remote": true
