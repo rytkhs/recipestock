@@ -177,11 +177,6 @@ describe("Instagram source extraction adapter", () => {
           "## Caption",
           "",
           "材料\nなす 5本\n作り方\n揚げ焼きにする",
-          "",
-          "## Images",
-          "",
-          "![Instagram image 1](<https://cdn.example.com/cover.jpg>)",
-          "![Instagram image 2](<https://cdn.example.com/step.jpg>)",
         ].join("\n"),
         recipeStructuredEvidence: [],
       },
@@ -199,6 +194,13 @@ describe("Instagram source extraction adapter", () => {
           position: 1,
         },
       ],
+      imagePlacement: {
+        coverImageUrl: "https://cdn.example.com/cover.jpg",
+        prependedStepImageUrls: [
+          "https://cdn.example.com/cover.jpg",
+          "https://cdn.example.com/step.jpg",
+        ],
+      },
       source: {
         sourceUrl: CANONICAL_URL,
         sourceName: "Instagram",
@@ -236,6 +238,9 @@ describe("Instagram source extraction adapter", () => {
       ].join("\n"),
     );
     expect(result.imageCandidates).toEqual([]);
+    expect(result.imagePlacement).toEqual({
+      prependedStepImageUrls: [],
+    });
   });
 
   it("yt-dlp metadata client未設定はunknownにする", async () => {

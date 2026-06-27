@@ -560,6 +560,12 @@ describe("URL import flow", () => {
           kind: "thumbnail",
           source: "top_level",
         },
+        {
+          url: "https://cdn.example.com/step.jpg",
+          kind: "thumbnail",
+          source: "entry",
+          entryIndex: 1,
+        },
       ],
     } satisfies YtDlpMetadata;
     const ytdlpMetadataClient = {
@@ -572,15 +578,13 @@ describe("URL import flow", () => {
       });
       expect(input.markdownContent).toContain("Source: Instagram");
       expect(input.markdownContent).toContain("## Caption\n\n材料\nなす 5本");
-      expect(input.markdownContent).toContain(
-        "![Instagram image 1](<https://cdn.example.com/cover.jpg>)",
-      );
+      expect(input.markdownContent).not.toContain("## Images");
+      expect(input.markdownContent).not.toContain("https://cdn.example.com/cover.jpg");
 
       return {
         title: "Instagram recipe",
-        coverImageUrl: "https://cdn.example.com/cover.jpg",
         ingredientGroups: [],
-        steps: [],
+        steps: [{ text: "揚げ焼きにする。", imageUrls: [] }],
       };
     });
 
@@ -611,6 +615,18 @@ describe("URL import flow", () => {
           type: "externalImageUrl",
           url: "https://cdn.example.com/cover.jpg",
         },
+        steps: [
+          {
+            images: [{ type: "externalImageUrl", url: "https://cdn.example.com/cover.jpg" }],
+          },
+          {
+            images: [{ type: "externalImageUrl", url: "https://cdn.example.com/step.jpg" }],
+          },
+          {
+            text: "揚げ焼きにする。",
+            images: [],
+          },
+        ],
       },
       source: {
         sourceUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",

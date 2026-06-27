@@ -70,11 +70,14 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
           author,
           canonicalUrl: source.canonicalUrl,
           caption,
-          imageUrls: imageCandidates.map((candidate) => candidate.url),
         }),
         recipeStructuredEvidence: [],
       },
       imageCandidates,
+      imagePlacement: {
+        ...(imageCandidates[0] ? { coverImageUrl: imageCandidates[0].url } : {}),
+        prependedStepImageUrls: imageCandidates.map((candidate) => candidate.url),
+      },
       source: {
         sourceUrl: source.canonicalUrl,
         sourceName: INSTAGRAM_SOURCE_NAME,
@@ -99,8 +102,7 @@ export const getInstagramSource = (rawUrl: string): InstagramSource | null => {
   const pathnameParts = url.pathname.split("/").filter(Boolean);
   if (pathnameParts.length !== 2 && pathnameParts.length !== 3) return null;
 
-  const [route, shortcode] =
-    pathnameParts.length === 2 ? pathnameParts : pathnameParts.slice(1);
+  const [route, shortcode] = pathnameParts.length === 2 ? pathnameParts : pathnameParts.slice(1);
 
   if (pathnameParts.length === 3 && !INSTAGRAM_USERNAME.test(pathnameParts[0])) return null;
 
@@ -166,24 +168,15 @@ const buildInstagramMarkdownContent = ({
   author,
   canonicalUrl,
   caption,
-  imageUrls,
 }: {
   title: string;
   author: string;
   canonicalUrl: string;
   caption: string;
-  imageUrls: string[];
 }) => {
   const lines = [`# ${title}`, "", `Source: ${INSTAGRAM_SOURCE_NAME}`, `URL: ${canonicalUrl}`];
   if (author) lines.push(`Author: ${author}`);
   lines.push("", "## Caption", "", caption);
-
-  if (imageUrls.length > 0) {
-    lines.push("", "## Images", "");
-    for (const [index, imageUrl] of imageUrls.entries()) {
-      lines.push(`![Instagram image ${index + 1}](<${imageUrl}>)`);
-    }
-  }
 
   return lines.join("\n").trim();
 };

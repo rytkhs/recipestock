@@ -5,6 +5,7 @@ import {
   type FetchedImportPage,
   type RecipeImportAIInput,
   type RecipeImportImageCandidate,
+  type RecipeImportImagePlacement,
 } from "../types";
 
 export type SourceExtractionMatchInput = {
@@ -23,6 +24,7 @@ export type SourceExtractionContext = {
 export type SourceExtractionResult = {
   input: RecipeImportAIInput;
   imageCandidates: RecipeImportImageCandidate[];
+  imagePlacement?: RecipeImportImagePlacement;
   source: RecipeSourceDraft;
   warnings: string[];
 };
@@ -40,6 +42,11 @@ const sourceExtractionImageCandidateSchema = z.strictObject({
   position: z.number().int().nonnegative(),
 });
 
+const sourceExtractionImagePlacementSchema = z.strictObject({
+  coverImageUrl: z.string().url().optional(),
+  prependedStepImageUrls: z.array(z.string().url()),
+});
+
 const sourceExtractionResultSchema = z.strictObject({
   input: z.strictObject({
     source: z.strictObject({
@@ -50,6 +57,7 @@ const sourceExtractionResultSchema = z.strictObject({
     recipeStructuredEvidence: z.array(z.unknown()),
   }),
   imageCandidates: z.array(sourceExtractionImageCandidateSchema),
+  imagePlacement: sourceExtractionImagePlacementSchema.optional(),
   source: recipeSourceDraftSchema,
   warnings: z.array(z.string()),
 });

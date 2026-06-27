@@ -46,6 +46,11 @@ export type RecipeImportImageCandidate = {
   position: number;
 };
 
+export type RecipeImportImagePlacement = {
+  coverImageUrl?: string;
+  prependedStepImageUrls: string[];
+};
+
 export type RecipeImportStructuredInstructionEvidence = {
   text: string;
   imageUrls: string[];
