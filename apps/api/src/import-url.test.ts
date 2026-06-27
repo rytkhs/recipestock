@@ -10,6 +10,7 @@ import {
 import { type DeterministicImporter } from "./lib/import/deterministic";
 import { type SourceExtractor } from "./lib/import/source-extraction";
 import { type UsageRepository } from "./usage";
+import { type YtDlpMetadata, type YtDlpMetadataClient, YtDlpMetadataError } from "./ytdlp-metadata";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -524,6 +525,164 @@ describe("URL import flow", () => {
       code: "extraction_failed",
     } satisfies Partial<RecipeImportError>);
 
+    expect(aiNormalize).not.toHaveBeenCalled();
+  });
+
+  it("Instagram source extractionではgeneric HTML conversionへfallbackしない", async () => {
+    const fetcher = vi.fn(async (url: string) => ({
+      finalUrl: url,
+      contentType: "text/html",
+      body: "<html><article><h1>Generic Instagram recipe</h1></article></html>",
+    }));
+    const ytdlpMetadata = {
+      ok: true,
+      source: {
+        platform: "instagram",
+        canonicalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+        shortcode: "DYsxvKyAZMg",
+        mediaKind: "post",
+      },
+      metadata: {
+        provider: "yt-dlp",
+        extractor: "Instagram",
+        webpageUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+        title: "Post by mizuki_31cafe",
+        description: "材料\nなす 5本\n作り方\n揚げ焼きにする",
+        uploader: "mizuki_31cafe",
+        thumbnail: null,
+        thumbnails: [],
+        duration: null,
+        availability: null,
+      },
+      images: [
+        {
+          url: "https://cdn.example.com/cover.jpg",
+          kind: "thumbnail",
+          source: "top_level",
+        },
+        {
+          url: "https://cdn.example.com/step.jpg",
+          kind: "thumbnail",
+          source: "entry",
+          entryIndex: 1,
+        },
+      ],
+    } satisfies YtDlpMetadata;
+    const ytdlpMetadataClient = {
+      extract: vi.fn(async () => ytdlpMetadata),
+    } satisfies YtDlpMetadataClient;
+    const aiNormalize = vi.fn(async (input: RecipeImportAIInput) => {
+      expect(input.source).toEqual({
+        finalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+        host: "instagram.com",
+      });
+      expect(input.markdownContent).toContain("Source: Instagram");
+      expect(input.markdownContent).toContain("## Caption\n\n材料\nなす 5本");
+      expect(input.markdownContent).not.toContain("## Images");
+      expect(input.markdownContent).not.toContain("https://cdn.example.com/cover.jpg");
+
+      return {
+        title: "Instagram recipe",
+        ingredientGroups: [],
+        steps: [{ text: "揚げ焼きにする。", imageUrls: [] }],
+      };
+    });
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://www.instagram.com/p/DYsxvKyAZMg/?hl=ja",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher,
+        ytdlpMetadataClient,
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          normalize: aiNormalize,
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "Instagram recipe",
+        coverImage: {
+          type: "externalImageUrl",
+          url: "https://cdn.example.com/cover.jpg",
+        },
+        steps: [
+          {
+            images: [{ type: "externalImageUrl", url: "https://cdn.example.com/cover.jpg" }],
+          },
+          {
+            images: [{ type: "externalImageUrl", url: "https://cdn.example.com/step.jpg" }],
+          },
+          {
+            text: "揚げ焼きにする。",
+            images: [],
+          },
+        ],
+      },
+      source: {
+        sourceUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+        sourceName: "Instagram",
+      },
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(ytdlpMetadataClient.extract).toHaveBeenCalledWith({
+      platform: "instagram",
+      url: "https://www.instagram.com/p/DYsxvKyAZMg/",
+      timeoutMs: 10_000,
+    });
+  });
+
+  it("Instagram private/login failureはgeneric HTML conversionへfallbackしない", async () => {
+    const fetcher = vi.fn(async (url: string) => ({
+      finalUrl: url,
+      contentType: "text/html",
+      body: "<html><article><h1>Generic Instagram recipe</h1></article></html>",
+    }));
+    const ytdlpMetadataClient = {
+      extract: vi.fn(async () => {
+        throw new YtDlpMetadataError(
+          "private_or_login_required",
+          "Instagram post is private, unavailable, or requires login.",
+        );
+      }),
+    } satisfies YtDlpMetadataClient;
+    const aiNormalize = vi.fn();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://www.instagram.com/p/DYsxvKyAZMg/?hl=ja",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher,
+        ytdlpMetadataClient,
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          normalize: aiNormalize,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "private_or_login_required",
+    } satisfies Partial<RecipeImportError>);
+
+    expect(fetcher).not.toHaveBeenCalled();
     expect(aiNormalize).not.toHaveBeenCalled();
   });
 

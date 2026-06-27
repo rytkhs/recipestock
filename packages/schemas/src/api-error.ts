@@ -10,6 +10,7 @@ export const apiErrorCodeSchema = z.enum([
   "fetch_failed",
   "unsupported_page",
   "extraction_failed",
+  "private_or_login_required",
   "ai_usage_limit_exceeded",
   "ai_timeout",
   "ai_schema_invalid",

@@ -20,3 +20,4 @@ coverage
 .env.*
 !.env.example
 !.dev.vars.example
+apps/api/containers/ytdlp-metadata/__pycache__/

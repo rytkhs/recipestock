@@ -30,6 +30,8 @@ import { createUsageRoutes } from "./routes/usage";
 import { type StripeBillingClient } from "./stripe-billing";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
+export { YtDlpMetadataContainer } from "./ytdlp-metadata-container";
+
 const IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS = 4;
 
 type AppDependencies = {

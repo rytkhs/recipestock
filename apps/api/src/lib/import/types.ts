@@ -5,6 +5,7 @@ export type ImportErrorCode =
   | "fetch_failed"
   | "unsupported_page"
   | "extraction_failed"
+  | "private_or_login_required"
   | "ai_usage_limit_exceeded"
   | "ai_timeout"
   | "job_timeout"
@@ -43,6 +44,11 @@ export type RecipeImportImageCandidate = {
   url: string;
   alt?: string;
   position: number;
+};
+
+export type RecipeImportImagePlacement = {
+  coverImageUrl?: string;
+  prependedStepImageUrls: string[];
 };
 
 export type RecipeImportStructuredInstructionEvidence = {

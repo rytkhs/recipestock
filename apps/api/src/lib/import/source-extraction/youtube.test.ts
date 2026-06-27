@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type RecipeImportError } from "../types";
 import {
   createYouTubeCanonicalUrl,
@@ -21,14 +21,7 @@ describe("YouTube source extraction URL handling", () => {
     expect(youtubeSourceExtractionAdapter.match({ normalizedUrl: url, host: "youtube.com" })).toBe(
       true,
     );
-    expect(
-      youtubeSourceExtractionAdapter.resolveFetchRequest({
-        normalizedUrl: url,
-        host: "youtube.com",
-      }),
-    ).toEqual({
-      url: CANONICAL_URL,
-    });
+    expect(createYouTubeCanonicalUrl(getYouTubeVideoId(url) ?? "")).toBe(CANONICAL_URL);
   });
 
   it("対象外URLにはmatchしない", () => {
@@ -44,9 +37,8 @@ describe("YouTube source extraction URL handling", () => {
 
 describe("YouTube source extraction adapter", () => {
   it("videoDetailsからAI inputと最大サムネイル候補を作る", async () => {
-    const result = await youtubeSourceExtractionAdapter.convert({
-      normalizedUrl: "https://youtu.be/FyLCRXMANAM?si=vxf25wqv_kohdf4L",
-      page: createPage(
+    const fetchHtml = createFetchHtml(
+      createPage(
         CANONICAL_URL,
         createYouTubeHtml({
           videoId: VIDEO_ID,
@@ -65,8 +57,15 @@ describe("YouTube source extraction adapter", () => {
           },
         }),
       ),
+    );
+    const result = await youtubeSourceExtractionAdapter.extract({
+      normalizedUrl: "https://youtu.be/FyLCRXMANAM?si=vxf25wqv_kohdf4L",
+      host: "youtu.be",
+      timeoutMs: 1000,
+      fetchHtml,
     });
 
+    expect(fetchHtml).toHaveBeenCalledWith(CANONICAL_URL);
     expect(result).toEqual({
       input: {
         source: {
@@ -104,9 +103,11 @@ describe("YouTube source extraction adapter", () => {
   });
 
   it("説明欄が空でもtitleとthumbnailで成功する", async () => {
-    const result = await youtubeSourceExtractionAdapter.convert({
+    const result = await youtubeSourceExtractionAdapter.extract({
       normalizedUrl: CANONICAL_URL,
-      page: createPage(
+      host: "youtube.com",
+      timeoutMs: 1000,
+      fetchHtml: createFetchHtml(
         CANONICAL_URL,
         createYouTubeHtml({
           videoId: VIDEO_ID,
@@ -137,9 +138,13 @@ describe("YouTube source extraction adapter", () => {
 
   it("ytInitialPlayerResponse不在はextraction_failedにする", async () => {
     await expect(
-      youtubeSourceExtractionAdapter.convert({
+      youtubeSourceExtractionAdapter.extract({
         normalizedUrl: CANONICAL_URL,
-        page: createPage(CANONICAL_URL, "<html><body>No player response</body></html>"),
+        host: "youtube.com",
+        timeoutMs: 1000,
+        fetchHtml: createFetchHtml(
+          createPage(CANONICAL_URL, "<html><body>No player response</body></html>"),
+        ),
       }),
     ).rejects.toMatchObject({
       code: "extraction_failed",
@@ -148,9 +153,11 @@ describe("YouTube source extraction adapter", () => {
 
   it("videoId不一致はextraction_failedにする", async () => {
     await expect(
-      youtubeSourceExtractionAdapter.convert({
+      youtubeSourceExtractionAdapter.extract({
         normalizedUrl: CANONICAL_URL,
-        page: createPage(
+        host: "youtube.com",
+        timeoutMs: 1000,
+        fetchHtml: createFetchHtml(
           CANONICAL_URL,
           createYouTubeHtml({
             videoId: "LZ7gPKzDrzY",
@@ -170,6 +177,11 @@ const createPage = (url: string, body: string) => ({
   contentType: "text/html; charset=utf-8",
   body,
 });
+
+const createFetchHtml = (pageOrUrl: ReturnType<typeof createPage> | string, body?: string) => {
+  const page = typeof pageOrUrl === "string" ? createPage(pageOrUrl, body ?? "") : pageOrUrl;
+  return vi.fn(async () => page);
+};
 
 const createYouTubeHtml = (videoDetails: unknown) => `
   <html>

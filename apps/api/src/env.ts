@@ -1,5 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import { type YtDlpMetadataContainer } from "./ytdlp-metadata-container";
+
 export type BrowserRunBinding = {
   quickAction(
     action: "content",
@@ -20,6 +22,7 @@ export type Bindings = {
   ASSETS: Fetcher;
   BROWSER: BrowserRunBinding;
   IMPORT_QUEUE: Queue<{ jobId: string }>;
+  YTDLP_METADATA_CONTAINER: DurableObjectNamespace<YtDlpMetadataContainer>;
   DATABASE_URL: string;
   BETTER_AUTH_URL: string;
   RECIPE_IMAGES: R2Bucket;

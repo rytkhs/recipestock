@@ -1,9 +1,11 @@
 import { type RecipeSourceDraft, recipeSourceDraftSchema } from "@recipestock/schemas";
 import { z } from "zod";
+import { type YtDlpMetadataClient } from "../../../ytdlp-metadata";
 import {
   type FetchedImportPage,
   type RecipeImportAIInput,
   type RecipeImportImageCandidate,
+  type RecipeImportImagePlacement,
 } from "../types";
 
 export type SourceExtractionMatchInput = {
@@ -11,18 +13,18 @@ export type SourceExtractionMatchInput = {
   host: string;
 };
 
-export type SourceExtractionFetchRequest = {
-  url: string;
-};
-
 export type SourceExtractionContext = {
   normalizedUrl: string;
-  page: FetchedImportPage;
+  host: string;
+  timeoutMs: number;
+  fetchHtml(url: string): Promise<FetchedImportPage>;
+  ytdlpMetadataClient?: YtDlpMetadataClient;
 };
 
 export type SourceExtractionResult = {
   input: RecipeImportAIInput;
   imageCandidates: RecipeImportImageCandidate[];
+  imagePlacement?: RecipeImportImagePlacement;
   source: RecipeSourceDraft;
   warnings: string[];
 };
@@ -30,8 +32,7 @@ export type SourceExtractionResult = {
 export type SourceExtractionAdapter = {
   id: string;
   match(input: SourceExtractionMatchInput): boolean;
-  resolveFetchRequest(input: SourceExtractionMatchInput): SourceExtractionFetchRequest;
-  convert(context: SourceExtractionContext): Promise<SourceExtractionResult>;
+  extract(context: SourceExtractionContext): Promise<SourceExtractionResult>;
 };
 
 const sourceExtractionImageCandidateSchema = z.strictObject({
@@ -39,6 +40,11 @@ const sourceExtractionImageCandidateSchema = z.strictObject({
   url: z.string().url(),
   alt: z.string().optional(),
   position: z.number().int().nonnegative(),
+});
+
+const sourceExtractionImagePlacementSchema = z.strictObject({
+  coverImageUrl: z.string().url().optional(),
+  prependedStepImageUrls: z.array(z.string().url()),
 });
 
 const sourceExtractionResultSchema = z.strictObject({
@@ -51,6 +57,7 @@ const sourceExtractionResultSchema = z.strictObject({
     recipeStructuredEvidence: z.array(z.unknown()),
   }),
   imageCandidates: z.array(sourceExtractionImageCandidateSchema),
+  imagePlacement: sourceExtractionImagePlacementSchema.optional(),
   source: recipeSourceDraftSchema,
   warnings: z.array(z.string()),
 });

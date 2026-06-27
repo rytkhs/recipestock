@@ -31,10 +31,12 @@ import {
   RecipeImportError,
   type RecipeImportFetcher,
   type RecipeImportImageCandidate,
+  type RecipeImportImagePlacement,
   type RecipeImportResult,
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
 import { consumeAiUsage, type UsageRepository } from "./usage";
+import { type YtDlpMetadataClient } from "./ytdlp-metadata";
 
 export { assertImportUrlAllowed } from "./lib/import/policy";
 export {
@@ -55,6 +57,7 @@ type RecipeImportConverterResult = {
   type: "requiresAi";
   input: RecipeImportAIInput;
   imageCandidates: RecipeImportImageCandidate[];
+  imagePlacement?: RecipeImportImagePlacement;
   source: RecipeSourceDraft;
   warnings: string[];
 };
@@ -284,6 +287,7 @@ export const importRecipeFromUrl = async ({
   usageRepository,
   aiProvider,
   fetcher,
+  ytdlpMetadataClient,
   deterministicImporter = defaultDeterministicImporter,
   sourceExtractor = defaultSourceExtractor,
   now = new Date(),
@@ -297,6 +301,7 @@ export const importRecipeFromUrl = async ({
   usageRepository: UsageRepository;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
+  ytdlpMetadataClient?: YtDlpMetadataClient;
   deterministicImporter?: DeterministicImporter;
   sourceExtractor?: SourceExtractor;
   now?: Date;
@@ -328,6 +333,7 @@ export const importRecipeFromUrl = async ({
     normalizedUrl,
     fetcher: deterministicFetcher,
     fetchOptions,
+    ytdlpMetadataClient,
   });
   assertImportJobDeadline(deadline, currentDate());
   const conversion = sourceExtractionResult
@@ -389,6 +395,10 @@ export const importRecipeFromUrl = async ({
 
   try {
     imageResult = resolveDraftImageUrls(draft, resolvedConversion.imageCandidates);
+    imageResult = {
+      draft: applyDeterministicImagePlacement(imageResult.draft, resolvedConversion.imagePlacement),
+      warnings: imageResult.warnings,
+    };
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
@@ -943,4 +953,28 @@ const resolveDraftImageUrls = (
     }),
     warnings,
   };
+};
+
+const applyDeterministicImagePlacement = (
+  draft: RecipeDraftContent,
+  placement: RecipeImportImagePlacement | undefined,
+): RecipeDraftContent => {
+  if (!placement) return draft;
+
+  const prependedSteps = placement.prependedStepImageUrls.map((url) => ({
+    images: [{ type: "externalImageUrl" as const, url }],
+  }));
+
+  return recipeDraftContentSchema.parse({
+    ...draft,
+    ...(placement.coverImageUrl
+      ? {
+          coverImage: {
+            type: "externalImageUrl",
+            url: placement.coverImageUrl,
+          },
+        }
+      : {}),
+    steps: [...prependedSteps, ...draft.steps],
+  });
 };
