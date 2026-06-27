@@ -494,10 +494,6 @@ export const RecipeDraftForm = ({
 
   return (
     <form className="mt-6 grid gap-5" onSubmit={(event) => void handleFormSubmit(event)}>
-      <FormInput control={control} isRequired label="タイトル" name="title" />
-
-      <FormInput control={control} label="人数" name="servingsText" />
-
       <ImageInput
         control={control}
         label="カバー画像"
@@ -506,6 +502,10 @@ export const RecipeDraftForm = ({
         previewUrl={coverImagePreviewUrl}
         uploadImage={uploadImage}
       />
+
+      <FormInput control={control} isRequired label="タイトル" name="title" />
+
+      <FormInput control={control} label="人数" name="servingsText" />
 
       {ingredientGroups.fields.map((field, groupIndex) => (
         <IngredientGroupFields control={control} groupIndex={groupIndex} key={field.id} />

@@ -458,6 +458,21 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/new");
 
+    const coverImageInput = await screen.findByLabelText("カバー画像");
+    const titleInput = screen.getByLabelText("タイトル");
+    const servingsInput = screen.getByLabelText("人数");
+    const ingredientNameInput = screen.getByLabelText("材料名");
+    expect(
+      coverImageInput.compareDocumentPosition(titleInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      titleInput.compareDocumentPosition(servingsInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      servingsInput.compareDocumentPosition(ingredientNameInput) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
     await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
     await userEvent.type(screen.getByLabelText("人数"), "2人分");
     await userEvent.type(screen.getByLabelText("材料名"), "トマト缶");
