@@ -14,6 +14,8 @@ import { type SourceExtractionContext } from "./types";
 
 const CANONICAL_URL = "https://www.instagram.com/p/DYsxvKyAZMg/";
 const SHORTCODE = "DYsxvKyAZMg";
+const REEL_CANONICAL_URL = "https://www.instagram.com/reel/C9QigGTgKZf/";
+const REEL_SHORTCODE = "C9QigGTgKZf";
 const TIMEOUT_MS = 10_000;
 
 describe("Instagram source extraction URL handling", () => {
@@ -239,6 +241,65 @@ describe("Instagram source extraction adapter", () => {
     );
     expect(result.imageCandidates).toEqual([]);
     expect(result.imagePlacement).toEqual({
+      prependedStepImageUrls: [],
+    });
+  });
+
+  it("動画投稿ではカバー画像をstepへ追加しない", async () => {
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        ytdlpMetadataClient: createYtDlpMetadataClientStub(
+          createYtDlpMetadata({
+            metadata: {
+              duration: 56.133,
+            },
+            images: [
+              {
+                url: "https://cdn.example.com/video-cover.jpg",
+                kind: "thumbnail",
+                source: "top_level",
+                width: 1080,
+                height: 1920,
+              },
+            ],
+          }),
+        ),
+      }),
+    );
+
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: "https://cdn.example.com/video-cover.jpg",
+      prependedStepImageUrls: [],
+    });
+  });
+
+  it("Reelではカバー画像をstepへ追加しない", async () => {
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        normalizedUrl: REEL_CANONICAL_URL,
+        ytdlpMetadataClient: createYtDlpMetadataClientStub(
+          createYtDlpMetadata({
+            source: {
+              canonicalUrl: REEL_CANONICAL_URL,
+              shortcode: REEL_SHORTCODE,
+              mediaKind: "reel",
+            },
+            images: [
+              {
+                url: "https://cdn.example.com/reel-cover.jpg",
+                kind: "thumbnail",
+                source: "top_level",
+                width: 1080,
+                height: 1920,
+              },
+            ],
+          }),
+        ),
+      }),
+    );
+
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: "https://cdn.example.com/reel-cover.jpg",
       prependedStepImageUrls: [],
     });
   });

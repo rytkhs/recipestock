@@ -249,11 +249,11 @@ def normalize_images(
     thumbnails: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     images: list[dict[str, Any]] = []
-    seen_urls: set[str] = set()
+    image_indexes_by_key: dict[str, int] = {}
 
     append_image(
         images,
-        seen_urls,
+        image_indexes_by_key,
         url=optional_string(payload.get("thumbnail")),
         kind="thumbnail",
         source="top_level",
@@ -261,7 +261,7 @@ def normalize_images(
     for thumbnail in thumbnails:
         append_image(
             images,
-            seen_urls,
+            image_indexes_by_key,
             url=optional_string(thumbnail.get("url")),
             kind="thumbnail",
             source="top_level",
@@ -277,7 +277,7 @@ def normalize_images(
 
             append_image(
                 images,
-                seen_urls,
+                image_indexes_by_key,
                 url=optional_string(entry.get("thumbnail")),
                 kind="thumbnail",
                 source="entry",
@@ -286,7 +286,7 @@ def normalize_images(
             for thumbnail in normalize_thumbnails(entry.get("thumbnails")):
                 append_image(
                     images,
-                    seen_urls,
+                    image_indexes_by_key,
                     url=optional_string(thumbnail.get("url")),
                     kind="thumbnail",
                     source="entry",
@@ -300,7 +300,7 @@ def normalize_images(
 
 def append_image(
     images: list[dict[str, Any]],
-    seen_urls: set[str],
+    image_indexes_by_key: dict[str, int],
     *,
     url: str | None,
     kind: str,
@@ -309,9 +309,51 @@ def append_image(
     width: int | None = None,
     height: int | None = None,
 ) -> None:
-    if len(images) >= MAX_IMAGES or url is None or not is_http_url(url) or url in seen_urls:
+    if url is None or not is_http_url(url):
         return
 
+    dedupe_key = image_dedupe_key(url)
+    existing_index = image_indexes_by_key.get(dedupe_key)
+    if existing_index is not None:
+        if image_area(width, height) > image_area(
+            optional_int(images[existing_index].get("width")),
+            optional_int(images[existing_index].get("height")),
+        ):
+            images[existing_index] = build_image(
+                url=url,
+                kind=kind,
+                source=source,
+                entry_index=entry_index,
+                width=width,
+                height=height,
+            )
+        return
+
+    if len(images) >= MAX_IMAGES:
+        return
+
+    images.append(
+        build_image(
+            url=url,
+            kind=kind,
+            source=source,
+            entry_index=entry_index,
+            width=width,
+            height=height,
+        )
+    )
+    image_indexes_by_key[dedupe_key] = len(images) - 1
+
+
+def build_image(
+    *,
+    url: str,
+    kind: str,
+    source: str,
+    entry_index: int | None = None,
+    width: int | None = None,
+    height: int | None = None,
+) -> dict[str, Any]:
     image: dict[str, Any] = {
         "url": url,
         "kind": kind,
@@ -324,8 +366,23 @@ def append_image(
     if height is not None:
         image["height"] = height
 
-    images.append(image)
-    seen_urls.add(url)
+    return image
+
+
+def image_dedupe_key(url: str) -> str:
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    if hostname == "cdninstagram.com" or hostname.endswith(".cdninstagram.com"):
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    if hostname == "fbcdn.net" or hostname.endswith(".fbcdn.net"):
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    return url
+
+
+def image_area(width: int | None, height: int | None) -> int:
+    if width is None or height is None:
+        return 0
+    return width * height
 
 
 def normalize_thumbnails(value: Any) -> list[dict[str, Any]]:

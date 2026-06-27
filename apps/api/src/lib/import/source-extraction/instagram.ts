@@ -58,6 +58,7 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
     }
 
     const imageCandidates = buildInstagramImageCandidates(extracted.images, title);
+    const isVideo = source.mediaKind === "reel" || extracted.metadata.duration !== null;
 
     return {
       input: {
@@ -76,7 +77,7 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
       imageCandidates,
       imagePlacement: {
         ...(imageCandidates[0] ? { coverImageUrl: imageCandidates[0].url } : {}),
-        prependedStepImageUrls: imageCandidates.map((candidate) => candidate.url),
+        prependedStepImageUrls: isVideo ? [] : imageCandidates.map((candidate) => candidate.url),
       },
       source: {
         sourceUrl: source.canonicalUrl,

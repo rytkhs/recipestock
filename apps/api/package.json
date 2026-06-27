@@ -9,7 +9,7 @@
     "build": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --port 8787",
-    "test": "vitest run",
+    "test": "vitest run && python3 -m unittest discover containers/ytdlp-metadata -p '*_test.py'",
     "typecheck": "tsc --noEmit",
     "wrangler:check": "wrangler check",
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
