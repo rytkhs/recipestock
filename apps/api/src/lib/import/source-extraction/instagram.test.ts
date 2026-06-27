@@ -245,6 +245,57 @@ describe("Instagram source extraction adapter", () => {
     });
   });
 
+  it("複数画像投稿ではsidecar画像をcoverとstepへ追加する", async () => {
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        ytdlpMetadataClient: createYtDlpMetadataClientStub(
+          createYtDlpMetadata({
+            images: [
+              {
+                url: "https://cdn.example.com/sidecar-1.jpg",
+                kind: "thumbnail",
+                source: "sidecar",
+                entryIndex: 0,
+                width: 1080,
+                height: 1080,
+              },
+              {
+                url: "https://cdn.example.com/sidecar-2.jpg",
+                kind: "thumbnail",
+                source: "sidecar",
+                entryIndex: 1,
+                width: 1080,
+                height: 1080,
+              },
+            ],
+          }),
+        ),
+      }),
+    );
+
+    expect(result.imageCandidates).toEqual([
+      {
+        id: "instagram_image_0",
+        url: "https://cdn.example.com/sidecar-1.jpg",
+        alt: "Post by mizuki_31cafe image 1",
+        position: 0,
+      },
+      {
+        id: "instagram_image_1",
+        url: "https://cdn.example.com/sidecar-2.jpg",
+        alt: "Post by mizuki_31cafe image 2",
+        position: 1,
+      },
+    ]);
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: "https://cdn.example.com/sidecar-1.jpg",
+      prependedStepImageUrls: [
+        "https://cdn.example.com/sidecar-1.jpg",
+        "https://cdn.example.com/sidecar-2.jpg",
+      ],
+    });
+  });
+
   it("動画投稿ではカバー画像をstepへ追加しない", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({

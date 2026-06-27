@@ -35,7 +35,16 @@ describe("YtDlpMetadataClient", () => {
           duration: null,
           availability: null,
         },
-        images: [],
+        images: [
+          {
+            url: "https://cdn.example.com/sidecar-1.jpg",
+            kind: "thumbnail",
+            source: "sidecar",
+            entryIndex: 0,
+            width: 1080,
+            height: 1080,
+          },
+        ],
       }),
     );
     const selectContainer = vi.fn(async () => ({ startAndWaitForPorts, fetch }));
@@ -53,6 +62,12 @@ describe("YtDlpMetadataClient", () => {
       metadata: {
         description: "材料\nなす 5本",
       },
+      images: [
+        {
+          source: "sidecar",
+          entryIndex: 0,
+        },
+      ],
     });
 
     expect(selectContainer).toHaveBeenCalledWith(binding, 3);

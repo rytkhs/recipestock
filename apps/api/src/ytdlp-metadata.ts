@@ -24,7 +24,7 @@ const ytdlpMetadataThumbnailSchema = z.strictObject({
 const ytdlpMetadataImageSchema = z.strictObject({
   url: z.string().url(),
   kind: z.literal("thumbnail"),
-  source: z.enum(["top_level", "entry"]),
+  source: z.enum(["top_level", "entry", "sidecar"]),
   entryIndex: z.number().int().nonnegative().optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),

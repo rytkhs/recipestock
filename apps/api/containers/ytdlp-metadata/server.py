@@ -5,10 +5,12 @@ import os
 import re
 import subprocess
 import sys
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request, urlopen
 
 
 HOST = "0.0.0.0"
@@ -17,6 +19,8 @@ MAX_BODY_BYTES = 16_384
 MIN_TIMEOUT_MS = 1_000
 MAX_TIMEOUT_MS = 30_000
 MAX_IMAGES = 30
+INSTAGRAM_GRAPHQL_DOC_ID = "8845758582119845"
+INSTAGRAM_GRAPHQL_URL = "https://www.instagram.com/graphql/query/"
 INSTAGRAM_SHORTCODE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 PRIVATE_OR_LOGIN_PATTERNS = re.compile(
     r"(login|log in|private|not available|require|requires|sign in|signin|checkpoint)",
@@ -164,6 +168,7 @@ def clamp_timeout_ms(value: Any) -> int:
 
 
 def extract_metadata(source: dict[str, str], timeout_ms: int) -> dict[str, Any]:
+    started_at = time.monotonic()
     command = [
         sys.executable,
         "-m",
@@ -218,12 +223,21 @@ def extract_metadata(source: dict[str, str], timeout_ms: int) -> dict[str, Any]:
             "message": "yt-dlp returned an unexpected payload.",
         }
 
-    return normalize_ytdlp_metadata(source, payload)
+    elapsed_ms = int((time.monotonic() - started_at) * 1000)
+    remaining_timeout_ms = timeout_ms - elapsed_ms
+    sidecar_images = extract_instagram_sidecar_images(source, remaining_timeout_ms)
+
+    return normalize_ytdlp_metadata(source, payload, sidecar_images=sidecar_images)
 
 
-def normalize_ytdlp_metadata(source: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
+def normalize_ytdlp_metadata(
+    source: dict[str, str],
+    payload: dict[str, Any],
+    *,
+    sidecar_images: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     thumbnails = normalize_thumbnails(payload.get("thumbnails"))
-    images = normalize_images(payload, thumbnails)
+    images = normalize_images(payload, thumbnails, sidecar_images=sidecar_images)
 
     return {
         "ok": True,
@@ -247,9 +261,23 @@ def normalize_ytdlp_metadata(source: dict[str, str], payload: dict[str, Any]) ->
 def normalize_images(
     payload: dict[str, Any],
     thumbnails: list[dict[str, Any]],
+    *,
+    sidecar_images: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     images: list[dict[str, Any]] = []
     image_indexes_by_key: dict[str, int] = {}
+
+    for sidecar_image in sidecar_images or []:
+        append_image(
+            images,
+            image_indexes_by_key,
+            url=optional_string(sidecar_image.get("url")),
+            kind="thumbnail",
+            source="sidecar",
+            entry_index=optional_int(sidecar_image.get("entryIndex")),
+            width=optional_int(sidecar_image.get("width")),
+            height=optional_int(sidecar_image.get("height")),
+        )
 
     append_image(
         images,
@@ -296,6 +324,136 @@ def normalize_images(
                 )
 
     return images
+
+
+def extract_instagram_sidecar_images(source: dict[str, str], timeout_ms: int) -> list[dict[str, Any]]:
+    if timeout_ms <= 0:
+        return []
+
+    variables = {
+        "shortcode": source["shortcode"],
+        "child_comment_count": 3,
+        "fetch_comment_count": 40,
+        "parent_comment_count": 24,
+        "has_threaded_comments": True,
+    }
+    query = urlencode(
+        {
+            "doc_id": INSTAGRAM_GRAPHQL_DOC_ID,
+            "variables": json.dumps(variables, separators=(",", ":")),
+        }
+    )
+    request = Request(
+        f"{INSTAGRAM_GRAPHQL_URL}?{query}",
+        headers={
+            "X-IG-App-ID": "936619743392459",
+            "X-ASBD-ID": "198387",
+            "X-IG-WWW-Claim": "0",
+            "Origin": "https://www.instagram.com",
+            "Accept": "*/*",
+            "X-CSRFToken": "",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": source["canonicalUrl"],
+            "User-Agent": "Mozilla/5.0",
+        },
+    )
+
+    try:
+        with urlopen(request, timeout=timeout_ms / 1000) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return []
+
+    return normalize_instagram_sidecar_images(payload)
+
+
+def normalize_instagram_sidecar_images(payload: Any) -> list[dict[str, Any]]:
+    media = as_dict(as_dict(payload).get("data")).get("xdt_shortcode_media")
+    edges = as_dict(as_dict(media).get("edge_sidecar_to_children")).get("edges")
+    if not isinstance(edges, list):
+        return []
+
+    images: list[dict[str, Any]] = []
+    for entry_index, edge in enumerate(edges):
+        node = as_dict(as_dict(edge).get("node"))
+        image = select_best_sidecar_image(node)
+        if image is None:
+            continue
+
+        images.append(
+            build_image(
+                url=image["url"],
+                kind="thumbnail",
+                source="sidecar",
+                entry_index=entry_index,
+                width=optional_int(image.get("width")),
+                height=optional_int(image.get("height")),
+            )
+        )
+
+    return images
+
+
+def select_best_sidecar_image(node: dict[str, Any]) -> dict[str, Any] | None:
+    candidates: list[dict[str, Any]] = []
+
+    display_resources = node.get("display_resources")
+    if isinstance(display_resources, list):
+        for resource in display_resources:
+            resource_dict = as_dict(resource)
+            append_sidecar_candidate(
+                candidates,
+                url=optional_string(resource_dict.get("src")) or optional_string(resource_dict.get("url")),
+                width=optional_int(resource_dict.get("config_width"))
+                or optional_int(resource_dict.get("width")),
+                height=optional_int(resource_dict.get("config_height"))
+                or optional_int(resource_dict.get("height")),
+            )
+
+    dimensions = as_dict(node.get("dimensions"))
+    dimension_width = optional_int(dimensions.get("width"))
+    dimension_height = optional_int(dimensions.get("height"))
+    append_sidecar_candidate(
+        candidates,
+        url=optional_string(node.get("display_url")),
+        width=dimension_width,
+        height=dimension_height,
+    )
+    append_sidecar_candidate(
+        candidates,
+        url=optional_string(node.get("thumbnail_src")),
+        width=dimension_width,
+        height=dimension_height,
+    )
+
+    if not candidates:
+        return None
+
+    return max(
+        candidates,
+        key=lambda candidate: image_area(
+            optional_int(candidate.get("width")),
+            optional_int(candidate.get("height")),
+        ),
+    )
+
+
+def append_sidecar_candidate(
+    candidates: list[dict[str, Any]],
+    *,
+    url: str | None,
+    width: int | None,
+    height: int | None,
+) -> None:
+    if url is None or not is_http_url(url):
+        return
+
+    candidate: dict[str, Any] = {"url": url}
+    if width is not None:
+        candidate["width"] = width
+    if height is not None:
+        candidate["height"] = height
+    candidates.append(candidate)
 
 
 def append_image(
@@ -415,6 +573,10 @@ def normalize_thumbnails(value: Any) -> list[dict[str, Any]]:
 
 def optional_string(value: Any) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
+
+
+def as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def optional_number(value: Any) -> int | float | None:
