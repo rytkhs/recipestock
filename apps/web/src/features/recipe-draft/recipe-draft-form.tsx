@@ -16,6 +16,7 @@ type RecipeDraftFormProps = {
   submitLabel: string;
   submitError?: string | null;
   coverImagePreviewUrl?: string;
+  sourceMediaPreviewUrls?: string[];
   stepImagePreviewUrls?: string[][];
   uploadImage?: (file: File) => Promise<DraftImageRef>;
   onSubmit(values: RecipeDraftFormValues): Promise<void> | void;
@@ -33,26 +34,39 @@ const imageInputHelpText = "JPEG / PNG / WebP、5MBまで";
 const imageRefId = (image: DraftImageRef) =>
   `${image.type}:${"key" in image ? image.key : image.url}`;
 
-const createStepImagePreviewUrlsByImageId = (
-  defaultValues: RecipeDraftFormValues,
-  stepImagePreviewUrls?: string[][],
-): ImagePreviewUrlsByImageId => {
+const addImagePreviewUrls = (
+  previewUrlsByImageId: ImagePreviewUrlsByImageId,
+  images: DraftImageRef[],
+  previewUrls?: string[],
+) => {
+  if (!previewUrls || previewUrls.length !== images.length) {
+    return;
+  }
+
+  images.forEach((image, imageIndex) => {
+    const previewUrl = previewUrls[imageIndex];
+
+    if (previewUrl) {
+      previewUrlsByImageId[imageRefId(image)] = previewUrl;
+    }
+  });
+};
+
+const createImagePreviewUrlsByImageId = ({
+  defaultValues,
+  sourceMediaPreviewUrls,
+  stepImagePreviewUrls,
+}: {
+  defaultValues: RecipeDraftFormValues;
+  sourceMediaPreviewUrls?: string[];
+  stepImagePreviewUrls?: string[][];
+}): ImagePreviewUrlsByImageId => {
   const previewUrlsByImageId: ImagePreviewUrlsByImageId = {};
 
+  addImagePreviewUrls(previewUrlsByImageId, defaultValues.sourceMedia, sourceMediaPreviewUrls);
+
   defaultValues.steps.forEach((step, stepIndex) => {
-    const previewUrls = stepImagePreviewUrls?.[stepIndex];
-
-    if (!previewUrls || previewUrls.length !== step.images.length) {
-      return;
-    }
-
-    step.images.forEach((image, imageIndex) => {
-      const previewUrl = previewUrls[imageIndex];
-
-      if (previewUrl) {
-        previewUrlsByImageId[imageRefId(image)] = previewUrl;
-      }
-    });
+    addImagePreviewUrls(previewUrlsByImageId, step.images, stepImagePreviewUrls?.[stepIndex]);
   });
 
   return previewUrlsByImageId;
@@ -472,6 +486,7 @@ export const RecipeDraftForm = ({
   submitLabel,
   submitError,
   coverImagePreviewUrl,
+  sourceMediaPreviewUrls,
   stepImagePreviewUrls,
   uploadImage = uploadRecipeImage,
   onSubmit,
@@ -483,9 +498,14 @@ export const RecipeDraftForm = ({
   const ingredientGroups = useFieldArray({ control, name: "ingredientGroups" });
   const steps = useFieldArray({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
-  const stepImagePreviewUrlsByImageId = useMemo(
-    () => createStepImagePreviewUrlsByImageId(defaultValues, stepImagePreviewUrls),
-    [defaultValues, stepImagePreviewUrls],
+  const imagePreviewUrlsByImageId = useMemo(
+    () =>
+      createImagePreviewUrlsByImageId({
+        defaultValues,
+        sourceMediaPreviewUrls,
+        stepImagePreviewUrls,
+      }),
+    [defaultValues, sourceMediaPreviewUrls, stepImagePreviewUrls],
   );
   const handleFormSubmit = handleSubmit(onSubmit);
   const handleUploadStateChange = (isUploading: boolean) => {
@@ -506,6 +526,18 @@ export const RecipeDraftForm = ({
       <FormInput control={control} isRequired label="タイトル" name="title" />
 
       <FormInput control={control} label="人数" name="servingsText" />
+
+      <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
+        <legend className="px-2 font-bold text-brand-walnut">投稿画像</legend>
+        <StepImagesInput
+          control={control}
+          label="投稿画像"
+          name="sourceMedia"
+          onUploadStateChange={handleUploadStateChange}
+          previewUrlsByImageId={imagePreviewUrlsByImageId}
+          uploadImage={uploadImage}
+        />
+      </fieldset>
 
       {ingredientGroups.fields.map((field, groupIndex) => (
         <IngredientGroupFields control={control} groupIndex={groupIndex} key={field.id} />
@@ -536,7 +568,7 @@ export const RecipeDraftForm = ({
                   label={`手順${stepIndex + 1}の画像`}
                   name={`steps.${stepIndex}.images`}
                   onUploadStateChange={handleUploadStateChange}
-                  previewUrlsByImageId={stepImagePreviewUrlsByImageId}
+                  previewUrlsByImageId={imagePreviewUrlsByImageId}
                   uploadImage={uploadImage}
                 />
               </div>

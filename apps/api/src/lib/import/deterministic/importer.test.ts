@@ -151,6 +151,7 @@ describe("createDeterministicImporter", () => {
           return {
             recipeDraftContent: {
               title: "",
+              sourceMedia: [],
               ingredientGroups: [],
               steps: [],
             },
@@ -216,6 +217,7 @@ const createPage = (url: string) => ({
 const createResult = () => ({
   recipeDraftContent: {
     title: "Tomato soup",
+    sourceMedia: [],
     ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
     steps: [{ text: "Cook.", images: [] }],
   },

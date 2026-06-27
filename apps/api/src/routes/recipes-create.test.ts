@@ -61,6 +61,7 @@ describe("Recipe create routes", () => {
         content: {
           title: "Tomato pasta",
           ingredientGroups: [],
+          sourceMedia: [],
           steps: [],
         },
         source: {
@@ -679,6 +680,108 @@ describe("Recipe create routes", () => {
         },
       },
     });
+  });
+
+  it("同じ外部画像URLをcoverと投稿画像で共有して保存する", async () => {
+    const externalCopies: unknown[] = [];
+    const savedRecipes: unknown[] = [];
+    const testApp = createApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123", email: "user@example.com" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async (recipe) => {
+          savedRecipes.push(recipe);
+          return {
+            status: "created",
+            recipe: {
+              ...recipe,
+              createdAt: new Date("2026-05-26T00:00:00.000Z"),
+              updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+            },
+          };
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+      imageService: {
+        createUploadUrl: async () => {
+          throw new Error("should not create an upload URL");
+        },
+        createSignedGetUrl: async () => {
+          throw new Error("should not create a signed GET URL");
+        },
+        copyObject: async () => {
+          throw new Error("should not copy a tmp object");
+        },
+        copyExternalImageUrl: async (params) => {
+          externalCopies.push(params);
+          return { objectKey: `${params.destinationKeyPrefix}.jpg`, width: 1200, height: 800 };
+        },
+        deleteObject: async () => undefined,
+        deletePrefixBestEffort: async () => undefined,
+      },
+      createRecipeId: () => "recipe_123",
+      createImageId: () => "shared",
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: "Tomato pasta",
+            coverImage: {
+              type: "externalImageUrl",
+              url: "https://cdn.example.com/source.jpg",
+            },
+            sourceMedia: [
+              {
+                type: "externalImageUrl",
+                url: "https://cdn.example.com/source.jpg",
+              },
+            ],
+          },
+          source: {},
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(externalCopies).toEqual([
+      {
+        sourceUrl: "https://cdn.example.com/source.jpg",
+        destinationKeyPrefix: "recipes/user_123/recipe_123/shared",
+      },
+    ]);
+    expect(savedRecipes).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({
+          coverImage: {
+            objectKey: "recipes/user_123/recipe_123/shared.jpg",
+            width: 1200,
+            height: 800,
+          },
+          sourceMedia: [
+            {
+              objectKey: "recipes/user_123/recipe_123/shared.jpg",
+              width: 1200,
+              height: 800,
+            },
+          ],
+        }),
+      }),
+    ]);
   });
 
   it("外部画像URLの確定に失敗しても画像を省略してレシピを保存する", async () => {

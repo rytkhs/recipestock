@@ -238,6 +238,7 @@ describe("URL import flow", () => {
       return {
         recipeDraftContent: {
           title: "Deterministic recipe",
+          sourceMedia: [],
           ingredientGroups: [],
           steps: [],
         },
@@ -615,13 +616,11 @@ describe("URL import flow", () => {
           type: "externalImageUrl",
           url: "https://cdn.example.com/cover.jpg",
         },
+        sourceMedia: [
+          { type: "externalImageUrl", url: "https://cdn.example.com/cover.jpg" },
+          { type: "externalImageUrl", url: "https://cdn.example.com/step.jpg" },
+        ],
         steps: [
-          {
-            images: [{ type: "externalImageUrl", url: "https://cdn.example.com/cover.jpg" }],
-          },
-          {
-            images: [{ type: "externalImageUrl", url: "https://cdn.example.com/step.jpg" }],
-          },
           {
             text: "揚げ焼きにする。",
             images: [],
@@ -709,6 +708,7 @@ describe("URL import flow", () => {
         return {
           recipeDraftContent: {
             title: "Deterministic soup",
+            sourceMedia: [],
             ingredientGroups: [{ ingredients: [{ name: "Salt", amount: "1 tsp" }] }],
             steps: [{ text: "Simmer.", images: [] }],
           },

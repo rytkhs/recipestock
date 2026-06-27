@@ -48,7 +48,7 @@ export type RecipeImportImageCandidate = {
 
 export type RecipeImportImagePlacement = {
   coverImageUrl?: string;
-  prependedStepImageUrls: string[];
+  sourceMediaUrls: string[];
 };
 
 export type RecipeImportStructuredInstructionEvidence = {

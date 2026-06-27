@@ -69,6 +69,7 @@ describe("kurashiruImportAdapter", () => {
           type: "externalImageUrl",
           url: COVER_IMAGE_URL,
         },
+        sourceMedia: [],
         ingredientGroups: [
           {
             ingredients: [{ name: "卵", amount: "2個" }],

@@ -110,6 +110,7 @@ describe("cookpadImportAdapter", () => {
           type: "externalImageUrl",
           url: cookpadCoverImageUrl(1360, 1562, 80),
         },
+        sourceMedia: [],
         ingredientGroups: [
           {
             ingredients: [

@@ -198,10 +198,7 @@ describe("Instagram source extraction adapter", () => {
       ],
       imagePlacement: {
         coverImageUrl: "https://cdn.example.com/cover.jpg",
-        prependedStepImageUrls: [
-          "https://cdn.example.com/cover.jpg",
-          "https://cdn.example.com/step.jpg",
-        ],
+        sourceMediaUrls: ["https://cdn.example.com/cover.jpg", "https://cdn.example.com/step.jpg"],
       },
       source: {
         sourceUrl: CANONICAL_URL,
@@ -241,11 +238,11 @@ describe("Instagram source extraction adapter", () => {
     );
     expect(result.imageCandidates).toEqual([]);
     expect(result.imagePlacement).toEqual({
-      prependedStepImageUrls: [],
+      sourceMediaUrls: [],
     });
   });
 
-  it("複数画像投稿ではsidecar画像をcoverとstepへ追加する", async () => {
+  it("複数画像投稿ではsidecar画像をcoverとsourceMediaへ追加する", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
         ytdlpMetadataClient: createYtDlpMetadataClientStub(
@@ -289,14 +286,14 @@ describe("Instagram source extraction adapter", () => {
     ]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/sidecar-1.jpg",
-      prependedStepImageUrls: [
+      sourceMediaUrls: [
         "https://cdn.example.com/sidecar-1.jpg",
         "https://cdn.example.com/sidecar-2.jpg",
       ],
     });
   });
 
-  it("動画投稿ではカバー画像をstepへ追加しない", async () => {
+  it("動画投稿ではカバー画像をsourceMediaへ追加しない", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
         ytdlpMetadataClient: createYtDlpMetadataClientStub(
@@ -320,11 +317,11 @@ describe("Instagram source extraction adapter", () => {
 
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/video-cover.jpg",
-      prependedStepImageUrls: [],
+      sourceMediaUrls: [],
     });
   });
 
-  it("Reelではカバー画像をstepへ追加しない", async () => {
+  it("Reelではカバー画像をsourceMediaへ追加しない", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
         normalizedUrl: REEL_CANONICAL_URL,
@@ -351,7 +348,7 @@ describe("Instagram source extraction adapter", () => {
 
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/reel-cover.jpg",
-      prependedStepImageUrls: [],
+      sourceMediaUrls: [],
     });
   });
 

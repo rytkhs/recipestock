@@ -30,6 +30,7 @@ export const formValuesToRecipeDraftContent = (
     title: values.title.trim(),
     servingsText: compactText(values.servingsText),
     coverImage: values.coverImage,
+    sourceMedia: values.sourceMedia,
     ingredientGroups: values.ingredientGroups
       .map((group) => ({
         label: compactText(group.label),
@@ -54,6 +55,10 @@ export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormV
   coverImage: recipe.content.coverImage
     ? { type: "existingObjectKey", key: recipe.content.coverImage.objectKey }
     : undefined,
+  sourceMedia: (recipe.content.sourceMedia ?? []).map((image) => ({
+    type: "existingObjectKey",
+    key: image.objectKey,
+  })),
   note: recipe.content.note ?? "",
   ingredientGroups:
     recipe.content.ingredientGroups.length > 0
@@ -86,6 +91,7 @@ export const recipeDraftContentToFormValues = (
   title: draft.title,
   servingsText: draft.servingsText ?? "",
   coverImage: draft.coverImage,
+  sourceMedia: draft.sourceMedia ?? [],
   note: draft.note ?? "",
   ingredientGroups:
     draft.ingredientGroups.length > 0

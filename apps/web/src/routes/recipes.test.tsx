@@ -469,8 +469,7 @@ describe("RecipesRoute", () => {
       titleInput.compareDocumentPosition(servingsInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      servingsInput.compareDocumentPosition(ingredientNameInput) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      servingsInput.compareDocumentPosition(ingredientNameInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
     await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
@@ -743,6 +742,20 @@ describe("RecipesRoute", () => {
                   "recipes/user_123/recipe_123/cover.webp",
                   "https://images.example/cover.webp",
                 ),
+                sourceMedia: [
+                  savedImage(
+                    "recipes/user_123/recipe_123/source-1.webp",
+                    "https://images.example/source-1.webp",
+                    1080,
+                    1080,
+                  ),
+                  savedImage(
+                    "recipes/user_123/recipe_123/source-2.webp",
+                    "https://images.example/source-2.webp",
+                    1080,
+                    1080,
+                  ),
+                ],
                 ingredientGroups: [],
                 steps: [
                   {
@@ -752,16 +765,6 @@ describe("RecipesRoute", () => {
                         "recipes/user_123/recipe_123/step.webp",
                         "https://images.example/step.webp",
                         800,
-                        1200,
-                      ),
-                    ],
-                  },
-                  {
-                    images: [
-                      savedImage(
-                        "recipes/user_123/recipe_123/step-only.webp",
-                        "https://images.example/step-only.webp",
-                        900,
                         1200,
                       ),
                     ],
@@ -792,15 +795,21 @@ describe("RecipesRoute", () => {
     expect(coverImage).toHaveAttribute("width", "1200");
     expect(coverImage).toHaveAttribute("height", "800");
     expect(coverImage).toHaveStyle({ aspectRatio: "1200 / 800" });
+    expect(screen.getByRole("heading", { name: "投稿画像" })).toBeInTheDocument();
+    expect(screen.getByAltText("投稿画像1")).toHaveAttribute(
+      "src",
+      "https://images.example/source-1.webp",
+    );
+    expect(screen.getByAltText("投稿画像2")).toHaveAttribute(
+      "src",
+      "https://images.example/source-2.webp",
+    );
     const stepImage = screen.getByAltText("手順1の画像1");
     expect(stepImage).toHaveAttribute("src", "https://images.example/step.webp");
     expect(stepImage).toHaveAttribute("width", "800");
     expect(stepImage).toHaveAttribute("height", "1200");
     expect(stepImage).toHaveStyle({ aspectRatio: "800 / 1200" });
-    expect(screen.getByAltText("手順2の画像1")).toHaveAttribute(
-      "src",
-      "https://images.example/step-only.webp",
-    );
+    expect(screen.queryByAltText("手順2の画像1")).not.toBeInTheDocument();
   });
 
   it("ロック中Recipe詳細に直接アクセスしても本文と編集リンクを表示しない", async () => {
@@ -1164,6 +1173,92 @@ describe("RecipesRoute", () => {
                 key: "recipes/user_123/recipe_123/step-b.webp",
               },
             ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("編集画面で投稿画像を削除して保存できる", async () => {
+    const recipeResponse = {
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          sourceMedia: [
+            savedImage(
+              "recipes/user_123/recipe_123/source-a.webp",
+              "https://images.example/source-a.webp",
+            ),
+            savedImage(
+              "recipes/user_123/recipe_123/source-b.webp",
+              "https://images.example/source-b.webp",
+            ),
+          ],
+          ingredientGroups: [],
+          steps: [{ text: "煮詰める", images: [] }],
+        },
+        source: {
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    };
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT") {
+          return jsonResponse(recipeResponse);
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(recipeResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    const firstPreview = await screen.findByAltText("投稿画像1プレビュー");
+    expect(firstPreview).toHaveAttribute("src", "https://images.example/source-a.webp");
+    expect(screen.getByAltText("投稿画像2プレビュー")).toHaveAttribute(
+      "src",
+      "https://images.example/source-b.webp",
+    );
+
+    const firstPreviewCard = firstPreview.closest(".group");
+    expect(firstPreviewCard).not.toBeNull();
+    await userEvent.click(
+      within(firstPreviewCard as HTMLElement).getByRole("button", { name: "削除" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/recipes/recipe_123",
+        expect.objectContaining({
+          method: "PUT",
+          credentials: "include",
+        }),
+      );
+    });
+    const updateRecipeCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(updateRecipeCall?.[1]?.body))).toMatchObject({
+      content: {
+        sourceMedia: [
+          {
+            type: "existingObjectKey",
+            key: "recipes/user_123/recipe_123/source-b.webp",
           },
         ],
       },

@@ -107,6 +107,7 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
             } as const,
           }
         : {}),
+      sourceMedia: [],
       ingredientGroups,
       steps,
       ...(note ? { note } : {}),

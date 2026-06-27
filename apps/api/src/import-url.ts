@@ -961,10 +961,6 @@ const applyDeterministicImagePlacement = (
 ): RecipeDraftContent => {
   if (!placement) return draft;
 
-  const prependedSteps = placement.prependedStepImageUrls.map((url) => ({
-    images: [{ type: "externalImageUrl" as const, url }],
-  }));
-
   return recipeDraftContentSchema.parse({
     ...draft,
     ...(placement.coverImageUrl
@@ -975,6 +971,9 @@ const applyDeterministicImagePlacement = (
           },
         }
       : {}),
-    steps: [...prependedSteps, ...draft.steps],
+    sourceMedia: [
+      ...placement.sourceMediaUrls.map((url) => ({ type: "externalImageUrl" as const, url })),
+      ...(draft.sourceMedia ?? []),
+    ],
   });
 };

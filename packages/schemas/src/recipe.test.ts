@@ -17,6 +17,7 @@ describe("recipeContentSchema", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(result.data?.sourceMedia).toEqual([]);
   });
 
   it("保存画像の正の整数寸法を検証する", () => {
@@ -41,6 +42,21 @@ describe("recipeContentSchema", () => {
         },
       }).success,
     ).toBe(false);
+  });
+
+  it("投稿画像を保存済みレシピ本文に持てる", () => {
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        sourceMedia: [
+          {
+            objectKey: "recipes/user/recipe/source.webp",
+            width: 1200,
+            height: 800,
+          },
+        ],
+      }).success,
+    ).toBe(true);
   });
 });
 
@@ -72,6 +88,7 @@ describe("recipeDraftContentSchema", () => {
     const result = recipeDraftContentSchema.safeParse({
       title: "Tomato pasta",
       coverImage: { type: "tmpObjectKey", key: "tmp/user/image.webp" },
+      sourceMedia: [{ type: "externalImageUrl", url: "https://example.com/source.jpg" }],
       steps: [
         {
           text: "盛り付ける",

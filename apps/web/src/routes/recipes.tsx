@@ -531,6 +531,8 @@ export const RecipeDetailRoute = () => {
     );
   }
 
+  const sourceMedia = recipe.content.sourceMedia ?? [];
+
   return (
     <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
       {recipe.content.coverImage?.url ? (
@@ -580,6 +582,26 @@ export const RecipeDetailRoute = () => {
             レシピを削除できませんでした。
           </p>
         </div>
+      ) : null}
+
+      {sourceMedia.some((image) => image.url) ? (
+        <section className="mt-8">
+          <h2 className="text-brand-walnut font-bold text-lg">投稿画像</h2>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {sourceMedia.map((image, imageIndex) =>
+              image.url ? (
+                <img
+                  alt={`投稿画像${imageIndex + 1}`}
+                  className="block aspect-square w-full rounded-[14px] object-cover shadow-pantry-sm"
+                  height={image.height}
+                  key={image.objectKey}
+                  src={image.url}
+                  width={image.width}
+                />
+              ) : null,
+            )}
+          </div>
+        </section>
       ) : null}
 
       {recipe.content.ingredientGroups.length > 0 ? (
@@ -744,6 +766,7 @@ export const EditRecipeRoute = () => {
         key={recipe.id}
         coverImagePreviewUrl={recipe.content.coverImage?.url}
         defaultValues={recipeDetailToFormValues(recipe)}
+        sourceMediaPreviewUrls={(recipe.content.sourceMedia ?? []).map((image) => image.url ?? "")}
         submitError={submitError}
         submitLabel="更新"
         stepImagePreviewUrls={recipe.content.steps.map((step) =>
