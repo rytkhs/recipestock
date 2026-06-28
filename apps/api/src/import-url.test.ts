@@ -1,3 +1,8 @@
+import {
+  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_TOTAL_IMAGES,
+} from "@recipestock/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertImportUrlAllowed,
@@ -685,6 +690,79 @@ describe("URL import flow", () => {
     expect(aiNormalize).not.toHaveBeenCalled();
   });
 
+  it("AI import結果の画像上限超過は切り詰めて成功する", async () => {
+    const sourceMediaUrls = createImageUrls(MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1, "source");
+    const stepImageUrlGroups = createStepImageUrlGroups(
+      MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+      "step",
+    );
+    const stepImageUrls = stepImageUrlGroups.flat();
+    const imageCandidates = [createImageUrl("cover"), ...sourceMediaUrls, ...stepImageUrls].map(
+      (url, position) => ({
+        id: `img_${position}`,
+        url,
+        position,
+      }),
+    );
+    const sourceExtractor: SourceExtractor = {
+      async tryExtract() {
+        return {
+          input: {
+            source: {
+              finalUrl: "https://www.example.com/recipes/image-limits",
+              host: "example.com",
+            },
+            markdownContent: "Image limit recipe",
+            recipeStructuredEvidence: [],
+          },
+          imageCandidates,
+          imagePlacement: {
+            coverImageUrl: createImageUrl("cover"),
+            sourceMediaUrls,
+          },
+          source: {
+            sourceUrl: "https://www.example.com/recipes/image-limits",
+            sourceName: "Example",
+          },
+          warnings: [],
+        };
+      },
+    };
+
+    const result = await importRecipeFromUrl({
+      rawUrl: "https://www.example.com/recipes/image-limits",
+      userId: "user_123",
+      env: {
+        IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+      },
+      usageRepository: createUsageRepositoryStub(),
+      deterministicImporter: {
+        async tryImport() {
+          return null;
+        },
+      },
+      sourceExtractor,
+      aiProvider: {
+        async normalize() {
+          return {
+            title: "Image limit recipe",
+            ingredientGroups: [],
+            steps: stepImageUrlGroups.map((imageUrls, index) => ({
+              text: `Cook ${index + 1}.`,
+              imageUrls,
+            })),
+          };
+        },
+      },
+    });
+
+    expect(result.recipeDraftContent.sourceMedia).toHaveLength(MAX_RECIPE_SOURCE_MEDIA_IMAGES);
+    expect(
+      result.recipeDraftContent.steps.every((step) => step.images.length <= MAX_RECIPE_STEP_IMAGES),
+    ).toBe(true);
+    expect(countDraftImages(result.recipeDraftContent)).toBe(MAX_RECIPE_TOTAL_IMAGES);
+  });
+
   it("deterministic importerが成功した場合はAI providerとAI usageを使わない", async () => {
     const consumeAiUsage = vi.fn(async ({ month }: { month: string }) => ({
       status: "consumed" as const,
@@ -1052,6 +1130,20 @@ const createAiProviderStub = (title: string) => ({
     };
   },
 });
+
+const createImageUrl = (id: string) => `https://images.example/${id}.jpg`;
+
+const createImageUrls = (count: number, prefix: string) =>
+  Array.from({ length: count }, (_, index) => createImageUrl(`${prefix}-${index}`));
+
+const createStepImageUrlGroups = (imageCount: number, prefix: string) =>
+  Array.from({ length: Math.ceil(imageCount / MAX_RECIPE_STEP_IMAGES) }, (_, stepIndex) =>
+    createImageUrls(MAX_RECIPE_STEP_IMAGES + 1, `${prefix}-${stepIndex}`),
+  );
+
+const countDraftImages = (content: { sourceMedia?: unknown[]; steps?: { images?: unknown[] }[] }) =>
+  (content.sourceMedia?.length ?? 0) +
+  (content.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
 const createYouTubeHtml = (videoDetails: unknown) => `
   <html>

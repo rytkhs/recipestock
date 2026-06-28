@@ -1,3 +1,8 @@
+import {
+  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_TOTAL_IMAGES,
+} from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { type RecipeImportError } from "../types";
 import { createDeterministicImporter } from "./importer";
@@ -176,6 +181,47 @@ describe("createDeterministicImporter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
+  it("画像上限を超えたAdapter結果は切り詰めて返す", async () => {
+    const importer = createDeterministicImporter([
+      createAdapter({
+        async convert() {
+          return {
+            recipeDraftContent: {
+              title: "Tomato soup",
+              coverImage: createDraftImage("cover"),
+              sourceMedia: createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1, "source"),
+              ingredientGroups: [],
+              steps: createStepsWithImages(
+                MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+              ),
+            },
+            source: {
+              sourceUrl: NORMALIZED_URL,
+              sourceName: "Example",
+            },
+            warnings: [],
+          };
+        },
+      }),
+    ]);
+
+    const result = await importer.tryImport({
+      normalizedUrl: NORMALIZED_URL,
+      fetcher: async (url) => createPage(url),
+      fetchOptions: FETCH_OPTIONS,
+    });
+
+    expect(result?.recipeDraftContent.sourceMedia).toEqual(
+      createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES, "source"),
+    );
+    expect(
+      result?.recipeDraftContent.steps.every(
+        (step) => step.images.length <= MAX_RECIPE_STEP_IMAGES,
+      ),
+    ).toBe(true);
+    expect(countDraftImages(result?.recipeDraftContent)).toBe(MAX_RECIPE_TOTAL_IMAGES);
+  });
+
   it("Adapter選択後の変換エラーをそのまま返す", async () => {
     const expectedError = new Error("Site structure changed.");
     const importer = createDeterministicImporter([
@@ -227,3 +273,28 @@ const createResult = () => ({
   },
   warnings: [],
 });
+
+const createDraftImage = (id: string) => ({
+  type: "externalImageUrl" as const,
+  url: `https://images.example/${id}.jpg`,
+});
+
+const createDraftImages = (count: number, prefix: string) =>
+  Array.from({ length: count }, (_, index) => createDraftImage(`${prefix}-${index}`));
+
+const createStepsWithImages = (imageCount: number) =>
+  Array.from({ length: Math.ceil(imageCount / MAX_RECIPE_STEP_IMAGES) }, (_, stepIndex) => ({
+    text: `Step ${stepIndex + 1}`,
+    images: createDraftImages(MAX_RECIPE_STEP_IMAGES + 1, `step-${stepIndex}`),
+  }));
+
+const countDraftImages = (
+  content:
+    | {
+        sourceMedia?: unknown[];
+        steps?: { images?: unknown[] }[];
+      }
+    | undefined,
+) =>
+  (content?.sourceMedia?.length ?? 0) +
+  (content?.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);

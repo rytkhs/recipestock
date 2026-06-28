@@ -1,8 +1,19 @@
 import { Button, Input, Label, ProgressBar, TextArea, TextField } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { type DraftImageRef } from "@recipestock/schemas";
+import {
+  type DraftImageRef,
+  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_TOTAL_IMAGES,
+} from "@recipestock/schemas";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type FieldPathByValue, useController, useFieldArray, useForm } from "react-hook-form";
+import {
+  type FieldPathByValue,
+  useController,
+  useFieldArray,
+  useForm,
+  useWatch,
+} from "react-hook-form";
 import { RecipeImageUploadError, uploadRecipeImage } from "./image-upload";
 import {
   createEmptyIngredientGroup,
@@ -31,6 +42,7 @@ type ImagePreviewUrlsByImageId = Record<string, string>;
 
 const imageInputAccept = "image/jpeg,image/png,image/webp";
 const imageInputHelpText = "JPEG / PNG / WebP、5MBまで";
+const imageLimitReachedText = "上限に達しました";
 
 const imageRefId = (image: DraftImageRef) =>
   `${image.type}:${"key" in image ? image.key : image.url}`;
@@ -72,6 +84,16 @@ const createImagePreviewUrlsByImageId = ({
 
   return previewUrlsByImageId;
 };
+
+const countFormImages = ({
+  sourceMedia,
+  steps,
+}: {
+  sourceMedia?: DraftImageRef[];
+  steps?: { images?: DraftImageRef[] }[];
+}) =>
+  (sourceMedia?.length ?? 0) +
+  (steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
 const createLocalPreviewUrl = (file: File) => URL.createObjectURL(file);
 
@@ -239,16 +261,20 @@ const ImageInput = ({
 
 const StepImagesInput = ({
   control,
+  isAddDisabled,
   label,
   name,
+  addDisabledReason,
   onUploadStateChange,
   previewUrlsByImageId,
   uploadImage,
   variant = "step",
 }: {
   control: RecipeDraftFormControl;
+  isAddDisabled?: boolean;
   label: string;
   name: RecipeDraftImageArrayFieldPath;
+  addDisabledReason?: string;
   onUploadStateChange(isUploading: boolean): void;
   previewUrlsByImageId?: ImagePreviewUrlsByImageId;
   uploadImage: (file: File) => Promise<DraftImageRef>;
@@ -347,7 +373,7 @@ const StepImagesInput = ({
         accept={imageInputAccept}
         aria-label={label}
         className="sr-only"
-        disabled={isUploading}
+        disabled={isUploading || isAddDisabled}
         type="file"
         onChange={(event) => void handleChange(event)}
       />
@@ -384,7 +410,7 @@ const StepImagesInput = ({
         })}
         <Button
           className={addButtonClassName}
-          isDisabled={isUploading}
+          isDisabled={isUploading || isAddDisabled}
           variant="secondary"
           onPress={() => inputRef.current?.click()}
         >
@@ -393,6 +419,9 @@ const StepImagesInput = ({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {isUploading ? <span className="text-brand-muted text-sm">アップロード中</span> : null}
+        {isAddDisabled && addDisabledReason ? (
+          <span className="text-brand-muted text-sm">{addDisabledReason}</span>
+        ) : null}
       </div>
       {isUploading ? <ProgressBar aria-label={`${label}アップロード中`} isIndeterminate /> : null}
       {error ? (
@@ -510,7 +539,16 @@ export const RecipeDraftForm = ({
   });
   const ingredientGroups = useFieldArray({ control, name: "ingredientGroups" });
   const steps = useFieldArray({ control, name: "steps" });
+  const watchedSourceMedia = useWatch({ control, name: "sourceMedia" });
+  const watchedSteps = useWatch({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
+  const totalImageCount = countFormImages({
+    sourceMedia: watchedSourceMedia,
+    steps: watchedSteps,
+  });
+  const isTotalImageLimitReached = totalImageCount >= MAX_RECIPE_TOTAL_IMAGES;
+  const isSourceMediaLimitReached =
+    (watchedSourceMedia?.length ?? 0) >= MAX_RECIPE_SOURCE_MEDIA_IMAGES;
   const imagePreviewUrlsByImageId = useMemo(
     () =>
       createImagePreviewUrlsByImageId({
@@ -545,8 +583,10 @@ export const RecipeDraftForm = ({
           <legend className="px-2 font-bold text-brand-walnut">投稿画像</legend>
           <StepImagesInput
             control={control}
+            isAddDisabled={isSourceMediaLimitReached || isTotalImageLimitReached}
             label="投稿画像"
             name="sourceMedia"
+            addDisabledReason={imageLimitReachedText}
             onUploadStateChange={handleUploadStateChange}
             previewUrlsByImageId={imagePreviewUrlsByImageId}
             uploadImage={uploadImage}
@@ -581,8 +621,13 @@ export const RecipeDraftForm = ({
                 />
                 <StepImagesInput
                   control={control}
+                  isAddDisabled={
+                    (watchedSteps?.[stepIndex]?.images?.length ?? 0) >= MAX_RECIPE_STEP_IMAGES ||
+                    isTotalImageLimitReached
+                  }
                   label={`手順${stepIndex + 1}の画像`}
                   name={`steps.${stepIndex}.images`}
+                  addDisabledReason={imageLimitReachedText}
                   onUploadStateChange={handleUploadStateChange}
                   previewUrlsByImageId={imagePreviewUrlsByImageId}
                   uploadImage={uploadImage}

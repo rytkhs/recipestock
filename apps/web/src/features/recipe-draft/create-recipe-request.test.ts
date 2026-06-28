@@ -1,3 +1,4 @@
+import { MAX_RECIPE_STEP_IMAGES, MAX_RECIPE_TOTAL_IMAGES } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
 import {
   formValuesToCreateRecipeRequest,
@@ -7,6 +8,7 @@ import {
 import {
   createEmptyRecipeDraftFormValues,
   type RecipeDraftFormValues,
+  recipeDraftFormSchema,
 } from "./recipe-draft-form-values";
 
 const createValues = (overrides: Partial<RecipeDraftFormValues> = {}): RecipeDraftFormValues => ({
@@ -187,3 +189,37 @@ describe("formValuesToCreateRecipeRequest", () => {
     });
   });
 });
+
+describe("recipeDraftFormSchema", () => {
+  it("フォーム値の全体画像枚数を制限する", () => {
+    const values = createValues({
+      coverImage: createDraftImage("cover"),
+      steps: createStepsWithImages(MAX_RECIPE_TOTAL_IMAGES),
+    });
+
+    expect(recipeDraftFormSchema.safeParse(values).success).toBe(false);
+    expect(
+      recipeDraftFormSchema.safeParse({
+        ...values,
+        coverImage: undefined,
+      }).success,
+    ).toBe(true);
+  });
+});
+
+const createDraftImage = (id: string) => ({
+  type: "tmpObjectKey" as const,
+  key: `tmp/user_123/${id}.webp`,
+});
+
+const createDraftImages = (count: number, prefix: string) =>
+  Array.from({ length: count }, (_, index) => createDraftImage(`${prefix}-${index}`));
+
+const createStepsWithImages = (imageCount: number) =>
+  Array.from({ length: Math.ceil(imageCount / MAX_RECIPE_STEP_IMAGES) }, (_, stepIndex) => ({
+    text: `手順${stepIndex + 1}`,
+    images: createDraftImages(
+      Math.min(MAX_RECIPE_STEP_IMAGES, imageCount - stepIndex * MAX_RECIPE_STEP_IMAGES),
+      `step-${stepIndex}`,
+    ),
+  }));

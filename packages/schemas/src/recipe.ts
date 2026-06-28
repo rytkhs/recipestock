@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const MAX_RECIPE_SOURCE_MEDIA_IMAGES = 20;
+export const MAX_RECIPE_STEP_IMAGES = 10;
+export const MAX_RECIPE_TOTAL_IMAGES = 100;
+
 const webUrlSchema = z.url().refine((value) => {
   const protocol = new URL(value).protocol;
   return protocol === "http:" || protocol === "https:";
@@ -40,49 +44,76 @@ export const recipeImageWithUrlSchema = recipeImageSchema.extend({
   url: z.string().optional(),
 });
 
+const countRecipeImages = (content: {
+  sourceMedia?: unknown[];
+  steps?: { images?: unknown[] }[];
+}) =>
+  (content.sourceMedia?.length ?? 0) +
+  (content.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
+
+const validateRecipeTotalImages = (
+  content: {
+    sourceMedia?: unknown[];
+    steps?: { images?: unknown[] }[];
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (countRecipeImages(content) > MAX_RECIPE_TOTAL_IMAGES) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["steps"],
+      message: `Recipe images must be at most ${MAX_RECIPE_TOTAL_IMAGES}.`,
+    });
+  }
+};
+
 export const recipeStepSchema = z
   .object({
     text: z.string().min(1).optional(),
-    images: z.array(recipeImageSchema).default([]),
+    images: z.array(recipeImageSchema).max(MAX_RECIPE_STEP_IMAGES).default([]),
   })
   .refine((step) => step.text || step.images.length > 0);
 
 export const recipeDraftStepSchema = z
   .object({
     text: z.string().min(1).optional(),
-    images: z.array(draftImageRefSchema).default([]),
+    images: z.array(draftImageRefSchema).max(MAX_RECIPE_STEP_IMAGES).default([]),
   })
   .refine((step) => step.text || step.images.length > 0);
 
-export const recipeContentSchema = z.object({
-  title: z.string().min(1),
-  yieldText: z.string().optional(),
-  coverImage: recipeImageSchema.optional(),
-  sourceMedia: z.array(recipeImageSchema).default([]),
-  ingredientGroups: z.array(ingredientGroupSchema).default([]),
-  steps: z.array(recipeStepSchema).default([]),
-  note: z.string().optional(),
-});
+export const recipeContentSchema = z
+  .object({
+    title: z.string().min(1),
+    yieldText: z.string().optional(),
+    coverImage: recipeImageSchema.optional(),
+    sourceMedia: z.array(recipeImageSchema).max(MAX_RECIPE_SOURCE_MEDIA_IMAGES).default([]),
+    ingredientGroups: z.array(ingredientGroupSchema).default([]),
+    steps: z.array(recipeStepSchema).default([]),
+    note: z.string().optional(),
+  })
+  .superRefine(validateRecipeTotalImages);
 
 export const recipeStepWithUrlSchema = recipeStepSchema.safeExtend({
-  images: z.array(recipeImageWithUrlSchema).default([]),
+  images: z.array(recipeImageWithUrlSchema).max(MAX_RECIPE_STEP_IMAGES).default([]),
 });
 
-export const recipeContentWithUrlsSchema = recipeContentSchema.extend({
+export const recipeContentWithUrlsSchema = recipeContentSchema.safeExtend({
   coverImage: recipeImageWithUrlSchema.optional(),
-  sourceMedia: z.array(recipeImageWithUrlSchema).default([]),
+  sourceMedia: z.array(recipeImageWithUrlSchema).max(MAX_RECIPE_SOURCE_MEDIA_IMAGES).default([]),
   steps: z.array(recipeStepWithUrlSchema).default([]),
 });
 
-export const recipeDraftContentSchema = z.object({
-  title: z.string().min(1),
-  yieldText: z.string().optional(),
-  coverImage: draftImageRefSchema.optional(),
-  sourceMedia: z.array(draftImageRefSchema).default([]),
-  ingredientGroups: z.array(ingredientGroupSchema).default([]),
-  steps: z.array(recipeDraftStepSchema).default([]),
-  note: z.string().optional(),
-});
+export const recipeDraftContentSchema = z
+  .object({
+    title: z.string().min(1),
+    yieldText: z.string().optional(),
+    coverImage: draftImageRefSchema.optional(),
+    sourceMedia: z.array(draftImageRefSchema).max(MAX_RECIPE_SOURCE_MEDIA_IMAGES).default([]),
+    ingredientGroups: z.array(ingredientGroupSchema).default([]),
+    steps: z.array(recipeDraftStepSchema).default([]),
+    note: z.string().optional(),
+  })
+  .superRefine(validateRecipeTotalImages);
 
 export const recipeSourceDraftSchema = z.object({
   sourceUrl: webUrlSchema.optional().nullable(),

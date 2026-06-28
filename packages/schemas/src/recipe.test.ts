@@ -5,6 +5,9 @@ import {
   getRecipeResponseSchema,
   listRecipesQuerySchema,
   listRecipesResponseSchema,
+  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_TOTAL_IMAGES,
   recipeContentSchema,
   recipeDraftContentSchema,
   recipeSourceDraftSchema,
@@ -57,6 +60,59 @@ describe("recipeContentSchema", () => {
         ],
       }).success,
     ).toBe(true);
+  });
+
+  it("保存済みレシピ本文の投稿画像枚数を制限する", () => {
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        sourceMedia: createSavedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+      }).success,
+    ).toBe(true);
+
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        sourceMedia: createSavedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("保存済みレシピ本文の1手順あたりの画像枚数を制限する", () => {
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        steps: [{ images: createSavedImages(MAX_RECIPE_STEP_IMAGES) }],
+      }).success,
+    ).toBe(true);
+
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        steps: [{ images: createSavedImages(MAX_RECIPE_STEP_IMAGES + 1) }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("保存済みレシピ本文の全体画像枚数を制限する", () => {
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        coverImage: createSavedImage("cover"),
+        sourceMedia: createSavedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+        steps: createSavedStepsWithImages(MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+      }).success,
+    ).toBe(true);
+
+    expect(
+      recipeContentSchema.safeParse({
+        title: "Tomato pasta",
+        sourceMedia: createSavedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+        steps: createSavedStepsWithImages(
+          MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1,
+        ),
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -134,6 +190,59 @@ describe("recipeDraftContentSchema", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("保存前入力の投稿画像枚数を制限する", () => {
+    expect(
+      recipeDraftContentSchema.safeParse({
+        title: "Tomato pasta",
+        sourceMedia: createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+      }).success,
+    ).toBe(true);
+
+    expect(
+      recipeDraftContentSchema.safeParse({
+        title: "Tomato pasta",
+        sourceMedia: createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("保存前入力の1手順あたりの画像枚数を制限する", () => {
+    expect(
+      recipeDraftContentSchema.safeParse({
+        title: "Tomato pasta",
+        steps: [{ images: createDraftImages(MAX_RECIPE_STEP_IMAGES) }],
+      }).success,
+    ).toBe(true);
+
+    expect(
+      recipeDraftContentSchema.safeParse({
+        title: "Tomato pasta",
+        steps: [{ images: createDraftImages(MAX_RECIPE_STEP_IMAGES + 1) }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("保存前入力の全体画像枚数を制限する", () => {
+    expect(
+      recipeDraftContentSchema.safeParse({
+        title: "Tomato pasta",
+        coverImage: createDraftImage("cover"),
+        sourceMedia: createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+        steps: createDraftStepsWithImages(MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+      }).success,
+    ).toBe(true);
+
+    expect(
+      recipeDraftContentSchema.safeParse({
+        title: "Tomato pasta",
+        sourceMedia: createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+        steps: createDraftStepsWithImages(
+          MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1,
+        ),
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -240,3 +349,34 @@ describe("listRecipesSchema", () => {
     ).toBe(true);
   });
 });
+
+const createSavedImage = (id: string) => ({
+  objectKey: `recipes/user/recipe/${id}.webp`,
+  width: 1200,
+  height: 800,
+});
+
+const createSavedImages = (count: number) =>
+  Array.from({ length: count }, (_, index) => createSavedImage(`image-${index}`));
+
+const createSavedStepsWithImages = (imageCount: number) =>
+  Array.from({ length: Math.ceil(imageCount / MAX_RECIPE_STEP_IMAGES) }, (_, stepIndex) => ({
+    images: createSavedImages(
+      Math.min(MAX_RECIPE_STEP_IMAGES, imageCount - stepIndex * MAX_RECIPE_STEP_IMAGES),
+    ),
+  }));
+
+const createDraftImage = (id: string) => ({
+  type: "tmpObjectKey" as const,
+  key: `tmp/user/${id}.webp`,
+});
+
+const createDraftImages = (count: number) =>
+  Array.from({ length: count }, (_, index) => createDraftImage(`image-${index}`));
+
+const createDraftStepsWithImages = (imageCount: number) =>
+  Array.from({ length: Math.ceil(imageCount / MAX_RECIPE_STEP_IMAGES) }, (_, stepIndex) => ({
+    images: createDraftImages(
+      Math.min(MAX_RECIPE_STEP_IMAGES, imageCount - stepIndex * MAX_RECIPE_STEP_IMAGES),
+    ),
+  }));
