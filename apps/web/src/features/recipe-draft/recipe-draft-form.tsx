@@ -337,7 +337,7 @@ const StepImagesInput = ({
         onChange={(event) => void handleChange(event)}
       />
       {images.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="flex snap-x gap-3 overflow-x-auto pb-2">
           {images.map((image, imageIndex) => {
             const imageId = imageRefId(image);
             const imagePreviewUrl =
@@ -345,7 +345,7 @@ const StepImagesInput = ({
 
             return (
               <div
-                className="group relative overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted"
+                className="group relative w-40 shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted sm:w-48"
                 key={imageId}
               >
                 <div className="grid aspect-square place-items-center">

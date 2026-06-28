@@ -649,17 +649,17 @@ export const RecipeDetailRoute = () => {
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-sage text-white text-xs font-bold">
                   {stepIndex + 1}
                 </div>
-                <div className="flex-1 pt-0.5">
+                <div className="min-w-0 flex-1 pt-0.5">
                   {step.text ? (
                     <p className="text-brand-ink text-sm leading-relaxed">{step.text}</p>
                   ) : null}
                   {step.images.some((image) => image.url) ? (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="mt-3 flex snap-x gap-3 overflow-x-auto pb-2">
                       {step.images.map((image, imageIndex) =>
                         image.url ? (
                           <img
                             alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
-                            className="mx-auto block h-auto max-h-80 max-w-full rounded-[14px] object-contain"
+                            className="block max-h-80 w-48 shrink-0 snap-start rounded-[14px] object-contain sm:w-56"
                             height={image.height}
                             key={image.objectKey}
                             src={image.url}
