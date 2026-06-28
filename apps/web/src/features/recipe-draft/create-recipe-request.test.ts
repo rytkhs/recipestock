@@ -1,10 +1,6 @@
 import { MAX_RECIPE_STEP_IMAGES, MAX_RECIPE_TOTAL_IMAGES } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
-import {
-  formValuesToCreateRecipeRequest,
-  recipeDetailToFormValues,
-  recipeDraftContentToFormValues,
-} from "./create-recipe-request";
+import { formValuesToCreateRecipeRequest, recipeDetailToFormValues } from "./create-recipe-request";
 import {
   createEmptyRecipeDraftFormValues,
   type RecipeDraftFormValues,
@@ -154,38 +150,6 @@ describe("formValuesToCreateRecipeRequest", () => {
       note: "仕上げにオリーブオイル。",
       ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ text: "煮詰める", images: [] }],
-    });
-  });
-
-  it("取り込みdraftをフォーム値に戻す", () => {
-    expect(
-      recipeDraftContentToFormValues({
-        title: "Tomato pasta",
-        yieldText: "2人分",
-        coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
-        sourceMedia: [{ type: "externalImageUrl", url: "https://example.com/source-media.jpg" }],
-        ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-        steps: [
-          {
-            text: "煮詰める",
-            images: [{ type: "externalImageUrl", url: "https://example.com/step.jpg" }],
-          },
-        ],
-        note: "仕上げにオリーブオイル。",
-      }),
-    ).toEqual({
-      title: "Tomato pasta",
-      yieldText: "2人分",
-      coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
-      sourceMedia: [{ type: "externalImageUrl", url: "https://example.com/source-media.jpg" }],
-      note: "仕上げにオリーブオイル。",
-      ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [
-        {
-          text: "煮詰める",
-          images: [{ type: "externalImageUrl", url: "https://example.com/step.jpg" }],
-        },
-      ],
     });
   });
 });

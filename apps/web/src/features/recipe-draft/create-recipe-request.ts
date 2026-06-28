@@ -85,34 +85,4 @@ export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormV
       : [createEmptyFormStep()],
 });
 
-export const recipeDraftContentToFormValues = (
-  draft: RecipeDraftContent,
-): RecipeDraftFormValues => ({
-  title: draft.title,
-  yieldText: draft.yieldText ?? "",
-  coverImage: draft.coverImage,
-  sourceMedia: draft.sourceMedia ?? [],
-  note: draft.note ?? "",
-  ingredientGroups:
-    draft.ingredientGroups.length > 0
-      ? draft.ingredientGroups.map((group) => ({
-          label: group.label ?? "",
-          ingredients:
-            group.ingredients.length > 0
-              ? group.ingredients.map((ingredient) => ({
-                  name: ingredient.name,
-                  amount: ingredient.amount,
-                }))
-              : [{ name: "", amount: "" }],
-        }))
-      : [{ label: "", ingredients: [{ name: "", amount: "" }] }],
-  steps:
-    draft.steps.length > 0
-      ? draft.steps.map((step) => ({
-          text: step.text ?? "",
-          images: step.images,
-        }))
-      : [createEmptyFormStep()],
-});
-
 const createEmptyFormStep = () => ({ text: "", images: [] });
