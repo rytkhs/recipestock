@@ -244,6 +244,7 @@ const StepImagesInput = ({
   onUploadStateChange,
   previewUrlsByImageId,
   uploadImage,
+  variant = "step",
 }: {
   control: RecipeDraftFormControl;
   label: string;
@@ -251,6 +252,7 @@ const StepImagesInput = ({
   onUploadStateChange(isUploading: boolean): void;
   previewUrlsByImageId?: ImagePreviewUrlsByImageId;
   uploadImage: (file: File) => Promise<DraftImageRef>;
+  variant?: "sourceMedia" | "step";
 }) => {
   const { field } = useController({ control, name });
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -263,6 +265,19 @@ const StepImagesInput = ({
   const images = field.value ?? [];
 
   localPreviewUrlsByImageIdRef.current = localPreviewUrlsByImageId;
+  const isSourceMedia = variant === "sourceMedia";
+  const imageCardClassName = isSourceMedia
+    ? "group relative aspect-[4/5] w-[min(70vw,240px)] shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted sm:w-56"
+    : "group relative w-40 shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted sm:w-48";
+  const imageFrameClassName = isSourceMedia
+    ? "grid h-full place-items-center"
+    : "grid aspect-square place-items-center";
+  const imageClassName = isSourceMedia
+    ? "h-full w-full object-contain"
+    : "h-full w-full object-cover";
+  const addButtonClassName = isSourceMedia
+    ? "aspect-[4/5] h-auto w-[min(70vw,240px)] shrink-0 snap-start rounded-[14px] border border-dashed border-brand-line-soft bg-brand-paper-muted font-semibold text-brand-walnut sm:w-56"
+    : "aspect-square h-auto w-40 shrink-0 snap-start rounded-[14px] border border-dashed border-brand-line-soft bg-brand-paper-muted font-semibold text-brand-walnut sm:w-48";
 
   useEffect(
     () => () => {
@@ -336,51 +351,47 @@ const StepImagesInput = ({
         type="file"
         onChange={(event) => void handleChange(event)}
       />
-      {images.length > 0 ? (
-        <div className="flex snap-x gap-3 overflow-x-auto pb-2">
-          {images.map((image, imageIndex) => {
-            const imageId = imageRefId(image);
-            const imagePreviewUrl =
-              localPreviewUrlsByImageId[imageId] ?? previewUrlsByImageId?.[imageId];
+      <div className="flex snap-x gap-3 overflow-x-auto pb-2">
+        {images.map((image, imageIndex) => {
+          const imageId = imageRefId(image);
+          const imagePreviewUrl =
+            localPreviewUrlsByImageId[imageId] ?? previewUrlsByImageId?.[imageId];
 
-            return (
-              <div
-                className="group relative w-40 shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted sm:w-48"
-                key={imageId}
-              >
-                <div className="grid aspect-square place-items-center">
-                  {imagePreviewUrl ? (
-                    <img
-                      alt={`${label}${imageIndex + 1}プレビュー`}
-                      className="h-full w-full object-cover"
-                      src={imagePreviewUrl}
-                    />
-                  ) : (
-                    <span className="px-2 text-center text-brand-muted text-xs">保存済み画像</span>
-                  )}
-                </div>
-                <Button
-                  className="absolute top-2 right-2 rounded-full"
-                  isDisabled={isUploading}
-                  variant="danger"
-                  onPress={() => handleRemove(imageIndex)}
-                >
-                  削除
-                </Button>
+          return (
+            <div className={imageCardClassName} key={imageId}>
+              <div className={imageFrameClassName}>
+                {imagePreviewUrl ? (
+                  <img
+                    alt={`${label}${imageIndex + 1}プレビュー`}
+                    className={imageClassName}
+                    src={imagePreviewUrl}
+                  />
+                ) : (
+                  <span className="px-2 text-center text-brand-muted text-xs">保存済み画像</span>
+                )}
               </div>
-            );
-          })}
-        </div>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-2">
+              <Button
+                aria-label={`${label}${imageIndex + 1}を削除`}
+                className="absolute top-2 right-2 h-8 min-w-8 rounded-full px-0 text-base leading-none"
+                isDisabled={isUploading}
+                variant="danger"
+                onPress={() => handleRemove(imageIndex)}
+              >
+                ×
+              </Button>
+            </div>
+          );
+        })}
         <Button
-          className="justify-self-start rounded-full font-semibold"
+          className={addButtonClassName}
           isDisabled={isUploading}
           variant="secondary"
           onPress={() => inputRef.current?.click()}
         >
           画像を追加
         </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         {isUploading ? <span className="text-brand-muted text-sm">アップロード中</span> : null}
       </div>
       {isUploading ? <ProgressBar aria-label={`${label}アップロード中`} isIndeterminate /> : null}
@@ -539,6 +550,7 @@ export const RecipeDraftForm = ({
             onUploadStateChange={handleUploadStateChange}
             previewUrlsByImageId={imagePreviewUrlsByImageId}
             uploadImage={uploadImage}
+            variant="sourceMedia"
           />
         </fieldset>
       ) : null}

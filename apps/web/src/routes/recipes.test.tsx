@@ -1114,7 +1114,9 @@ describe("RecipesRoute", () => {
     const firstPreviewCard = firstPreview.closest(".group");
     expect(firstPreviewCard).not.toBeNull();
     await userEvent.click(
-      within(firstPreviewCard as HTMLElement).getByRole("button", { name: "削除" }),
+      within(firstPreviewCard as HTMLElement).getByRole("button", {
+        name: "手順1の画像1を削除",
+      }),
     );
 
     await waitFor(() => {
@@ -1186,7 +1188,9 @@ describe("RecipesRoute", () => {
     const firstSavedImageCard = screen.getAllByText("保存済み画像")[0]?.closest(".group");
     expect(firstSavedImageCard).not.toBeNull();
     await userEvent.click(
-      within(firstSavedImageCard as HTMLElement).getByRole("button", { name: "削除" }),
+      within(firstSavedImageCard as HTMLElement).getByRole("button", {
+        name: "手順1の画像1を削除",
+      }),
     );
     await userEvent.click(screen.getByRole("button", { name: "更新" }));
 
@@ -1314,7 +1318,7 @@ describe("RecipesRoute", () => {
     const firstPreviewCard = firstPreview.closest(".group");
     expect(firstPreviewCard).not.toBeNull();
     await userEvent.click(
-      within(firstPreviewCard as HTMLElement).getByRole("button", { name: "削除" }),
+      within(firstPreviewCard as HTMLElement).getByRole("button", { name: "投稿画像1を削除" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "更新" }));
 

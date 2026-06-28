@@ -591,14 +591,18 @@ export const RecipeDetailRoute = () => {
           <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2">
             {sourceMedia.map((image, imageIndex) =>
               image.url ? (
-                <img
-                  alt={`投稿画像${imageIndex + 1}`}
-                  className="block aspect-square w-40 shrink-0 snap-start rounded-[14px] object-cover shadow-pantry-sm sm:w-48"
-                  height={image.height}
+                <div
+                  className="grid aspect-[4/5] w-[min(78vw,320px)] shrink-0 snap-start place-items-center overflow-hidden rounded-[14px] bg-brand-paper-muted shadow-pantry-sm sm:w-64"
                   key={image.objectKey}
-                  src={image.url}
-                  width={image.width}
-                />
+                >
+                  <img
+                    alt={`投稿画像${imageIndex + 1}`}
+                    className="h-full w-full object-contain"
+                    height={image.height}
+                    src={image.url}
+                    width={image.width}
+                  />
+                </div>
               ) : null,
             )}
           </div>
