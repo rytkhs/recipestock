@@ -1,3 +1,8 @@
+import {
+  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_TOTAL_IMAGES,
+} from "@recipestock/schemas";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +20,23 @@ const savedImage = (objectKey: string, url?: string, width = 1200, height = 800)
   height,
   ...(url ? { url } : {}),
 });
+
+const savedImages = (count: number, prefix: string) =>
+  Array.from({ length: count }, (_, index) =>
+    savedImage(
+      `recipes/user_123/recipe_123/${prefix}-${index}.webp`,
+      `https://images.example/${prefix}-${index}.webp`,
+    ),
+  );
+
+const savedStepsWithImages = (imageCount: number, prefix: string) =>
+  Array.from({ length: Math.ceil(imageCount / MAX_RECIPE_STEP_IMAGES) }, (_, stepIndex) => ({
+    text: `手順${stepIndex + 1}`,
+    images: savedImages(
+      Math.min(MAX_RECIPE_STEP_IMAGES, imageCount - stepIndex * MAX_RECIPE_STEP_IMAGES),
+      `${prefix}-${stepIndex}`,
+    ),
+  }));
 
 describe("RecipesRoute", () => {
   afterEach(() => {
@@ -1259,6 +1281,133 @@ describe("RecipesRoute", () => {
 
     await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
     expect(screen.queryByLabelText("投稿画像")).not.toBeInTheDocument();
+  });
+
+  it("編集画面で投稿画像上限に達したら投稿画像追加を無効にする", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_123",
+              title: "Tomato pasta",
+              content: {
+                title: "Tomato pasta",
+                sourceMedia: savedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES, "source"),
+                ingredientGroups: [],
+                steps: [{ text: "煮詰める", images: [] }],
+              },
+              source: {
+                sourceUrl: null,
+                normalizedSourceUrl: null,
+                sourceName: null,
+              },
+              createdAt: "2026-05-26T00:00:00.000Z",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("投稿画像")).toBeDisabled();
+    expect(screen.getByText("上限に達しました")).toBeInTheDocument();
+    expect(screen.getByLabelText("手順1の画像")).not.toBeDisabled();
+  });
+
+  it("編集画面で手順画像上限に達したら該当手順の画像追加だけを無効にする", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_123",
+              title: "Tomato pasta",
+              content: {
+                title: "Tomato pasta",
+                ingredientGroups: [],
+                steps: [
+                  { text: "煮詰める", images: savedImages(MAX_RECIPE_STEP_IMAGES, "step") },
+                  { text: "盛り付ける", images: [] },
+                ],
+              },
+              source: {
+                sourceUrl: null,
+                normalizedSourceUrl: null,
+                sourceName: null,
+              },
+              createdAt: "2026-05-26T00:00:00.000Z",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("手順1の画像")).toBeDisabled();
+    expect(screen.getByLabelText("手順2の画像")).not.toBeDisabled();
+    expect(screen.getByText("上限に達しました")).toBeInTheDocument();
+  });
+
+  it("編集画面で全体画像上限に達したら投稿画像と手順画像追加を無効にしカバー画像変更は許可する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_123",
+              title: "Tomato pasta",
+              content: {
+                title: "Tomato pasta",
+                coverImage: savedImage(
+                  "recipes/user_123/recipe_123/cover.webp",
+                  "https://images.example/cover.webp",
+                ),
+                sourceMedia: savedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES, "source"),
+                ingredientGroups: [],
+                steps: savedStepsWithImages(
+                  MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES - 1,
+                  "step",
+                ),
+              },
+              source: {
+                sourceUrl: null,
+                normalizedSourceUrl: null,
+                sourceName: null,
+              },
+              createdAt: "2026-05-26T00:00:00.000Z",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("カバー画像")).not.toBeDisabled();
+    expect(screen.getByLabelText("投稿画像")).toBeDisabled();
+    expect(screen.getByLabelText("手順1の画像")).toBeDisabled();
+    expect(screen.getAllByText("上限に達しました").length).toBeGreaterThan(1);
   });
 
   it("編集画面で投稿画像を削除して保存できる", async () => {

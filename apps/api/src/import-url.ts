@@ -1,10 +1,6 @@
 import { createGroq } from "@ai-sdk/groq";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import {
-  type RecipeDraftContent,
-  type RecipeSourceDraft,
-  recipeDraftContentSchema,
-} from "@recipestock/schemas";
+import { type RecipeDraftContent, type RecipeSourceDraft } from "@recipestock/schemas";
 import { normalizeUrl } from "@recipestock/shared";
 import { generateObject } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
@@ -15,6 +11,7 @@ import {
   type DeterministicImporter,
   defaultDeterministicImporter,
 } from "./lib/import/deterministic";
+import { trimRecipeDraftContentImages } from "./lib/import/image-limits";
 import {
   assertFetchedPageIsHtml,
   assertImportContentTypeMayBeHtml,
@@ -938,10 +935,11 @@ const resolveDraftImageUrls = (
   };
 
   return {
-    draft: recipeDraftContentSchema.parse({
+    draft: trimRecipeDraftContentImages({
       title: draft.title,
       yieldText: draft.yieldText,
       coverImage: resolveImage(draft.coverImageUrl),
+      sourceMedia: [],
       ingredientGroups: draft.ingredientGroups,
       steps: draft.steps.map((step) => ({
         text: step.text,
@@ -961,7 +959,7 @@ const applyDeterministicImagePlacement = (
 ): RecipeDraftContent => {
   if (!placement) return draft;
 
-  return recipeDraftContentSchema.parse({
+  return trimRecipeDraftContentImages({
     ...draft,
     ...(placement.coverImageUrl
       ? {
