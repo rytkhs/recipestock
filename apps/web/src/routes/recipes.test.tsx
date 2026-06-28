@@ -1380,7 +1380,7 @@ describe("RecipesRoute", () => {
                 sourceMedia: savedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES, "source"),
                 ingredientGroups: [],
                 steps: savedStepsWithImages(
-                  MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES - 1,
+                  MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES,
                   "step",
                 ),
               },

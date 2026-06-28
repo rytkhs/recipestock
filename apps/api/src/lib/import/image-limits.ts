@@ -7,7 +7,7 @@ import {
 } from "@recipestock/schemas";
 
 export const trimRecipeDraftContentImages = (draft: RecipeDraftContent): RecipeDraftContent => {
-  let remainingImages = MAX_RECIPE_TOTAL_IMAGES - (draft.coverImage ? 1 : 0);
+  let remainingImages = MAX_RECIPE_TOTAL_IMAGES;
   const sourceMediaLimit = Math.min(MAX_RECIPE_SOURCE_MEDIA_IMAGES, Math.max(remainingImages, 0));
   const sourceMedia = (draft.sourceMedia ?? []).slice(0, sourceMediaLimit);
   remainingImages -= sourceMedia.length;

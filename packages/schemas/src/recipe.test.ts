@@ -98,6 +98,7 @@ describe("recipeContentSchema", () => {
     expect(
       recipeContentSchema.safeParse({
         title: "Tomato pasta",
+        coverImage: createSavedImage("cover"),
         sourceMedia: createSavedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
         steps: createSavedStepsWithImages(MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES),
       }).success,
@@ -106,9 +107,10 @@ describe("recipeContentSchema", () => {
     expect(
       recipeContentSchema.safeParse({
         title: "Tomato pasta",
-        coverImage: createSavedImage("cover"),
         sourceMedia: createSavedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
-        steps: createSavedStepsWithImages(MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+        steps: createSavedStepsWithImages(
+          MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1,
+        ),
       }).success,
     ).toBe(false);
   });
@@ -226,6 +228,7 @@ describe("recipeDraftContentSchema", () => {
     expect(
       recipeDraftContentSchema.safeParse({
         title: "Tomato pasta",
+        coverImage: createDraftImage("cover"),
         sourceMedia: createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
         steps: createDraftStepsWithImages(MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES),
       }).success,
@@ -234,9 +237,10 @@ describe("recipeDraftContentSchema", () => {
     expect(
       recipeDraftContentSchema.safeParse({
         title: "Tomato pasta",
-        coverImage: createDraftImage("cover"),
         sourceMedia: createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
-        steps: createDraftStepsWithImages(MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+        steps: createDraftStepsWithImages(
+          MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1,
+        ),
       }).success,
     ).toBe(false);
   });

@@ -86,15 +86,12 @@ const createImagePreviewUrlsByImageId = ({
 };
 
 const countFormImages = ({
-  coverImage,
   sourceMedia,
   steps,
 }: {
-  coverImage?: DraftImageRef;
   sourceMedia?: DraftImageRef[];
   steps?: { images?: DraftImageRef[] }[];
 }) =>
-  (coverImage ? 1 : 0) +
   (sourceMedia?.length ?? 0) +
   (steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
@@ -542,12 +539,10 @@ export const RecipeDraftForm = ({
   });
   const ingredientGroups = useFieldArray({ control, name: "ingredientGroups" });
   const steps = useFieldArray({ control, name: "steps" });
-  const watchedCoverImage = useWatch({ control, name: "coverImage" });
   const watchedSourceMedia = useWatch({ control, name: "sourceMedia" });
   const watchedSteps = useWatch({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
   const totalImageCount = countFormImages({
-    coverImage: watchedCoverImage,
     sourceMedia: watchedSourceMedia,
     steps: watchedSteps,
   });

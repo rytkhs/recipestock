@@ -291,12 +291,10 @@ const createStepsWithImages = (imageCount: number) =>
 const countDraftImages = (
   content:
     | {
-        coverImage?: unknown;
         sourceMedia?: unknown[];
         steps?: { images?: unknown[] }[];
       }
     | undefined,
 ) =>
-  (content?.coverImage ? 1 : 0) +
   (content?.sourceMedia?.length ?? 0) +
   (content?.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);

@@ -1141,12 +1141,7 @@ const createStepImageUrlGroups = (imageCount: number, prefix: string) =>
     createImageUrls(MAX_RECIPE_STEP_IMAGES + 1, `${prefix}-${stepIndex}`),
   );
 
-const countDraftImages = (content: {
-  coverImage?: unknown;
-  sourceMedia?: unknown[];
-  steps?: { images?: unknown[] }[];
-}) =>
-  (content.coverImage ? 1 : 0) +
+const countDraftImages = (content: { sourceMedia?: unknown[]; steps?: { images?: unknown[] }[] }) =>
   (content.sourceMedia?.length ?? 0) +
   (content.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
