@@ -288,7 +288,7 @@ describe("RecipesRoute", () => {
     await renderApp("/recipes");
 
     await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
-      "この投稿を取得できませんでした。非公開またはログインが必要な投稿です。",
+      "この投稿を取得できませんでした。",
     );
   });
 
