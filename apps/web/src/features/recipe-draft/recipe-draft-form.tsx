@@ -538,7 +538,7 @@ export const RecipeDraftForm = ({
 
       <FormInput control={control} isRequired label="タイトル" name="title" />
 
-      <FormInput control={control} label="人数" name="servingsText" />
+      <FormInput control={control} label="できあがり量" name="yieldText" />
 
       {showSourceMediaInput ? (
         <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">

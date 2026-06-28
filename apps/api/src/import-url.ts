@@ -90,7 +90,7 @@ const importAiDraftStepSchema = z
 
 const importAiDraftContentSchema = z.strictObject({
   title: z.string().min(1),
-  servingsText: z.string().nullable(),
+  yieldText: z.string().nullable(),
   coverImageUrl: importAiImageUrlSchema.nullable(),
   ingredientGroups: z.array(importAiIngredientGroupSchema),
   steps: z.array(importAiDraftStepSchema),
@@ -107,7 +107,7 @@ const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftConte
 
   return {
     title: draft.title,
-    ...(draft.servingsText !== null ? { servingsText: draft.servingsText } : {}),
+    ...(draft.yieldText !== null ? { yieldText: draft.yieldText } : {}),
     ...(draft.coverImageUrl !== null ? { coverImageUrl: draft.coverImageUrl } : {}),
     ingredientGroups: draft.ingredientGroups.map((group) => ({
       ...(group.label !== null ? { label: group.label } : {}),
@@ -940,7 +940,7 @@ const resolveDraftImageUrls = (
   return {
     draft: recipeDraftContentSchema.parse({
       title: draft.title,
-      servingsText: draft.servingsText,
+      yieldText: draft.yieldText,
       coverImage: resolveImage(draft.coverImageUrl),
       ingredientGroups: draft.ingredientGroups,
       steps: draft.steps.map((step) => ({

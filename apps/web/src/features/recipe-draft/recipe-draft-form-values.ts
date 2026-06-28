@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const recipeDraftFormSchema = z.object({
   title: z.string().min(1),
-  servingsText: z.string().optional(),
+  yieldText: z.string().optional(),
   coverImage: draftImageRefSchema.optional(),
   sourceMedia: z.array(draftImageRefSchema),
   note: z.string().optional(),
@@ -32,7 +32,7 @@ export const createEmptyStep = () => ({ text: "", images: [] });
 
 export const createEmptyRecipeDraftFormValues = (): RecipeDraftFormValues => ({
   title: "",
-  servingsText: "",
+  yieldText: "",
   sourceMedia: [],
   note: "",
   ingredientGroups: [createEmptyIngredientGroup()],

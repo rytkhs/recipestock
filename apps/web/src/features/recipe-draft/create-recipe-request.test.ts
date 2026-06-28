@@ -23,7 +23,7 @@ describe("formValuesToCreateRecipeRequest", () => {
       formValuesToCreateRecipeRequest(
         createValues({
           title: "  Tomato pasta  ",
-          servingsText: "  2人分  ",
+          yieldText: "  2人分  ",
           note: "  仕上げにオリーブオイル。  ",
           ingredientGroups: [
             {
@@ -37,7 +37,7 @@ describe("formValuesToCreateRecipeRequest", () => {
     ).toMatchObject({
       content: {
         title: "Tomato pasta",
-        servingsText: "2人分",
+        yieldText: "2人分",
         note: "仕上げにオリーブオイル。",
         ingredientGroups: [
           {
@@ -128,7 +128,7 @@ describe("formValuesToCreateRecipeRequest", () => {
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          servingsText: "2人分",
+          yieldText: "2人分",
           sourceMedia: [],
           ingredientGroups: [
             { label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] },
@@ -147,7 +147,7 @@ describe("formValuesToCreateRecipeRequest", () => {
       }),
     ).toEqual({
       title: "Tomato pasta",
-      servingsText: "2人分",
+      yieldText: "2人分",
       sourceMedia: [],
       note: "仕上げにオリーブオイル。",
       ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
@@ -159,7 +159,7 @@ describe("formValuesToCreateRecipeRequest", () => {
     expect(
       recipeDraftContentToFormValues({
         title: "Tomato pasta",
-        servingsText: "2人分",
+        yieldText: "2人分",
         coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
         sourceMedia: [{ type: "externalImageUrl", url: "https://example.com/source-media.jpg" }],
         ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
@@ -173,7 +173,7 @@ describe("formValuesToCreateRecipeRequest", () => {
       }),
     ).toEqual({
       title: "Tomato pasta",
-      servingsText: "2人分",
+      yieldText: "2人分",
       coverImage: { type: "externalImageUrl", url: "https://example.com/cover.jpg" },
       sourceMedia: [{ type: "externalImageUrl", url: "https://example.com/source-media.jpg" }],
       note: "仕上げにオリーブオイル。",

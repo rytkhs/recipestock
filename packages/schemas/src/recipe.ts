@@ -56,7 +56,7 @@ export const recipeDraftStepSchema = z
 
 export const recipeContentSchema = z.object({
   title: z.string().min(1),
-  servingsText: z.string().optional(),
+  yieldText: z.string().optional(),
   coverImage: recipeImageSchema.optional(),
   sourceMedia: z.array(recipeImageSchema).default([]),
   ingredientGroups: z.array(ingredientGroupSchema).default([]),
@@ -76,7 +76,7 @@ export const recipeContentWithUrlsSchema = recipeContentSchema.extend({
 
 export const recipeDraftContentSchema = z.object({
   title: z.string().min(1),
-  servingsText: z.string().optional(),
+  yieldText: z.string().optional(),
   coverImage: draftImageRefSchema.optional(),
   sourceMedia: z.array(draftImageRefSchema).default([]),
   ingredientGroups: z.array(ingredientGroupSchema).default([]),

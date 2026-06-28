@@ -53,7 +53,7 @@ describe("Recipe detail routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
-            servingsText: "2人分",
+            yieldText: "2人分",
             sourceMedia: [],
             ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
             steps: [{ text: "煮詰める", images: [] }],
@@ -84,7 +84,7 @@ describe("Recipe detail routes", () => {
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          servingsText: "2人分",
+          yieldText: "2人分",
         },
         source: {
           sourceName: "Example Kitchen",

@@ -74,7 +74,7 @@ describe("Recipe mutation routes", () => {
         body: JSON.stringify({
           content: {
             title: "Potato salad",
-            servingsText: "3人分",
+            yieldText: "3人分",
             ingredientGroups: [{ ingredients: [{ name: "じゃがいも", amount: "2個" }] }],
             steps: [{ text: "つぶす", images: [] }],
             note: "冷やす。",
@@ -94,7 +94,7 @@ describe("Recipe mutation routes", () => {
         title: "Potato salad",
         content: expect.objectContaining({
           title: "Potato salad",
-          servingsText: "3人分",
+          yieldText: "3人分",
         }),
         searchText: expect.stringContaining("potato salad"),
       }),
@@ -110,7 +110,7 @@ describe("Recipe mutation routes", () => {
         title: "Potato salad",
         content: {
           title: "Potato salad",
-          servingsText: "3人分",
+          yieldText: "3人分",
         },
         source: {
           sourceName: "Example Kitchen",

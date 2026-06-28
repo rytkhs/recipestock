@@ -64,7 +64,7 @@ describe("kurashiruImportAdapter", () => {
     expect(result).toEqual({
       recipeDraftContent: {
         title: "お弁当の定番 卵焼き",
-        servingsText: "2人前",
+        yieldText: "2人前",
         coverImage: {
           type: "externalImageUrl",
           url: COVER_IMAGE_URL,

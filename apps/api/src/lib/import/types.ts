@@ -59,7 +59,7 @@ export type RecipeImportStructuredInstructionEvidence = {
 export type RecipeImportStructuredEvidence = {
   format: "jsonLd" | "microdata" | "rdfa";
   name?: string;
-  servingsText?: string;
+  yieldText?: string;
   imageUrls: string[];
   rawIngredients: string[];
   rawInstructions: string[];
@@ -84,7 +84,7 @@ export type RecipeImportAIDraftStep = {
 
 export type RecipeImportAIDraftContent = {
   title: string;
-  servingsText?: string;
+  yieldText?: string;
   coverImageUrl?: RecipeImportAIImageUrl;
   ingredientGroups: Array<{
     label?: string;

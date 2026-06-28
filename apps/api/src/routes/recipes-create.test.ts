@@ -173,7 +173,7 @@ describe("Recipe create routes", () => {
         body: JSON.stringify({
           content: {
             title: "Tomato pasta",
-            servingsText: "2人分",
+            yieldText: "2人分",
             ingredientGroups: [
               { label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] },
             ],
@@ -195,7 +195,7 @@ describe("Recipe create routes", () => {
     expect(savedRecipes).toEqual([
       expect.objectContaining({
         content: expect.objectContaining({
-          servingsText: "2人分",
+          yieldText: "2人分",
           note: "仕上げにオリーブオイル。",
         }),
         sourceName: "Example Kitchen",

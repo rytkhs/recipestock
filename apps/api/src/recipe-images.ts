@@ -234,7 +234,7 @@ export const finalizeRecipeDraftImages = async ({
     return {
       content: recipeContentSchema.parse({
         title: draft.title,
-        servingsText: draft.servingsText,
+        yieldText: draft.yieldText,
         coverImage,
         sourceMedia,
         ingredientGroups: draft.ingredientGroups,

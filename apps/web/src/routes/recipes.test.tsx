@@ -410,7 +410,7 @@ describe("RecipesRoute", () => {
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          servingsText: "2人分",
+          yieldText: "2人分",
           coverImage: savedImage(
             "recipes/user_123/recipe_123/cover.webp",
             "https://images.example/cover.webp",
@@ -460,21 +460,21 @@ describe("RecipesRoute", () => {
 
     const coverImageInput = await screen.findByLabelText("カバー画像");
     const titleInput = screen.getByLabelText("タイトル");
-    const servingsInput = screen.getByLabelText("人数");
+    const yieldInput = screen.getByLabelText("できあがり量");
     const ingredientNameInput = screen.getByLabelText("材料名");
     expect(
       coverImageInput.compareDocumentPosition(titleInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      titleInput.compareDocumentPosition(servingsInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+      titleInput.compareDocumentPosition(yieldInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      servingsInput.compareDocumentPosition(ingredientNameInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+      yieldInput.compareDocumentPosition(ingredientNameInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.queryByLabelText("投稿画像")).not.toBeInTheDocument();
 
     await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
-    await userEvent.type(screen.getByLabelText("人数"), "2人分");
+    await userEvent.type(screen.getByLabelText("できあがり量"), "2人分");
     await userEvent.type(screen.getByLabelText("材料名"), "トマト缶");
     await userEvent.type(screen.getByLabelText("分量"), "1缶");
     await userEvent.type(screen.getByLabelText("手順"), "煮詰める");
@@ -494,7 +494,7 @@ describe("RecipesRoute", () => {
     expect(JSON.parse(String(createRecipeCall?.[1]?.body))).toMatchObject({
       content: {
         title: "Tomato pasta",
-        servingsText: "2人分",
+        yieldText: "2人分",
         ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
         steps: [{ text: "煮詰める", images: [] }],
         note: "仕上げにオリーブオイル。",
@@ -911,7 +911,7 @@ describe("RecipesRoute", () => {
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          servingsText: "2人分",
+          yieldText: "2人分",
           coverImage: savedImage(
             "recipes/user_123/recipe_123/cover.webp",
             "https://images.example/cover.webp",
@@ -948,7 +948,7 @@ describe("RecipesRoute", () => {
         title: "Potato salad",
         content: {
           title: "Potato salad",
-          servingsText: "3人分",
+          yieldText: "3人分",
           coverImage: savedImage("recipes/user_123/recipe_123/cover.webp"),
           ingredientGroups: recipeResponse.recipe.content.ingredientGroups,
           steps: [
@@ -969,7 +969,7 @@ describe("RecipesRoute", () => {
         content: {
           ...recipeResponse.recipe.content,
           title: "Potato salad",
-          servingsText: "3人分",
+          yieldText: "3人分",
         },
         updatedAt: "2026-05-27T00:00:00.000Z",
       },
@@ -1007,8 +1007,8 @@ describe("RecipesRoute", () => {
 
     await userEvent.clear(screen.getByLabelText("タイトル"));
     await userEvent.type(screen.getByLabelText("タイトル"), "Potato salad");
-    await userEvent.clear(screen.getByLabelText("人数"));
-    await userEvent.type(screen.getByLabelText("人数"), "3人分");
+    await userEvent.clear(screen.getByLabelText("できあがり量"));
+    await userEvent.type(screen.getByLabelText("できあがり量"), "3人分");
     await userEvent.click(screen.getByRole("button", { name: "更新" }));
 
     await waitFor(() => {
@@ -1027,7 +1027,7 @@ describe("RecipesRoute", () => {
     expect(JSON.parse(String(updateRecipeCall?.[1]?.body))).toMatchObject({
       content: {
         title: "Potato salad",
-        servingsText: "3人分",
+        yieldText: "3人分",
         coverImage: {
           type: "existingObjectKey",
           key: "recipes/user_123/recipe_123/cover.webp",
@@ -1354,7 +1354,7 @@ describe("RecipesRoute", () => {
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          servingsText: "2人分",
+          yieldText: "2人分",
           ingredientGroups: [],
           steps: [{ text: "煮詰める", images: [] }],
         },

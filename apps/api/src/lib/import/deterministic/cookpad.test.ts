@@ -105,7 +105,7 @@ describe("cookpadImportAdapter", () => {
     await expect(importPromise).resolves.toEqual({
       recipeDraftContent: {
         title: TITLE,
-        servingsText: "2人前",
+        yieldText: "2人前",
         coverImage: {
           type: "externalImageUrl",
           url: cookpadCoverImageUrl(1360, 1562, 80),

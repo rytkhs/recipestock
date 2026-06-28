@@ -24,7 +24,7 @@ type PrintStepCapture = {
 
 type CookpadPrintExtraction = {
   title: string;
-  servingsText: string;
+  yieldText: string;
   ingredientRows: IngredientCapture[];
   note: string;
   steps: PrintStepCapture[];
@@ -133,8 +133,8 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
 
     const recipeDraftContent: RecipeDraftContent = {
       title,
-      ...(normalizeText(printExtraction.servingsText)
-        ? { servingsText: normalizeText(printExtraction.servingsText) }
+      ...(normalizeText(printExtraction.yieldText)
+        ? { yieldText: normalizeText(printExtraction.yieldText) }
         : {}),
       ...(recipeExtraction.coverImageUrl
         ? {
@@ -182,7 +182,7 @@ const extractCookpadPrintRecipe = async (
 ): Promise<CookpadPrintExtraction> => {
   const extraction: CookpadPrintExtraction = {
     title: "",
-    servingsText: "",
+    yieldText: "",
     ingredientRows: [],
     note: "",
     steps: [],
@@ -218,7 +218,7 @@ const extractCookpadPrintRecipe = async (
     })
     .on("#recipe-print .mise-icon-text", {
       text(text) {
-        extraction.servingsText += text.text;
+        extraction.yieldText += text.text;
       },
     })
     .on("#recipe-print li.justified-quantity-and-name", {

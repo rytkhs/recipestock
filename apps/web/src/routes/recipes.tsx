@@ -554,8 +554,8 @@ export const RecipeDetailRoute = () => {
           <h1 className="text-brand-ink font-bold text-2xl sm:text-3xl leading-tight">
             {recipe.title}
           </h1>
-          {recipe.content.servingsText ? (
-            <p className="mt-2 text-brand-muted text-sm">{recipe.content.servingsText}</p>
+          {recipe.content.yieldText ? (
+            <p className="mt-2 text-brand-muted text-sm">{recipe.content.yieldText}</p>
           ) : null}
         </div>
         <div className="flex gap-2 shrink-0">

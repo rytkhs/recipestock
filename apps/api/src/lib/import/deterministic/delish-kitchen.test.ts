@@ -80,7 +80,7 @@ describe("delishKitchenImportAdapter", () => {
     expect(result).toEqual({
       recipeDraftContent: {
         title: "人気の定番メニュー！ 基本の牛丼",
-        servingsText: "2人分",
+        yieldText: "2人分",
         coverImage: {
           type: "externalImageUrl",
           url: COVER_IMAGE_URL,
@@ -131,20 +131,20 @@ describe("delishKitchenImportAdapter", () => {
     expect(result.recipeDraftContent.title).toBe("人気の定番メニュー！ 基本の牛丼");
   });
 
-  it("servingsTextは表示本文を正としてJSON-LDが空でも抽出する", async () => {
+  it("yieldTextは表示本文を正としてJSON-LDが空でも抽出する", async () => {
     const result = await importDelishKitchen({
-      jsonLdServingsText: "",
+      jsonLdYieldText: "",
     });
 
-    expect(result.recipeDraftContent.servingsText).toBe("2人分");
+    expect(result.recipeDraftContent.yieldText).toBe("2人分");
   });
 
-  it("表示本文に分量がなければJSON-LDだけに存在してもservingsTextを省略する", async () => {
+  it("表示本文に分量がなければJSON-LDだけに存在してもyieldTextを省略する", async () => {
     const result = await importDelishKitchen({
-      htmlServingsText: "",
+      htmlYieldText: "",
     });
 
-    expect(result.recipeDraftContent).not.toHaveProperty("servingsText");
+    expect(result.recipeDraftContent).not.toHaveProperty("yieldText");
   });
 
   it("画像、ポイント、注意事項がなくても成功する", async () => {
@@ -173,7 +173,7 @@ describe("delishKitchenImportAdapter", () => {
     expect(result).toEqual({
       recipeDraftContent: {
         title: "人気の定番メニュー！ 基本の牛丼",
-        servingsText: "2人分",
+        yieldText: "2人分",
         coverImage: {
           type: "externalImageUrl",
           url: COVER_IMAGE_URL,
@@ -263,7 +263,7 @@ describe("delishKitchenImportAdapter", () => {
     },
     {
       name: "分量",
-      jsonLdServingsText: "4人分",
+      jsonLdYieldText: "4人分",
     },
   ])("JSON-LDの$nameがHTMLと一致しなくても成功する", async ({ name: _name, ...options }) => {
     const result = await importDelishKitchen(options);
@@ -442,8 +442,8 @@ type FixtureOptions = {
   jsonLdStepTexts?: string[];
   points?: Array<string | undefined>;
   attentionItems?: string[];
-  htmlServingsText?: string;
-  jsonLdServingsText?: string;
+  htmlYieldText?: string;
+  jsonLdYieldText?: string;
   coverImage?: boolean;
   stepImages?: boolean;
   jsonLdStepImageIndexes?: number[];
@@ -495,8 +495,8 @@ const createDelishKitchenHtml = ({
   jsonLdStepTexts = stepTexts,
   points = ["加熱する直前に切りましょう。"],
   attentionItems = ["調理中は火元を離れないでください。", "高温になったら火を止めます。"],
-  htmlServingsText = "2人分",
-  jsonLdServingsText = "2人分",
+  htmlYieldText = "2人分",
+  jsonLdYieldText = "2人分",
   coverImage = true,
   stepImages = true,
   jsonLdStepImageIndexes = [0],
@@ -509,7 +509,7 @@ const createDelishKitchenHtml = ({
     "@context": "https://schema.org",
     "@type": "Recipe",
     name: jsonLdName,
-    recipeYield: jsonLdServingsText,
+    recipeYield: jsonLdYieldText,
     recipeIngredient: jsonLdIngredients,
     recipeInstructions: jsonLdStepTexts.map((text, index) => ({
       "@type": "HowToStep",
@@ -558,7 +558,7 @@ const createDelishKitchenHtml = ({
           <h2>
             <span class="recipe-serving">
               材料
-              ${htmlServingsText ? `<span>【${htmlServingsText}】</span>` : ""}
+              ${htmlYieldText ? `<span>【${htmlYieldText}】</span>` : ""}
             </span>
           </h2>
           <ul class="ingredient-list">

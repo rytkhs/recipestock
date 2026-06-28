@@ -65,7 +65,7 @@ describe("recipeDraftContentSchema", () => {
     const result = createRecipeRequestSchema.safeParse({
       content: {
         title: "Tomato pasta",
-        servingsText: "2人分",
+        yieldText: "2人分",
         ingredientGroups: [
           {
             label: "ソース",
