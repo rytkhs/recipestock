@@ -53,7 +53,8 @@ describe("Recipe detail routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
-            servingsText: "2人分",
+            yieldText: "2人分",
+            sourceMedia: [],
             ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
             steps: [{ text: "煮詰める", images: [] }],
             note: "仕上げにオリーブオイル。",
@@ -83,7 +84,7 @@ describe("Recipe detail routes", () => {
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          servingsText: "2人分",
+          yieldText: "2人分",
         },
         source: {
           sourceName: "Example Kitchen",
@@ -116,6 +117,13 @@ describe("Recipe detail routes", () => {
               width: 1200,
               height: 800,
             },
+            sourceMedia: [
+              {
+                objectKey: "recipes/user_123/recipe_123/source.webp",
+                width: 1080,
+                height: 1080,
+              },
+            ],
             ingredientGroups: [],
             steps: [
               {
@@ -172,6 +180,14 @@ describe("Recipe detail routes", () => {
             height: 800,
             url: "https://images.example/recipes/user_123/recipe_123/cover.webp",
           },
+          sourceMedia: [
+            {
+              objectKey: "recipes/user_123/recipe_123/source.webp",
+              width: 1080,
+              height: 1080,
+              url: "https://images.example/recipes/user_123/recipe_123/source.webp",
+            },
+          ],
           steps: [
             {
               text: "煮詰める",
@@ -208,6 +224,7 @@ describe("Recipe detail routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
+            sourceMedia: [],
             ingredientGroups: [],
             steps: [
               {
@@ -309,6 +326,7 @@ describe("Recipe detail routes", () => {
           title: "Locked pasta",
           content: {
             title: "Locked pasta",
+            sourceMedia: [],
             ingredientGroups: [{ ingredients: [{ name: "秘密の材料", amount: "1つ" }] }],
             steps: [{ text: "煮る", images: [] }],
           },

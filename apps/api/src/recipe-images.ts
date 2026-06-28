@@ -38,6 +38,11 @@ const extensionFromObjectKey = (objectKey: string) => objectKey.split(".").at(-1
 const isUserTmpObjectKey = (userId: string, objectKey: string) =>
   objectKey.startsWith(`tmp/${userId}/`);
 
+const draftImageRefId = (image: DraftImageRef | undefined) => {
+  if (!image) return null;
+  return `${image.type}:${"key" in image ? image.key : image.url}`;
+};
+
 const destinationObjectKey = ({
   userId,
   recipeId,
@@ -153,6 +158,24 @@ const resolveImageRef = async ({
   }
 };
 
+const resolveImageRefOnce = ({
+  image,
+  resolvedImages,
+  ...params
+}: Parameters<typeof resolveImageRef>[0] & {
+  resolvedImages: Map<string, Promise<RecipeImage | undefined>>;
+}) => {
+  const imageId = draftImageRefId(image);
+  if (!imageId) return Promise.resolve(undefined);
+
+  const cached = resolvedImages.get(imageId);
+  if (cached) return cached;
+
+  const resolved = resolveImageRef({ image, ...params });
+  resolvedImages.set(imageId, resolved);
+  return resolved;
+};
+
 export const finalizeRecipeDraftImages = async ({
   draft,
   userId,
@@ -168,38 +191,34 @@ export const finalizeRecipeDraftImages = async ({
       existingContent
         ? [
             ...(existingContent.coverImage ? [existingContent.coverImage] : []),
+            ...(existingContent.sourceMedia ?? []),
             ...existingContent.steps.flatMap((step) => step.images),
           ].map((image) => [image.objectKey, image] as const)
         : [],
     );
-    const coverImage = await resolveImageRef({
-      image: draft.coverImage,
-      userId,
-      recipeId,
-      imageService,
-      existingImages,
-      createImageId,
-      copiedKeys,
-      tmpKeys,
-    });
+    const resolvedImages = new Map<string, Promise<RecipeImage | undefined>>();
+    const resolveDraftImage = (image: DraftImageRef | undefined) =>
+      resolveImageRefOnce({
+        image,
+        userId,
+        recipeId,
+        imageService,
+        existingImages,
+        createImageId,
+        copiedKeys,
+        tmpKeys,
+        resolvedImages,
+      });
+
+    const coverImage = await resolveDraftImage(draft.coverImage);
+    const sourceMedia = (
+      await Promise.all((draft.sourceMedia ?? []).map((image) => resolveDraftImage(image)))
+    ).filter((image): image is RecipeImage => Boolean(image));
     const steps: RecipeContent["steps"] = [];
 
     for (const step of draft.steps) {
       const images = (
-        await Promise.all(
-          step.images.map((image) =>
-            resolveImageRef({
-              image,
-              userId,
-              recipeId,
-              imageService,
-              existingImages,
-              createImageId,
-              copiedKeys,
-              tmpKeys,
-            }),
-          ),
-        )
+        await Promise.all(step.images.map((image) => resolveDraftImage(image)))
       ).filter((image): image is RecipeImage => Boolean(image));
 
       if (!step.text && images.length === 0) {
@@ -215,8 +234,9 @@ export const finalizeRecipeDraftImages = async ({
     return {
       content: recipeContentSchema.parse({
         title: draft.title,
-        servingsText: draft.servingsText,
+        yieldText: draft.yieldText,
         coverImage,
+        sourceMedia,
         ingredientGroups: draft.ingredientGroups,
         steps,
         note: draft.note,
@@ -262,31 +282,28 @@ export const attachRecipeImageUrls = async (
     return recipeContentWithUrlsSchema.parse(content);
   }
 
-  const coverImage = content.coverImage
-    ? await imageService
-        .createSignedGetUrl({ objectKey: content.coverImage.objectKey })
-        .then((result) => ({ ...content.coverImage, url: result.url }))
-        .catch(() => content.coverImage)
-    : undefined;
+  const attachImageUrl = async (image: RecipeImage) => {
+    try {
+      const result = await imageService.createSignedGetUrl({ objectKey: image.objectKey });
+      return { ...image, url: result.url };
+    } catch {
+      return image;
+    }
+  };
+
+  const coverImage = content.coverImage ? await attachImageUrl(content.coverImage) : undefined;
+  const sourceMedia = await Promise.all((content.sourceMedia ?? []).map(attachImageUrl));
   const steps = await Promise.all(
     content.steps.map(async (step) => ({
       ...step,
-      images: await Promise.all(
-        step.images.map(async (image) => {
-          try {
-            const result = await imageService.createSignedGetUrl({ objectKey: image.objectKey });
-            return { ...image, url: result.url };
-          } catch {
-            return image;
-          }
-        }),
-      ),
+      images: await Promise.all(step.images.map(attachImageUrl)),
     })),
   );
 
   return recipeContentWithUrlsSchema.parse({
     ...content,
     coverImage,
+    sourceMedia,
     steps,
   });
 };

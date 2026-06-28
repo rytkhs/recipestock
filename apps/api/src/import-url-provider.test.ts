@@ -60,7 +60,7 @@ const createEnv = (overrides: Record<string, unknown> = {}) =>
 
 const createStrictAiDraft = (overrides: Record<string, unknown> = {}) => ({
   title: "Tomato pasta",
-  servingsText: null,
+  yieldText: null,
   coverImageUrl: null,
   ingredientGroups: [
     {
@@ -222,7 +222,7 @@ describe("default recipe import AI provider", () => {
   it("AI出力のnullを既存のoptional形式へ正規化する", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: createStrictAiDraft({
-        servingsText: null,
+        yieldText: null,
         coverImageUrl: null,
         ingredientGroups: [
           {

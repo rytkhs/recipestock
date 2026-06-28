@@ -94,11 +94,11 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
     ]
       .map((value) => resolveHttpUrl(value, page.finalUrl))
       .find(Boolean);
-    const servingsText = normalizeText(attributes.servings);
+    const yieldText = normalizeText(attributes.servings);
     const note = buildNote(attributes, asArray(attributes.points), ingredientNamesById);
     const recipeDraftContent: RecipeDraftContent = {
       title,
-      ...(servingsText ? { servingsText } : {}),
+      ...(yieldText ? { yieldText } : {}),
       ...(coverImageUrl
         ? {
             coverImage: {
@@ -107,6 +107,7 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
             } as const,
           }
         : {}),
+      sourceMedia: [],
       ingredientGroups,
       steps,
       ...(note ? { note } : {}),

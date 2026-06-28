@@ -77,7 +77,7 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
       imageCandidates,
       imagePlacement: {
         ...(imageCandidates[0] ? { coverImageUrl: imageCandidates[0].url } : {}),
-        prependedStepImageUrls: isVideo ? [] : imageCandidates.map((candidate) => candidate.url),
+        sourceMediaUrls: isVideo ? [] : imageCandidates.map((candidate) => candidate.url),
       },
       source: {
         sourceUrl: source.canonicalUrl,

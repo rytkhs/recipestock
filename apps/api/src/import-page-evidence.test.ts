@@ -107,7 +107,7 @@ describe("Recipe page evidence", () => {
       {
         format: "jsonLd",
         name: "Tomato pasta",
-        servingsText: "2 servings",
+        yieldText: "2 servings",
         imageUrls: ["https://example.com/jsonld.jpg"],
         rawIngredients: ["Tomato 1 can", "Olive oil 1 tbsp"],
         rawInstructions: ["Simmer the tomato sauce.", "Toss with pasta."],
@@ -169,7 +169,7 @@ describe("Recipe page evidence", () => {
       {
         format: "jsonLd",
         name: "Layered pasta",
-        servingsText: undefined,
+        yieldText: undefined,
         imageUrls: [],
         rawIngredients: ["Pasta 100g"],
         rawInstructions: ["Warm the sauce.", "Serve with pasta."],
@@ -217,7 +217,7 @@ describe("Recipe page evidence", () => {
     expect(evidence.recipeStructuredEvidence).toContainEqual({
       format: "microdata",
       name: "Miso soup",
-      servingsText: "2 bowls",
+      yieldText: "2 bowls",
       imageUrls: ["https://example.com/miso.jpg"],
       rawIngredients: ["Miso 2 tbsp", "Tofu 150g"],
       rawInstructions: ["Warm the broth.", "Dissolve the miso."],
@@ -257,7 +257,7 @@ describe("Recipe page evidence", () => {
       rawIngredients: ["Same-node ingredient text for extraction and import conversion."],
       rawInstructions: [],
       structuredInstructions: [],
-      servingsText: undefined,
+      yieldText: undefined,
     });
   });
 
@@ -289,7 +289,7 @@ describe("Recipe page evidence", () => {
     expect(evidence.recipeStructuredEvidence).toContainEqual({
       format: "rdfa",
       name: "Rice bowl",
-      servingsText: "1 serving",
+      yieldText: "1 serving",
       imageUrls: ["https://example.com/rice.jpg"],
       rawIngredients: ["Rice 200g", "Egg 1"],
       rawInstructions: ["Steam the rice.", "Add the egg."],

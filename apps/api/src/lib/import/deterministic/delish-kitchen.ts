@@ -37,7 +37,7 @@ type DelishKitchenHtmlExtraction = {
   canonicalUrl?: string;
   lead: string;
   title: string;
-  servingsText: string;
+  yieldText: string;
   ingredientRows: IngredientRow[];
   steps: StepCapture[];
   attentionItems: string[];
@@ -152,11 +152,11 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
         });
     const coverImageUrl = structuredRecipe?.imageUrls[0];
     const note = buildRecipeNote(extraction.attentionItems, isPartialImport);
-    const servingsText = normalizeServingsText(extraction.servingsText);
+    const yieldText = normalizeYieldText(extraction.yieldText);
 
     const recipeDraftContent: RecipeDraftContent = {
       title,
-      ...(servingsText ? { servingsText } : {}),
+      ...(yieldText ? { yieldText } : {}),
       ...(coverImageUrl
         ? {
             coverImage: {
@@ -165,6 +165,7 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
             } as const,
           }
         : {}),
+      sourceMedia: [],
       ingredientGroups,
       steps,
       ...(note ? { note } : {}),
@@ -202,7 +203,7 @@ const extractDelishKitchenRecipe = async (
   const extraction: DelishKitchenHtmlExtraction = {
     lead: "",
     title: "",
-    servingsText: "",
+    yieldText: "",
     ingredientRows: [],
     steps: [],
     attentionItems: [],
@@ -247,7 +248,7 @@ const extractDelishKitchenRecipe = async (
     })
     .on(".delish-recipe-ingredients .recipe-serving > span", {
       text(text) {
-        extraction.servingsText += text.text;
+        extraction.yieldText += text.text;
       },
     })
     .on(".delish-recipe-ingredients .ingredient-list > li.ingredient-group__header", {
@@ -497,7 +498,7 @@ const firstText = (value: unknown) => extractTexts(Array.isArray(value) ? value 
 
 const normalizeText = (value: string) => value.replace(/\s+/g, " ").trim();
 
-const normalizeServingsText = (value: string) =>
+const normalizeYieldText = (value: string) =>
   normalizeText(value).replace(/^【/, "").replace(/】$/, "").trim();
 
 const resolveHttpUrl = (rawUrl: string | null, baseUrl: string) => {

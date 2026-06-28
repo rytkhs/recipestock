@@ -15,7 +15,9 @@ type RecipeDraftFormProps = {
   defaultValues: RecipeDraftFormValues;
   submitLabel: string;
   submitError?: string | null;
+  showSourceMediaInput?: boolean;
   coverImagePreviewUrl?: string;
+  sourceMediaPreviewUrls?: string[];
   stepImagePreviewUrls?: string[][];
   uploadImage?: (file: File) => Promise<DraftImageRef>;
   onSubmit(values: RecipeDraftFormValues): Promise<void> | void;
@@ -33,26 +35,39 @@ const imageInputHelpText = "JPEG / PNG / WebP、5MBまで";
 const imageRefId = (image: DraftImageRef) =>
   `${image.type}:${"key" in image ? image.key : image.url}`;
 
-const createStepImagePreviewUrlsByImageId = (
-  defaultValues: RecipeDraftFormValues,
-  stepImagePreviewUrls?: string[][],
-): ImagePreviewUrlsByImageId => {
+const addImagePreviewUrls = (
+  previewUrlsByImageId: ImagePreviewUrlsByImageId,
+  images: DraftImageRef[],
+  previewUrls?: string[],
+) => {
+  if (!previewUrls || previewUrls.length !== images.length) {
+    return;
+  }
+
+  images.forEach((image, imageIndex) => {
+    const previewUrl = previewUrls[imageIndex];
+
+    if (previewUrl) {
+      previewUrlsByImageId[imageRefId(image)] = previewUrl;
+    }
+  });
+};
+
+const createImagePreviewUrlsByImageId = ({
+  defaultValues,
+  sourceMediaPreviewUrls,
+  stepImagePreviewUrls,
+}: {
+  defaultValues: RecipeDraftFormValues;
+  sourceMediaPreviewUrls?: string[];
+  stepImagePreviewUrls?: string[][];
+}): ImagePreviewUrlsByImageId => {
   const previewUrlsByImageId: ImagePreviewUrlsByImageId = {};
 
+  addImagePreviewUrls(previewUrlsByImageId, defaultValues.sourceMedia, sourceMediaPreviewUrls);
+
   defaultValues.steps.forEach((step, stepIndex) => {
-    const previewUrls = stepImagePreviewUrls?.[stepIndex];
-
-    if (!previewUrls || previewUrls.length !== step.images.length) {
-      return;
-    }
-
-    step.images.forEach((image, imageIndex) => {
-      const previewUrl = previewUrls[imageIndex];
-
-      if (previewUrl) {
-        previewUrlsByImageId[imageRefId(image)] = previewUrl;
-      }
-    });
+    addImagePreviewUrls(previewUrlsByImageId, step.images, stepImagePreviewUrls?.[stepIndex]);
   });
 
   return previewUrlsByImageId;
@@ -229,6 +244,7 @@ const StepImagesInput = ({
   onUploadStateChange,
   previewUrlsByImageId,
   uploadImage,
+  variant = "step",
 }: {
   control: RecipeDraftFormControl;
   label: string;
@@ -236,6 +252,7 @@ const StepImagesInput = ({
   onUploadStateChange(isUploading: boolean): void;
   previewUrlsByImageId?: ImagePreviewUrlsByImageId;
   uploadImage: (file: File) => Promise<DraftImageRef>;
+  variant?: "sourceMedia" | "step";
 }) => {
   const { field } = useController({ control, name });
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -248,6 +265,19 @@ const StepImagesInput = ({
   const images = field.value ?? [];
 
   localPreviewUrlsByImageIdRef.current = localPreviewUrlsByImageId;
+  const isSourceMedia = variant === "sourceMedia";
+  const imageCardClassName = isSourceMedia
+    ? "group relative aspect-[4/5] w-[min(70vw,240px)] shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted sm:w-56"
+    : "group relative w-40 shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted sm:w-48";
+  const imageFrameClassName = isSourceMedia
+    ? "grid h-full place-items-center"
+    : "grid aspect-square place-items-center";
+  const imageClassName = isSourceMedia
+    ? "h-full w-full object-contain"
+    : "h-full w-full object-cover";
+  const addButtonClassName = isSourceMedia
+    ? "aspect-[4/5] h-auto w-[min(70vw,240px)] shrink-0 snap-start rounded-[14px] border border-dashed border-brand-line-soft bg-brand-paper-muted font-semibold text-brand-walnut sm:w-56"
+    : "aspect-square h-auto w-40 shrink-0 snap-start rounded-[14px] border border-dashed border-brand-line-soft bg-brand-paper-muted font-semibold text-brand-walnut sm:w-48";
 
   useEffect(
     () => () => {
@@ -321,51 +351,47 @@ const StepImagesInput = ({
         type="file"
         onChange={(event) => void handleChange(event)}
       />
-      {images.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {images.map((image, imageIndex) => {
-            const imageId = imageRefId(image);
-            const imagePreviewUrl =
-              localPreviewUrlsByImageId[imageId] ?? previewUrlsByImageId?.[imageId];
+      <div className="flex snap-x gap-3 overflow-x-auto pb-2">
+        {images.map((image, imageIndex) => {
+          const imageId = imageRefId(image);
+          const imagePreviewUrl =
+            localPreviewUrlsByImageId[imageId] ?? previewUrlsByImageId?.[imageId];
 
-            return (
-              <div
-                className="group relative overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted"
-                key={imageId}
-              >
-                <div className="grid aspect-square place-items-center">
-                  {imagePreviewUrl ? (
-                    <img
-                      alt={`${label}${imageIndex + 1}プレビュー`}
-                      className="h-full w-full object-cover"
-                      src={imagePreviewUrl}
-                    />
-                  ) : (
-                    <span className="px-2 text-center text-brand-muted text-xs">保存済み画像</span>
-                  )}
-                </div>
-                <Button
-                  className="absolute top-2 right-2 rounded-full"
-                  isDisabled={isUploading}
-                  variant="danger"
-                  onPress={() => handleRemove(imageIndex)}
-                >
-                  削除
-                </Button>
+          return (
+            <div className={imageCardClassName} key={imageId}>
+              <div className={imageFrameClassName}>
+                {imagePreviewUrl ? (
+                  <img
+                    alt={`${label}${imageIndex + 1}プレビュー`}
+                    className={imageClassName}
+                    src={imagePreviewUrl}
+                  />
+                ) : (
+                  <span className="px-2 text-center text-brand-muted text-xs">保存済み画像</span>
+                )}
               </div>
-            );
-          })}
-        </div>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-2">
+              <Button
+                aria-label={`${label}${imageIndex + 1}を削除`}
+                className="absolute top-2 right-2 h-8 min-w-8 rounded-full px-0 text-base leading-none"
+                isDisabled={isUploading}
+                variant="danger"
+                onPress={() => handleRemove(imageIndex)}
+              >
+                ×
+              </Button>
+            </div>
+          );
+        })}
         <Button
-          className="justify-self-start rounded-full font-semibold"
+          className={addButtonClassName}
           isDisabled={isUploading}
           variant="secondary"
           onPress={() => inputRef.current?.click()}
         >
           画像を追加
         </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         {isUploading ? <span className="text-brand-muted text-sm">アップロード中</span> : null}
       </div>
       {isUploading ? <ProgressBar aria-label={`${label}アップロード中`} isIndeterminate /> : null}
@@ -471,7 +497,9 @@ export const RecipeDraftForm = ({
   defaultValues,
   submitLabel,
   submitError,
+  showSourceMediaInput = true,
   coverImagePreviewUrl,
+  sourceMediaPreviewUrls,
   stepImagePreviewUrls,
   uploadImage = uploadRecipeImage,
   onSubmit,
@@ -483,9 +511,14 @@ export const RecipeDraftForm = ({
   const ingredientGroups = useFieldArray({ control, name: "ingredientGroups" });
   const steps = useFieldArray({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
-  const stepImagePreviewUrlsByImageId = useMemo(
-    () => createStepImagePreviewUrlsByImageId(defaultValues, stepImagePreviewUrls),
-    [defaultValues, stepImagePreviewUrls],
+  const imagePreviewUrlsByImageId = useMemo(
+    () =>
+      createImagePreviewUrlsByImageId({
+        defaultValues,
+        sourceMediaPreviewUrls,
+        stepImagePreviewUrls,
+      }),
+    [defaultValues, sourceMediaPreviewUrls, stepImagePreviewUrls],
   );
   const handleFormSubmit = handleSubmit(onSubmit);
   const handleUploadStateChange = (isUploading: boolean) => {
@@ -505,7 +538,22 @@ export const RecipeDraftForm = ({
 
       <FormInput control={control} isRequired label="タイトル" name="title" />
 
-      <FormInput control={control} label="人数" name="servingsText" />
+      <FormInput control={control} label="できあがり量" name="yieldText" />
+
+      {showSourceMediaInput ? (
+        <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
+          <legend className="px-2 font-bold text-brand-walnut">投稿画像</legend>
+          <StepImagesInput
+            control={control}
+            label="投稿画像"
+            name="sourceMedia"
+            onUploadStateChange={handleUploadStateChange}
+            previewUrlsByImageId={imagePreviewUrlsByImageId}
+            uploadImage={uploadImage}
+            variant="sourceMedia"
+          />
+        </fieldset>
+      ) : null}
 
       {ingredientGroups.fields.map((field, groupIndex) => (
         <IngredientGroupFields control={control} groupIndex={groupIndex} key={field.id} />
@@ -536,7 +584,7 @@ export const RecipeDraftForm = ({
                   label={`手順${stepIndex + 1}の画像`}
                   name={`steps.${stepIndex}.images`}
                   onUploadStateChange={handleUploadStateChange}
-                  previewUrlsByImageId={stepImagePreviewUrlsByImageId}
+                  previewUrlsByImageId={imagePreviewUrlsByImageId}
                   uploadImage={uploadImage}
                 />
               </div>

@@ -15,7 +15,7 @@ type ExtractedRecipeStructuredInstruction = {
 type ExtractedRecipeStructuredEvidence = {
   format: "jsonLd" | "microdata" | "rdfa";
   name?: string;
-  servingsText?: string;
+  yieldText?: string;
   imageUrls: string[];
   rawIngredients: string[];
   rawInstructions: string[];
@@ -61,7 +61,7 @@ type HtmlElementEndTagRegistrar = (element: HtmlRewriterElement, callback: () =>
 type RecipeStructuredEvidenceBuilder = {
   format: ExtractedRecipeStructuredEvidence["format"];
   name?: string;
-  servingsText?: string;
+  yieldText?: string;
   imageUrls: string[];
   rawIngredients: string[];
   rawInstructions: string[];
@@ -70,7 +70,7 @@ type RecipeStructuredEvidenceBuilder = {
 
 type RecipeStructuredProperty = keyof Pick<
   ExtractedRecipeStructuredEvidence,
-  "name" | "servingsText" | "imageUrls" | "rawIngredients" | "rawInstructions"
+  "name" | "yieldText" | "imageUrls" | "rawIngredients" | "rawInstructions"
 >;
 
 type RecipeStructuredTextCapture = {
@@ -491,8 +491,8 @@ const appendRecipeStructuredValue = (
   for (const property of properties) {
     if (property === "name") {
       builder.name ??= value;
-    } else if (property === "servingsText") {
-      builder.servingsText ??= value;
+    } else if (property === "yieldText") {
+      builder.yieldText ??= value;
     } else if (property === "imageUrls") {
       const imageUrl = resolveStructuredImageUrl(value, baseUrl);
       if (imageUrl) builder.imageUrls.push(imageUrl);
@@ -510,7 +510,7 @@ const normalizeRecipeStructuredEvidence = (
   const evidence = {
     format: builder.format,
     name: builder.name ? normalizeReadableText(builder.name) : undefined,
-    servingsText: builder.servingsText ? normalizeReadableText(builder.servingsText) : undefined,
+    yieldText: builder.yieldText ? normalizeReadableText(builder.yieldText) : undefined,
     imageUrls: dedupeStrings(builder.imageUrls.map(normalizeReadableText).filter(Boolean)),
     rawIngredients: dedupeStrings(
       builder.rawIngredients.map(normalizeReadableText).filter(Boolean),
@@ -523,7 +523,7 @@ const normalizeRecipeStructuredEvidence = (
 
   if (
     !evidence.name &&
-    !evidence.servingsText &&
+    !evidence.yieldText &&
     evidence.imageUrls.length === 0 &&
     evidence.rawIngredients.length === 0 &&
     evidence.rawInstructions.length === 0 &&
@@ -551,7 +551,7 @@ const normalizeRecipeStructuredProperties = (value: string | null): RecipeStruct
 const normalizeRecipeStructuredProperty = (value: string): RecipeStructuredProperty | undefined => {
   const term = normalizeSchemaTerm(value);
   if (term === "name") return "name";
-  if (term === "recipeyield") return "servingsText";
+  if (term === "recipeyield") return "yieldText";
   if (term === "image") return "imageUrls";
   if (term === "recipeingredient") return "rawIngredients";
   if (term === "recipeinstructions" || term === "text" || term === "itemlistelement") {
@@ -701,7 +701,7 @@ const normalizeRecipeJsonLdNode = (
   return {
     format: "jsonLd",
     name: firstReadableText(record.name),
-    servingsText: firstReadableText(record.recipeYield),
+    yieldText: firstReadableText(record.recipeYield),
     imageUrls: extractJsonLdImageUrls(record.image, baseUrl),
     rawIngredients: extractReadableTexts(record.recipeIngredient),
     rawInstructions: structuredInstructions.map((instruction) => instruction.text),
@@ -868,7 +868,7 @@ const buildImportStructuredEvidence = (
   recipes.map((recipe) => ({
     format: recipe.format,
     name: recipe.name,
-    servingsText: recipe.servingsText,
+    yieldText: recipe.yieldText,
     imageUrls: recipe.imageUrls.flatMap((url) => {
       const candidate = imageRegistry.getOrCreate(url, recipe.name);
       return candidate ? [candidate.url] : [];
@@ -901,7 +901,7 @@ const dedupeRecipeStructuredEvidence = (
   for (const recipe of recipes) {
     const key = JSON.stringify({
       name: recipe.name,
-      servingsText: recipe.servingsText,
+      yieldText: recipe.yieldText,
       imageUrls: recipe.imageUrls,
       rawIngredients: recipe.rawIngredients,
       rawInstructions: recipe.rawInstructions,
