@@ -465,6 +465,7 @@ export const NewRecipeRoute = () => {
       <h1 className="text-brand-ink font-bold text-2xl">レシピ作成</h1>
       <RecipeDraftForm
         defaultValues={createEmptyRecipeDraftFormValues()}
+        showSourceMediaInput={false}
         submitError={submitError}
         submitLabel="保存"
         onSubmit={onSubmit}
@@ -759,6 +760,9 @@ export const EditRecipeRoute = () => {
     );
   }
 
+  const sourceMedia = recipe.content.sourceMedia ?? [];
+  const showSourceMediaInput = sourceMedia.some((image) => image.url);
+
   return (
     <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
       <h1 className="text-brand-ink font-bold text-2xl">レシピ編集</h1>
@@ -766,7 +770,8 @@ export const EditRecipeRoute = () => {
         key={recipe.id}
         coverImagePreviewUrl={recipe.content.coverImage?.url}
         defaultValues={recipeDetailToFormValues(recipe)}
-        sourceMediaPreviewUrls={(recipe.content.sourceMedia ?? []).map((image) => image.url ?? "")}
+        showSourceMediaInput={showSourceMediaInput}
+        sourceMediaPreviewUrls={sourceMedia.map((image) => image.url ?? "")}
         submitError={submitError}
         submitLabel="更新"
         stepImagePreviewUrls={recipe.content.steps.map((step) =>

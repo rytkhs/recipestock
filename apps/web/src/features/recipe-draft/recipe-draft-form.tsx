@@ -15,6 +15,7 @@ type RecipeDraftFormProps = {
   defaultValues: RecipeDraftFormValues;
   submitLabel: string;
   submitError?: string | null;
+  showSourceMediaInput?: boolean;
   coverImagePreviewUrl?: string;
   sourceMediaPreviewUrls?: string[];
   stepImagePreviewUrls?: string[][];
@@ -485,6 +486,7 @@ export const RecipeDraftForm = ({
   defaultValues,
   submitLabel,
   submitError,
+  showSourceMediaInput = true,
   coverImagePreviewUrl,
   sourceMediaPreviewUrls,
   stepImagePreviewUrls,
@@ -527,17 +529,19 @@ export const RecipeDraftForm = ({
 
       <FormInput control={control} label="人数" name="servingsText" />
 
-      <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
-        <legend className="px-2 font-bold text-brand-walnut">投稿画像</legend>
-        <StepImagesInput
-          control={control}
-          label="投稿画像"
-          name="sourceMedia"
-          onUploadStateChange={handleUploadStateChange}
-          previewUrlsByImageId={imagePreviewUrlsByImageId}
-          uploadImage={uploadImage}
-        />
-      </fieldset>
+      {showSourceMediaInput ? (
+        <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
+          <legend className="px-2 font-bold text-brand-walnut">投稿画像</legend>
+          <StepImagesInput
+            control={control}
+            label="投稿画像"
+            name="sourceMedia"
+            onUploadStateChange={handleUploadStateChange}
+            previewUrlsByImageId={imagePreviewUrlsByImageId}
+            uploadImage={uploadImage}
+          />
+        </fieldset>
+      ) : null}
 
       {ingredientGroups.fields.map((field, groupIndex) => (
         <IngredientGroupFields control={control} groupIndex={groupIndex} key={field.id} />

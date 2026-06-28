@@ -471,6 +471,7 @@ describe("RecipesRoute", () => {
     expect(
       servingsInput.compareDocumentPosition(ingredientNameInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.queryByLabelText("投稿画像")).not.toBeInTheDocument();
 
     await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
     await userEvent.type(screen.getByLabelText("人数"), "2人分");
@@ -810,6 +811,45 @@ describe("RecipesRoute", () => {
     expect(stepImage).toHaveAttribute("height", "1200");
     expect(stepImage).toHaveStyle({ aspectRatio: "800 / 1200" });
     expect(screen.queryByAltText("手順2の画像1")).not.toBeInTheDocument();
+  });
+
+  it("詳細画面で投稿画像がなければ投稿画像セクションを表示しない", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_123",
+              title: "Tomato pasta",
+              content: {
+                title: "Tomato pasta",
+                sourceMedia: [],
+                ingredientGroups: [],
+                steps: [{ text: "煮詰める", images: [] }],
+              },
+              source: {
+                sourceUrl: null,
+                normalizedSourceUrl: null,
+                sourceName: null,
+              },
+              createdAt: "2026-05-26T00:00:00.000Z",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123");
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "投稿画像" })).not.toBeInTheDocument();
   });
 
   it("ロック中Recipe詳細に直接アクセスしても本文と編集リンクを表示しない", async () => {
@@ -1177,6 +1217,44 @@ describe("RecipesRoute", () => {
         ],
       },
     });
+  });
+
+  it("編集画面で投稿画像がなければ投稿画像入力を表示しない", async () => {
+    const recipeResponse = {
+      recipe: {
+        id: "recipe_123",
+        title: "Tomato pasta",
+        content: {
+          title: "Tomato pasta",
+          sourceMedia: [],
+          ingredientGroups: [],
+          steps: [{ text: "煮詰める", images: [] }],
+        },
+        source: {
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+        },
+        createdAt: "2026-05-26T00:00:00.000Z",
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        locked: false,
+      },
+    };
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(recipeResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
+    expect(screen.queryByLabelText("投稿画像")).not.toBeInTheDocument();
   });
 
   it("編集画面で投稿画像を削除して保存できる", async () => {
