@@ -601,7 +601,7 @@ describe("URL import flow", () => {
         finalUrl: "https://x.com/HG7654321/status/2071084010705727927",
         host: "x.com",
       },
-      markdownContent: ["# X post", "", "## Post", "", "材料\n卵 2個\n作り方\n焼く"].join("\n"),
+      markdownContent: ["# X post", "", "材料\n卵 2個\n作り方\n焼く"].join("\n"),
       recipeStructuredEvidence: [],
     });
     const aiInput = aiNormalize.mock.calls[0]?.[0];

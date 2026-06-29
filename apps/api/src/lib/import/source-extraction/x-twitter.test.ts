@@ -134,7 +134,7 @@ describe("X/Twitter source extraction adapter", () => {
           finalUrl: CANONICAL_URL,
           host: "x.com",
         },
-        markdownContent: ["# X post", "", "## Post", "", "材料\n卵 2個\n作り方\n焼く"].join("\n"),
+        markdownContent: ["# X post", "", "材料\n卵 2個\n作り方\n焼く"].join("\n"),
         recipeStructuredEvidence: [],
       },
       imageCandidates: [],
@@ -167,8 +167,6 @@ describe("X/Twitter source extraction adapter", () => {
     expect(result.input.markdownContent).toBe(
       [
         "# X post",
-        "",
-        "## Post",
         "",
         "ツンとしない手作り和風にんにくドレッシングの作り方",
         "おろしにんにく大4",
