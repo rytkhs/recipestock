@@ -75,14 +75,14 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
     const page = await context.fetchHtml(source.canonicalUrl);
     const html = await readFetchedPageText(page);
     const meta = extractMeta(html);
-    const primaryPostText = normalizePostText(meta["og:description"] ?? meta.description);
-    if (!primaryPostText && isPrivateOrUnavailableHtml(html)) {
+    if (isPrivateOrUnavailableHtml(html)) {
       throw new RecipeImportError(
         "private_or_login_required",
         "X/Twitter post is private, unavailable, or requires login.",
       );
     }
 
+    const primaryPostText = normalizePostText(meta["og:description"] ?? meta.description);
     const postText = primaryPostText || normalizePostText(meta["twitter:description"]);
     if (!postText) {
       throw new RecipeImportError(

@@ -399,6 +399,31 @@ describe("X/Twitter source extraction adapter", () => {
       code: "private_or_login_required",
     } satisfies Partial<RecipeImportError>);
   });
+
+  it("primary descriptionがあるlogin/unavailable HTMLはprivate_or_login_requiredにする", async () => {
+    await expect(
+      xTwitterSourceExtractionAdapter.extract(
+        createContext({
+          fetchHtml: createFetchHtml(
+            createPage(
+              CANONICAL_URL,
+              [
+                "<html>",
+                "<head>",
+                '<meta property="og:description" content="See what people are saying on X.">',
+                '<meta name="description" content="See what people are saying on X.">',
+                "</head>",
+                "<body>This post is unavailable. Log in to X</body>",
+                "</html>",
+              ].join(""),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "private_or_login_required",
+    } satisfies Partial<RecipeImportError>);
+  });
 });
 
 const createContext = ({
