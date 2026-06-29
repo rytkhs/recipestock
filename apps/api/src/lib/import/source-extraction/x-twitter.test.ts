@@ -232,8 +232,12 @@ describe("X/Twitter source extraction adapter", () => {
     });
   });
 
-  it("動画postではthumbnailをcoverにしsourceMediaへ配置しない", async () => {
-    const thumbnailUrl = "https://pbs.twimg.com/amplify_video_thumb/2070/img/abc.jpg";
+  it.each([
+    "amplify_video_thumb",
+    "ext_tw_video_thumb",
+    "tweet_video_thumb",
+  ])("動画postでは%s thumbnailをcoverにしsourceMediaへ配置しない", async (thumbnailPrefix) => {
+    const thumbnailUrl = `https://pbs.twimg.com/${thumbnailPrefix}/2070/img/abc.jpg`;
     const videoUrl = "https://video.twimg.com/amplify_video/2070/vid/avc1/720x1280/abc.mp4";
 
     const result = await xTwitterSourceExtractionAdapter.extract(

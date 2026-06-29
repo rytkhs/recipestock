@@ -9,6 +9,11 @@ const X_TWITTER_HOSTS = new Set(["x.com", "twitter.com", "mobile.twitter.com"]);
 const X_TWITTER_STATUS_ID = /^[0-9]+$/;
 const X_TWITTER_USERNAME = /^[A-Za-z0-9_]{1,15}$/;
 const X_TWITTER_SUFFIX_ROUTES = new Set(["photo", "video"]);
+const X_TWITTER_VIDEO_THUMBNAIL_PATH_PREFIXES = [
+  "/amplify_video_thumb/",
+  "/ext_tw_video_thumb/",
+  "/tweet_video_thumb/",
+];
 const X_SOURCE_NAME = "X";
 
 type XTwitterSource =
@@ -213,7 +218,7 @@ const extractXTwitterMedia = (html: string): XTwitterMedia[] => {
     .replace(/\\u0026/gi, "&")
     .replace(/\\u003D/gi, "=");
   const mediaUrlPattern =
-    /https:\/\/pbs\.twimg\.com\/(?:media|amplify_video_thumb)\/[^\s"'<>\\)]+/g;
+    /https:\/\/pbs\.twimg\.com\/(?:media|amplify_video_thumb|ext_tw_video_thumb|tweet_video_thumb)\/[^\s"'<>\\)]+/g;
   const seenUrls = new Set<string>();
   const media: XTwitterMedia[] = [];
 
@@ -242,7 +247,7 @@ const normalizeXTwitterMediaUrl = (rawUrl: string): XTwitterMedia | null => {
     return { url: url.toString(), kind: "image" };
   }
 
-  if (url.pathname.startsWith("/amplify_video_thumb/")) {
+  if (X_TWITTER_VIDEO_THUMBNAIL_PATH_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
     return { url: url.toString(), kind: "videoThumbnail" };
   }
 
