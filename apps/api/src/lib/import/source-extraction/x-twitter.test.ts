@@ -232,6 +232,60 @@ describe("X/Twitter source extraction adapter", () => {
     });
   });
 
+  it(":largeとvariantなしの同一画像は高画質variantだけを配置する", async () => {
+    const largeUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg:large";
+    const bareUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg";
+    const secondImageUrl = "https://pbs.twimg.com/media/HLzmmW9bcAAOZMT.jpg";
+
+    const result = await xTwitterSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createPage(
+            CANONICAL_URL,
+            createXTwitterHtml({
+              description: "画像に材料あり",
+              body: [bareUrl, largeUrl, secondImageUrl].join("\n"),
+            }),
+          ),
+        ),
+      }),
+    );
+
+    expect(result.imageCandidates.map((candidate) => candidate.url)).toEqual([
+      largeUrl,
+      secondImageUrl,
+    ]);
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: largeUrl,
+      sourceMediaUrls: [largeUrl, secondImageUrl],
+    });
+  });
+
+  it("?name違いの同一画像は高画質variantだけを配置する", async () => {
+    const smallUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg?format=jpg&name=small";
+    const largeUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux?format=jpg&name=large";
+
+    const result = await xTwitterSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createPage(
+            CANONICAL_URL,
+            createXTwitterHtml({
+              description: "画像に材料あり",
+              body: [smallUrl, largeUrl].join("\n"),
+            }),
+          ),
+        ),
+      }),
+    );
+
+    expect(result.imageCandidates.map((candidate) => candidate.url)).toEqual([largeUrl]);
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: largeUrl,
+      sourceMediaUrls: [largeUrl],
+    });
+  });
+
   it.each([
     "amplify_video_thumb",
     "ext_tw_video_thumb",

@@ -15,6 +15,15 @@ const X_TWITTER_VIDEO_THUMBNAIL_PATH_PREFIXES = [
   "/tweet_video_thumb/",
 ];
 const X_SOURCE_NAME = "X";
+const X_TWITTER_MEDIA_VARIANT_RANK: Record<string, number> = {
+  orig: 6,
+  large: 5,
+  medium: 4,
+  small: 3,
+  thumb: 2,
+  none: 1,
+  unknown: 0,
+};
 
 type XTwitterSource =
   | {
@@ -32,6 +41,11 @@ type XTwitterSource =
 type XTwitterMedia = {
   url: string;
   kind: "image" | "videoThumbnail";
+};
+
+type NormalizedXTwitterMedia = XTwitterMedia & {
+  dedupeKey: string;
+  qualityRank: number;
 };
 
 type XTwitterCanonicalSource =
@@ -220,11 +234,29 @@ const extractXTwitterMedia = (html: string): XTwitterMedia[] => {
   const mediaUrlPattern =
     /https:\/\/pbs\.twimg\.com\/(?:media|amplify_video_thumb|ext_tw_video_thumb|tweet_video_thumb)\/[^\s"'<>\\)]+/g;
   const seenUrls = new Set<string>();
+  const imageByIdentity = new Map<string, NormalizedXTwitterMedia>();
   const media: XTwitterMedia[] = [];
 
   for (const match of normalizedHtml.matchAll(mediaUrlPattern)) {
     const item = normalizeXTwitterMediaUrl(match[0]);
-    if (!item || seenUrls.has(item.url)) continue;
+    if (!item) continue;
+
+    if (item.kind === "image") {
+      const existing = imageByIdentity.get(item.dedupeKey);
+      if (existing) {
+        if (item.qualityRank > existing.qualityRank) {
+          existing.url = item.url;
+          existing.qualityRank = item.qualityRank;
+        }
+        continue;
+      }
+
+      imageByIdentity.set(item.dedupeKey, item);
+      media.push(item);
+      continue;
+    }
+
+    if (seenUrls.has(item.url)) continue;
 
     seenUrls.add(item.url);
     media.push(item);
@@ -233,7 +265,7 @@ const extractXTwitterMedia = (html: string): XTwitterMedia[] => {
   return media;
 };
 
-const normalizeXTwitterMediaUrl = (rawUrl: string): XTwitterMedia | null => {
+const normalizeXTwitterMediaUrl = (rawUrl: string): NormalizedXTwitterMedia | null => {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -244,14 +276,46 @@ const normalizeXTwitterMediaUrl = (rawUrl: string): XTwitterMedia | null => {
   if (url.protocol !== "https:" || url.hostname !== "pbs.twimg.com") return null;
 
   if (url.pathname.startsWith("/media/")) {
-    return { url: url.toString(), kind: "image" };
+    return {
+      url: url.toString(),
+      kind: "image",
+      ...getXTwitterImageDedupe(url),
+    };
   }
 
   if (X_TWITTER_VIDEO_THUMBNAIL_PATH_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
-    return { url: url.toString(), kind: "videoThumbnail" };
+    return {
+      url: url.toString(),
+      kind: "videoThumbnail",
+      dedupeKey: url.toString(),
+      qualityRank: X_TWITTER_MEDIA_VARIANT_RANK.none,
+    };
   }
 
   return null;
+};
+
+const getXTwitterImageDedupe = (
+  url: URL,
+): Pick<NormalizedXTwitterMedia, "dedupeKey" | "qualityRank"> => {
+  const mediaPath = url.pathname.slice("/media/".length);
+  const pathVariant = getXTwitterPathVariant(mediaPath);
+  const pathWithoutVariant = pathVariant
+    ? mediaPath.slice(0, -`:${pathVariant}`.length)
+    : mediaPath;
+  const mediaId = pathWithoutVariant.replace(/\.[A-Za-z0-9]+$/, "");
+  const queryVariant = url.searchParams.get("name")?.toLowerCase();
+  const variant = queryVariant || pathVariant || "none";
+
+  return {
+    dedupeKey: `/media/${mediaId}`,
+    qualityRank: X_TWITTER_MEDIA_VARIANT_RANK[variant] ?? X_TWITTER_MEDIA_VARIANT_RANK.unknown,
+  };
+};
+
+const getXTwitterPathVariant = (mediaPath: string) => {
+  const match = /:([A-Za-z0-9_]+)$/.exec(mediaPath);
+  return match?.[1]?.toLowerCase();
 };
 
 const normalizePostText = (value: string | undefined) => {
