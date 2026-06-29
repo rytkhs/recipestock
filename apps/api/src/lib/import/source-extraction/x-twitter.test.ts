@@ -376,6 +376,27 @@ describe("X/Twitter source extraction adapter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
+  it("投稿本文のprimary descriptionがある場合はページ共通login/unavailable文言で弾かない", async () => {
+    const result = await xTwitterSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createPage(
+            CANONICAL_URL,
+            createXTwitterHtml({
+              description: "トマトソースの作り方&#10;玉ねぎを炒めて煮る",
+              body: [
+                "<aside>Log in to X to see more posts.</aside>",
+                "<blockquote>This post is unavailable.</blockquote>",
+              ].join(""),
+            }),
+          ),
+        ),
+      }),
+    );
+
+    expect(result.input.markdownContent).toBe("トマトソースの作り方\n玉ねぎを炒めて煮る");
+  });
+
   it("fallback descriptionだけがあるlogin/unavailable HTMLはprivate_or_login_requiredにする", async () => {
     await expect(
       xTwitterSourceExtractionAdapter.extract(

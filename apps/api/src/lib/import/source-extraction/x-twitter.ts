@@ -75,15 +75,19 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
     const page = await context.fetchHtml(source.canonicalUrl);
     const html = await readFetchedPageText(page);
     const meta = extractMeta(html);
-    if (isPrivateOrUnavailableHtml(html)) {
+
+    const primaryPostText = normalizePostText(meta["og:description"] ?? meta.description);
+    const hasPrimaryPostText =
+      primaryPostText !== "" && !isGenericXTwitterDescription(primaryPostText);
+    if (!hasPrimaryPostText && isPrivateOrUnavailableHtml(html)) {
       throw new RecipeImportError(
         "private_or_login_required",
         "X/Twitter post is private, unavailable, or requires login.",
       );
     }
 
-    const primaryPostText = normalizePostText(meta["og:description"] ?? meta.description);
-    const postText = primaryPostText || normalizePostText(meta["twitter:description"]);
+    const fallbackPostText = normalizePostText(meta["twitter:description"]);
+    const postText = hasPrimaryPostText ? primaryPostText : fallbackPostText;
     if (!postText) {
       throw new RecipeImportError(
         "extraction_failed",
@@ -329,6 +333,12 @@ const normalizePostText = (value: string | undefined) => {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+};
+
+const isGenericXTwitterDescription = (value: string) => {
+  const normalized = value.toLowerCase();
+
+  return normalized === "see what people are saying on x.";
 };
 
 const decodeHtml = (value: string) =>
