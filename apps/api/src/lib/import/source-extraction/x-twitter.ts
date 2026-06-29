@@ -295,5 +295,4 @@ const isPrivateOrUnavailableHtml = (html: string) => {
   );
 };
 
-const buildXTwitterMarkdownContent = (postText: string) =>
-  ["# X post", "", postText].join("\n").trim();
+const buildXTwitterMarkdownContent = (postText: string) => postText.trim();
