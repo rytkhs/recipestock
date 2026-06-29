@@ -86,7 +86,10 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
       );
     }
 
-    const fallbackPostText = normalizePostText(meta["twitter:description"]);
+    const rawFallbackPostText = normalizePostText(meta["twitter:description"]);
+    const fallbackPostText = isGenericXTwitterDescription(rawFallbackPostText)
+      ? ""
+      : rawFallbackPostText;
     const postText = hasPrimaryPostText ? primaryPostText : fallbackPostText;
     if (!postText) {
       throw new RecipeImportError(
