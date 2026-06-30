@@ -126,12 +126,7 @@ describe("YouTube source extraction adapter", () => {
     });
 
     expect(result.input.markdownContent).toBe(
-      [
-        "# 説明欄なしShorts",
-        "",
-        "Source: YouTube",
-        "Channel: Recipe Channel",
-      ].join("\n"),
+      ["# 説明欄なしShorts", "", "Source: YouTube", "Channel: Recipe Channel"].join("\n"),
     );
     expect(result.input.markdownContent).not.toContain("## Description");
     expect(result.input.markdownContent).not.toContain("hqdefault.jpg");
