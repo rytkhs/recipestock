@@ -534,6 +534,117 @@ describe("URL import flow", () => {
     expect(aiNormalize).not.toHaveBeenCalled();
   });
 
+  it("X/Twitter URLはsource extraction結果をAI normalizationへ渡し画像を決定的に配置する", async () => {
+    const imageUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg";
+    const aiNormalize = vi.fn(async (input: RecipeImportAIInput) => ({
+      title: "卵焼き",
+      ingredientGroups: [{ ingredients: [{ name: "卵", amount: "2個" }] }],
+      steps: [
+        { text: input.markdownContent.includes("焼く") ? "焼く。" : "作る。", imageUrls: [] },
+      ],
+    }));
+    const fetcher = vi.fn(async (url: string) => ({
+      finalUrl: url,
+      contentType: "text/html",
+      body: createXTwitterHtml({
+        description: "材料&#10;卵 2個&#10;作り方&#10;焼く",
+        body: `<script>{"media":"${imageUrl}"}</script>`,
+      }),
+    }));
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://twitter.com/HG7654321/status/2071084010705727927?s=20",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher,
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          normalize: aiNormalize,
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "卵焼き",
+        coverImage: {
+          type: "externalImageUrl",
+          url: imageUrl,
+        },
+        sourceMedia: [
+          {
+            type: "externalImageUrl",
+            url: imageUrl,
+          },
+        ],
+      },
+      source: {
+        sourceUrl: "https://x.com/HG7654321/status/2071084010705727927",
+        sourceName: "X",
+      },
+      warnings: [],
+    });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://x.com/HG7654321/status/2071084010705727927",
+      expect.any(Object),
+    );
+    expect(aiNormalize).toHaveBeenCalledWith({
+      source: {
+        finalUrl: "https://x.com/HG7654321/status/2071084010705727927",
+        host: "x.com",
+      },
+      markdownContent: ["材料\n卵 2個\n作り方\n焼く"].join("\n"),
+      recipeStructuredEvidence: [],
+    });
+    const aiInput = aiNormalize.mock.calls[0]?.[0];
+    expect(aiInput?.markdownContent).not.toContain("Source: X");
+    expect(aiInput?.markdownContent).not.toContain("https://x.com");
+    expect(aiInput?.markdownContent).not.toContain(imageUrl);
+  });
+
+  it("X/Twitter source extraction失敗時はgeneric HTML conversionへfallbackしない", async () => {
+    const aiNormalize = vi.fn();
+    const fetcher = vi.fn(async (url: string) => ({
+      finalUrl: url,
+      contentType: "text/html",
+      body: "<html><article><h1>Generic X recipe</h1><p>Enough recipe text.</p></article></html>",
+    }));
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://x.com/HG7654321/status/2071084010705727927",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher,
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          normalize: aiNormalize,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(aiNormalize).not.toHaveBeenCalled();
+  });
+
   it("Instagram source extractionではgeneric HTML conversionへfallbackしない", async () => {
     const fetcher = vi.fn(async (url: string) => ({
       finalUrl: url,
@@ -1157,5 +1268,14 @@ const createYouTubeHtml = (videoDetails: unknown) => `
         <h1>Generic YouTube page text should not be used.</h1>
       </article>
     </body>
+  </html>
+`;
+
+const createXTwitterHtml = ({ description, body = "" }: { description: string; body?: string }) => `
+  <html>
+    <head>
+      <meta property="og:description" content="${description}">
+    </head>
+    <body>${body}</body>
   </html>
 `;

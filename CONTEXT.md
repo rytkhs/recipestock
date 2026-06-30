@@ -14,7 +14,7 @@ The saved body of a **Recipe**. It contains the title, yield text, extracted sou
 _Avoid_: content blob, recipe record, draft
 
 **RecipeDraftContent**:
-Temporary pre-save recipe content shown in the confirmation and edit flow after import or manual creation. It is held in frontend state and is not persisted as a database draft.
+Pre-save recipe content used as the request body for creating or updating a **Recipe** and as the intermediate output of import conversion before image finalization. It is not persisted as a database draft.
 _Avoid_: Draft, saved draft, temporary recipe
 
 **Source**:
@@ -37,7 +37,7 @@ Domain expert: "No. `sourceName` is part of the Source metadata on the Recipe re
 
 Developer: "Can we save a RecipeDraftContent so users can come back later?"
 
-Domain expert: "No. A RecipeDraftContent is temporary pre-save content."
+Domain expert: "No. A RecipeDraftContent is pre-save content, not a saved draft."
 
 Developer: "The AI request may still be running. Is the Import Job really canceled?"
 
