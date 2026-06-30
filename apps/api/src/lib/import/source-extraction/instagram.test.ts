@@ -164,6 +164,7 @@ describe("Instagram source extraction adapter", () => {
       timeoutMs: TIMEOUT_MS,
     });
     expect(result).toEqual({
+      promptProfile: "social",
       input: {
         source: {
           finalUrl: CANONICAL_URL,

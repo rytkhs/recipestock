@@ -75,6 +75,13 @@ export type RecipeImportAIInput = {
   recipeStructuredEvidence: RecipeImportStructuredEvidence[];
 };
 
+export type RecipeImportPromptProfile = "generic" | "social";
+
+export type RecipeImportAINormalizeRequest = {
+  promptProfile: RecipeImportPromptProfile;
+  input: RecipeImportAIInput;
+};
+
 export type RecipeImportAIImageUrl = string;
 
 export type RecipeImportAIDraftStep = {
@@ -98,5 +105,5 @@ export type RecipeImportAIDraftContent = {
 };
 
 export type RecipeImportAIProvider = {
-  normalize(input: RecipeImportAIInput): Promise<RecipeImportAIDraftContent>;
+  normalize(request: RecipeImportAINormalizeRequest): Promise<RecipeImportAIDraftContent>;
 };

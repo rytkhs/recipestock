@@ -86,6 +86,7 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
       : [];
 
     return {
+      promptProfile: "social",
       input: {
         source: {
           finalUrl: canonicalUrl,

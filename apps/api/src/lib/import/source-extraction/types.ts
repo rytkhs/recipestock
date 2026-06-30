@@ -6,6 +6,7 @@ import {
   type RecipeImportAIInput,
   type RecipeImportImageCandidate,
   type RecipeImportImagePlacement,
+  type RecipeImportPromptProfile,
 } from "../types";
 
 export type SourceExtractionMatchInput = {
@@ -22,6 +23,7 @@ export type SourceExtractionContext = {
 };
 
 export type SourceExtractionResult = {
+  promptProfile: RecipeImportPromptProfile;
   input: RecipeImportAIInput;
   imageCandidates: RecipeImportImageCandidate[];
   imagePlacement?: RecipeImportImagePlacement;
@@ -48,6 +50,7 @@ const sourceExtractionImagePlacementSchema = z.strictObject({
 });
 
 const sourceExtractionResultSchema = z.strictObject({
+  promptProfile: z.literal("social"),
   input: z.strictObject({
     source: z.strictObject({
       finalUrl: z.string().url(),

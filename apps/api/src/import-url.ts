@@ -24,11 +24,13 @@ import {
   type RecipeImportAIDraftContent,
   type RecipeImportAIImageUrl,
   type RecipeImportAIInput,
+  type RecipeImportAINormalizeRequest,
   type RecipeImportAIProvider,
   RecipeImportError,
   type RecipeImportFetcher,
   type RecipeImportImageCandidate,
   type RecipeImportImagePlacement,
+  type RecipeImportPromptProfile,
   type RecipeImportResult,
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
@@ -42,16 +44,19 @@ export {
   type RecipeImportAIDraftContent,
   type RecipeImportAIImageUrl,
   type RecipeImportAIInput,
+  type RecipeImportAINormalizeRequest,
   type RecipeImportAIProvider,
   RecipeImportError,
   type RecipeImportFetcher,
   type RecipeImportImageCandidate,
+  type RecipeImportPromptProfile,
   type RecipeImportResult,
   type RecipeImportStructuredEvidence,
 } from "./lib/import/types";
 
 type RecipeImportConverterResult = {
   type: "requiresAi";
+  promptProfile: RecipeImportPromptProfile;
   input: RecipeImportAIInput;
   imageCandidates: RecipeImportImageCandidate[];
   imagePlacement?: RecipeImportImagePlacement;
@@ -262,6 +267,7 @@ const convertFetchedHtmlPage = async (
 
   return {
     type: "requiresAi",
+    promptProfile: "generic",
     input: {
       source: {
         finalUrl: normalizedFinalUrl,
@@ -384,7 +390,10 @@ export const importRecipeFromUrl = async ({
   let draft: RecipeImportAIDraftContent;
 
   try {
-    draft = await importAIProvider.normalize(resolvedConversion.input);
+    draft = await importAIProvider.normalize({
+      promptProfile: resolvedConversion.promptProfile,
+      input: resolvedConversion.input,
+    });
     assertImportJobDeadline(deadline, currentDate());
   } catch (error) {
     if (error instanceof RecipeImportError) {
@@ -452,9 +461,9 @@ export const createDefaultRecipeImportAIProvider = (
   env: Bindings,
   { logger = createLogger() }: { logger?: Logger } = {},
 ): RecipeImportAIProvider => ({
-  async normalize(input) {
+  async normalize({ promptProfile, input }: RecipeImportAINormalizeRequest) {
     const providerKind = resolveImportAiProvider(env);
-    const system = resolveImportRecipeSystemPrompt(env);
+    const system = resolveImportRecipeSystemPrompt(env, promptProfile);
     const timeoutMs = resolveImportAiTimeoutMs(env);
     const controller = new AbortController();
     let didTimeout = false;
@@ -483,6 +492,7 @@ export const createDefaultRecipeImportAIProvider = (
         env,
         input,
         logger,
+        promptProfile,
         providerKind,
         timeoutMs,
       });
@@ -693,12 +703,14 @@ const logImportAiFailure = (
     env,
     input,
     logger,
+    promptProfile,
     providerKind,
     timeoutMs,
   }: {
     env: Partial<Bindings>;
     input: RecipeImportAIInput;
     logger: Logger;
+    promptProfile: RecipeImportPromptProfile;
     providerKind: ImportAiProviderKind;
     timeoutMs: number;
   },
@@ -707,6 +719,7 @@ const logImportAiFailure = (
 
   logger.error("recipe_import_ai_normalization_failed", {
     provider: providerKind,
+    promptProfile,
     model: model || undefined,
     timeoutMs,
     sourceHost: input.source.host,
@@ -780,10 +793,21 @@ const sanitizeErrorDetails = (error: unknown, depth = 0): unknown => {
   return error;
 };
 
-const resolveImportRecipeSystemPrompt = (env: Partial<Bindings>) => {
-  const prompt = env.IMPORT_RECIPE_SYSTEM_PROMPT?.trim();
+const resolveImportRecipeSystemPrompt = (
+  env: Partial<Bindings>,
+  promptProfile: RecipeImportPromptProfile,
+) => {
+  const prompt =
+    promptProfile === "social"
+      ? env.IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPT?.trim()
+      : env.IMPORT_RECIPE_SYSTEM_PROMPT?.trim();
   if (!prompt) {
-    throw new RecipeImportError("unknown", "Import recipe system prompt is not configured.");
+    throw new RecipeImportError(
+      "unknown",
+      promptProfile === "social"
+        ? "Import recipe social system prompt is not configured."
+        : "Import recipe system prompt is not configured.",
+    );
   }
 
   return prompt;

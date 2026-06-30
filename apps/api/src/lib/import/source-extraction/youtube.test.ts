@@ -67,6 +67,7 @@ describe("YouTube source extraction adapter", () => {
 
     expect(fetchHtml).toHaveBeenCalledWith(CANONICAL_URL);
     expect(result).toEqual({
+      promptProfile: "social",
       input: {
         source: {
           finalUrl: CANONICAL_URL,

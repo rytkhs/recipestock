@@ -9,7 +9,7 @@ import {
   fetchImportPage,
   importRecipeFromUrl,
   normalizeImportableUrl,
-  type RecipeImportAIInput,
+  type RecipeImportAINormalizeRequest,
   RecipeImportError,
 } from "./import-url";
 import { type DeterministicImporter } from "./lib/import/deterministic";
@@ -414,7 +414,17 @@ describe("URL import flow", () => {
       "https://example.com/recipes/fallback",
       expect.any(Object),
     );
-    expect(aiNormalize).toHaveBeenCalledTimes(1);
+    expect(aiNormalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptProfile: "generic",
+        input: expect.objectContaining({
+          source: {
+            finalUrl: "https://example.com/recipes/fallback",
+            host: "example.com",
+          },
+        }),
+      }),
+    );
   });
 
   it("AI titleがnullの場合はstructured recipe nameで補完する", async () => {
@@ -552,6 +562,7 @@ describe("URL import flow", () => {
     const sourceExtractor: SourceExtractor = {
       async tryExtract() {
         return {
+          promptProfile: "social",
           input: {
             source: {
               finalUrl: "https://example.com/recipes/host-title",
@@ -693,7 +704,7 @@ describe("URL import flow", () => {
 
   it("YouTube URLはsource extraction結果をAI normalizationへ渡す", async () => {
     const usageRepository = createUsageRepositoryStub();
-    const aiNormalize = vi.fn(async (_input: RecipeImportAIInput) => ({
+    const aiNormalize = vi.fn(async (_request: RecipeImportAINormalizeRequest) => ({
       title: "鶏むねキャベツ鍋",
       ingredientGroups: [{ ingredients: [{ name: "キャベツ", amount: "500g" }] }],
       steps: [{ text: "煮る。", imageUrls: [] }],
@@ -760,15 +771,18 @@ describe("URL import flow", () => {
     );
     expect(aiNormalize).toHaveBeenCalledWith(
       expect.objectContaining({
-        source: {
-          finalUrl: "https://www.youtube.com/watch?v=FyLCRXMANAM",
-          host: "youtube.com",
-        },
-        markdownContent: expect.stringContaining("## Description\n\n材料\nキャベツ 500g"),
-        recipeStructuredEvidence: [],
+        promptProfile: "social",
+        input: expect.objectContaining({
+          source: {
+            finalUrl: "https://www.youtube.com/watch?v=FyLCRXMANAM",
+            host: "youtube.com",
+          },
+          markdownContent: expect.stringContaining("## Description\n\n材料\nキャベツ 500g"),
+          recipeStructuredEvidence: [],
+        }),
       }),
     );
-    const aiInput = aiNormalize.mock.calls[0]?.[0];
+    const aiInput = aiNormalize.mock.calls[0]?.[0]?.input;
     expect(aiInput?.markdownContent).not.toContain(
       "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
     );
@@ -810,7 +824,7 @@ describe("URL import flow", () => {
 
   it("X/Twitter URLはsource extraction結果をAI normalizationへ渡し画像を決定的に配置する", async () => {
     const imageUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg";
-    const aiNormalize = vi.fn(async (input: RecipeImportAIInput) => ({
+    const aiNormalize = vi.fn(async ({ input }: RecipeImportAINormalizeRequest) => ({
       title: "卵焼き",
       ingredientGroups: [{ ingredients: [{ name: "卵", amount: "2個" }] }],
       steps: [
@@ -871,14 +885,17 @@ describe("URL import flow", () => {
       expect.any(Object),
     );
     expect(aiNormalize).toHaveBeenCalledWith({
-      source: {
-        finalUrl: "https://x.com/HG7654321/status/2071084010705727927",
-        host: "x.com",
+      promptProfile: "social",
+      input: {
+        source: {
+          finalUrl: "https://x.com/HG7654321/status/2071084010705727927",
+          host: "x.com",
+        },
+        markdownContent: ["材料\n卵 2個\n作り方\n焼く"].join("\n"),
+        recipeStructuredEvidence: [],
       },
-      markdownContent: ["材料\n卵 2個\n作り方\n焼く"].join("\n"),
-      recipeStructuredEvidence: [],
     });
-    const aiInput = aiNormalize.mock.calls[0]?.[0];
+    const aiInput = aiNormalize.mock.calls[0]?.[0]?.input;
     expect(aiInput?.markdownContent).not.toContain("Source: X");
     expect(aiInput?.markdownContent).not.toContain("https://x.com");
     expect(aiInput?.markdownContent).not.toContain(imageUrl);
@@ -962,7 +979,8 @@ describe("URL import flow", () => {
     const ytdlpMetadataClient = {
       extract: vi.fn(async () => ytdlpMetadata),
     } satisfies YtDlpMetadataClient;
-    const aiNormalize = vi.fn(async (input: RecipeImportAIInput) => {
+    const aiNormalize = vi.fn(async ({ input, promptProfile }: RecipeImportAINormalizeRequest) => {
+      expect(promptProfile).toBe("social");
       expect(input.source).toEqual({
         finalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
         host: "instagram.com",
@@ -1092,6 +1110,7 @@ describe("URL import flow", () => {
     const sourceExtractor: SourceExtractor = {
       async tryExtract() {
         return {
+          promptProfile: "social",
           input: {
             source: {
               finalUrl: "https://www.example.com/recipes/image-limits",
@@ -1275,7 +1294,8 @@ describe("URL import flow", () => {
           `,
         }),
         aiProvider: {
-          async normalize(input) {
+          async normalize({ input, promptProfile }) {
+            expect(promptProfile).toBe("generic");
             expect(input).toMatchObject({
               source: {
                 finalUrl: "https://example.com/recipes/test",
@@ -1334,7 +1354,8 @@ describe("URL import flow", () => {
           `,
         }),
         aiProvider: {
-          async normalize(input) {
+          async normalize({ input, promptProfile }) {
+            expect(promptProfile).toBe("generic");
             expect(input.recipeStructuredEvidence).toContainEqual(
               expect.objectContaining({
                 imageUrls: ["https://example.com/structured.jpg"],
@@ -1408,7 +1429,8 @@ describe("URL import flow", () => {
           `,
         }),
         aiProvider: {
-          async normalize(input) {
+          async normalize({ input, promptProfile }) {
+            expect(promptProfile).toBe("generic");
             expect(JSON.stringify(input.recipeStructuredEvidence)).toContain(
               '"imageUrls":["https://example.com/step.jpg"]',
             );
