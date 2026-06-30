@@ -23,6 +23,7 @@ type ExtractedRecipeStructuredEvidence = {
 };
 
 export type RecipePageEvidence = {
+  title: string;
   meta: Record<string, string | undefined>;
   markdownContent: string;
   recipeStructuredEvidence: RecipeImportStructuredEvidence[];
@@ -42,6 +43,7 @@ export const extractRecipePageEvidence = async (
   ]);
 
   return {
+    title: normalizeReadableText(extraction.title),
     meta: extraction.meta,
     markdownContent,
     recipeStructuredEvidence: buildImportStructuredEvidence(

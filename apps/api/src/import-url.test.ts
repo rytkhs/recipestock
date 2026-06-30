@@ -417,6 +417,280 @@ describe("URL import flow", () => {
     expect(aiNormalize).toHaveBeenCalledTimes(1);
   });
 
+  it("AI titleがnullの場合はstructured recipe nameで補完する", async () => {
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/structured-title",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher: async () => ({
+          finalUrl: "https://example.com/recipes/structured-title",
+          contentType: "text/html",
+          body: `
+            <html>
+              <head>
+                <meta property="og:title" content="OG tomato pasta">
+                <script type="application/ld+json">
+                  ${JSON.stringify({
+                    "@context": "https://schema.org",
+                    "@type": "Recipe",
+                    name: "Structured tomato pasta",
+                  })}
+                </script>
+              </head>
+              <body><article><p>Enough visible recipe content for extraction.</p></article></body>
+            </html>
+          `,
+        }),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          async normalize() {
+            return {
+              title: null,
+              ingredientGroups: [],
+              steps: [],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "Structured tomato pasta",
+        ingredientGroups: [],
+        steps: [],
+      },
+    });
+  });
+
+  it.each([
+    {
+      name: "og:title",
+      html: `
+        <html>
+          <head><meta property="og:title" content="OG tomato pasta"></head>
+          <body><article><p>Enough visible recipe content for extraction.</p></article></body>
+        </html>
+      `,
+      expectedTitle: "OG tomato pasta",
+    },
+    {
+      name: "twitter:title",
+      html: `
+        <html>
+          <head><meta name="twitter:title" content="Twitter tomato pasta"></head>
+          <body><article><p>Enough visible recipe content for extraction.</p></article></body>
+        </html>
+      `,
+      expectedTitle: "Twitter tomato pasta",
+    },
+    {
+      name: "HTML title",
+      html: `
+        <html>
+          <head><title>HTML tomato pasta</title></head>
+          <body><article><p>Enough visible recipe content for extraction.</p></article></body>
+        </html>
+      `,
+      expectedTitle: "HTML tomato pasta",
+    },
+    {
+      name: "sourceName",
+      html: `
+        <html>
+          <head><meta property="og:site_name" content="Example Kitchen"></head>
+          <body><article><p>Enough visible recipe content for extraction.</p></article></body>
+        </html>
+      `,
+      expectedTitle: "Example Kitchen",
+    },
+  ])("AI titleがnullの場合は$nameで補完する", async ({ html, expectedTitle }) => {
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/fallback-title",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher: async () => ({
+          finalUrl: "https://example.com/recipes/fallback-title",
+          contentType: "text/html",
+          body: html,
+        }),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          async normalize() {
+            return {
+              title: null,
+              ingredientGroups: [],
+              steps: [],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: expectedTitle,
+      },
+    });
+  });
+
+  it("sourceNameも空の場合はhostで補完する", async () => {
+    const sourceExtractor: SourceExtractor = {
+      async tryExtract() {
+        return {
+          input: {
+            source: {
+              finalUrl: "https://example.com/recipes/host-title",
+              host: "example.com",
+            },
+            markdownContent: "Enough extracted content for host fallback.",
+            recipeStructuredEvidence: [],
+          },
+          imageCandidates: [],
+          source: {
+            sourceUrl: "https://example.com/recipes/host-title",
+            sourceName: null,
+          },
+          warnings: [],
+        };
+      },
+    };
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/host-title",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        sourceExtractor,
+        aiProvider: {
+          async normalize() {
+            return {
+              title: null,
+              ingredientGroups: [],
+              steps: [],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "example.com",
+      },
+    });
+  });
+
+  it.each([
+    { title: "", expectedTitle: "OG tomato pasta" },
+    { title: "   ", expectedTitle: "OG tomato pasta" },
+  ])("AI titleが空の場合はfallback titleで補完する", async ({ title, expectedTitle }) => {
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/empty-ai-title",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher: async () => ({
+          finalUrl: "https://example.com/recipes/empty-ai-title",
+          contentType: "text/html",
+          body: `
+            <html>
+              <head><meta property="og:title" content="OG tomato pasta"></head>
+              <body><article><p>Enough visible recipe content for extraction.</p></article></body>
+            </html>
+          `,
+        }),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          async normalize() {
+            return {
+              title,
+              ingredientGroups: [],
+              steps: [],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: expectedTitle,
+        ingredientGroups: [],
+        steps: [],
+      },
+    });
+  });
+
+  it("AI titleが有効な場合はfallback titleで上書きしない", async () => {
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://example.com/recipes/ai-title",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher: async () => ({
+          finalUrl: "https://example.com/recipes/ai-title",
+          contentType: "text/html",
+          body: `
+            <html>
+              <head><meta property="og:title" content="OG tomato pasta"></head>
+              <body><article><p>Enough visible recipe content for extraction.</p></article></body>
+            </html>
+          `,
+        }),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          async normalize() {
+            return {
+              title: "AI tomato pasta",
+              ingredientGroups: [],
+              steps: [],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "AI tomato pasta",
+      },
+    });
+  });
+
   it("YouTube URLはsource extraction結果をAI normalizationへ渡す", async () => {
     const usageRepository = createUsageRepositoryStub();
     const aiNormalize = vi.fn(async (_input: RecipeImportAIInput) => ({

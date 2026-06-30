@@ -244,6 +244,38 @@ describe("default recipe import AI provider", () => {
     });
   });
 
+  it("AI出力のtitleがnullでも受け付ける", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: createStrictAiDraft({
+        title: null,
+      }),
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(input)).resolves.toMatchObject({
+      title: null,
+      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      steps: [{ text: "煮詰める", imageUrls: [] }],
+    });
+  });
+
+  it("AI出力のtitleが空白でもnull相当に正規化する", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: createStrictAiDraft({
+        title: "   ",
+      }),
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(input)).resolves.toMatchObject({
+      title: null,
+      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      steps: [{ text: "煮詰める", imageUrls: [] }],
+    });
+  });
+
   it("AIがURL typeの画像を返した場合はai_schema_invalidへ変換する", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: {

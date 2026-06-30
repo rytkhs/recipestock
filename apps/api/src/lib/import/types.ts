@@ -83,7 +83,7 @@ export type RecipeImportAIDraftStep = {
 };
 
 export type RecipeImportAIDraftContent = {
-  title: string;
+  title: string | null;
   yieldText?: string;
   coverImageUrl?: RecipeImportAIImageUrl;
   ingredientGroups: Array<{

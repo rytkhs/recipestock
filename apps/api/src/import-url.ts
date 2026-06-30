@@ -55,8 +55,13 @@ type RecipeImportConverterResult = {
   input: RecipeImportAIInput;
   imageCandidates: RecipeImportImageCandidate[];
   imagePlacement?: RecipeImportImagePlacement;
+  titleFallbackCandidates?: string[];
   source: RecipeSourceDraft;
   warnings: string[];
+};
+
+type ResolvedTitleRecipeImportAIDraftContent = RecipeImportAIDraftContent & {
+  title: string;
 };
 
 const MAX_IMPORT_PAGE_REDIRECTS = 5;
@@ -86,7 +91,7 @@ const importAiDraftStepSchema = z
   .refine((step) => step.text !== null || step.imageUrls.length > 0);
 
 const importAiDraftContentSchema = z.strictObject({
-  title: z.string().min(1),
+  title: z.string().nullable(),
   yieldText: z.string().nullable(),
   coverImageUrl: importAiImageUrlSchema.nullable(),
   ingredientGroups: z.array(importAiIngredientGroupSchema),
@@ -103,7 +108,7 @@ const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftConte
   const draft = importAiDraftContentSchema.parse(value);
 
   return {
-    title: draft.title,
+    title: normalizeTitleCandidate(draft.title),
     ...(draft.yieldText !== null ? { yieldText: draft.yieldText } : {}),
     ...(draft.coverImageUrl !== null ? { coverImageUrl: draft.coverImageUrl } : {}),
     ingredientGroups: draft.ingredientGroups.map((group) => ({
@@ -266,6 +271,11 @@ const convertFetchedHtmlPage = async (
       recipeStructuredEvidence: evidence.recipeStructuredEvidence,
     },
     imageCandidates: evidence.imageCandidates,
+    titleFallbackCandidates: [
+      evidence.meta["og:title"],
+      evidence.meta["twitter:title"],
+      evidence.title,
+    ].filter((candidate): candidate is string => Boolean(candidate)),
     source: {
       sourceUrl: normalizedFinalUrl,
       sourceName,
@@ -391,7 +401,13 @@ export const importRecipeFromUrl = async ({
   let imageResult: { draft: RecipeDraftContent; warnings: string[] };
 
   try {
-    imageResult = resolveDraftImageUrls(draft, resolvedConversion.imageCandidates);
+    imageResult = resolveDraftImageUrls(
+      {
+        ...draft,
+        title: resolveImportDraftTitle(draft.title, resolvedConversion),
+      },
+      resolvedConversion.imageCandidates,
+    );
     imageResult = {
       draft: applyDeterministicImagePlacement(imageResult.draft, resolvedConversion.imagePlacement),
       warnings: imageResult.warnings,
@@ -914,8 +930,35 @@ const isAiSchemaError = (error: unknown): boolean => {
   return cause ? isAiSchemaError(cause) : false;
 };
 
+const normalizeTitleCandidate = (value: string | null | undefined) => {
+  const title = value?.trim();
+  return title || null;
+};
+
+const resolveImportDraftTitle = (
+  aiTitle: string | null,
+  conversion: RecipeImportConverterResult,
+) => {
+  const structuredRecipeName = conversion.input.recipeStructuredEvidence
+    .map((evidence) => normalizeTitleCandidate(evidence.name))
+    .find((title): title is string => Boolean(title));
+  const fallbackTitle = [
+    normalizeTitleCandidate(aiTitle),
+    structuredRecipeName,
+    ...(conversion.titleFallbackCandidates ?? []).map(normalizeTitleCandidate),
+    normalizeTitleCandidate(conversion.source.sourceName),
+    normalizeTitleCandidate(conversion.input.source.host),
+  ].find((title): title is string => Boolean(title));
+
+  if (!fallbackTitle) {
+    throw new RecipeImportError("unknown", "Import title fallback could not be resolved.");
+  }
+
+  return fallbackTitle;
+};
+
 const resolveDraftImageUrls = (
-  draft: RecipeImportAIDraftContent,
+  draft: ResolvedTitleRecipeImportAIDraftContent,
   candidates: RecipeImportImageCandidate[],
 ): { draft: RecipeDraftContent; warnings: string[] } => {
   const candidateUrls = new Set(candidates.map((candidate) => candidate.url));
