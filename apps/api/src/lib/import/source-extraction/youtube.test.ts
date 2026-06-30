@@ -36,7 +36,7 @@ describe("YouTube source extraction URL handling", () => {
 });
 
 describe("YouTube source extraction adapter", () => {
-  it("videoDetailsからAI inputと最大サムネイル候補を作る", async () => {
+  it("videoDetailsからAI inputと最大サムネイルcover配置を作る", async () => {
     const fetchHtml = createFetchHtml(
       createPage(
         CANONICAL_URL,
@@ -78,8 +78,6 @@ describe("YouTube source extraction adapter", () => {
           "Source: YouTube",
           "Channel: Recipe Channel",
           "",
-          "![YouTube thumbnail](<https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg>)",
-          "",
           "## Description",
           "",
           "材料\nキャベツ 500g\n鶏むね肉 350g\n作り方\n煮る",
@@ -94,6 +92,10 @@ describe("YouTube source extraction adapter", () => {
           position: 0,
         },
       ],
+      imagePlacement: {
+        coverImageUrl: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
+        sourceMediaUrls: [],
+      },
       source: {
         sourceUrl: CANONICAL_URL,
         sourceName: "YouTube",
@@ -129,11 +131,14 @@ describe("YouTube source extraction adapter", () => {
         "",
         "Source: YouTube",
         "Channel: Recipe Channel",
-        "",
-        "![YouTube thumbnail](<https://i.ytimg.com/vi/FyLCRXMANAM/hqdefault.jpg>)",
       ].join("\n"),
     );
     expect(result.input.markdownContent).not.toContain("## Description");
+    expect(result.input.markdownContent).not.toContain("hqdefault.jpg");
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: "https://i.ytimg.com/vi/FyLCRXMANAM/hqdefault.jpg",
+      sourceMediaUrls: [],
+    });
   });
 
   it("ytInitialPlayerResponse不在はextraction_failedにする", async () => {

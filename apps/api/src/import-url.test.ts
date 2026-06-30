@@ -421,7 +421,6 @@ describe("URL import flow", () => {
     const usageRepository = createUsageRepositoryStub();
     const aiNormalize = vi.fn(async (_input: RecipeImportAIInput) => ({
       title: "鶏むねキャベツ鍋",
-      coverImageUrl: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
       ingredientGroups: [{ ingredients: [{ name: "キャベツ", amount: "500g" }] }],
       steps: [{ text: "煮る。", imageUrls: [] }],
     }));
@@ -496,9 +495,10 @@ describe("URL import flow", () => {
       }),
     );
     const aiInput = aiNormalize.mock.calls[0]?.[0];
-    expect(aiInput?.markdownContent).toContain(
-      "![YouTube thumbnail](<https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg>)",
+    expect(aiInput?.markdownContent).not.toContain(
+      "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
     );
+    expect(aiInput?.markdownContent).not.toContain("![YouTube thumbnail]");
   });
 
   it("YouTube source extraction失敗時はgeneric HTML conversionへfallbackしない", async () => {
