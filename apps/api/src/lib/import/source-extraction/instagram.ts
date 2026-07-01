@@ -73,7 +73,6 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
           canonicalUrl: source.canonicalUrl,
           caption,
         }),
-        recipeStructuredEvidence: [],
       },
       imageCandidates,
       imagePlacement: {

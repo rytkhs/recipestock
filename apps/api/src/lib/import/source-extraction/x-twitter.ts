@@ -119,7 +119,6 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
           host: "x.com",
         },
         markdownContent: buildXTwitterMarkdownContent(postText),
-        recipeStructuredEvidence: [],
       },
       imageCandidates,
       ...(coverImageUrl || sourceMediaUrls.length > 0

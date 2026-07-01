@@ -136,7 +136,6 @@ describe("X/Twitter source extraction adapter", () => {
           host: "x.com",
         },
         markdownContent: "材料\n卵 2個\n作り方\n焼く",
-        recipeStructuredEvidence: [],
       },
       imageCandidates: [],
       source: {

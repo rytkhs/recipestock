@@ -23,11 +23,11 @@ import {
   type ImportErrorCode,
   type RecipeImportAIDraftContent,
   type RecipeImportAIImageUrl,
-  type RecipeImportAIInput,
   type RecipeImportAINormalizeRequest,
   type RecipeImportAIProvider,
   RecipeImportError,
   type RecipeImportFetcher,
+  type RecipeImportGenericAIInput,
   type RecipeImportImageCandidate,
   type RecipeImportImagePlacement,
   type RecipeImportPromptProfile,
@@ -48,22 +48,22 @@ export {
   type RecipeImportAIProvider,
   RecipeImportError,
   type RecipeImportFetcher,
+  type RecipeImportGenericAIInput,
   type RecipeImportImageCandidate,
   type RecipeImportPromptProfile,
   type RecipeImportResult,
+  type RecipeImportSocialAIInput,
   type RecipeImportStructuredEvidence,
 } from "./lib/import/types";
 
 type RecipeImportConverterResult = {
   type: "requiresAi";
-  promptProfile: RecipeImportPromptProfile;
-  input: RecipeImportAIInput;
   imageCandidates: RecipeImportImageCandidate[];
   imagePlacement?: RecipeImportImagePlacement;
   titleFallbackCandidates?: string[];
   source: RecipeSourceDraft;
   warnings: string[];
-};
+} & RecipeImportAINormalizeRequest;
 
 type ResolvedTitleRecipeImportAIDraftContent = RecipeImportAIDraftContent & {
   title: string;
@@ -265,17 +265,19 @@ const convertFetchedHtmlPage = async (
     throw new RecipeImportError("extraction_failed", "Recipe text could not be extracted.");
   }
 
+  const input: RecipeImportGenericAIInput = {
+    source: {
+      finalUrl: normalizedFinalUrl,
+      host: finalHost,
+    },
+    markdownContent: evidence.markdownContent,
+    recipeStructuredEvidence: evidence.recipeStructuredEvidence,
+  };
+
   return {
     type: "requiresAi",
     promptProfile: "generic",
-    input: {
-      source: {
-        finalUrl: normalizedFinalUrl,
-        host: finalHost,
-      },
-      markdownContent: evidence.markdownContent,
-      recipeStructuredEvidence: evidence.recipeStructuredEvidence,
-    },
+    input,
     imageCandidates: evidence.imageCandidates,
     titleFallbackCandidates: [
       evidence.meta["og:title"],
@@ -390,10 +392,11 @@ export const importRecipeFromUrl = async ({
   let draft: RecipeImportAIDraftContent;
 
   try {
-    draft = await importAIProvider.normalize({
-      promptProfile: resolvedConversion.promptProfile,
-      input: resolvedConversion.input,
-    });
+    const normalizeRequest: RecipeImportAINormalizeRequest =
+      resolvedConversion.promptProfile === "generic"
+        ? { promptProfile: "generic", input: resolvedConversion.input }
+        : { promptProfile: "social", input: resolvedConversion.input };
+    draft = await importAIProvider.normalize(normalizeRequest);
     assertImportJobDeadline(deadline, currentDate());
   } catch (error) {
     if (error instanceof RecipeImportError) {
@@ -461,9 +464,9 @@ export const createDefaultRecipeImportAIProvider = (
   env: Bindings,
   { logger = createLogger() }: { logger?: Logger } = {},
 ): RecipeImportAIProvider => ({
-  async normalize({ promptProfile, input }: RecipeImportAINormalizeRequest) {
+  async normalize(request: RecipeImportAINormalizeRequest) {
     const providerKind = resolveImportAiProvider(env);
-    const system = resolveImportRecipeSystemPrompt(env, promptProfile);
+    const system = resolveImportRecipeSystemPrompt(env, request.promptProfile);
     const timeoutMs = resolveImportAiTimeoutMs(env);
     const controller = new AbortController();
     let didTimeout = false;
@@ -477,7 +480,7 @@ export const createDefaultRecipeImportAIProvider = (
         model: createImportLanguageModel(env, providerKind, timeoutMs),
         schema: importAiDraftContentSchema,
         system,
-        prompt: buildImportUserPrompt(input),
+        prompt: buildImportUserPrompt(request),
         providerOptions: createImportProviderOptions(providerKind),
         temperature: 0,
         maxOutputTokens: IMPORT_AI_MAX_OUTPUT_TOKENS,
@@ -490,10 +493,9 @@ export const createDefaultRecipeImportAIProvider = (
     } catch (error) {
       logImportAiFailure(error, {
         env,
-        input,
         logger,
-        promptProfile,
         providerKind,
+        request,
         timeoutMs,
       });
 
@@ -565,17 +567,25 @@ const createImportProviderOptions = (providerKind: ImportAiProviderKind) => {
   };
 };
 
-const buildImportUserPrompt = (input: RecipeImportAIInput) => `
-source:
-${JSON.stringify(input.source)}
-
+const buildImportUserPrompt = (request: RecipeImportAINormalizeRequest) => {
+  const structuredEvidenceSection =
+    request.promptProfile === "generic"
+      ? `
 recipeStructuredEvidence:
-${JSON.stringify(input.recipeStructuredEvidence)}
+${JSON.stringify(request.input.recipeStructuredEvidence)}
+`
+      : "";
+
+  return `
+source:
+${JSON.stringify(request.input.source)}
+${structuredEvidenceSection}
 
 markdownContent:
 <<<PAGE_CONTENT
-${input.markdownContent}
+${request.input.markdownContent}
 PAGE_CONTENT`;
+};
 
 const resolveImportTimeoutMs = (env: Partial<Bindings>) => {
   const value = Number(env.IMPORT_TIMEOUT_MS ?? 10_000);
@@ -701,17 +711,15 @@ const logImportAiFailure = (
   error: unknown,
   {
     env,
-    input,
     logger,
-    promptProfile,
     providerKind,
+    request,
     timeoutMs,
   }: {
     env: Partial<Bindings>;
-    input: RecipeImportAIInput;
     logger: Logger;
-    promptProfile: RecipeImportPromptProfile;
     providerKind: ImportAiProviderKind;
+    request: RecipeImportAINormalizeRequest;
     timeoutMs: number;
   },
 ) => {
@@ -719,13 +727,15 @@ const logImportAiFailure = (
 
   logger.error("recipe_import_ai_normalization_failed", {
     provider: providerKind,
-    promptProfile,
+    promptProfile: request.promptProfile,
     model: model || undefined,
     timeoutMs,
-    sourceHost: input.source.host,
-    sourceUrl: input.source.finalUrl,
-    markdownContentLength: input.markdownContent.length,
-    structuredEvidenceCount: input.recipeStructuredEvidence.length,
+    sourceHost: request.input.source.host,
+    sourceUrl: request.input.source.finalUrl,
+    markdownContentLength: request.input.markdownContent.length,
+    ...(request.promptProfile === "generic"
+      ? { structuredEvidenceCount: request.input.recipeStructuredEvidence.length }
+      : {}),
     gatewayBaseUrl:
       providerKind === "workers-ai"
         ? undefined
@@ -963,9 +973,12 @@ const resolveImportDraftTitle = (
   aiTitle: string | null,
   conversion: RecipeImportConverterResult,
 ) => {
-  const structuredRecipeName = conversion.input.recipeStructuredEvidence
-    .map((evidence) => normalizeTitleCandidate(evidence.name))
-    .find((title): title is string => Boolean(title));
+  const structuredRecipeName =
+    conversion.promptProfile === "generic"
+      ? conversion.input.recipeStructuredEvidence
+          .map((evidence) => normalizeTitleCandidate(evidence.name))
+          .find((title): title is string => Boolean(title))
+      : null;
   const fallbackTitle = [
     normalizeTitleCandidate(aiTitle),
     structuredRecipeName,

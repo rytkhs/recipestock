@@ -569,7 +569,6 @@ describe("URL import flow", () => {
               host: "example.com",
             },
             markdownContent: "Enough extracted content for host fallback.",
-            recipeStructuredEvidence: [],
           },
           imageCandidates: [],
           source: {
@@ -778,7 +777,6 @@ describe("URL import flow", () => {
             host: "youtube.com",
           },
           markdownContent: expect.stringContaining("## Description\n\n材料\nキャベツ 500g"),
-          recipeStructuredEvidence: [],
         }),
       }),
     );
@@ -892,7 +890,6 @@ describe("URL import flow", () => {
           host: "x.com",
         },
         markdownContent: ["材料\n卵 2個\n作り方\n焼く"].join("\n"),
-        recipeStructuredEvidence: [],
       },
     });
     const aiInput = aiNormalize.mock.calls[0]?.[0]?.input;
@@ -1117,7 +1114,6 @@ describe("URL import flow", () => {
               host: "example.com",
             },
             markdownContent: "Image limit recipe",
-            recipeStructuredEvidence: [],
           },
           imageCandidates,
           imagePlacement: {
@@ -1354,8 +1350,12 @@ describe("URL import flow", () => {
           `,
         }),
         aiProvider: {
-          async normalize({ input, promptProfile }) {
-            expect(promptProfile).toBe("generic");
+          async normalize(request) {
+            expect(request.promptProfile).toBe("generic");
+            if (request.promptProfile !== "generic") {
+              throw new Error("Expected generic import request.");
+            }
+            const { input } = request;
             expect(input.recipeStructuredEvidence).toContainEqual(
               expect.objectContaining({
                 imageUrls: ["https://example.com/structured.jpg"],
@@ -1429,8 +1429,12 @@ describe("URL import flow", () => {
           `,
         }),
         aiProvider: {
-          async normalize({ input, promptProfile }) {
-            expect(promptProfile).toBe("generic");
+          async normalize(request) {
+            expect(request.promptProfile).toBe("generic");
+            if (request.promptProfile !== "generic") {
+              throw new Error("Expected generic import request.");
+            }
+            const { input } = request;
             expect(JSON.stringify(input.recipeStructuredEvidence)).toContain(
               '"imageUrls":["https://example.com/step.jpg"]',
             );

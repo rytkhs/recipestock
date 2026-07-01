@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDefaultRecipeImportAIProvider,
-  type RecipeImportAIInput,
   type RecipeImportAINormalizeRequest,
   type RecipeImportError,
+  type RecipeImportGenericAIInput,
+  type RecipeImportSocialAIInput,
 } from "./import-url";
 
 const mocks = vi.hoisted(() => {
@@ -30,7 +31,7 @@ vi.mock("@ai-sdk/groq", () => ({
   createGroq: mocks.createGroq,
 }));
 
-const input: RecipeImportAIInput = {
+const genericInput: RecipeImportGenericAIInput = {
   source: {
     finalUrl: "https://example.com/recipes/tomato",
     host: "example.com",
@@ -49,14 +50,22 @@ const input: RecipeImportAIInput = {
   ],
 };
 
+const socialInput: RecipeImportSocialAIInput = {
+  source: {
+    finalUrl: "https://example.com/social/tomato",
+    host: "example.com",
+  },
+  markdownContent: "# Tomato pasta\n\nトマト缶とオリーブオイルで作るパスタです。",
+};
+
 const genericRequest = {
   promptProfile: "generic",
-  input,
+  input: genericInput,
 } satisfies RecipeImportAINormalizeRequest;
 
 const socialRequest = {
   promptProfile: "social",
-  input,
+  input: socialInput,
 } satisfies RecipeImportAINormalizeRequest;
 
 const createEnv = (overrides: Record<string, unknown> = {}) =>
@@ -535,8 +544,8 @@ describe("default recipe import AI provider", () => {
     expect(logger.error).toHaveBeenCalledWith(
       "recipe_import_ai_normalization_failed",
       expect.objectContaining({
-        markdownContentLength: input.markdownContent.length,
-        structuredEvidenceCount: input.recipeStructuredEvidence.length,
+        markdownContentLength: genericInput.markdownContent.length,
+        structuredEvidenceCount: genericInput.recipeStructuredEvidence.length,
       }),
     );
   });

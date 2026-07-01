@@ -181,7 +181,6 @@ describe("Instagram source extraction adapter", () => {
           "",
           "材料\nなす 5本\n作り方\n揚げ焼きにする",
         ].join("\n"),
-        recipeStructuredEvidence: [],
       },
       imageCandidates: [
         {

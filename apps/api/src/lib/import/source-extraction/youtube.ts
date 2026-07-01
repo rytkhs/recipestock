@@ -97,7 +97,6 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
           author,
           description,
         }),
-        recipeStructuredEvidence: [],
       },
       imageCandidates,
       ...(thumbnail

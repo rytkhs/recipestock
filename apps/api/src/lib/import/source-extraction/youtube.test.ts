@@ -83,7 +83,6 @@ describe("YouTube source extraction adapter", () => {
           "",
           "材料\nキャベツ 500g\n鶏むね肉 350g\n作り方\n煮る",
         ].join("\n"),
-        recipeStructuredEvidence: [],
       },
       imageCandidates: [
         {

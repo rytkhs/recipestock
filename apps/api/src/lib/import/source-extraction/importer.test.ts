@@ -172,7 +172,6 @@ const createResult = () => ({
       host: "example.com",
     },
     markdownContent: "# Example",
-    recipeStructuredEvidence: [],
   },
   imageCandidates: [],
   source: {
