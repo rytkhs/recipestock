@@ -182,7 +182,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           IMPORT_FETCH_MODE: mode,
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         deterministicImporter: {
@@ -215,7 +214,6 @@ describe("URL import flow", () => {
         BROWSER: { quickAction },
         IMPORT_FETCH_MODE: "browser-run",
         IMPORT_TIMEOUT_MS: "90000",
-        IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
       },
       usageRepository: createUsageRepositoryStub(),
       deterministicImporter: {
@@ -390,7 +388,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
         fetcher,
@@ -434,7 +431,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher: async () => ({
@@ -528,7 +524,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher: async () => ({
@@ -586,7 +581,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         deterministicImporter: {
@@ -622,7 +616,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher: async () => ({
@@ -666,7 +659,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher: async () => ({
@@ -735,7 +727,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
         fetcher,
@@ -796,7 +787,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher: async (url) => ({
@@ -844,7 +834,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher,
@@ -912,7 +901,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher,
@@ -1000,7 +988,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher,
@@ -1068,7 +1055,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher,
@@ -1132,9 +1118,7 @@ describe("URL import flow", () => {
     const result = await importRecipeFromUrl({
       rawUrl: "https://www.example.com/recipes/image-limits",
       userId: "user_123",
-      env: {
-        IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
-      },
+      env: {},
       usageRepository: createUsageRepositoryStub(),
       deterministicImporter: {
         async tryImport() {
@@ -1205,7 +1189,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
         deterministicImporter,
@@ -1240,7 +1223,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
         deterministicImporter: {
@@ -1268,7 +1250,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
         fetcher: async () => ({
@@ -1333,7 +1314,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
         fetcher: async () => ({
@@ -1394,7 +1374,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
         fetcher: async () => ({
@@ -1473,7 +1452,6 @@ describe("URL import flow", () => {
         userId: "user_123",
         env: {
           AI_TEXT_MODEL: "@cf/test",
-          IMPORT_RECIPE_SYSTEM_PROMPT: "Normalize recipe.",
         },
         usageRepository,
         fetcher: async () => ({

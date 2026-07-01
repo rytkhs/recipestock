@@ -6,6 +6,10 @@ import {
   type RecipeImportGenericAIInput,
   type RecipeImportSocialAIInput,
 } from "./import-url";
+import {
+  GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT,
+  SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT,
+} from "./lib/import/prompts";
 
 const mocks = vi.hoisted(() => {
   const workersAiModel = { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" };
@@ -73,10 +77,6 @@ const createEnv = (overrides: Record<string, unknown> = {}) =>
     AI: { run: vi.fn() } as unknown as Ai,
     AI_GATEWAY_NAME: "recipestock",
     AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
-    IMPORT_RECIPE_SYSTEM_PROMPT:
-      "URLから抽出した情報をRecipeDraftContentに正規化してください。入力にない内容は推測しない。",
-    IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPT:
-      "SNS投稿から抽出した情報をRecipeDraftContentに正規化してください。",
     ...overrides,
   }) as never;
 
@@ -126,7 +126,7 @@ describe("default recipe import AI provider", () => {
       expect.objectContaining({
         model: { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" },
         schema: expect.any(Object),
-        system: expect.stringContaining("RecipeDraftContent"),
+        system: GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT,
         prompt: expect.not.stringContaining("metadataCandidates"),
         temperature: 0,
         maxOutputTokens: 8192,
@@ -190,19 +190,14 @@ describe("default recipe import AI provider", () => {
   it("social profileではSNS用system promptを使う", async () => {
     mocks.generateObject.mockResolvedValueOnce({ object: createStrictAiDraft() });
 
-    const provider = createDefaultRecipeImportAIProvider(
-      createEnv({
-        IMPORT_RECIPE_SYSTEM_PROMPT: "Generic prompt.",
-        IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPT: "Social prompt.",
-      }),
-    );
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
 
     await expect(provider.normalize(socialRequest)).resolves.toMatchObject({
       title: "Tomato pasta",
     });
     expect(mocks.generateObject).toHaveBeenCalledWith(
       expect.objectContaining({
-        system: "Social prompt.",
+        system: SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT,
       }),
     );
   });
@@ -447,32 +442,6 @@ describe("default recipe import AI provider", () => {
       message: "Groq text model is not configured.",
     } satisfies Partial<RecipeImportError>);
     expect(mocks.createGroq).not.toHaveBeenCalled();
-    expect(mocks.generateObject).not.toHaveBeenCalled();
-  });
-
-  it("IMPORT_RECIPE_SYSTEM_PROMPTが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
-    const provider = createDefaultRecipeImportAIProvider(
-      createEnv({ IMPORT_RECIPE_SYSTEM_PROMPT: "" }),
-    );
-
-    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
-      code: "unknown",
-      message: "Import recipe system prompt is not configured.",
-    } satisfies Partial<RecipeImportError>);
-    expect(mocks.createWorkersAI).not.toHaveBeenCalled();
-    expect(mocks.generateObject).not.toHaveBeenCalled();
-  });
-
-  it("IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPTが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
-    const provider = createDefaultRecipeImportAIProvider(
-      createEnv({ IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPT: "" }),
-    );
-
-    await expect(provider.normalize(socialRequest)).rejects.toMatchObject({
-      code: "unknown",
-      message: "Import recipe social system prompt is not configured.",
-    } satisfies Partial<RecipeImportError>);
-    expect(mocks.createWorkersAI).not.toHaveBeenCalled();
     expect(mocks.generateObject).not.toHaveBeenCalled();
   });
 

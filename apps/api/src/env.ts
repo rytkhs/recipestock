@@ -54,6 +54,4 @@ export type Bindings = {
   IMPORT_JOB_TIMEOUT_MS?: string;
   IMPORT_MAX_HTML_BYTES: string;
   IMPORT_AI_TIMEOUT_MS: string;
-  IMPORT_RECIPE_SYSTEM_PROMPT: string;
-  IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPT: string;
 };

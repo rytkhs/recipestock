@@ -17,6 +17,7 @@ import {
   assertImportContentTypeMayBeHtml,
   assertImportUrlAllowed,
 } from "./lib/import/policy";
+import { getRecipeImportSystemPrompt } from "./lib/import/prompts";
 import { defaultSourceExtractor, type SourceExtractor } from "./lib/import/source-extraction";
 import {
   type FetchedImportPage,
@@ -30,7 +31,6 @@ import {
   type RecipeImportGenericAIInput,
   type RecipeImportImageCandidate,
   type RecipeImportImagePlacement,
-  type RecipeImportPromptProfile,
   type RecipeImportResult,
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
@@ -466,7 +466,7 @@ export const createDefaultRecipeImportAIProvider = (
 ): RecipeImportAIProvider => ({
   async normalize(request: RecipeImportAINormalizeRequest) {
     const providerKind = resolveImportAiProvider(env);
-    const system = resolveImportRecipeSystemPrompt(env, request.promptProfile);
+    const system = getRecipeImportSystemPrompt(request.promptProfile);
     const timeoutMs = resolveImportAiTimeoutMs(env);
     const controller = new AbortController();
     let didTimeout = false;
@@ -801,26 +801,6 @@ const sanitizeErrorDetails = (error: unknown, depth = 0): unknown => {
   }
 
   return error;
-};
-
-const resolveImportRecipeSystemPrompt = (
-  env: Partial<Bindings>,
-  promptProfile: RecipeImportPromptProfile,
-) => {
-  const prompt =
-    promptProfile === "social"
-      ? env.IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPT?.trim()
-      : env.IMPORT_RECIPE_SYSTEM_PROMPT?.trim();
-  if (!prompt) {
-    throw new RecipeImportError(
-      "unknown",
-      promptProfile === "social"
-        ? "Import recipe social system prompt is not configured."
-        : "Import recipe system prompt is not configured.",
-    );
-  }
-
-  return prompt;
 };
 
 const assertContentLengthAllowed = (response: Response, maxBytes: number) => {

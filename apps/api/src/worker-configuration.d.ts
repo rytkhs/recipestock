@@ -36,8 +36,6 @@ interface __BaseEnv_Env {
   OPENROUTER_API_KEY: string;
   OPENROUTER_TEXT_MODEL: string;
   IMPORT_TIMEOUT_MS: string;
-  IMPORT_RECIPE_SYSTEM_PROMPT: string;
-  IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPT: string;
   YTDLP_METADATA_CONTAINER: DurableObjectNamespace<import("./index").YtDlpMetadataContainer>;
 }
 declare namespace Cloudflare {
@@ -85,8 +83,6 @@ declare namespace NodeJS {
         | "OPENROUTER_API_KEY"
         | "OPENROUTER_TEXT_MODEL"
         | "IMPORT_TIMEOUT_MS"
-        | "IMPORT_RECIPE_SYSTEM_PROMPT"
-        | "IMPORT_RECIPE_SOCIAL_SYSTEM_PROMPT"
       >
     > {}
 }
