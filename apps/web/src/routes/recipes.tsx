@@ -792,9 +792,6 @@ export const RecipeDetailRoute = () => {
           <h1 className="text-brand-ink font-bold text-2xl sm:text-3xl leading-tight">
             {recipe.title}
           </h1>
-          {recipe.content.yieldText ? (
-            <p className="mt-2 text-brand-muted text-sm">{recipe.content.yieldText}</p>
-          ) : null}
         </div>
         <div className="flex gap-2 shrink-0">
           <Link
@@ -851,7 +848,12 @@ export const RecipeDetailRoute = () => {
 
       {recipe.content.ingredientGroups.length > 0 ? (
         <section className="mt-8 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
-          <h2 className="text-brand-walnut font-bold text-lg">材料</h2>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="text-brand-walnut font-bold text-lg">材料</h2>
+            {recipe.content.yieldText ? (
+              <p className="text-brand-muted text-sm">{recipe.content.yieldText}</p>
+            ) : null}
+          </div>
           {recipe.content.ingredientGroups.map((group) => (
             <div
               className="mt-4"
