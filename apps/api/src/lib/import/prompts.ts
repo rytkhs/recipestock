@@ -27,7 +27,7 @@ Field Rules:
 - title: Use the recipe title only. Do not append site name, author, or source metadata.
 - yieldText: Use serving, yield, portion, or quantity text when explicitly provided.
 - ingredientGroups: Preserve ingredient group labels when provided. Use null for an unlabeled group. For each ingredient, put quantity/unit/preparation text in amount when separable, and the ingredient item name in name. If a line cannot be reliably split, keep the full ingredient line in name and use an empty string for amount.
-- steps: Create ordered preparation steps. A step is valid only when it has non-null text or at least one imageUrls item. Do not create empty steps.
+- steps: Create ordered preparation steps. Omit leading ordinal or list markers from steps[].text because the application numbers steps by array order. Remove only markers such as "1.", "1)", "1:", "(1)", "①", "Step 1:", "手順1", or "作り方1". Do not remove leading numbers that are part of the instruction itself, such as temperatures, times, quantities, or ingredient amounts. A step is valid only when it has non-null text or at least one imageUrls item. Do not create empty steps.
 - note: Include only recipe-specific notes, tips, storage guidance, substitutions, or serving guidance supported by the evidence. Do not include provenance or uncertainty commentary.
 
 Image Rules:
@@ -74,7 +74,7 @@ Field Rules:
 - title: Use the recipe title or dish name when explicitly provided.
 - yieldText: Use serving, yield, portion, or quantity text when explicitly provided.
 - ingredientGroups: Preserve ingredient group labels when provided. Use null for an unlabeled group. For each ingredient, put quantity/unit/preparation text in amount when separable, and the ingredient item name in name. If a line cannot be reliably split, keep the full ingredient line in name and use an empty string for amount.
-- steps: Create ordered preparation steps only from explicit preparation instructions in the provided text. A step is valid only when it has non-null text or at least one imageUrls item. Do not create empty steps.
+- steps: Create ordered preparation steps only from explicit preparation instructions in the provided text. Omit leading ordinal or list markers from steps[].text because the application numbers steps by array order. Remove only markers such as "1.", "1)", "1:", "(1)", "①", "Step 1:", "手順1", or "作り方1". Do not remove leading numbers that are part of the instruction itself, such as temperatures, times, quantities, or ingredient amounts. A step is valid only when it has non-null text or at least one imageUrls item. Do not create empty steps.
 - note: Include only recipe-specific notes, tips, storage guidance, substitutions, or serving guidance supported by the evidence. Do not include provenance or uncertainty commentary.
 
 Image Rules:
