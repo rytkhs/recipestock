@@ -86,6 +86,7 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
       : [];
 
     return {
+      promptProfile: "social",
       input: {
         source: {
           finalUrl: canonicalUrl,
@@ -95,11 +96,17 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
           title,
           author,
           description,
-          thumbnailUrl: thumbnail?.url,
         }),
-        recipeStructuredEvidence: [],
       },
       imageCandidates,
+      ...(thumbnail
+        ? {
+            imagePlacement: {
+              coverImageUrl: thumbnail.url,
+              sourceMediaUrls: [],
+            },
+          }
+        : {}),
       source: {
         sourceUrl: canonicalUrl,
         sourceName: "YouTube",
@@ -244,16 +251,13 @@ const buildYouTubeMarkdownContent = ({
   title,
   author,
   description,
-  thumbnailUrl,
 }: {
   title: string;
   author: string;
   description: string;
-  thumbnailUrl?: string;
 }) => {
   const lines = [`# ${title}`, "", "Source: YouTube"];
   if (author) lines.push(`Channel: ${author}`);
-  if (thumbnailUrl) lines.push("", `![YouTube thumbnail](<${thumbnailUrl}>)`);
   if (description) lines.push("", "## Description", "", description);
 
   return lines.join("\n").trim();

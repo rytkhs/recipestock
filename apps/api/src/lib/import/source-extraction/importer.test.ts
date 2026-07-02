@@ -165,13 +165,13 @@ const createPage = (url: string) => ({
 });
 
 const createResult = () => ({
+  promptProfile: "social" as const,
   input: {
     source: {
       finalUrl: "https://www.example.com/watch?v=abc123",
       host: "example.com",
     },
     markdownContent: "# Example",
-    recipeStructuredEvidence: [],
   },
   imageCandidates: [],
   source: {

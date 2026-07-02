@@ -61,6 +61,7 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
     const isVideo = source.mediaKind === "reel" || extracted.metadata.duration !== null;
 
     return {
+      promptProfile: "social",
       input: {
         source: {
           finalUrl: source.canonicalUrl,
@@ -72,7 +73,6 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
           canonicalUrl: source.canonicalUrl,
           caption,
         }),
-        recipeStructuredEvidence: [],
       },
       imageCandidates,
       imagePlacement: {

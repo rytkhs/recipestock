@@ -1,5 +1,12 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
-import { Globe, LockSimple, MagnifyingGlass } from "@phosphor-icons/react";
+import {
+  CaretLeft,
+  CaretRight,
+  Globe,
+  LockSimple,
+  MagnifyingGlass,
+  X,
+} from "@phosphor-icons/react";
 import {
   type CreateRecipeResponse,
   type DeleteRecipeResponse,
@@ -11,7 +18,7 @@ import {
 } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   createEmptyRecipeDraftFormValues,
   formValuesToCreateRecipeRequest,
@@ -275,6 +282,161 @@ const SourceIcon = () => {
   return <Globe className="h-3.5 w-3.5 text-brand-wheat" weight="bold" />;
 };
 
+type RecipeLightboxImage = {
+  alt: string;
+  height: number;
+  id: string;
+  url: string;
+  width: number;
+};
+
+const RecipeImageZoomButton = ({
+  alt,
+  children,
+  className,
+  onOpen,
+}: {
+  alt: string;
+  children: ReactNode;
+  className: string;
+  onOpen: () => void;
+}) => (
+  <button
+    aria-label={`${alt}を拡大`}
+    className={`${className} cursor-zoom-in border-0 bg-transparent p-0 text-left transition-transform duration-200 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-orange`}
+    type="button"
+    onClick={onOpen}
+  >
+    {children}
+  </button>
+);
+
+const RecipeImageLightbox = ({
+  images,
+  index,
+  onChangeIndex,
+  onClose,
+}: {
+  images: RecipeLightboxImage[];
+  index: number;
+  onChangeIndex: (index: number) => void;
+  onClose: () => void;
+}) => {
+  const image = images[index];
+  const hasMultipleImages = images.length > 1;
+  const hasPreviousImage = index > 0;
+  const hasNextImage = index < images.length - 1;
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!image) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+
+      if (event.key === "ArrowLeft" && hasPreviousImage) {
+        onChangeIndex(index - 1);
+        return;
+      }
+
+      if (event.key === "ArrowRight" && hasNextImage) {
+        onChangeIndex(index + 1);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [hasNextImage, hasPreviousImage, image, index, onChangeIndex, onClose]);
+
+  if (!image) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-label="画像プレビュー"
+      aria-modal="true"
+      className="fixed inset-0 z-[60] isolate flex items-center justify-center bg-black/85 px-4 py-[calc(1rem+env(safe-area-inset-top))] text-white"
+      role="dialog"
+    >
+      <button
+        aria-label="背景を閉じる"
+        className="absolute inset-0 z-0 cursor-default border-0 bg-transparent p-0"
+        tabIndex={-1}
+        type="button"
+        onClick={onClose}
+      />
+      <div className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))] z-20 flex items-center gap-2">
+        {hasMultipleImages ? (
+          <span
+            aria-live="polite"
+            className="rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white"
+          >
+            {index + 1} / {images.length}
+          </span>
+        ) : null}
+        <Button
+          aria-label="閉じる"
+          className="rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper"
+          isIconOnly
+          variant="secondary"
+          onPress={onClose}
+        >
+          <X size={20} weight="bold" />
+        </Button>
+      </div>
+
+      {hasMultipleImages ? (
+        <Button
+          aria-label="前の画像"
+          className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper sm:left-6"
+          isDisabled={!hasPreviousImage}
+          isIconOnly
+          variant="secondary"
+          onPress={() => onChangeIndex(index - 1)}
+        >
+          <CaretLeft size={24} weight="bold" />
+        </Button>
+      ) : null}
+
+      <img
+        alt={`${image.alt} 拡大`}
+        className="relative z-10 max-h-[86vh] max-w-[92vw] rounded-[14px] object-contain shadow-pantry-lg"
+        height={image.height}
+        src={image.url}
+        style={{ aspectRatio: `${image.width} / ${image.height}` }}
+        width={image.width}
+      />
+
+      {hasMultipleImages ? (
+        <Button
+          aria-label="次の画像"
+          className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper sm:right-6"
+          isDisabled={!hasNextImage}
+          isIconOnly
+          variant="secondary"
+          onPress={() => onChangeIndex(index + 1)}
+        >
+          <CaretRight size={24} weight="bold" />
+        </Button>
+      ) : null}
+    </div>
+  );
+};
+
 export const RecipesIndexRoute = () => {
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
@@ -288,7 +450,7 @@ export const RecipesIndexRoute = () => {
   const recipes = activePages.flatMap((page) => page.items);
   const nextCursor = activePages.at(-1)?.nextCursor ?? null;
 
-  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+  const submitSearch = (event: { preventDefault: () => void }) => {
     event.preventDefault();
     setLoadedPages([]);
     setCursor(null);
@@ -478,6 +640,7 @@ export const RecipeDetailRoute = () => {
   const { recipeId } = useParams({ from: "/recipes/$recipeId" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const deleteMutation = useMutation({
     mutationFn: () => deleteRecipe(recipeId),
     onSuccess: async () => {
@@ -494,12 +657,74 @@ export const RecipeDetailRoute = () => {
     queryKey: recipesQueryKeys.detail(recipeId),
     queryFn: () => fetchRecipe(recipeId),
   });
+  const lightboxImages = useMemo<RecipeLightboxImage[]>(() => {
+    if (!recipe || recipe.locked) {
+      return [];
+    }
+
+    const images: RecipeLightboxImage[] = [];
+
+    if (recipe.content.coverImage?.url) {
+      images.push({
+        alt: recipe.title,
+        height: recipe.content.coverImage.height,
+        id: `cover:${recipe.content.coverImage.objectKey}`,
+        url: recipe.content.coverImage.url,
+        width: recipe.content.coverImage.width,
+      });
+    }
+
+    recipe.content.sourceMedia?.forEach((image, imageIndex) => {
+      if (!image.url) {
+        return;
+      }
+
+      images.push({
+        alt: `投稿画像${imageIndex + 1}`,
+        height: image.height,
+        id: `source:${image.objectKey}`,
+        url: image.url,
+        width: image.width,
+      });
+    });
+
+    recipe.content.steps.forEach((step, stepIndex) => {
+      step.images.forEach((image, imageIndex) => {
+        if (!image.url) {
+          return;
+        }
+
+        images.push({
+          alt: `手順${stepIndex + 1}の画像${imageIndex + 1}`,
+          height: image.height,
+          id: `step:${image.objectKey}`,
+          url: image.url,
+          width: image.width,
+        });
+      });
+    });
+
+    return images;
+  }, [recipe]);
 
   const confirmDelete = () => {
     if (window.confirm("このレシピを削除しますか？")) {
       deleteMutation.mutate();
     }
   };
+  const openLightbox = (imageId: string) => {
+    const nextLightboxIndex = lightboxImages.findIndex((image) => image.id === imageId);
+
+    if (nextLightboxIndex >= 0) {
+      setLightboxIndex(nextLightboxIndex);
+    }
+  };
+
+  useEffect(() => {
+    if (lightboxIndex !== null && lightboxIndex >= lightboxImages.length) {
+      setLightboxIndex(null);
+    }
+  }, [lightboxImages.length, lightboxIndex]);
 
   if (isLoading) {
     return (
@@ -533,20 +758,33 @@ export const RecipeDetailRoute = () => {
   }
 
   const sourceMedia = recipe.content.sourceMedia ?? [];
+  const coverImageId = recipe.content.coverImage
+    ? `cover:${recipe.content.coverImage.objectKey}`
+    : null;
 
   return (
     <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
       {recipe.content.coverImage?.url ? (
-        <img
+        <RecipeImageZoomButton
           alt={recipe.title}
-          className="mx-auto block h-auto max-h-[32rem] max-w-full rounded-[20px] object-contain shadow-pantry-sm"
-          height={recipe.content.coverImage.height}
-          src={recipe.content.coverImage.url}
-          style={{
-            aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
+          className="mx-auto block max-w-full rounded-[20px] shadow-pantry-sm"
+          onOpen={() => {
+            if (coverImageId) {
+              openLightbox(coverImageId);
+            }
           }}
-          width={recipe.content.coverImage.width}
-        />
+        >
+          <img
+            alt={recipe.title}
+            className="block h-auto max-h-[32rem] max-w-full rounded-[20px] object-contain"
+            height={recipe.content.coverImage.height}
+            src={recipe.content.coverImage.url}
+            style={{
+              aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
+            }}
+            width={recipe.content.coverImage.width}
+          />
+        </RecipeImageZoomButton>
       ) : null}
 
       <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -591,9 +829,11 @@ export const RecipeDetailRoute = () => {
           <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2">
             {sourceMedia.map((image, imageIndex) =>
               image.url ? (
-                <div
+                <RecipeImageZoomButton
+                  alt={`投稿画像${imageIndex + 1}`}
                   className="grid aspect-[4/5] w-[min(78vw,320px)] shrink-0 snap-start place-items-center overflow-hidden rounded-[14px] bg-brand-paper-muted shadow-pantry-sm sm:w-64"
                   key={image.objectKey}
+                  onOpen={() => openLightbox(`source:${image.objectKey}`)}
                 >
                   <img
                     alt={`投稿画像${imageIndex + 1}`}
@@ -602,7 +842,7 @@ export const RecipeDetailRoute = () => {
                     src={image.url}
                     width={image.width}
                   />
-                </div>
+                </RecipeImageZoomButton>
               ) : null,
             )}
           </div>
@@ -661,15 +901,21 @@ export const RecipeDetailRoute = () => {
                     <div className="mt-3 flex snap-x gap-3 overflow-x-auto pb-2">
                       {step.images.map((image, imageIndex) =>
                         image.url ? (
-                          <img
+                          <RecipeImageZoomButton
                             alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
-                            className="block max-h-80 w-48 shrink-0 snap-start rounded-[14px] object-contain sm:w-56"
-                            height={image.height}
+                            className="block w-48 shrink-0 snap-start rounded-[14px] sm:w-56"
                             key={image.objectKey}
-                            src={image.url}
-                            style={{ aspectRatio: `${image.width} / ${image.height}` }}
-                            width={image.width}
-                          />
+                            onOpen={() => openLightbox(`step:${image.objectKey}`)}
+                          >
+                            <img
+                              alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
+                              className="block max-h-80 w-full rounded-[14px] object-contain"
+                              height={image.height}
+                              src={image.url}
+                              style={{ aspectRatio: `${image.width} / ${image.height}` }}
+                              width={image.width}
+                            />
+                          </RecipeImageZoomButton>
                         ) : null,
                       )}
                     </div>
@@ -710,6 +956,15 @@ export const RecipeDetailRoute = () => {
             </div>
           </div>
         </section>
+      ) : null}
+
+      {lightboxIndex !== null ? (
+        <RecipeImageLightbox
+          images={lightboxImages}
+          index={lightboxIndex}
+          onChangeIndex={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       ) : null}
     </article>
   );

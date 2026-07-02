@@ -112,13 +112,13 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
     const sourceMediaUrls = imageUrls.length > 0 ? imageUrls : [];
 
     return {
+      promptProfile: "social",
       input: {
         source: {
           finalUrl: source.canonicalUrl,
           host: "x.com",
         },
         markdownContent: buildXTwitterMarkdownContent(postText),
-        recipeStructuredEvidence: [],
       },
       imageCandidates,
       ...(coverImageUrl || sourceMediaUrls.length > 0

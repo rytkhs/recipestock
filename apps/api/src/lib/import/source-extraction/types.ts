@@ -3,9 +3,9 @@ import { z } from "zod";
 import { type YtDlpMetadataClient } from "../../../ytdlp-metadata";
 import {
   type FetchedImportPage,
-  type RecipeImportAIInput,
   type RecipeImportImageCandidate,
   type RecipeImportImagePlacement,
+  type RecipeImportSocialAIInput,
 } from "../types";
 
 export type SourceExtractionMatchInput = {
@@ -22,7 +22,8 @@ export type SourceExtractionContext = {
 };
 
 export type SourceExtractionResult = {
-  input: RecipeImportAIInput;
+  promptProfile: "social";
+  input: RecipeImportSocialAIInput;
   imageCandidates: RecipeImportImageCandidate[];
   imagePlacement?: RecipeImportImagePlacement;
   source: RecipeSourceDraft;
@@ -48,13 +49,13 @@ const sourceExtractionImagePlacementSchema = z.strictObject({
 });
 
 const sourceExtractionResultSchema = z.strictObject({
+  promptProfile: z.literal("social"),
   input: z.strictObject({
     source: z.strictObject({
       finalUrl: z.string().url(),
       host: z.string().min(1),
     }),
     markdownContent: z.string().min(1),
-    recipeStructuredEvidence: z.array(z.unknown()),
   }),
   imageCandidates: z.array(sourceExtractionImageCandidateSchema),
   imagePlacement: sourceExtractionImagePlacementSchema.optional(),

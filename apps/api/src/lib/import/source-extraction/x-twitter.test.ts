@@ -129,13 +129,13 @@ describe("X/Twitter source extraction adapter", () => {
 
     expect(fetchHtml).toHaveBeenCalledWith(CANONICAL_URL);
     expect(result).toEqual({
+      promptProfile: "social",
       input: {
         source: {
           finalUrl: CANONICAL_URL,
           host: "x.com",
         },
         markdownContent: "材料\n卵 2個\n作り方\n焼く",
-        recipeStructuredEvidence: [],
       },
       imageCandidates: [],
       source: {

@@ -66,14 +66,33 @@ export type RecipeImportStructuredEvidence = {
   structuredInstructions: RecipeImportStructuredInstructionEvidence[];
 };
 
-export type RecipeImportAIInput = {
+export type RecipeImportAIInputBase = {
   source: {
     finalUrl: string;
     host: string;
   };
   markdownContent: string;
+};
+
+export type RecipeImportGenericAIInput = RecipeImportAIInputBase & {
   recipeStructuredEvidence: RecipeImportStructuredEvidence[];
 };
+
+export type RecipeImportSocialAIInput = RecipeImportAIInputBase;
+
+export type RecipeImportAIInput = RecipeImportGenericAIInput | RecipeImportSocialAIInput;
+
+export type RecipeImportPromptProfile = "generic" | "social";
+
+export type RecipeImportAINormalizeRequest =
+  | {
+      promptProfile: "generic";
+      input: RecipeImportGenericAIInput;
+    }
+  | {
+      promptProfile: "social";
+      input: RecipeImportSocialAIInput;
+    };
 
 export type RecipeImportAIImageUrl = string;
 
@@ -83,7 +102,7 @@ export type RecipeImportAIDraftStep = {
 };
 
 export type RecipeImportAIDraftContent = {
-  title: string;
+  title: string | null;
   yieldText?: string;
   coverImageUrl?: RecipeImportAIImageUrl;
   ingredientGroups: Array<{
@@ -98,5 +117,5 @@ export type RecipeImportAIDraftContent = {
 };
 
 export type RecipeImportAIProvider = {
-  normalize(input: RecipeImportAIInput): Promise<RecipeImportAIDraftContent>;
+  normalize(request: RecipeImportAINormalizeRequest): Promise<RecipeImportAIDraftContent>;
 };

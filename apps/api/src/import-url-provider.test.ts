@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDefaultRecipeImportAIProvider,
-  type RecipeImportAIInput,
+  type RecipeImportAINormalizeRequest,
   type RecipeImportError,
+  type RecipeImportGenericAIInput,
+  type RecipeImportSocialAIInput,
 } from "./import-url";
+import {
+  GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT,
+  SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT,
+} from "./lib/import/prompts";
 
 const mocks = vi.hoisted(() => {
   const workersAiModel = { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" };
@@ -29,7 +35,7 @@ vi.mock("@ai-sdk/groq", () => ({
   createGroq: mocks.createGroq,
 }));
 
-const input: RecipeImportAIInput = {
+const genericInput: RecipeImportGenericAIInput = {
   source: {
     finalUrl: "https://example.com/recipes/tomato",
     host: "example.com",
@@ -48,13 +54,29 @@ const input: RecipeImportAIInput = {
   ],
 };
 
+const socialInput: RecipeImportSocialAIInput = {
+  source: {
+    finalUrl: "https://example.com/social/tomato",
+    host: "example.com",
+  },
+  markdownContent: "# Tomato pasta\n\nトマト缶とオリーブオイルで作るパスタです。",
+};
+
+const genericRequest = {
+  promptProfile: "generic",
+  input: genericInput,
+} satisfies RecipeImportAINormalizeRequest;
+
+const socialRequest = {
+  promptProfile: "social",
+  input: socialInput,
+} satisfies RecipeImportAINormalizeRequest;
+
 const createEnv = (overrides: Record<string, unknown> = {}) =>
   ({
     AI: { run: vi.fn() } as unknown as Ai,
     AI_GATEWAY_NAME: "recipestock",
     AI_TEXT_MODEL: "@cf/zai-org/glm-4.7-flash",
-    IMPORT_RECIPE_SYSTEM_PROMPT:
-      "URLから抽出した情報をRecipeDraftContentに正規化してください。入力にない内容は推測しない。",
     ...overrides,
   }) as never;
 
@@ -85,7 +107,7 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).resolves.toEqual({
+    await expect(provider.normalize(genericRequest)).resolves.toEqual({
       title: "Tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ text: "煮詰める", imageUrls: [] }],
@@ -104,7 +126,7 @@ describe("default recipe import AI provider", () => {
       expect.objectContaining({
         model: { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" },
         schema: expect.any(Object),
-        system: expect.stringContaining("RecipeDraftContent"),
+        system: GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT,
         prompt: expect.not.stringContaining("metadataCandidates"),
         temperature: 0,
         maxOutputTokens: 8192,
@@ -138,7 +160,7 @@ describe("default recipe import AI provider", () => {
       }),
     );
 
-    await expect(provider.normalize(input)).resolves.toEqual({
+    await expect(provider.normalize(genericRequest)).resolves.toEqual({
       title: "Tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ text: "煮詰める", imageUrls: [] }],
@@ -165,6 +187,21 @@ describe("default recipe import AI provider", () => {
     );
   });
 
+  it("social profileではSNS用system promptを使う", async () => {
+    mocks.generateObject.mockResolvedValueOnce({ object: createStrictAiDraft() });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(socialRequest)).resolves.toMatchObject({
+      title: "Tomato pasta",
+    });
+    expect(mocks.generateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT,
+      }),
+    );
+  });
+
   it("AIがcoverImageUrlを返した場合は受け付ける", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: createStrictAiDraft({
@@ -174,7 +211,7 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).resolves.toMatchObject({
+    await expect(provider.normalize(genericRequest)).resolves.toMatchObject({
       coverImageUrl: "https://example.com/cover.jpg",
     });
   });
@@ -191,7 +228,7 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_schema_invalid",
     } satisfies Partial<RecipeImportError>);
   });
@@ -210,7 +247,7 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).resolves.toMatchObject({
+    await expect(provider.normalize(genericRequest)).resolves.toMatchObject({
       steps: [
         {
           imageUrls: ["https://example.com/step-2.jpg", "https://example.com/step-3.jpg"],
@@ -237,10 +274,42 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).resolves.toEqual({
+    await expect(provider.normalize(genericRequest)).resolves.toEqual({
       title: "Tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ imageUrls: ["https://example.com/step-2.jpg"] }],
+    });
+  });
+
+  it("AI出力のtitleがnullでも受け付ける", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: createStrictAiDraft({
+        title: null,
+      }),
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(genericRequest)).resolves.toMatchObject({
+      title: null,
+      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      steps: [{ text: "煮詰める", imageUrls: [] }],
+    });
+  });
+
+  it("AI出力のtitleが空白でもnull相当に正規化する", async () => {
+    mocks.generateObject.mockResolvedValueOnce({
+      object: createStrictAiDraft({
+        title: "   ",
+      }),
+    });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(genericRequest)).resolves.toMatchObject({
+      title: null,
+      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+      steps: [{ text: "煮詰める", imageUrls: [] }],
     });
   });
 
@@ -256,7 +325,7 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_schema_invalid",
     } satisfies Partial<RecipeImportError>);
   });
@@ -273,7 +342,7 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_schema_invalid",
     } satisfies Partial<RecipeImportError>);
   });
@@ -288,7 +357,7 @@ describe("default recipe import AI provider", () => {
       createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_schema_invalid",
     } satisfies Partial<RecipeImportError>);
   });
@@ -303,7 +372,7 @@ describe("default recipe import AI provider", () => {
       createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_schema_invalid",
     } satisfies Partial<RecipeImportError>);
   });
@@ -322,7 +391,7 @@ describe("default recipe import AI provider", () => {
       createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_schema_invalid",
     } satisfies Partial<RecipeImportError>);
   });
@@ -330,7 +399,7 @@ describe("default recipe import AI provider", () => {
   it("AI_TEXT_MODELが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
     const provider = createDefaultRecipeImportAIProvider(createEnv({ AI_TEXT_MODEL: "" }));
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "unknown",
       message: "AI text model is not configured.",
     } satisfies Partial<RecipeImportError>);
@@ -349,7 +418,7 @@ describe("default recipe import AI provider", () => {
       }),
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "unknown",
       message: "Groq API key is not configured.",
     } satisfies Partial<RecipeImportError>);
@@ -368,24 +437,11 @@ describe("default recipe import AI provider", () => {
       }),
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "unknown",
       message: "Groq text model is not configured.",
     } satisfies Partial<RecipeImportError>);
     expect(mocks.createGroq).not.toHaveBeenCalled();
-    expect(mocks.generateObject).not.toHaveBeenCalled();
-  });
-
-  it("IMPORT_RECIPE_SYSTEM_PROMPTが未設定の場合はunknownへ変換しAI呼び出しをしない", async () => {
-    const provider = createDefaultRecipeImportAIProvider(
-      createEnv({ IMPORT_RECIPE_SYSTEM_PROMPT: "" }),
-    );
-
-    await expect(provider.normalize(input)).rejects.toMatchObject({
-      code: "unknown",
-      message: "Import recipe system prompt is not configured.",
-    } satisfies Partial<RecipeImportError>);
-    expect(mocks.createWorkersAI).not.toHaveBeenCalled();
     expect(mocks.generateObject).not.toHaveBeenCalled();
   });
 
@@ -402,7 +458,7 @@ describe("default recipe import AI provider", () => {
 
     const provider = createDefaultRecipeImportAIProvider(createEnv({ IMPORT_AI_TIMEOUT_MS: "10" }));
 
-    const result = expect(provider.normalize(input)).rejects.toMatchObject({
+    const result = expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_timeout",
     } satisfies Partial<RecipeImportError>);
     await vi.advanceTimersByTimeAsync(10);
@@ -420,7 +476,7 @@ describe("default recipe import AI provider", () => {
       createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_timeout",
     } satisfies Partial<RecipeImportError>);
   });
@@ -451,14 +507,14 @@ describe("default recipe import AI provider", () => {
       { logger },
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_timeout",
     } satisfies Partial<RecipeImportError>);
     expect(logger.error).toHaveBeenCalledWith(
       "recipe_import_ai_normalization_failed",
       expect.objectContaining({
-        markdownContentLength: input.markdownContent.length,
-        structuredEvidenceCount: input.recipeStructuredEvidence.length,
+        markdownContentLength: genericInput.markdownContent.length,
+        structuredEvidenceCount: genericInput.recipeStructuredEvidence.length,
       }),
     );
   });
@@ -474,7 +530,7 @@ describe("default recipe import AI provider", () => {
       createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_timeout",
     } satisfies Partial<RecipeImportError>);
   });
@@ -493,7 +549,7 @@ describe("default recipe import AI provider", () => {
       createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
     );
 
-    await expect(provider.normalize(input)).rejects.toMatchObject({
+    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_timeout",
     } satisfies Partial<RecipeImportError>);
   });

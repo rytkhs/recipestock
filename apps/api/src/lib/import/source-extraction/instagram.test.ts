@@ -164,6 +164,7 @@ describe("Instagram source extraction adapter", () => {
       timeoutMs: TIMEOUT_MS,
     });
     expect(result).toEqual({
+      promptProfile: "social",
       input: {
         source: {
           finalUrl: CANONICAL_URL,
@@ -180,7 +181,6 @@ describe("Instagram source extraction adapter", () => {
           "",
           "材料\nなす 5本\n作り方\n揚げ焼きにする",
         ].join("\n"),
-        recipeStructuredEvidence: [],
       },
       imageCandidates: [
         {
