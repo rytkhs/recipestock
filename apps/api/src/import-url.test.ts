@@ -15,7 +15,6 @@ import {
 import { type DeterministicImporter } from "./lib/import/deterministic";
 import { type SourceExtractor } from "./lib/import/source-extraction";
 import { type UsageRepository } from "./usage";
-import { type YtDlpMetadata, type YtDlpMetadataClient, YtDlpMetadataError } from "./ytdlp-metadata";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -925,45 +924,17 @@ describe("URL import flow", () => {
     const fetcher = vi.fn(async (url: string) => ({
       finalUrl: url,
       contentType: "text/html",
-      body: "<html><article><h1>Generic Instagram recipe</h1></article></html>",
+      body:
+        url === "https://www.instagram.com/p/DYsxvKyAZMg/embed/"
+          ? createInstagramEmbedHtml({
+              caption: "材料\nなす 5本\n作り方\n揚げ焼きにする",
+              children: [
+                { display_url: "https://cdn.example.com/cover.jpg" },
+                { display_url: "https://cdn.example.com/step.jpg" },
+              ],
+            })
+          : "<html><article><h1>Generic Instagram recipe</h1></article></html>",
     }));
-    const ytdlpMetadata = {
-      ok: true,
-      source: {
-        platform: "instagram",
-        canonicalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
-        shortcode: "DYsxvKyAZMg",
-        mediaKind: "post",
-      },
-      metadata: {
-        provider: "yt-dlp",
-        extractor: "Instagram",
-        webpageUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
-        title: "Post by mizuki_31cafe",
-        description: "材料\nなす 5本\n作り方\n揚げ焼きにする",
-        uploader: "mizuki_31cafe",
-        thumbnail: null,
-        thumbnails: [],
-        duration: null,
-        availability: null,
-      },
-      images: [
-        {
-          url: "https://cdn.example.com/cover.jpg",
-          kind: "thumbnail",
-          source: "top_level",
-        },
-        {
-          url: "https://cdn.example.com/step.jpg",
-          kind: "thumbnail",
-          source: "entry",
-          entryIndex: 1,
-        },
-      ],
-    } satisfies YtDlpMetadata;
-    const ytdlpMetadataClient = {
-      extract: vi.fn(async () => ytdlpMetadata),
-    } satisfies YtDlpMetadataClient;
     const aiNormalize = vi.fn(async ({ input, promptProfile }: RecipeImportAINormalizeRequest) => {
       expect(promptProfile).toBe("social");
       expect(input.source).toEqual({
@@ -991,7 +962,6 @@ describe("URL import flow", () => {
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher,
-        ytdlpMetadataClient,
         deterministicImporter: {
           async tryImport() {
             return null;
@@ -1025,11 +995,70 @@ describe("URL import flow", () => {
       },
     });
 
-    expect(fetcher).not.toHaveBeenCalled();
-    expect(ytdlpMetadataClient.extract).toHaveBeenCalledWith({
-      platform: "instagram",
-      url: "https://www.instagram.com/p/DYsxvKyAZMg/",
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith("https://www.instagram.com/p/DYsxvKyAZMg/embed/", {
+      maxBytes: 2_000_000,
       timeoutMs: 10_000,
+    });
+  });
+
+  it("Instagram source extractionの標準fetchではembed取得用のdocument headersを送る", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://www.instagram.com/p/DYsxvKyAZMg/embed/");
+
+      const hasInstagramEmbedHeaders =
+        getFetchHeader(init, "accept")?.includes("application/xml;q=0.9") === true &&
+        getFetchHeader(init, "accept-language") === "ja,en-US;q=0.9,en;q=0.8" &&
+        getFetchHeader(init, "sec-fetch-dest") === "document" &&
+        getFetchHeader(init, "sec-fetch-mode") === "navigate" &&
+        getFetchHeader(init, "sec-fetch-site") === "none" &&
+        getFetchHeader(init, "upgrade-insecure-requests") === "1";
+
+      return new Response(
+        hasInstagramEmbedHeaders
+          ? createInstagramEmbedHtml({
+              caption: "材料\nなす 5本\n作り方\n揚げ焼きにする",
+              children: [{ display_url: "https://cdn.example.com/cover.jpg" }],
+            })
+          : "<html><body>Please login. checkpoint required.</body></html>",
+        {
+          headers: { "content-type": "text/html" },
+        },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://www.instagram.com/p/DYsxvKyAZMg/?hl=ja",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          async normalize() {
+            return {
+              title: "Instagram recipe",
+              ingredientGroups: [],
+              steps: [{ text: "揚げ焼きにする。", imageUrls: [] }],
+            };
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "Instagram recipe",
+        coverImage: {
+          type: "externalImageUrl",
+          url: "https://cdn.example.com/cover.jpg",
+        },
+      },
     });
   });
 
@@ -1037,16 +1066,11 @@ describe("URL import flow", () => {
     const fetcher = vi.fn(async (url: string) => ({
       finalUrl: url,
       contentType: "text/html",
-      body: "<html><article><h1>Generic Instagram recipe</h1></article></html>",
+      body:
+        url === "https://www.instagram.com/p/DYsxvKyAZMg/embed/"
+          ? "<html><body>Please login. checkpoint required.</body></html>"
+          : "<html><article><h1>Generic Instagram recipe</h1></article></html>",
     }));
-    const ytdlpMetadataClient = {
-      extract: vi.fn(async () => {
-        throw new YtDlpMetadataError(
-          "private_or_login_required",
-          "Instagram post is private, unavailable, or requires login.",
-        );
-      }),
-    } satisfies YtDlpMetadataClient;
     const aiNormalize = vi.fn();
 
     await expect(
@@ -1058,7 +1082,6 @@ describe("URL import flow", () => {
         },
         usageRepository: createUsageRepositoryStub(),
         fetcher,
-        ytdlpMetadataClient,
         deterministicImporter: {
           async tryImport() {
             return null;
@@ -1072,7 +1095,7 @@ describe("URL import flow", () => {
       code: "private_or_login_required",
     } satisfies Partial<RecipeImportError>);
 
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledTimes(1);
     expect(aiNormalize).not.toHaveBeenCalled();
   });
 
@@ -1534,6 +1557,22 @@ const countDraftImages = (content: { sourceMedia?: unknown[]; steps?: { images?:
   (content.sourceMedia?.length ?? 0) +
   (content.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
+const getFetchHeader = (init: RequestInit | undefined, name: string) => {
+  const headers = init?.headers;
+  if (!headers) return undefined;
+
+  if (headers instanceof Headers) {
+    return headers.get(name) ?? undefined;
+  }
+
+  const normalizedName = name.toLowerCase();
+  if (Array.isArray(headers)) {
+    return headers.find(([key]) => key.toLowerCase() === normalizedName)?.[1];
+  }
+
+  return Object.entries(headers).find(([key]) => key.toLowerCase() === normalizedName)?.[1];
+};
+
 const createYouTubeHtml = (videoDetails: unknown) => `
   <html>
     <head>
@@ -1548,6 +1587,39 @@ const createYouTubeHtml = (videoDetails: unknown) => `
     </body>
   </html>
 `;
+
+const createInstagramEmbedHtml = ({
+  caption,
+  children = [],
+}: {
+  caption: string;
+  children?: Array<{ display_url: string; is_video?: boolean }>;
+}) => {
+  const shortcode_media = {
+    owner: {
+      username: "mizuki_31cafe",
+    },
+    edge_media_to_caption: {
+      edges: [
+        {
+          node: {
+            text: caption,
+          },
+        },
+      ],
+    },
+    edge_sidecar_to_children: {
+      edges: children.map((node) => ({ node })),
+    },
+  };
+  const outerPayload = {
+    contextJSON: JSON.stringify({ gql_data: { shortcode_media } }),
+  };
+
+  return `<html><body><script type="application/json">${JSON.stringify(
+    outerPayload,
+  )}</script></body></html>`;
+};
 
 const createXTwitterHtml = ({ description, body = "" }: { description: string; body?: string }) => `
   <html>
