@@ -764,6 +764,8 @@ export const RecipeDetailRoute = () => {
   }
 
   const sourceMedia = recipe.content.sourceMedia ?? [];
+  const shouldShowIngredientsSection =
+    Boolean(recipe.content.yieldText) || recipe.content.ingredientGroups.length > 0;
   const coverImageId = recipe.content.coverImage
     ? `cover:${recipe.content.coverImage.objectKey}`
     : null;
@@ -877,7 +879,7 @@ export const RecipeDetailRoute = () => {
         </section>
       ) : null}
 
-      {recipe.content.ingredientGroups.length > 0 ? (
+      {shouldShowIngredientsSection ? (
         <section className="mt-8 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-brand-walnut font-bold text-lg">材料</h2>

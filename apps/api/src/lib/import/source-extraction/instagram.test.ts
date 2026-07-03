@@ -344,6 +344,26 @@ describe("Instagram source extraction adapter", () => {
     expect(result.input.markdownContent).toContain("材料\nなす 5本");
   });
 
+  it("double-quoted属性のcontextJSONでcaption内のapostropheを許容する", async () => {
+    const caption = "Don't skip the sauce\n材料\nトマト 2個";
+    const contextJSON = JSON.stringify({
+      gql_data: {
+        shortcode_media: createInstagramMedia({ caption }),
+      },
+    });
+    const html = `<html><body><blockquote contextJSON="${escapeHtmlAttribute(
+      contextJSON,
+    )}"></blockquote></body></html>`;
+
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(html),
+      }),
+    );
+
+    expect(result.input.markdownContent).toContain(caption);
+  });
+
   it("contextJSONがない場合はextraction_failedにする", async () => {
     await expect(
       instagramSourceExtractionAdapter.extract(
@@ -433,6 +453,13 @@ const createInstagramEmbedHtml = ({
     outerPayload,
   )}</script></body></html>`;
 };
+
+const escapeHtmlAttribute = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 
 const createInstagramMedia = ({
   caption = "材料\nなす 5本",

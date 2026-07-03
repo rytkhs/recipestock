@@ -193,11 +193,14 @@ const extractInstagramShortcodeMedia = (html: string): InstagramShortcodeMedia |
 
 const extractContextJsonPayloads = (html: string) => {
   const payloads: unknown[] = [];
-  const patterns = [/"contextJSON"\s*:\s*"((?:\\.|[^"\\])*)"/g, /contextJSON=["']([^"']+)["']/g];
+  const patterns = [
+    /"contextJSON"\s*:\s*"((?:\\.|[^"\\])*)"/g,
+    /contextJSON\s*=\s*"([^"]*)"|contextJSON\s*=\s*'([^']*)'/g,
+  ];
 
   for (const pattern of patterns) {
     for (const match of html.matchAll(pattern)) {
-      const raw = match[1];
+      const raw = match[1] ?? match[2];
       if (!raw) continue;
 
       const decoded = decodeHtml(raw);
