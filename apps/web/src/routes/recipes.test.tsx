@@ -526,7 +526,7 @@ describe("RecipesRoute", () => {
     await expect(
       screen.findByRole("heading", { name: "Tomato pasta" }),
     ).resolves.toBeInTheDocument();
-    const ingredients = screen.getByRole("heading", { name: "材料" }).parentElement;
+    const ingredients = screen.getByRole("heading", { name: "材料" }).closest("section");
     expect(ingredients).not.toBeNull();
     expect(within(ingredients as HTMLElement).getByText("トマト缶")).toBeInTheDocument();
     expect(within(ingredients as HTMLElement).getByText("1缶")).toBeInTheDocument();
@@ -1023,7 +1023,8 @@ describe("RecipesRoute", () => {
     );
 
     await renderApp("/recipes/recipe_123");
-    await userEvent.click(await screen.findByRole("link", { name: "編集" }));
+    await userEvent.click(await screen.findByRole("button", { name: "操作メニュー" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /編集/ }));
     await expect(screen.findByRole("heading", { name: "レシピ編集" })).resolves.toBeInTheDocument();
     expect(screen.getByDisplayValue("Tomato pasta")).toBeInTheDocument();
     expect(screen.getByDisplayValue("2人分")).toBeInTheDocument();
@@ -1616,7 +1617,8 @@ describe("RecipesRoute", () => {
     );
 
     await renderApp("/recipes/recipe_123");
-    await userEvent.click(await screen.findByRole("button", { name: "削除" }));
+    await userEvent.click(await screen.findByRole("button", { name: "操作メニュー" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /削除/ }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
