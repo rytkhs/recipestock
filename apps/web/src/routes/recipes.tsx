@@ -1,14 +1,14 @@
-import { Button, Input, Label, TextField, Dropdown } from "@heroui/react";
+import { Button, Dropdown, Input, Label, TextField } from "@heroui/react";
 import {
   CaretLeft,
   CaretRight,
+  DotsThreeVertical,
   Globe,
   LockSimple,
   MagnifyingGlass,
-  X,
-  DotsThreeVertical,
   PencilSimple,
   Trash,
+  X,
 } from "@phosphor-icons/react";
 import {
   type CreateRecipeResponse,
@@ -769,8 +769,7 @@ export const RecipeDetailRoute = () => {
     : null;
   const coverImageStyle = recipe.content.coverImage
     ? ({
-        "--cover-aspect":
-          recipe.content.coverImage.width / recipe.content.coverImage.height,
+        "--cover-aspect": recipe.content.coverImage.width / recipe.content.coverImage.height,
       } as CSSProperties)
     : undefined;
 
