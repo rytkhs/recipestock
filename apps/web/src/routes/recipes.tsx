@@ -1,4 +1,4 @@
-import { Button, Input, Label, TextField } from "@heroui/react";
+import { Button, Input, Label, TextField, Dropdown } from "@heroui/react";
 import {
   CaretLeft,
   CaretRight,
@@ -6,6 +6,9 @@ import {
   LockSimple,
   MagnifyingGlass,
   X,
+  DotsThreeVertical,
+  PencilSimple,
+  Trash,
 } from "@phosphor-icons/react";
 import {
   type CreateRecipeResponse,
@@ -773,28 +776,47 @@ export const RecipeDetailRoute = () => {
 
   return (
     <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-brand-ink font-bold text-2xl sm:text-3xl leading-tight">
             {recipe.title}
           </h1>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-full border border-brand-line bg-brand-paper-raised px-5 font-semibold text-brand-walnut text-sm hover:bg-brand-paper-muted transition-colors"
-            params={{ recipeId }}
-            to="/recipes/$recipeId/edit"
-          >
-            編集
-          </Link>
-          <Button
-            className="rounded-full"
-            isDisabled={deleteMutation.isPending}
-            variant="danger"
-            onPress={confirmDelete}
-          >
-            削除
-          </Button>
+        <div className="shrink-0">
+          <Dropdown>
+            <Button
+              aria-label="操作メニュー"
+              className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut hover:bg-brand-paper-muted"
+              isIconOnly
+              variant="secondary"
+            >
+              <DotsThreeVertical size={20} weight="bold" />
+            </Button>
+            <Dropdown.Popover className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
+              <Dropdown.Menu
+                onAction={(key) => {
+                  if (key === "edit") {
+                    void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
+                  } else if (key === "delete") {
+                    confirmDelete();
+                  }
+                }}
+              >
+                <Dropdown.Item id="edit" textValue="編集">
+                  <div className="flex items-center gap-2 text-brand-walnut">
+                    <PencilSimple size={16} weight="bold" />
+                    <span className="text-sm font-semibold">編集</span>
+                  </div>
+                </Dropdown.Item>
+                <Dropdown.Item id="delete" textValue="削除">
+                  <div className="flex items-center gap-2 text-brand-danger">
+                    <Trash size={16} weight="bold" />
+                    <span className="text-sm font-semibold">削除</span>
+                  </div>
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
         </div>
       </div>
 
