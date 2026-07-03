@@ -4,6 +4,6 @@ Instagram、TikTok などの SNS 投稿 URL import では、投稿本文、capti
 
 Worker 本体には `yt-dlp` と Python 実行環境を入れず、SNS ごとの adapter は URL 正規化と `yt-dlp` metadata から `RecipeImportAIInput` への変換だけを担当します。最初は Instagram adapter のみを有効化し、container と client の interface は TikTok を追加できる `yt-dlp` metadata source extraction として設計します。
 
-Twitter/X は public SSR HTML の `og:description` と `pbs.twimg.com` media URL から投稿本文と画像候補を抽出できるため、`yt-dlp` metadata source extraction の対象外にします。X/Twitter adapter は X API、Browser Rendering、`yt-dlp` を使わず、direct HTML fetch の結果だけを処理します。
+Twitter/X は public SSR HTML の `og:description`、`NoteTweet` text、`pbs.twimg.com` media URL から投稿本文と画像候補を抽出できるため、`yt-dlp` metadata source extraction の対象外にします。X/Twitter adapter は X API、Browser Rendering、`yt-dlp` を使わず、direct HTML fetch の結果だけを処理します。
 
 Cloudflare Browser Run は Instagram adapter の初期実装では fallback にしません。取得失敗、ログイン要求、private 投稿、caption 不在は import 失敗として扱います。
