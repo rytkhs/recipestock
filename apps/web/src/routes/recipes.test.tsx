@@ -813,11 +813,16 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123");
 
+    const title = await screen.findByRole("heading", { name: "Tomato pasta" });
     const coverImage = await screen.findByAltText("Tomato pasta");
+    expect(
+      title.compareDocumentPosition(coverImage) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(coverImage).toHaveAttribute("src", "https://images.example/cover.webp");
     expect(coverImage).toHaveAttribute("width", "1200");
     expect(coverImage).toHaveAttribute("height", "800");
     expect(coverImage).toHaveStyle({ aspectRatio: "1200 / 800" });
+    expect(screen.getByRole("button", { name: "Tomato pastaを拡大" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "投稿画像" })).toBeInTheDocument();
     expect(screen.getByAltText("投稿画像1")).toHaveAttribute(
       "src",

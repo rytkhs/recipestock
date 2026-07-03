@@ -18,7 +18,7 @@ import {
 } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   createEmptyRecipeDraftFormValues,
   formValuesToCreateRecipeRequest,
@@ -295,15 +295,18 @@ const RecipeImageZoomButton = ({
   children,
   className,
   onOpen,
+  style,
 }: {
   alt: string;
   children: ReactNode;
   className: string;
   onOpen: () => void;
+  style?: CSSProperties;
 }) => (
   <button
     aria-label={`${alt}を拡大`}
     className={`${className} cursor-zoom-in border-0 bg-transparent p-0 text-left transition-transform duration-200 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-orange`}
+    style={style}
     type="button"
     onClick={onOpen}
   >
@@ -761,33 +764,16 @@ export const RecipeDetailRoute = () => {
   const coverImageId = recipe.content.coverImage
     ? `cover:${recipe.content.coverImage.objectKey}`
     : null;
+  const coverImageStyle = recipe.content.coverImage
+    ? ({
+        "--cover-aspect":
+          recipe.content.coverImage.width / recipe.content.coverImage.height,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
-      {recipe.content.coverImage?.url ? (
-        <RecipeImageZoomButton
-          alt={recipe.title}
-          className="mx-auto block max-w-full rounded-[20px] shadow-pantry-sm"
-          onOpen={() => {
-            if (coverImageId) {
-              openLightbox(coverImageId);
-            }
-          }}
-        >
-          <img
-            alt={recipe.title}
-            className="block h-auto max-h-[32rem] max-w-full rounded-[20px] object-contain"
-            height={recipe.content.coverImage.height}
-            src={recipe.content.coverImage.url}
-            style={{
-              aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
-            }}
-            width={recipe.content.coverImage.width}
-          />
-        </RecipeImageZoomButton>
-      ) : null}
-
-      <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-brand-ink font-bold text-2xl sm:text-3xl leading-tight">
             {recipe.title}
@@ -811,6 +797,30 @@ export const RecipeDetailRoute = () => {
           </Button>
         </div>
       </div>
+
+      {recipe.content.coverImage?.url ? (
+        <RecipeImageZoomButton
+          alt={recipe.title}
+          className="relative mx-auto mt-5 block w-fit max-w-[min(100%,calc(40svh*var(--cover-aspect)))] overflow-hidden rounded-[20px] shadow-pantry-sm sm:max-w-[min(100%,calc(32rem*var(--cover-aspect)))]"
+          onOpen={() => {
+            if (coverImageId) {
+              openLightbox(coverImageId);
+            }
+          }}
+          style={coverImageStyle}
+        >
+          <img
+            alt={recipe.title}
+            className="block h-auto max-h-[40svh] w-full rounded-[20px] sm:max-h-[32rem]"
+            height={recipe.content.coverImage.height}
+            src={recipe.content.coverImage.url}
+            style={{
+              aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
+            }}
+            width={recipe.content.coverImage.width}
+          />
+        </RecipeImageZoomButton>
+      ) : null}
 
       {deleteMutation.error ? (
         <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
