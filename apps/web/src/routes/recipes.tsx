@@ -14,14 +14,20 @@ import {
   type CreateRecipeResponse,
   type DeleteRecipeResponse,
   type GetRecipeResponse,
-  type ImportJobSummary,
   type ListRecipesResponse,
-  type RecentImportJobsResponse,
   type UpdateRecipeResponse,
 } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  dismissFinishedImportJob,
+  fetchRecentImportJobs,
+  getImportJobFailureMessage,
+  hasActiveImportJob,
+  importJobQueryKeys,
+  retryImportUrlJob,
+} from "../features/import-jobs";
 import {
   createEmptyRecipeDraftFormValues,
   formValuesToCreateRecipeRequest,
@@ -98,86 +104,23 @@ const fetchRecipes = async ({ cursor, query }: { cursor?: string | null; query?:
   );
 };
 
-const fetchRecentImportJobs = async () =>
-  parseApiResponse<RecentImportJobsResponse>(
-    fetch("/api/import/jobs/recent", {
-      method: "GET",
-      credentials: "include",
-    }),
-  );
-
-const dismissImportJob = async (jobId: string) =>
-  parseApiResponse<{ job: ImportJobSummary }>(
-    fetch(`/api/import/jobs/${encodeURIComponent(jobId)}/dismiss`, {
-      method: "PATCH",
-      credentials: "include",
-    }),
-  );
-
-const createImportUrlJob = async (url: string) =>
-  parseApiResponse<{ job: ImportJobSummary }>(
-    fetch("/api/import/url/jobs", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url }),
-    }),
-  );
-
-const hasActiveImportJob = (jobs: ImportJobSummary[]) =>
-  jobs.some((job) => job.status === "queued" || job.status === "running");
-
-const importJobErrorMessage = (job: ImportJobSummary) => {
-  switch (job.errorCode) {
-    case "invalid_url":
-      return "URLを確認してください。";
-    case "fetch_failed":
-      return "ページを取得できませんでした。";
-    case "unsupported_page":
-      return "このページは取り込みに対応していません。";
-    case "extraction_failed":
-      return "レシピ本文を見つけられませんでした。";
-    case "private_or_login_required":
-      return "この投稿を取得できませんでした。";
-    case "ai_usage_limit_exceeded":
-      return "今月のAI利用回数の上限に達しています。";
-    case "ai_timeout":
-      return "タイムアウトしました。";
-    case "job_timeout":
-      return "取り込み処理が時間内に完了しませんでした。再試行してください。";
-    case "ai_schema_invalid":
-      return "解析結果を保存できませんでした。";
-    case "recipe_limit_exceeded":
-      return "保存できるレシピ数の上限に達しています。";
-    default:
-      return "URLを取り込めませんでした。";
-  }
-};
-
 const ImportJobBanner = () => {
   const queryClient = useQueryClient();
   const { data } = useQuery({
-    queryKey: ["importJobs", "recent"],
+    queryKey: importJobQueryKeys.recent(),
     queryFn: fetchRecentImportJobs,
     refetchInterval: (query) => (hasActiveImportJob(query.state.data?.jobs ?? []) ? 2500 : false),
   });
   const dismissMutation = useMutation({
-    mutationFn: dismissImportJob,
+    mutationFn: dismissFinishedImportJob,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["importJobs", "recent"] });
+      await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
     },
   });
   const retryMutation = useMutation({
-    mutationFn: async (job: ImportJobSummary) => {
-      if (!job.url) {
-        throw new Error("Import job URL is missing.");
-      }
-
-      await dismissImportJob(job.id);
-      return createImportUrlJob(job.url);
-    },
+    mutationFn: retryImportUrlJob,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["importJobs", "recent"] });
+      await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
     },
   });
   const jobs = data?.jobs ?? [];
@@ -237,7 +180,7 @@ const ImportJobBanner = () => {
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="font-semibold text-brand-danger">
-                  取り込みに失敗しました。{importJobErrorMessage(job)}
+                  取り込みに失敗しました。{getImportJobFailureMessage(job)}
                 </p>
                 <div className="flex gap-2">
                   <Button

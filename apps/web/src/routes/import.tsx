@@ -1,48 +1,9 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
 import { Link as LinkIcon } from "@phosphor-icons/react";
-import { type CreateImportUrlJobResponse, type ImportJobSummary } from "@recipestock/schemas";
+import { type ImportJobSummary } from "@recipestock/schemas";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { ApiClientError, parseApiResponse } from "../lib/api";
-
-const createImportUrlJob = async (url: string) =>
-  parseApiResponse<CreateImportUrlJobResponse>(
-    fetch("/api/import/url/jobs", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url }),
-    }),
-  );
-
-const importErrorMessage = (error: unknown) => {
-  if (!(error instanceof ApiClientError)) {
-    return "URLを取り込めませんでした。";
-  }
-
-  switch (error.code) {
-    case "invalid_url":
-      return "URLを確認してください。";
-    case "fetch_failed":
-      return "ページを取得できませんでした。";
-    case "unsupported_page":
-      return "このページは取り込みに対応していません。";
-    case "extraction_failed":
-      return "レシピ本文を見つけられませんでした。";
-    case "private_or_login_required":
-      return "この投稿を取得できませんでした。非公開またはログインが必要な投稿です。";
-    case "ai_usage_limit_exceeded":
-      return "今月のAI利用回数の上限に達しています。";
-    case "ai_timeout":
-      return "タイムアウトしました。";
-    case "ai_schema_invalid":
-      return "結果を読み取れませんでした。";
-    case "recipe_limit_exceeded":
-      return "保存できるレシピ数の上限に達しています。";
-    default:
-      return "URLを取り込めませんでした。";
-  }
-};
+import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
 
 export const ImportUrlRoute = () => {
   const navigate = useNavigate();
@@ -67,7 +28,7 @@ export const ImportUrlRoute = () => {
 
       await navigate({ to: "/recipes" });
     } catch (submitError) {
-      setError(importErrorMessage(submitError));
+      setError(getCreateImportUrlJobErrorMessage(submitError));
     } finally {
       setIsSubmitting(false);
     }
