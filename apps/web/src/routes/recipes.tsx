@@ -1,10 +1,13 @@
-import { Button, Input, Label, TextField } from "@heroui/react";
+import { Button, Dropdown, Input, Label, TextField } from "@heroui/react";
 import {
   CaretLeft,
   CaretRight,
+  DotsThreeVertical,
   Globe,
   LockSimple,
   MagnifyingGlass,
+  PencilSimple,
+  Trash,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -18,7 +21,7 @@ import {
 } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   createEmptyRecipeDraftFormValues,
   formValuesToCreateRecipeRequest,
@@ -295,15 +298,18 @@ const RecipeImageZoomButton = ({
   children,
   className,
   onOpen,
+  style,
 }: {
   alt: string;
   children: ReactNode;
   className: string;
   onOpen: () => void;
+  style?: CSSProperties;
 }) => (
   <button
     aria-label={`${alt}を拡大`}
     className={`${className} cursor-zoom-in border-0 bg-transparent p-0 text-left transition-transform duration-200 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-orange`}
+    style={style}
     type="button"
     onClick={onOpen}
   >
@@ -758,25 +764,77 @@ export const RecipeDetailRoute = () => {
   }
 
   const sourceMedia = recipe.content.sourceMedia ?? [];
+  const shouldShowIngredientsSection =
+    Boolean(recipe.content.yieldText) || recipe.content.ingredientGroups.length > 0;
   const coverImageId = recipe.content.coverImage
     ? `cover:${recipe.content.coverImage.objectKey}`
     : null;
+  const coverImageStyle = recipe.content.coverImage
+    ? ({
+        "--cover-aspect": recipe.content.coverImage.width / recipe.content.coverImage.height,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-brand-ink font-bold text-2xl sm:text-3xl leading-tight">
+            {recipe.title}
+          </h1>
+        </div>
+        <div className="shrink-0">
+          <Dropdown>
+            <Button
+              aria-label="操作メニュー"
+              className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut hover:bg-brand-paper-muted"
+              isIconOnly
+              variant="secondary"
+            >
+              <DotsThreeVertical size={20} weight="bold" />
+            </Button>
+            <Dropdown.Popover className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
+              <Dropdown.Menu
+                onAction={(key) => {
+                  if (key === "edit") {
+                    void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
+                  } else if (key === "delete") {
+                    confirmDelete();
+                  }
+                }}
+              >
+                <Dropdown.Item id="edit" textValue="編集">
+                  <div className="flex items-center gap-2 text-brand-walnut">
+                    <PencilSimple size={16} weight="bold" />
+                    <span className="text-sm font-semibold">編集</span>
+                  </div>
+                </Dropdown.Item>
+                <Dropdown.Item id="delete" textValue="削除">
+                  <div className="flex items-center gap-2 text-brand-danger">
+                    <Trash size={16} weight="bold" />
+                    <span className="text-sm font-semibold">削除</span>
+                  </div>
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
+        </div>
+      </div>
+
       {recipe.content.coverImage?.url ? (
         <RecipeImageZoomButton
           alt={recipe.title}
-          className="mx-auto block max-w-full rounded-[20px] shadow-pantry-sm"
+          className="relative mx-auto mt-5 block w-fit max-w-[min(100%,calc(40svh*var(--cover-aspect)))] overflow-hidden rounded-[20px] shadow-pantry-sm sm:max-w-[min(100%,calc(32rem*var(--cover-aspect)))]"
           onOpen={() => {
             if (coverImageId) {
               openLightbox(coverImageId);
             }
           }}
+          style={coverImageStyle}
         >
           <img
             alt={recipe.title}
-            className="block h-auto max-h-[32rem] max-w-full rounded-[20px] object-contain"
+            className="block h-auto max-h-[40svh] w-full rounded-[20px] sm:max-h-[32rem]"
             height={recipe.content.coverImage.height}
             src={recipe.content.coverImage.url}
             style={{
@@ -786,34 +844,6 @@ export const RecipeDetailRoute = () => {
           />
         </RecipeImageZoomButton>
       ) : null}
-
-      <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-brand-ink font-bold text-2xl sm:text-3xl leading-tight">
-            {recipe.title}
-          </h1>
-          {recipe.content.yieldText ? (
-            <p className="mt-2 text-brand-muted text-sm">{recipe.content.yieldText}</p>
-          ) : null}
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-full border border-brand-line bg-brand-paper-raised px-5 font-semibold text-brand-walnut text-sm hover:bg-brand-paper-muted transition-colors"
-            params={{ recipeId }}
-            to="/recipes/$recipeId/edit"
-          >
-            編集
-          </Link>
-          <Button
-            className="rounded-full"
-            isDisabled={deleteMutation.isPending}
-            variant="danger"
-            onPress={confirmDelete}
-          >
-            削除
-          </Button>
-        </div>
-      </div>
 
       {deleteMutation.error ? (
         <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
@@ -849,9 +879,14 @@ export const RecipeDetailRoute = () => {
         </section>
       ) : null}
 
-      {recipe.content.ingredientGroups.length > 0 ? (
+      {shouldShowIngredientsSection ? (
         <section className="mt-8 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
-          <h2 className="text-brand-walnut font-bold text-lg">材料</h2>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="text-brand-walnut font-bold text-lg">材料</h2>
+            {recipe.content.yieldText ? (
+              <p className="text-brand-muted text-sm">{recipe.content.yieldText}</p>
+            ) : null}
+          </div>
           {recipe.content.ingredientGroups.map((group) => (
             <div
               className="mt-4"

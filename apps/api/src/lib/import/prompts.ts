@@ -21,14 +21,14 @@ Normalization Rules:
 - Do not include source URL, normalized URL, host, source name, author, or import metadata in RecipeDraftContent.
 - If multiple recipes are present, extract the primary recipe for the imported page. If the primary recipe cannot be identified, extract the recipe most directly represented by the page title or structured recipe evidence.
 - If no recipe is supported by the evidence, return null for scalar fields and empty arrays for ingredientGroups and steps.
-- Do not summarize or rewrite the wording to make it easier to understand. Use the text for ingredients, steps, notes, and similar fields exactly as copied.
+- Do not summarize, paraphrase, simplify, combine, or rewrite source wording. For ingredients, steps, notes, tips, storage guidance, substitutions, and serving guidance, copy the original wording exactly except for obvious whitespace cleanup and allowed list-marker removal.
 
 Field Rules:
 - title: Use the recipe title only. Do not append site name, author, or source metadata.
 - yieldText: Use serving, yield, portion, or quantity text when explicitly provided.
 - ingredientGroups: Preserve ingredient group labels when provided. Use null for an unlabeled group. For each ingredient, put quantity/unit/preparation text in amount when separable, and the ingredient item name in name. If a line cannot be reliably split, keep the full ingredient line in name and use an empty string for amount.
-- steps: Create ordered preparation steps. A step is valid only when it has non-null text or at least one imageUrls item. Do not create empty steps.
-- note: Include only recipe-specific notes, tips, storage guidance, substitutions, or serving guidance supported by the evidence. Do not include provenance or uncertainty commentary.
+- steps: Create ordered preparation steps. Omit leading ordinal or list markers from steps[].text because the application numbers steps by array order. Remove only markers such as "1.", "1)", "1:", "(1)", "①", "Step 1:", "手順1", or "作り方1". Do not remove leading numbers that are part of the instruction itself, such as temperatures, times, quantities, or ingredient amounts. A step is valid only when it has non-null text or at least one imageUrls item. Do not create empty steps.
+- note: Include recipe-specific notes, tips, storage guidance, substitutions, serving guidance, and any other cooking-useful details that do not fit other fields. If unsure whether supported cooking-useful information belongs in note, include it. Copy note text verbatim from the evidence. Do not summarize multiple note-like passages into one sentence. If multiple distinct notes are present, preserve their wording and order, separated only by newlines. Do not include provenance, uncertainty commentary, unrelated page text, promotion, or source metadata.
 
 Image Rules:
 - Return image URLs only in coverImageUrl and steps[].imageUrls.
@@ -68,14 +68,14 @@ Normalization Rules:
 - Do not include source URL, normalized URL, host, source name, author, channel, uploader, handles, hashtags, or import metadata in RecipeDraftContent unless the text is part of the recipe title itself.
 - If the text contains only a dish name, reaction, promotional post, food photo reference, or video tease without explicit ingredients or preparation instructions, return null for unsupported scalar fields and empty arrays for ingredientGroups and steps.
 - If multiple recipes are present, extract the recipe most directly represented by the post, caption, description, or title.
-- Do not summarize or rewrite the wording to make it easier to understand. Use the text for ingredients, steps, notes, and similar fields exactly as copied.
+- Do not summarize, paraphrase, simplify, combine, or rewrite source wording. For ingredients, steps, notes, tips, storage guidance, substitutions, and serving guidance, copy the original wording exactly except for obvious whitespace cleanup and allowed list-marker removal.
 
 Field Rules:
 - title: Use the recipe title or dish name when explicitly provided.
 - yieldText: Use serving, yield, portion, or quantity text when explicitly provided.
 - ingredientGroups: Preserve ingredient group labels when provided. Use null for an unlabeled group. For each ingredient, put quantity/unit/preparation text in amount when separable, and the ingredient item name in name. If a line cannot be reliably split, keep the full ingredient line in name and use an empty string for amount.
-- steps: Create ordered preparation steps only from explicit preparation instructions in the provided text. A step is valid only when it has non-null text or at least one imageUrls item. Do not create empty steps.
-- note: Include only recipe-specific notes, tips, storage guidance, substitutions, or serving guidance supported by the evidence. Do not include provenance or uncertainty commentary.
+- steps: Create ordered preparation steps only from explicit preparation instructions in the provided text. Omit leading ordinal or list markers from steps[].text because the application numbers steps by array order. Remove only markers such as "1.", "1)", "1:", "(1)", "①", "Step 1:", "手順1", or "作り方1". Do not remove leading numbers that are part of the instruction itself, such as temperatures, times, quantities, or ingredient amounts. A step is valid only when it has non-null text or at least one imageUrls item. Do not create empty steps.
+- note: Include recipe-specific notes, tips, storage guidance, substitutions, serving guidance, and any other cooking-useful details that do not fit other fields. If unsure whether supported cooking-useful information belongs in note, include it. Copy note text verbatim from the evidence. Do not summarize multiple note-like passages into one sentence. If multiple distinct notes are present, preserve their wording and order, separated only by newlines. Do not include provenance, uncertainty commentary, unrelated page text, promotion, or source metadata.
 
 Image Rules:
 - For current social imports, always set coverImageUrl to null and use empty arrays for steps[].imageUrls. Social media placement is handled outside AI.

@@ -75,6 +75,15 @@ const DEFAULT_IMPORT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
   "AppleWebKit/537.36 (KHTML, like Gecko) " +
   "Chrome/125.0.0.0 Safari/537.36";
+const DEFAULT_IMPORT_FETCH_HEADERS = {
+  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "accept-language": "ja,en-US;q=0.9,en;q=0.8",
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-site": "none",
+  "upgrade-insecure-requests": "1",
+  "user-agent": DEFAULT_IMPORT_USER_AGENT,
+};
 
 const importAiImageUrlSchema = z.string().min(1);
 
@@ -208,10 +217,7 @@ const fetchImportPageFollowingAllowedRedirects = async (sourceUrl: string, signa
     assertImportUrlAllowed(currentUrl);
 
     const response = await fetch(currentUrl, {
-      headers: {
-        accept: "text/html,application/xhtml+xml",
-        "user-agent": DEFAULT_IMPORT_USER_AGENT,
-      },
+      headers: DEFAULT_IMPORT_FETCH_HEADERS,
       redirect: "manual",
       signal,
     });

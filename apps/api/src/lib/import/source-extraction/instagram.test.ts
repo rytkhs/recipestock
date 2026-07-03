@@ -1,9 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  type YtDlpMetadata,
-  type YtDlpMetadataClient,
-  YtDlpMetadataError,
-} from "../../../ytdlp-metadata";
 import { type RecipeImportError } from "../types";
 import {
   createInstagramCanonicalUrl,
@@ -13,9 +8,8 @@ import {
 import { type SourceExtractionContext } from "./types";
 
 const CANONICAL_URL = "https://www.instagram.com/p/DYsxvKyAZMg/";
-const SHORTCODE = "DYsxvKyAZMg";
+const EMBED_URL = "https://www.instagram.com/p/DYsxvKyAZMg/embed/";
 const REEL_CANONICAL_URL = "https://www.instagram.com/reel/C9QigGTgKZf/";
-const REEL_SHORTCODE = "C9QigGTgKZf";
 const TIMEOUT_MS = 10_000;
 
 describe("Instagram source extraction URL handling", () => {
@@ -122,47 +116,30 @@ describe("Instagram source extraction URL handling", () => {
 });
 
 describe("Instagram source extraction adapter", () => {
-  it("yt-dlp metadataからAI inputと画像候補を作る", async () => {
-    const ytdlpMetadataClient = createYtDlpMetadataClientStub(
-      createYtDlpMetadata({
-        metadata: {
-          title: "Post by mizuki_31cafe",
-          description: "材料\nなす 5本\n作り方\n揚げ焼きにする",
-          uploader: "mizuki_31cafe",
-        },
-        images: [
-          {
-            url: "https://cdn.example.com/cover.jpg",
-            kind: "thumbnail",
-            source: "top_level",
-            width: 1080,
-            height: 1080,
-          },
-          {
-            url: "https://cdn.example.com/cover.jpg",
-            kind: "thumbnail",
-            source: "entry",
-            entryIndex: 0,
-          },
-          {
-            url: "https://cdn.example.com/step.jpg",
-            kind: "thumbnail",
-            source: "entry",
-            entryIndex: 1,
-          },
-        ],
+  it("embed HTMLからAI inputと単一画像配置を作る", async () => {
+    const fetchHtml = createFetchHtml(
+      createInstagramEmbedHtml({
+        shortcode_media: createInstagramMedia({
+          caption: "材料\nなす 5本\n作り方\n揚げ焼きにする",
+          displayResources: [
+            { src: "https://cdn.example.com/small.jpg", config_width: 320, config_height: 320 },
+            { src: "https://cdn.example.com/cover.jpg", config_width: 1080, config_height: 1080 },
+          ],
+        }),
       }),
     );
+    const ytdlpMetadataClient = {
+      extract: vi.fn(async () => {
+        throw new Error("yt-dlp should not be called.");
+      }),
+    };
 
     const result = await instagramSourceExtractionAdapter.extract(
-      createContext({ ytdlpMetadataClient }),
+      createContext({ fetchHtml, ytdlpMetadataClient }),
     );
 
-    expect(ytdlpMetadataClient.extract).toHaveBeenCalledWith({
-      platform: "instagram",
-      url: CANONICAL_URL,
-      timeoutMs: TIMEOUT_MS,
-    });
+    expect(fetchHtml).toHaveBeenCalledWith(EMBED_URL);
+    expect(ytdlpMetadataClient.extract).not.toHaveBeenCalled();
     expect(result).toEqual({
       promptProfile: "social",
       input: {
@@ -189,16 +166,10 @@ describe("Instagram source extraction adapter", () => {
           alt: "Post by mizuki_31cafe image 1",
           position: 0,
         },
-        {
-          id: "instagram_image_1",
-          url: "https://cdn.example.com/step.jpg",
-          alt: "Post by mizuki_31cafe image 2",
-          position: 1,
-        },
       ],
       imagePlacement: {
         coverImageUrl: "https://cdn.example.com/cover.jpg",
-        sourceMediaUrls: ["https://cdn.example.com/cover.jpg", "https://cdn.example.com/step.jpg"],
+        sourceMediaUrls: ["https://cdn.example.com/cover.jpg"],
       },
       source: {
         sourceUrl: CANONICAL_URL,
@@ -206,19 +177,19 @@ describe("Instagram source extraction adapter", () => {
       },
       warnings: [],
     });
+    expect(result.input.markdownContent).not.toContain("https://cdn.example.com/cover.jpg");
   });
 
   it("画像0件でもcaptionがあれば成功する", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
-        ytdlpMetadataClient: createYtDlpMetadataClientStub(
-          createYtDlpMetadata({
-            metadata: {
-              title: null,
-              description: "材料\n卵 2個",
-              uploader: null,
-            },
-            images: [],
+        fetchHtml: createFetchHtml(
+          createInstagramEmbedHtml({
+            shortcode_media: createInstagramMedia({
+              caption: "材料\n卵 2個",
+              displayUrl: null,
+              ownerUsername: null,
+            }),
           }),
         ),
       }),
@@ -242,29 +213,17 @@ describe("Instagram source extraction adapter", () => {
     });
   });
 
-  it("複数画像投稿ではsidecar画像をcoverとsourceMediaへ追加する", async () => {
+  it("carouselの画像childを順序通りsourceMediaへ追加する", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
-        ytdlpMetadataClient: createYtDlpMetadataClientStub(
-          createYtDlpMetadata({
-            images: [
-              {
-                url: "https://cdn.example.com/sidecar-1.jpg",
-                kind: "thumbnail",
-                source: "sidecar",
-                entryIndex: 0,
-                width: 1080,
-                height: 1080,
-              },
-              {
-                url: "https://cdn.example.com/sidecar-2.jpg",
-                kind: "thumbnail",
-                source: "sidecar",
-                entryIndex: 1,
-                width: 1080,
-                height: 1080,
-              },
-            ],
+        fetchHtml: createFetchHtml(
+          createInstagramEmbedHtml({
+            shortcode_media: createInstagramMedia({
+              children: [
+                createInstagramMediaNode({ displayUrl: "https://cdn.example.com/sidecar-1.jpg" }),
+                createInstagramMediaNode({ displayUrl: "https://cdn.example.com/sidecar-2.jpg" }),
+              ],
+            }),
           }),
         ),
       }),
@@ -293,82 +252,123 @@ describe("Instagram source extraction adapter", () => {
     });
   });
 
-  it("動画投稿ではカバー画像をsourceMediaへ追加しない", async () => {
+  it("mixed carouselでは動画childをsourceMediaとimageCandidatesから除外して先頭動画coverをcoverにする", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
-        ytdlpMetadataClient: createYtDlpMetadataClientStub(
-          createYtDlpMetadata({
-            metadata: {
-              duration: 56.133,
-            },
-            images: [
-              {
-                url: "https://cdn.example.com/video-cover.jpg",
-                kind: "thumbnail",
-                source: "top_level",
-                width: 1080,
-                height: 1920,
-              },
-            ],
+        fetchHtml: createFetchHtml(
+          createInstagramEmbedHtml({
+            shortcode_media: createInstagramMedia({
+              children: [
+                createInstagramMediaNode({
+                  isVideo: true,
+                  displayUrl: "https://cdn.example.com/video-cover.jpg",
+                }),
+                createInstagramMediaNode({ displayUrl: "https://cdn.example.com/sidecar-1.jpg" }),
+                createInstagramMediaNode({ displayUrl: "https://cdn.example.com/sidecar-2.jpg" }),
+              ],
+            }),
           }),
         ),
       }),
     );
 
+    expect(result.imageCandidates.map((candidate) => candidate.url)).toEqual([
+      "https://cdn.example.com/sidecar-1.jpg",
+      "https://cdn.example.com/sidecar-2.jpg",
+    ]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/video-cover.jpg",
-      sourceMediaUrls: [],
+      sourceMediaUrls: [
+        "https://cdn.example.com/sidecar-1.jpg",
+        "https://cdn.example.com/sidecar-2.jpg",
+      ],
     });
   });
 
-  it("Reelではカバー画像をsourceMediaへ追加しない", async () => {
+  it("Reelではカバー画像だけを配置する", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
         normalizedUrl: REEL_CANONICAL_URL,
-        ytdlpMetadataClient: createYtDlpMetadataClientStub(
-          createYtDlpMetadata({
-            source: {
-              canonicalUrl: REEL_CANONICAL_URL,
-              shortcode: REEL_SHORTCODE,
-              mediaKind: "reel",
-            },
-            images: [
-              {
-                url: "https://cdn.example.com/reel-cover.jpg",
-                kind: "thumbnail",
-                source: "top_level",
-                width: 1080,
-                height: 1920,
-              },
-            ],
+        fetchHtml: createFetchHtml(
+          createInstagramEmbedHtml({
+            shortcode_media: createInstagramMedia({
+              isVideo: true,
+              displayUrl: "https://cdn.example.com/reel-cover.jpg",
+            }),
           }),
         ),
       }),
     );
 
+    expect(result.input.source.finalUrl).toBe(REEL_CANONICAL_URL);
+    expect(result.imageCandidates).toEqual([]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/reel-cover.jpg",
       sourceMediaUrls: [],
     });
   });
 
-  it("yt-dlp metadata client未設定はunknownにする", async () => {
-    await expect(instagramSourceExtractionAdapter.extract(createContext())).rejects.toMatchObject({
-      code: "unknown",
-    } satisfies Partial<RecipeImportError>);
+  it("単一動画投稿ではカバー画像だけを配置する", async () => {
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createInstagramEmbedHtml({
+            shortcode_media: createInstagramMedia({
+              isVideo: true,
+              displayUrl: "https://cdn.example.com/video-cover.jpg",
+            }),
+          }),
+        ),
+      }),
+    );
+
+    expect(result.imageCandidates).toEqual([]);
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: "https://cdn.example.com/video-cover.jpg",
+      sourceMediaUrls: [],
+    });
   });
 
-  it("captionが空の場合はextraction_failedにする", async () => {
+  it("login/challenge文字列があってもshortcode_mediaがあれば成功する", async () => {
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createInstagramEmbedHtml({
+            shortcode_media: createInstagramMedia(),
+            bodyPrefix: "login checkpoint challenge",
+          }),
+        ),
+      }),
+    );
+
+    expect(result.input.markdownContent).toContain("材料\nなす 5本");
+  });
+
+  it("double-quoted属性のcontextJSONでcaption内のapostropheを許容する", async () => {
+    const caption = "Don't skip the sauce\n材料\nトマト 2個";
+    const contextJSON = JSON.stringify({
+      gql_data: {
+        shortcode_media: createInstagramMedia({ caption }),
+      },
+    });
+    const html = `<html><body><blockquote contextJSON="${escapeHtmlAttribute(
+      contextJSON,
+    )}"></blockquote></body></html>`;
+
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(html),
+      }),
+    );
+
+    expect(result.input.markdownContent).toContain(caption);
+  });
+
+  it("contextJSONがない場合はextraction_failedにする", async () => {
     await expect(
       instagramSourceExtractionAdapter.extract(
         createContext({
-          ytdlpMetadataClient: createYtDlpMetadataClientStub(
-            createYtDlpMetadata({
-              metadata: {
-                description: "   ",
-              },
-            }),
-          ),
+          fetchHtml: createFetchHtml("<html><body>No context JSON</body></html>"),
         }),
       ),
     ).rejects.toMatchObject({
@@ -376,19 +376,11 @@ describe("Instagram source extraction adapter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("metadata identityが一致しない場合はextraction_failedにする", async () => {
+  it("shortcode_mediaがない場合はextraction_failedにする", async () => {
     await expect(
       instagramSourceExtractionAdapter.extract(
         createContext({
-          ytdlpMetadataClient: createYtDlpMetadataClientStub(
-            createYtDlpMetadata({
-              source: {
-                canonicalUrl: "https://www.instagram.com/p/OTHER/",
-                shortcode: "OTHER",
-                mediaKind: "post",
-              },
-            }),
-          ),
+          fetchHtml: createFetchHtml(createInstagramEmbedHtml({ gql_data: {} })),
         }),
       ),
     ).rejects.toMatchObject({
@@ -396,15 +388,12 @@ describe("Instagram source extraction adapter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("yt-dlp private/login failureはprivate_or_login_requiredにする", async () => {
+  it("shortcode_mediaがなくlogin/checkpoint HTMLの場合はprivate_or_login_requiredにする", async () => {
     await expect(
       instagramSourceExtractionAdapter.extract(
         createContext({
-          ytdlpMetadataClient: createYtDlpMetadataClientErrorStub(
-            new YtDlpMetadataError(
-              "private_or_login_required",
-              "Instagram post is private, unavailable, or requires login.",
-            ),
+          fetchHtml: createFetchHtml(
+            "<html><body>Please login. checkpoint required.</body></html>",
           ),
         }),
       ),
@@ -413,31 +402,19 @@ describe("Instagram source extraction adapter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("yt-dlp timeoutはfetch_failedに丸める", async () => {
+  it("captionが空の場合はextraction_failedにする", async () => {
     await expect(
       instagramSourceExtractionAdapter.extract(
         createContext({
-          ytdlpMetadataClient: createYtDlpMetadataClientErrorStub(
-            new YtDlpMetadataError("timeout", "yt-dlp metadata request timed out."),
+          fetchHtml: createFetchHtml(
+            createInstagramEmbedHtml({
+              shortcode_media: createInstagramMedia({ caption: "   " }),
+            }),
           ),
         }),
       ),
     ).rejects.toMatchObject({
-      code: "fetch_failed",
-    } satisfies Partial<RecipeImportError>);
-  });
-
-  it("yt-dlp invalid_requestはinvalid_urlに丸める", async () => {
-    await expect(
-      instagramSourceExtractionAdapter.extract(
-        createContext({
-          ytdlpMetadataClient: createYtDlpMetadataClientErrorStub(
-            new YtDlpMetadataError("invalid_request", "Instagram URL is invalid."),
-          ),
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "invalid_url",
+      code: "extraction_failed",
     } satisfies Partial<RecipeImportError>);
   });
 });
@@ -448,51 +425,91 @@ const createContext = (
   normalizedUrl: CANONICAL_URL,
   host: "instagram.com",
   timeoutMs: TIMEOUT_MS,
-  async fetchHtml() {
-    throw new Error("Instagram adapter should not fetch HTML.");
-  },
+  fetchHtml: createFetchHtml(createInstagramEmbedHtml({ shortcode_media: createInstagramMedia() })),
   ...overrides,
 });
 
-const createYtDlpMetadataClientStub = (metadata: YtDlpMetadata): YtDlpMetadataClient => ({
-  extract: vi.fn(async () => metadata),
-});
+const createFetchHtml = (html: string) =>
+  vi.fn(async (url: string) => ({
+    finalUrl: url,
+    contentType: "text/html",
+    body: html,
+  }));
 
-const createYtDlpMetadataClientErrorStub = (error: Error): YtDlpMetadataClient => ({
-  extract: vi.fn(async () => {
-    throw error;
-  }),
-});
-
-const createYtDlpMetadata = ({
-  source = {},
-  metadata = {},
-  images = [],
+const createInstagramEmbedHtml = ({
+  shortcode_media,
+  gql_data = { shortcode_media },
+  bodyPrefix = "",
 }: {
-  source?: Partial<YtDlpMetadata["source"]>;
-  metadata?: Partial<YtDlpMetadata["metadata"]>;
-  images?: YtDlpMetadata["images"];
-} = {}): YtDlpMetadata => ({
-  ok: true,
-  source: {
-    platform: "instagram",
-    canonicalUrl: CANONICAL_URL,
-    shortcode: SHORTCODE,
-    mediaKind: "post",
-    ...source,
+  shortcode_media?: Record<string, unknown>;
+  gql_data?: Record<string, unknown>;
+  bodyPrefix?: string;
+}) => {
+  const outerPayload = {
+    contextJSON: JSON.stringify({ gql_data }),
+  };
+
+  return `<html><body>${bodyPrefix}<script type="application/json">${JSON.stringify(
+    outerPayload,
+  )}</script></body></html>`;
+};
+
+const escapeHtmlAttribute = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+const createInstagramMedia = ({
+  caption = "材料\nなす 5本",
+  ownerUsername = "mizuki_31cafe",
+  displayUrl = "https://cdn.example.com/cover.jpg",
+  displayResources,
+  isVideo = false,
+  children = [],
+}: {
+  caption?: string;
+  ownerUsername?: string | null;
+  displayUrl?: string | null;
+  displayResources?: Array<{ src: string; config_width: number; config_height: number }>;
+  isVideo?: boolean;
+  children?: Array<Record<string, unknown>>;
+} = {}) => ({
+  is_video: isVideo,
+  ...(displayUrl ? { display_url: displayUrl } : {}),
+  ...(displayResources ? { display_resources: displayResources } : {}),
+  edge_media_to_caption: {
+    edges: [
+      {
+        node: {
+          text: caption,
+        },
+      },
+    ],
   },
-  metadata: {
-    provider: "yt-dlp",
-    extractor: "Instagram",
-    webpageUrl: CANONICAL_URL,
-    title: "Post by mizuki_31cafe",
-    description: "材料\nなす 5本",
-    uploader: "mizuki_31cafe",
-    thumbnail: null,
-    thumbnails: [],
-    duration: null,
-    availability: null,
-    ...metadata,
+  owner: {
+    ...(ownerUsername ? { username: ownerUsername } : {}),
   },
-  images,
+  ...(children.length > 0
+    ? {
+        edge_sidecar_to_children: {
+          edges: children.map((node) => ({ node })),
+        },
+      }
+    : {}),
+});
+
+const createInstagramMediaNode = ({
+  displayUrl,
+  displayResources,
+  isVideo = false,
+}: {
+  displayUrl: string;
+  displayResources?: Array<{ src: string; config_width: number; config_height: number }>;
+  isVideo?: boolean;
+}) => ({
+  is_video: isVideo,
+  display_url: displayUrl,
+  ...(displayResources ? { display_resources: displayResources } : {}),
 });

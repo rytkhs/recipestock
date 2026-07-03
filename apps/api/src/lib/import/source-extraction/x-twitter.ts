@@ -76,9 +76,11 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
     const html = await readFetchedPageText(page);
     const meta = extractMeta(html);
 
-    const primaryPostText = normalizePostText(meta["og:description"] ?? meta.description);
-    const hasPrimaryPostText =
-      primaryPostText !== "" && !isGenericXTwitterDescription(primaryPostText);
+    const primaryPostText = selectXTwitterPostText([
+      extractXTwitterNoteTweetText(html),
+      meta["og:description"] ?? meta.description,
+    ]);
+    const hasPrimaryPostText = primaryPostText !== "";
     if (!hasPrimaryPostText && isPrivateOrUnavailableHtml(html)) {
       throw new RecipeImportError(
         "private_or_login_required",
@@ -230,6 +232,105 @@ const getHtmlAttribute = (tag: string, name: string) => {
 };
 
 const normalizeMetaKey = (value: string | undefined) => value?.trim().toLowerCase();
+
+const selectXTwitterPostText = (values: Array<string | undefined>) => {
+  const candidates = values
+    .map(normalizePostText)
+    .filter((value) => value && !isGenericXTwitterDescription(value));
+
+  candidates.sort((left, right) => right.length - left.length);
+
+  return candidates[0] ?? "";
+};
+
+const extractXTwitterNoteTweetText = (html: string) => {
+  const noteTweetPattern = /__typename\s*:\s*"NoteTweet"[\s\S]*?\btext\s*:\s*"/g;
+  const candidates: string[] = [];
+
+  for (const match of html.matchAll(noteTweetPattern)) {
+    const textStart = (match.index ?? 0) + match[0].length;
+    const text = readJavaScriptStringContent(html, textStart);
+    if (text) candidates.push(text);
+  }
+
+  candidates.sort((left, right) => right.length - left.length);
+
+  return candidates[0];
+};
+
+const readJavaScriptStringContent = (value: string, startIndex: number) => {
+  let result = "";
+
+  for (let index = startIndex; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === '"') return result;
+    if (char !== "\\") {
+      result += char;
+      continue;
+    }
+
+    index += 1;
+    const escaped = value[index];
+    if (escaped === undefined) return undefined;
+
+    if (escaped === "n") {
+      result += "\n";
+    } else if (escaped === "r") {
+      result += "\r";
+    } else if (escaped === "t") {
+      result += "\t";
+    } else if (escaped === "b") {
+      result += "\b";
+    } else if (escaped === "f") {
+      result += "\f";
+    } else if (escaped === "v") {
+      result += "\v";
+    } else if (escaped === "u") {
+      const unicode = readJavaScriptUnicodeEscape(value, index + 1);
+      if (!unicode) return undefined;
+      result += unicode.char;
+      index = unicode.endIndex;
+    } else if (escaped === "x") {
+      const hex = value.slice(index + 1, index + 3);
+      if (!/^[0-9a-f]{2}$/i.test(hex)) return undefined;
+      result += String.fromCharCode(Number.parseInt(hex, 16));
+      index += 2;
+    } else if (escaped === "\r" || escaped === "\n") {
+      if (escaped === "\r" && value[index + 1] === "\n") {
+        index += 1;
+      }
+    } else {
+      result += escaped;
+    }
+  }
+
+  return undefined;
+};
+
+const readJavaScriptUnicodeEscape = (value: string, startIndex: number) => {
+  if (value[startIndex] === "{") {
+    const endIndex = value.indexOf("}", startIndex + 1);
+    if (endIndex < 0) return undefined;
+
+    const hex = value.slice(startIndex + 1, endIndex);
+    if (!/^[0-9a-f]+$/i.test(hex)) return undefined;
+    const codePoint = Number.parseInt(hex, 16);
+    if (codePoint > 0x10ffff) return undefined;
+
+    return {
+      char: String.fromCodePoint(codePoint),
+      endIndex,
+    };
+  }
+
+  const hex = value.slice(startIndex, startIndex + 4);
+  if (!/^[0-9a-f]{4}$/i.test(hex)) return undefined;
+
+  return {
+    char: String.fromCharCode(Number.parseInt(hex, 16)),
+    endIndex: startIndex + 3,
+  };
+};
 
 const extractXTwitterMedia = (html: string): XTwitterMedia[] => {
   const normalizedHtml = decodeHtml(html)

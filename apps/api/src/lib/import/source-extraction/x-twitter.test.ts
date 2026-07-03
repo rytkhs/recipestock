@@ -173,6 +173,33 @@ describe("X/Twitter source extraction adapter", () => {
     );
   });
 
+  it("NoteTweet本文がある場合はmeta descriptionより長い本文を抽出する", async () => {
+    const result = await xTwitterSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createPage(
+            CANONICAL_URL,
+            createXTwitterHtml({
+              description: "ゆで卵を作るすべての人が知っておいて損のないテクニックです",
+              body: [
+                "<script>",
+                '"client:tweet:note_tweet":$R[69]={__typename:"NoteTweetData",is_expandable:!0,note_tweet_results:$R[70]={__ref:"note-results"}},',
+                '"note-results":$R[71]={__typename:"NoteTweetResults",result:$R[72]={__ref:"note"}},',
+                '"note":$R[73]={__typename:"NoteTweet",text:"ゆで卵を作るすべての人が知っておいて損のないテクニックです\\n\\n\\u2460沸騰したたっぷりのお湯に冷蔵庫から出したての冷たい卵を入れる\\n\\u2461弱火か強火にしたら好みの分数でタイマーをセットする\\nちなみに僕は7分〜8分が味玉に最適"}',
+                "</script>",
+              ].join(""),
+            }),
+          ),
+        ),
+      }),
+    );
+
+    expect(result.input.markdownContent).toContain(
+      "①沸騰したたっぷりのお湯に冷蔵庫から出したての冷たい卵を入れる",
+    );
+    expect(result.input.markdownContent).toContain("ちなみに僕は7分〜8分が味玉に最適");
+  });
+
   it("1画像postではcoverとsourceMediaへ同じ画像を配置する", async () => {
     const imageUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg?format=jpg&name=large";
     const result = await xTwitterSourceExtractionAdapter.extract(
