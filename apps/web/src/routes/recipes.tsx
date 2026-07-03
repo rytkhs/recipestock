@@ -10,18 +10,18 @@ import {
   Trash,
   X,
 } from "@phosphor-icons/react";
-import {
-  type CreateRecipeResponse,
-  type DeleteRecipeResponse,
-  type GetRecipeResponse,
-  type ImportJobSummary,
-  type ListRecipesResponse,
-  type RecentImportJobsResponse,
-  type UpdateRecipeResponse,
-} from "@recipestock/schemas";
+import { type ListRecipesResponse } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  dismissFinishedImportJob,
+  fetchRecentImportJobs,
+  getImportJobFailureMessage,
+  hasActiveImportJob,
+  importJobQueryKeys,
+  retryImportUrlJob,
+} from "../features/import-jobs";
 import {
   createEmptyRecipeDraftFormValues,
   formValuesToCreateRecipeRequest,
@@ -30,161 +30,42 @@ import {
   type RecipeDraftFormValues,
   recipeDetailToFormValues,
 } from "../features/recipe-draft";
-import { recipesQueryKeys } from "../features/recipes";
-import { ApiClientError, api, parseApiResponse } from "../lib/api";
-
-const postRecipe = async (values: RecipeDraftFormValues) => {
-  return parseApiResponse<CreateRecipeResponse>(
-    api.api.recipes.$post({
-      json: formValuesToCreateRecipeRequest(values),
-    }),
-  );
-};
-
-const putRecipe = async (recipeId: string, values: RecipeDraftFormValues) => {
-  return parseApiResponse<UpdateRecipeResponse>(
-    fetch(`/api/recipes/${encodeURIComponent(recipeId)}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content: formValuesToRecipeDraftContent(values) }),
-    }),
-  );
-};
-
-const deleteRecipe = async (recipeId: string) => {
-  return parseApiResponse<DeleteRecipeResponse>(
-    fetch(`/api/recipes/${encodeURIComponent(recipeId)}`, {
-      method: "DELETE",
-      credentials: "include",
-    }),
-  );
-};
-
-const recipeMutationErrorMessage = (error: unknown, fallback: string) => {
-  if (!(error instanceof ApiClientError)) {
-    return fallback;
-  }
-
-  if (error.code === "recipe_limit_exceeded") {
-    return "保存できるレシピ数の上限に達しています。";
-  }
-
-  if (error.code === "image_finalize_failed") {
-    return "画像を保存できませんでした。再度アップロードしてください。";
-  }
-
-  return fallback;
-};
-
-const fetchRecipe = async (recipeId: string) => {
-  const body = await parseApiResponse<GetRecipeResponse>(
-    api.api.recipes[":recipeId"].$get({
-      param: { recipeId },
-    }),
-  );
-  return body.recipe;
-};
-
-const fetchRecipes = async ({ cursor, query }: { cursor?: string | null; query?: string }) => {
-  return parseApiResponse<ListRecipesResponse>(
-    api.api.recipes.$get({
-      query: {
-        limit: "20",
-        ...(query ? { q: query } : {}),
-        ...(cursor ? { cursor } : {}),
-      },
-    }),
-  );
-};
-
-const fetchRecentImportJobs = async () =>
-  parseApiResponse<RecentImportJobsResponse>(
-    fetch("/api/import/jobs/recent", {
-      method: "GET",
-      credentials: "include",
-    }),
-  );
-
-const dismissImportJob = async (jobId: string) =>
-  parseApiResponse<{ job: ImportJobSummary }>(
-    fetch(`/api/import/jobs/${encodeURIComponent(jobId)}/dismiss`, {
-      method: "PATCH",
-      credentials: "include",
-    }),
-  );
-
-const createImportUrlJob = async (url: string) =>
-  parseApiResponse<{ job: ImportJobSummary }>(
-    fetch("/api/import/url/jobs", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url }),
-    }),
-  );
-
-const hasActiveImportJob = (jobs: ImportJobSummary[]) =>
-  jobs.some((job) => job.status === "queued" || job.status === "running");
-
-const importJobErrorMessage = (job: ImportJobSummary) => {
-  switch (job.errorCode) {
-    case "invalid_url":
-      return "URLを確認してください。";
-    case "fetch_failed":
-      return "ページを取得できませんでした。";
-    case "unsupported_page":
-      return "このページは取り込みに対応していません。";
-    case "extraction_failed":
-      return "レシピ本文を見つけられませんでした。";
-    case "private_or_login_required":
-      return "この投稿を取得できませんでした。";
-    case "ai_usage_limit_exceeded":
-      return "今月のAI利用回数の上限に達しています。";
-    case "ai_timeout":
-      return "タイムアウトしました。";
-    case "job_timeout":
-      return "取り込み処理が時間内に完了しませんでした。再試行してください。";
-    case "ai_schema_invalid":
-      return "解析結果を保存できませんでした。";
-    case "recipe_limit_exceeded":
-      return "保存できるレシピ数の上限に達しています。";
-    default:
-      return "URLを取り込めませんでした。";
-  }
-};
+import {
+  createRecipe,
+  deleteRecipe,
+  getRecipe,
+  invalidateRecipeLists,
+  listRecipes,
+  recipeMutationErrorMessage,
+  recipesQueryKeys,
+  removeRecipeDetail,
+  updateRecipe,
+} from "../features/recipes";
 
 const ImportJobBanner = () => {
   const queryClient = useQueryClient();
   const { data } = useQuery({
-    queryKey: ["importJobs", "recent"],
+    queryKey: importJobQueryKeys.recent(),
     queryFn: fetchRecentImportJobs,
     refetchInterval: (query) => (hasActiveImportJob(query.state.data?.jobs ?? []) ? 2500 : false),
   });
   const dismissMutation = useMutation({
-    mutationFn: dismissImportJob,
+    mutationFn: dismissFinishedImportJob,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["importJobs", "recent"] });
+      await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
     },
   });
   const retryMutation = useMutation({
-    mutationFn: async (job: ImportJobSummary) => {
-      if (!job.url) {
-        throw new Error("Import job URL is missing.");
-      }
-
-      await dismissImportJob(job.id);
-      return createImportUrlJob(job.url);
-    },
+    mutationFn: retryImportUrlJob,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["importJobs", "recent"] });
+      await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
     },
   });
   const jobs = data?.jobs ?? [];
 
   useEffect(() => {
     if (jobs.some((job) => job.status === "succeeded")) {
-      void queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      void invalidateRecipeLists(queryClient);
     }
   }, [jobs, queryClient]);
 
@@ -237,7 +118,7 @@ const ImportJobBanner = () => {
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="font-semibold text-brand-danger">
-                  取り込みに失敗しました。{importJobErrorMessage(job)}
+                  取り込みに失敗しました。{getImportJobFailureMessage(job)}
                 </p>
                 <div className="flex gap-2">
                   <Button
@@ -450,7 +331,7 @@ export const RecipesIndexRoute = () => {
   const [loadedPages, setLoadedPages] = useState<ListRecipesResponse[]>([]);
   const { data, error, isFetching, refetch } = useQuery({
     queryKey: recipesQueryKeys.list(query, cursor),
-    queryFn: () => fetchRecipes({ query, cursor }),
+    queryFn: () => listRecipes({ query, cursor }),
   });
   const activePages = cursor ? loadedPages.concat(data ? [data] : []) : data ? [data] : [];
   const recipes = activePages.flatMap((page) => page.items);
@@ -620,8 +501,8 @@ export const NewRecipeRoute = () => {
     setSubmitError(null);
 
     try {
-      const response = await postRecipe(values);
-      await queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      const response = await createRecipe(formValuesToCreateRecipeRequest(values));
+      await invalidateRecipeLists(queryClient);
       await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
     } catch (error) {
       setSubmitError(recipeMutationErrorMessage(error, "レシピを保存できませんでした。"));
@@ -650,8 +531,8 @@ export const RecipeDetailRoute = () => {
   const deleteMutation = useMutation({
     mutationFn: () => deleteRecipe(recipeId),
     onSuccess: async () => {
-      queryClient.removeQueries({ queryKey: recipesQueryKeys.detail(recipeId) });
-      await queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      removeRecipeDetail(queryClient, recipeId);
+      await invalidateRecipeLists(queryClient);
       await navigate({ to: "/recipes" });
     },
   });
@@ -661,7 +542,7 @@ export const RecipeDetailRoute = () => {
     isLoading,
   } = useQuery({
     queryKey: recipesQueryKeys.detail(recipeId),
-    queryFn: () => fetchRecipe(recipeId),
+    queryFn: () => getRecipe(recipeId),
   });
   const lightboxImages = useMemo<RecipeLightboxImage[]>(() => {
     if (!recipe || recipe.locked) {
@@ -1016,23 +897,24 @@ export const EditRecipeRoute = () => {
     isLoading,
   } = useQuery({
     queryKey: recipesQueryKeys.detail(recipeId),
-    queryFn: () => fetchRecipe(recipeId),
+    queryFn: () => getRecipe(recipeId),
   });
 
   const onSubmit = async (values: RecipeDraftFormValues) => {
     setSubmitError(null);
 
-    let response: UpdateRecipeResponse;
+    let updatedRecipeId: string;
     try {
-      response = await putRecipe(recipeId, values);
+      const response = await updateRecipe(recipeId, formValuesToRecipeDraftContent(values));
+      updatedRecipeId = response.recipe.id;
     } catch (error) {
       setSubmitError(recipeMutationErrorMessage(error, "レシピを更新できませんでした。"));
       return;
     }
 
-    void queryClient.invalidateQueries({ queryKey: ["recipes"] });
-    queryClient.removeQueries({ queryKey: recipesQueryKeys.detail(recipeId) });
-    await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
+    void invalidateRecipeLists(queryClient);
+    removeRecipeDetail(queryClient, recipeId);
+    await navigate({ to: "/recipes/$recipeId", params: { recipeId: updatedRecipeId } });
   };
 
   if (isLoading) {
