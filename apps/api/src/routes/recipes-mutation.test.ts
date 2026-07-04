@@ -16,7 +16,7 @@ const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
   title: "Tomato pasta",
   content: {
     title: "Tomato pasta",
-    sourceMedia: [],
+    referenceImages: [],
     ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
     steps: [{ text: "煮詰める", images: [] }],
   },
@@ -320,7 +320,7 @@ describe("Recipe mutation routes", () => {
       content: {
         title: "Tomato pasta",
         coverImage: recipeImage("recipes/user_123/recipe_123/old-cover.webp"),
-        sourceMedia: [recipeImage("recipes/user_123/recipe_123/old-source.webp")],
+        referenceImages: [recipeImage("recipes/user_123/recipe_123/old-source.webp")],
         ingredientGroups: [],
         steps: [
           {
@@ -438,7 +438,7 @@ describe("Recipe mutation routes", () => {
       content: {
         title: "Tomato pasta",
         coverImage: recipeImage("recipes/user_123/recipe_123/old-cover.webp"),
-        sourceMedia: [],
+        referenceImages: [],
         ingredientGroups: [],
         steps: [
           {

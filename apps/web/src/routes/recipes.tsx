@@ -514,7 +514,6 @@ export const NewRecipeRoute = () => {
       <h1 className="text-brand-ink font-bold text-2xl">レシピ作成</h1>
       <RecipeDraftForm
         defaultValues={createEmptyRecipeDraftFormValues()}
-        showSourceMediaInput={false}
         submitError={submitError}
         submitLabel="保存"
         onSubmit={onSubmit}
@@ -561,15 +560,15 @@ export const RecipeDetailRoute = () => {
       });
     }
 
-    recipe.content.sourceMedia?.forEach((image, imageIndex) => {
+    recipe.content.referenceImages?.forEach((image, imageIndex) => {
       if (!image.url) {
         return;
       }
 
       images.push({
-        alt: `投稿画像${imageIndex + 1}`,
+        alt: `レシピ画像${imageIndex + 1}`,
         height: image.height,
-        id: `source:${image.objectKey}`,
+        id: `reference:${image.objectKey}`,
         url: image.url,
         width: image.width,
       });
@@ -644,7 +643,7 @@ export const RecipeDetailRoute = () => {
     );
   }
 
-  const sourceMedia = recipe.content.sourceMedia ?? [];
+  const referenceImages = recipe.content.referenceImages ?? [];
   const shouldShowIngredientsSection =
     Boolean(recipe.content.yieldText) || recipe.content.ingredientGroups.length > 0;
   const coverImageId = recipe.content.coverImage
@@ -734,20 +733,20 @@ export const RecipeDetailRoute = () => {
         </div>
       ) : null}
 
-      {sourceMedia.some((image) => image.url) ? (
+      {referenceImages.some((image) => image.url) ? (
         <section className="mt-8">
-          <h2 className="text-brand-walnut font-bold text-lg">投稿画像</h2>
+          <h2 className="text-brand-walnut font-bold text-lg">レシピ画像</h2>
           <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2">
-            {sourceMedia.map((image, imageIndex) =>
+            {referenceImages.map((image, imageIndex) =>
               image.url ? (
                 <RecipeImageZoomButton
-                  alt={`投稿画像${imageIndex + 1}`}
+                  alt={`レシピ画像${imageIndex + 1}`}
                   className="grid aspect-[4/5] w-[min(78vw,320px)] shrink-0 snap-start place-items-center overflow-hidden rounded-[14px] bg-brand-paper-muted shadow-pantry-sm sm:w-64"
                   key={image.objectKey}
-                  onOpen={() => openLightbox(`source:${image.objectKey}`)}
+                  onOpen={() => openLightbox(`reference:${image.objectKey}`)}
                 >
                   <img
-                    alt={`投稿画像${imageIndex + 1}`}
+                    alt={`レシピ画像${imageIndex + 1}`}
                     className="h-full w-full object-contain"
                     height={image.height}
                     src={image.url}
@@ -936,8 +935,7 @@ export const EditRecipeRoute = () => {
     );
   }
 
-  const sourceMedia = recipe.content.sourceMedia ?? [];
-  const showSourceMediaInput = sourceMedia.some((image) => image.url);
+  const referenceImages = recipe.content.referenceImages ?? [];
 
   return (
     <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
@@ -946,8 +944,7 @@ export const EditRecipeRoute = () => {
         key={recipe.id}
         coverImagePreviewUrl={recipe.content.coverImage?.url}
         defaultValues={recipeDetailToFormValues(recipe)}
-        showSourceMediaInput={showSourceMediaInput}
-        sourceMediaPreviewUrls={sourceMedia.map((image) => image.url ?? "")}
+        referenceImagePreviewUrls={referenceImages.map((image) => image.url ?? "")}
         submitError={submitError}
         submitLabel="更新"
         stepImagePreviewUrls={recipe.content.steps.map((step) =>

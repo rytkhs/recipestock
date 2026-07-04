@@ -94,7 +94,7 @@ describe("YouTube source extraction adapter", () => {
       ],
       imagePlacement: {
         coverImageUrl: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
-        sourceMediaUrls: [],
+        referenceImageUrls: [],
       },
       source: {
         sourceUrl: CANONICAL_URL,
@@ -132,7 +132,7 @@ describe("YouTube source extraction adapter", () => {
     expect(result.input.markdownContent).not.toContain("hqdefault.jpg");
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://i.ytimg.com/vi/FyLCRXMANAM/hqdefault.jpg",
-      sourceMediaUrls: [],
+      referenceImageUrls: [],
     });
   });
 

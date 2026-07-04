@@ -169,7 +169,7 @@ describe("Instagram source extraction adapter", () => {
       ],
       imagePlacement: {
         coverImageUrl: "https://cdn.example.com/cover.jpg",
-        sourceMediaUrls: ["https://cdn.example.com/cover.jpg"],
+        referenceImageUrls: ["https://cdn.example.com/cover.jpg"],
       },
       source: {
         sourceUrl: CANONICAL_URL,
@@ -209,11 +209,11 @@ describe("Instagram source extraction adapter", () => {
     );
     expect(result.imageCandidates).toEqual([]);
     expect(result.imagePlacement).toEqual({
-      sourceMediaUrls: [],
+      referenceImageUrls: [],
     });
   });
 
-  it("carouselの画像childを順序通りsourceMediaへ追加する", async () => {
+  it("carouselの画像childを順序通りreferenceImagesへ追加する", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
         fetchHtml: createFetchHtml(
@@ -245,14 +245,14 @@ describe("Instagram source extraction adapter", () => {
     ]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/sidecar-1.jpg",
-      sourceMediaUrls: [
+      referenceImageUrls: [
         "https://cdn.example.com/sidecar-1.jpg",
         "https://cdn.example.com/sidecar-2.jpg",
       ],
     });
   });
 
-  it("mixed carouselでは動画childをsourceMediaとimageCandidatesから除外して先頭動画coverをcoverにする", async () => {
+  it("mixed carouselでは動画childをreferenceImagesとimageCandidatesから除外して先頭動画coverをcoverにする", async () => {
     const result = await instagramSourceExtractionAdapter.extract(
       createContext({
         fetchHtml: createFetchHtml(
@@ -278,7 +278,7 @@ describe("Instagram source extraction adapter", () => {
     ]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/video-cover.jpg",
-      sourceMediaUrls: [
+      referenceImageUrls: [
         "https://cdn.example.com/sidecar-1.jpg",
         "https://cdn.example.com/sidecar-2.jpg",
       ],
@@ -304,7 +304,7 @@ describe("Instagram source extraction adapter", () => {
     expect(result.imageCandidates).toEqual([]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/reel-cover.jpg",
-      sourceMediaUrls: [],
+      referenceImageUrls: [],
     });
   });
 
@@ -325,7 +325,7 @@ describe("Instagram source extraction adapter", () => {
     expect(result.imageCandidates).toEqual([]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: "https://cdn.example.com/video-cover.jpg",
-      sourceMediaUrls: [],
+      referenceImageUrls: [],
     });
   });
 

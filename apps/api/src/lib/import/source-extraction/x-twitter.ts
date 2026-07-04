@@ -111,7 +111,7 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
     const imageUrls = media.filter((item) => item.kind === "image").map((item) => item.url);
     const firstVideoThumbnail = media.find((item) => item.kind === "videoThumbnail")?.url;
     const coverImageUrl = imageUrls[0] ?? firstVideoThumbnail;
-    const sourceMediaUrls = imageUrls.length > 0 ? imageUrls : [];
+    const referenceImageUrls = imageUrls.length > 0 ? imageUrls : [];
 
     return {
       promptProfile: "social",
@@ -123,11 +123,11 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
         markdownContent: buildXTwitterMarkdownContent(postText),
       },
       imageCandidates,
-      ...(coverImageUrl || sourceMediaUrls.length > 0
+      ...(coverImageUrl || referenceImageUrls.length > 0
         ? {
             imagePlacement: {
               ...(coverImageUrl ? { coverImageUrl } : {}),
-              sourceMediaUrls,
+              referenceImageUrls,
             },
           }
         : {}),

@@ -200,7 +200,7 @@ describe("X/Twitter source extraction adapter", () => {
     expect(result.input.markdownContent).toContain("ちなみに僕は7分〜8分が味玉に最適");
   });
 
-  it("1画像postではcoverとsourceMediaへ同じ画像を配置する", async () => {
+  it("1画像postではcoverとreferenceImagesへ同じ画像を配置する", async () => {
     const imageUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg?format=jpg&name=large";
     const result = await xTwitterSourceExtractionAdapter.extract(
       createContext({
@@ -226,12 +226,12 @@ describe("X/Twitter source extraction adapter", () => {
     ]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: imageUrl,
-      sourceMediaUrls: [imageUrl],
+      referenceImageUrls: [imageUrl],
     });
     expect(result.input.markdownContent).not.toContain(imageUrl);
   });
 
-  it("複数画像postではHTML出現順でsourceMediaへ配置する", async () => {
+  it("複数画像postではHTML出現順でreferenceImagesへ配置する", async () => {
     const imageUrls = [
       "https://pbs.twimg.com/media/HLzmmXCa0AEoiJK.jpg",
       "https://pbs.twimg.com/media/HLzmmW9bcAAOZMT.jpg",
@@ -255,7 +255,7 @@ describe("X/Twitter source extraction adapter", () => {
     expect(result.imageCandidates.map((candidate) => candidate.url)).toEqual(imageUrls);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: imageUrls[0],
-      sourceMediaUrls: imageUrls,
+      referenceImageUrls: imageUrls,
     });
   });
 
@@ -284,7 +284,7 @@ describe("X/Twitter source extraction adapter", () => {
     ]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: largeUrl,
-      sourceMediaUrls: [largeUrl, secondImageUrl],
+      referenceImageUrls: [largeUrl, secondImageUrl],
     });
   });
 
@@ -309,7 +309,7 @@ describe("X/Twitter source extraction adapter", () => {
     expect(result.imageCandidates.map((candidate) => candidate.url)).toEqual([largeUrl]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: largeUrl,
-      sourceMediaUrls: [largeUrl],
+      referenceImageUrls: [largeUrl],
     });
   });
 
@@ -317,7 +317,7 @@ describe("X/Twitter source extraction adapter", () => {
     "amplify_video_thumb",
     "ext_tw_video_thumb",
     "tweet_video_thumb",
-  ])("動画postでは%s thumbnailをcoverにしsourceMediaへ配置しない", async (thumbnailPrefix) => {
+  ])("動画postでは%s thumbnailをcoverにしreferenceImagesへ配置しない", async (thumbnailPrefix) => {
     const thumbnailUrl = `https://pbs.twimg.com/${thumbnailPrefix}/2070/img/abc.jpg`;
     const videoUrl = "https://video.twimg.com/amplify_video/2070/vid/avc1/720x1280/abc.mp4";
 
@@ -345,7 +345,7 @@ describe("X/Twitter source extraction adapter", () => {
     ]);
     expect(result.imagePlacement).toEqual({
       coverImageUrl: thumbnailUrl,
-      sourceMediaUrls: [],
+      referenceImageUrls: [],
     });
   });
 

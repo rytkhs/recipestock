@@ -63,7 +63,7 @@ type InstagramEmbedProjection = {
   caption: string;
   imageCandidates: RecipeImportImageCandidate[];
   coverImageUrl?: string;
-  sourceMediaUrls: string[];
+  referenceImageUrls: string[];
 };
 
 export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
@@ -118,7 +118,7 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
       imageCandidates: projection.imageCandidates,
       imagePlacement: {
         ...(projection.coverImageUrl ? { coverImageUrl: projection.coverImageUrl } : {}),
-        sourceMediaUrls: projection.sourceMediaUrls,
+        referenceImageUrls: projection.referenceImageUrls,
       },
       source: {
         sourceUrl: source.canonicalUrl,
@@ -230,7 +230,7 @@ const projectInstagramEmbedMedia = (
   const children = getInstagramMediaChildren(media);
   const displayNodes = children.length > 0 ? children : [media];
   const coverImageUrl = selectBestDisplayImage(displayNodes[0]);
-  const sourceMediaNodes =
+  const referenceImagesNodes =
     source.mediaKind === "reel"
       ? []
       : children.length > 0
@@ -238,8 +238,8 @@ const projectInstagramEmbedMedia = (
         : isInstagramVideoNode(media)
           ? []
           : [media];
-  const sourceMediaUrls = uniqueUrls(sourceMediaNodes.map(selectBestDisplayImage));
-  const imageCandidates = buildInstagramImageCandidates(sourceMediaUrls, title);
+  const referenceImageUrls = uniqueUrls(referenceImagesNodes.map(selectBestDisplayImage));
+  const imageCandidates = buildInstagramImageCandidates(referenceImageUrls, title);
 
   return {
     title,
@@ -247,7 +247,7 @@ const projectInstagramEmbedMedia = (
     caption,
     imageCandidates,
     ...(coverImageUrl ? { coverImageUrl } : {}),
-    sourceMediaUrls,
+    referenceImageUrls,
   };
 };
 

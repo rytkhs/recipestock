@@ -1,6 +1,6 @@
 import {
   draftImageRefSchema,
-  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
@@ -8,11 +8,11 @@ import { z } from "zod";
 
 const countRecipeDraftFormImages = (values: {
   coverImage?: unknown;
-  sourceMedia?: unknown[];
+  referenceImages?: unknown[];
   steps?: { images?: unknown[] }[];
 }) =>
   (values.coverImage ? 1 : 0) +
-  (values.sourceMedia?.length ?? 0) +
+  (values.referenceImages?.length ?? 0) +
   (values.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
 export const recipeDraftFormSchema = z
@@ -20,7 +20,7 @@ export const recipeDraftFormSchema = z
     title: z.string().min(1),
     yieldText: z.string().optional(),
     coverImage: draftImageRefSchema.optional(),
-    sourceMedia: z.array(draftImageRefSchema).max(MAX_RECIPE_SOURCE_MEDIA_IMAGES),
+    referenceImages: z.array(draftImageRefSchema).max(MAX_RECIPE_REFERENCE_IMAGES),
     note: z.string().optional(),
     ingredientGroups: z.array(
       z.object({
@@ -62,7 +62,7 @@ export const createEmptyStep = () => ({ text: "", images: [] });
 export const createEmptyRecipeDraftFormValues = (): RecipeDraftFormValues => ({
   title: "",
   yieldText: "",
-  sourceMedia: [],
+  referenceImages: [],
   note: "",
   ingredientGroups: [createEmptyIngredientGroup()],
   steps: [createEmptyStep()],

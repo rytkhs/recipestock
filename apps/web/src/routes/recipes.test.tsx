@@ -1,5 +1,5 @@
 import {
-  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
@@ -483,6 +483,7 @@ describe("RecipesRoute", () => {
     const coverImageInput = await screen.findByLabelText("カバー画像");
     const titleInput = screen.getByLabelText("タイトル");
     const yieldInput = screen.getByLabelText("できあがり量");
+    const referenceImageInput = screen.getByLabelText("レシピ画像");
     const ingredientNameInput = screen.getByLabelText("材料名");
     expect(
       coverImageInput.compareDocumentPosition(titleInput) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -493,7 +494,13 @@ describe("RecipesRoute", () => {
     expect(
       yieldInput.compareDocumentPosition(ingredientNameInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.queryByLabelText("投稿画像")).not.toBeInTheDocument();
+    expect(
+      yieldInput.compareDocumentPosition(referenceImageInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      referenceImageInput.compareDocumentPosition(ingredientNameInput) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
     await userEvent.type(screen.getByLabelText("できあがり量"), "2人分");
@@ -533,7 +540,7 @@ describe("RecipesRoute", () => {
     expect(screen.getByText("煮詰める")).toBeInTheDocument();
   });
 
-  it("新規レシピでカバー画像と手順画像をアップロードして保存できる", async () => {
+  it("新規レシピでカバー画像、レシピ画像、手順画像をアップロードして保存できる", async () => {
     const recipeResponse = {
       recipe: {
         id: "recipe_123",
@@ -544,6 +551,12 @@ describe("RecipesRoute", () => {
             "recipes/user_123/recipe_123/cover.webp",
             "https://images.example/cover.webp",
           ),
+          referenceImages: [
+            savedImage(
+              "recipes/user_123/recipe_123/reference.webp",
+              "https://images.example/reference.webp",
+            ),
+          ],
           ingredientGroups: [],
           steps: [
             {
@@ -576,8 +589,11 @@ describe("RecipesRoute", () => {
           uploadUrlRequests += 1;
           return jsonResponse({
             uploadUrl: `https://upload.example/${uploadUrlRequests}`,
-            objectKey:
-              uploadUrlRequests === 1 ? "tmp/user_123/cover.webp" : "tmp/user_123/step.webp",
+            objectKey: [
+              "tmp/user_123/cover.webp",
+              "tmp/user_123/reference.webp",
+              "tmp/user_123/step.webp",
+            ][uploadUrlRequests - 1],
             expiresAt: "2026-05-31T00:15:00.000Z",
           });
         }
@@ -606,12 +622,17 @@ describe("RecipesRoute", () => {
       screen.getByLabelText("カバー画像"),
       new File(["cover"], "cover.webp", { type: "image/webp" }),
     );
+    await userEvent.upload(
+      screen.getByLabelText("レシピ画像"),
+      new File(["reference"], "reference.webp", { type: "image/webp" }),
+    );
     await userEvent.type(screen.getByLabelText("手順"), "煮詰める");
     await userEvent.upload(
       screen.getByLabelText("手順1の画像"),
       new File(["step"], "step.webp", { type: "image/webp" }),
     );
     await screen.findByAltText("カバー画像プレビュー");
+    await screen.findByAltText("レシピ画像1プレビュー");
     await screen.findByAltText("手順1の画像1プレビュー");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
@@ -628,6 +649,7 @@ describe("RecipesRoute", () => {
     expect(JSON.parse(String(createRecipeCall?.[1]?.body))).toMatchObject({
       content: {
         coverImage: { type: "tmpObjectKey", key: "tmp/user_123/cover.webp" },
+        referenceImages: [{ type: "tmpObjectKey", key: "tmp/user_123/reference.webp" }],
         steps: [
           {
             text: "煮詰める",
@@ -642,6 +664,10 @@ describe("RecipesRoute", () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "https://upload.example/2",
+      expect.objectContaining({ method: "PUT" }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://upload.example/3",
       expect.objectContaining({ method: "PUT" }),
     );
   });
@@ -765,7 +791,7 @@ describe("RecipesRoute", () => {
                   "recipes/user_123/recipe_123/cover.webp",
                   "https://images.example/cover.webp",
                 ),
-                sourceMedia: [
+                referenceImages: [
                   savedImage(
                     "recipes/user_123/recipe_123/source-1.webp",
                     "https://images.example/source-1.webp",
@@ -823,12 +849,12 @@ describe("RecipesRoute", () => {
     expect(coverImage).toHaveAttribute("height", "800");
     expect(coverImage).toHaveStyle({ aspectRatio: "1200 / 800" });
     expect(screen.getByRole("button", { name: "Tomato pastaを拡大" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "投稿画像" })).toBeInTheDocument();
-    expect(screen.getByAltText("投稿画像1")).toHaveAttribute(
+    expect(screen.getByRole("heading", { name: "レシピ画像" })).toBeInTheDocument();
+    expect(screen.getByAltText("レシピ画像1")).toHaveAttribute(
       "src",
       "https://images.example/source-1.webp",
     );
-    expect(screen.getByAltText("投稿画像2")).toHaveAttribute(
+    expect(screen.getByAltText("レシピ画像2")).toHaveAttribute(
       "src",
       "https://images.example/source-2.webp",
     );
@@ -840,7 +866,7 @@ describe("RecipesRoute", () => {
     expect(screen.queryByAltText("手順2の画像1")).not.toBeInTheDocument();
   });
 
-  it("詳細画面で投稿画像がなければ投稿画像セクションを表示しない", async () => {
+  it("詳細画面でレシピ画像がなければレシピ画像セクションを表示しない", async () => {
     mockFetch(
       async (input) => {
         if (getRequestPath(input) === "/api/recipes/recipe_123") {
@@ -850,7 +876,7 @@ describe("RecipesRoute", () => {
               title: "Tomato pasta",
               content: {
                 title: "Tomato pasta",
-                sourceMedia: [],
+                referenceImages: [],
                 ingredientGroups: [],
                 steps: [{ text: "煮詰める", images: [] }],
               },
@@ -876,7 +902,7 @@ describe("RecipesRoute", () => {
     await expect(
       screen.findByRole("heading", { name: "Tomato pasta" }),
     ).resolves.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "投稿画像" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "レシピ画像" })).not.toBeInTheDocument();
   });
 
   it("ロック中Recipe詳細に直接アクセスしても本文と編集リンクを表示しない", async () => {
@@ -1251,14 +1277,14 @@ describe("RecipesRoute", () => {
     });
   });
 
-  it("編集画面で投稿画像がなければ投稿画像入力を表示しない", async () => {
+  it("編集画面でレシピ画像がなくてもレシピ画像入力を表示する", async () => {
     const recipeResponse = {
       recipe: {
         id: "recipe_123",
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          sourceMedia: [],
+          referenceImages: [],
           ingredientGroups: [],
           steps: [{ text: "煮詰める", images: [] }],
         },
@@ -1286,10 +1312,10 @@ describe("RecipesRoute", () => {
     await renderApp("/recipes/recipe_123/edit");
 
     await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
-    expect(screen.queryByLabelText("投稿画像")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("レシピ画像")).toBeInTheDocument();
   });
 
-  it("編集画面で投稿画像上限に達したら投稿画像追加を無効にする", async () => {
+  it("編集画面でレシピ画像上限に達したらレシピ画像追加を無効にする", async () => {
     mockFetch(
       async (input) => {
         if (getRequestPath(input) === "/api/recipes/recipe_123") {
@@ -1299,7 +1325,7 @@ describe("RecipesRoute", () => {
               title: "Tomato pasta",
               content: {
                 title: "Tomato pasta",
-                sourceMedia: savedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES, "source"),
+                referenceImages: savedImages(MAX_RECIPE_REFERENCE_IMAGES, "source"),
                 ingredientGroups: [],
                 steps: [{ text: "煮詰める", images: [] }],
               },
@@ -1323,7 +1349,7 @@ describe("RecipesRoute", () => {
     await renderApp("/recipes/recipe_123/edit");
 
     await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
-    expect(screen.getByLabelText("投稿画像")).toBeDisabled();
+    expect(screen.getByLabelText("レシピ画像")).toBeDisabled();
     expect(screen.getByText("上限に達しました")).toBeInTheDocument();
     expect(screen.getByLabelText("手順1の画像")).not.toBeDisabled();
   });
@@ -1369,7 +1395,7 @@ describe("RecipesRoute", () => {
     expect(screen.getByText("上限に達しました")).toBeInTheDocument();
   });
 
-  it("編集画面で全体画像上限に達したら投稿画像と手順画像追加を無効にしカバー画像変更は許可する", async () => {
+  it("編集画面で全体画像上限に達したらレシピ画像と手順画像追加を無効にしカバー画像変更は許可する", async () => {
     mockFetch(
       async (input) => {
         if (getRequestPath(input) === "/api/recipes/recipe_123") {
@@ -1383,10 +1409,10 @@ describe("RecipesRoute", () => {
                   "recipes/user_123/recipe_123/cover.webp",
                   "https://images.example/cover.webp",
                 ),
-                sourceMedia: savedImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES, "source"),
+                referenceImages: savedImages(MAX_RECIPE_REFERENCE_IMAGES, "source"),
                 ingredientGroups: [],
                 steps: savedStepsWithImages(
-                  MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+                  MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_REFERENCE_IMAGES,
                   "step",
                 ),
               },
@@ -1411,19 +1437,19 @@ describe("RecipesRoute", () => {
 
     await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
     expect(screen.getByLabelText("カバー画像")).not.toBeDisabled();
-    expect(screen.getByLabelText("投稿画像")).toBeDisabled();
+    expect(screen.getByLabelText("レシピ画像")).toBeDisabled();
     expect(screen.getByLabelText("手順1の画像")).toBeDisabled();
     expect(screen.getAllByText("上限に達しました").length).toBeGreaterThan(1);
   });
 
-  it("編集画面で投稿画像を削除して保存できる", async () => {
+  it("編集画面でレシピ画像を削除して保存できる", async () => {
     const recipeResponse = {
       recipe: {
         id: "recipe_123",
         title: "Tomato pasta",
         content: {
           title: "Tomato pasta",
-          sourceMedia: [
+          referenceImages: [
             savedImage(
               "recipes/user_123/recipe_123/source-a.webp",
               "https://images.example/source-a.webp",
@@ -1463,9 +1489,9 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123/edit");
 
-    const firstPreview = await screen.findByAltText("投稿画像1プレビュー");
+    const firstPreview = await screen.findByAltText("レシピ画像1プレビュー");
     expect(firstPreview).toHaveAttribute("src", "https://images.example/source-a.webp");
-    expect(screen.getByAltText("投稿画像2プレビュー")).toHaveAttribute(
+    expect(screen.getByAltText("レシピ画像2プレビュー")).toHaveAttribute(
       "src",
       "https://images.example/source-b.webp",
     );
@@ -1473,7 +1499,7 @@ describe("RecipesRoute", () => {
     const firstPreviewCard = firstPreview.closest(".group");
     expect(firstPreviewCard).not.toBeNull();
     await userEvent.click(
-      within(firstPreviewCard as HTMLElement).getByRole("button", { name: "投稿画像1を削除" }),
+      within(firstPreviewCard as HTMLElement).getByRole("button", { name: "レシピ画像1を削除" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "更新" }));
 
@@ -1492,7 +1518,7 @@ describe("RecipesRoute", () => {
     );
     expect(JSON.parse(String(updateRecipeCall?.[1]?.body))).toMatchObject({
       content: {
-        sourceMedia: [
+        referenceImages: [
           {
             type: "existingObjectKey",
             key: "recipes/user_123/recipe_123/source-b.webp",

@@ -4,7 +4,7 @@ TikTok など、Worker の通常 fetch だけでは投稿本文、caption、desc
 
 Worker 本体には `yt-dlp` と Python 実行環境を入れず、`yt-dlp` が必要な SNS adapter は URL 正規化と `yt-dlp` metadata から `RecipeImportAIInput` への変換だけを担当します。container と client の interface は platform を受け取る `yt-dlp` metadata source extraction として設計します。
 
-Instagram adapter は `yt-dlp` metadata service の対象外にします。Instagram は canonical URL の `embed/` HTML を Worker から直接 fetch し、`contextJSON.gql_data.shortcode_media` から caption、author、display images、carousel children を抽出します。単一画像投稿と carousel の画像は `sourceMediaUrls` と `imageCandidates` に配置し、Reel と動画投稿は cover image だけを `coverImageUrl` に配置します。
+Instagram adapter は `yt-dlp` metadata service の対象外にします。Instagram は canonical URL の `embed/` HTML を Worker から直接 fetch し、`contextJSON.gql_data.shortcode_media` から caption、author、display images、carousel children を抽出します。単一画像投稿と carousel の画像は `referenceImageUrls` と `imageCandidates` に配置し、Reel と動画投稿は cover image だけを `coverImageUrl` に配置します。
 
 Twitter/X は public SSR HTML の `og:description`、`NoteTweet` text、`pbs.twimg.com` media URL から投稿本文と画像候補を抽出できるため、`yt-dlp` metadata source extraction の対象外にします。X/Twitter adapter は X API、Browser Rendering、`yt-dlp` を使わず、direct HTML fetch の結果だけを処理します。
 

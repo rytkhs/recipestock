@@ -61,7 +61,7 @@ describe("Recipe create routes", () => {
         content: {
           title: "Tomato pasta",
           ingredientGroups: [],
-          sourceMedia: [],
+          referenceImages: [],
           steps: [],
         },
         source: {
@@ -682,7 +682,7 @@ describe("Recipe create routes", () => {
     });
   });
 
-  it("同じ外部画像URLをcoverと投稿画像で共有して保存する", async () => {
+  it("同じ外部画像URLをcoverとレシピ画像で共有して保存する", async () => {
     const externalCopies: unknown[] = [];
     const savedRecipes: unknown[] = [];
     const testApp = createApp({
@@ -742,7 +742,7 @@ describe("Recipe create routes", () => {
               type: "externalImageUrl",
               url: "https://cdn.example.com/source.jpg",
             },
-            sourceMedia: [
+            referenceImages: [
               {
                 type: "externalImageUrl",
                 url: "https://cdn.example.com/source.jpg",
@@ -772,7 +772,7 @@ describe("Recipe create routes", () => {
             width: 1200,
             height: 800,
           },
-          sourceMedia: [
+          referenceImages: [
             {
               objectKey: "recipes/user_123/recipe_123/shared.jpg",
               width: 1200,

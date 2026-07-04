@@ -54,7 +54,7 @@ describe("Recipe detail routes", () => {
           content: {
             title: "Tomato pasta",
             yieldText: "2人分",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
             steps: [{ text: "煮詰める", images: [] }],
             note: "仕上げにオリーブオイル。",
@@ -117,7 +117,7 @@ describe("Recipe detail routes", () => {
               width: 1200,
               height: 800,
             },
-            sourceMedia: [
+            referenceImages: [
               {
                 objectKey: "recipes/user_123/recipe_123/source.webp",
                 width: 1080,
@@ -180,7 +180,7 @@ describe("Recipe detail routes", () => {
             height: 800,
             url: "https://images.example/recipes/user_123/recipe_123/cover.webp",
           },
-          sourceMedia: [
+          referenceImages: [
             {
               objectKey: "recipes/user_123/recipe_123/source.webp",
               width: 1080,
@@ -224,7 +224,7 @@ describe("Recipe detail routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [],
             steps: [
               {
@@ -326,7 +326,7 @@ describe("Recipe detail routes", () => {
           title: "Locked pasta",
           content: {
             title: "Locked pasta",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [{ ingredients: [{ name: "秘密の材料", amount: "1つ" }] }],
             steps: [{ text: "煮る", images: [] }],
           },

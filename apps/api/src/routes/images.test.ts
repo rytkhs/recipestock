@@ -171,7 +171,7 @@ describe("Image routes", () => {
               width: 1200,
               height: 800,
             },
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [],
             steps: [
               {
@@ -240,7 +240,7 @@ describe("Image routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [],
             steps: [],
           },

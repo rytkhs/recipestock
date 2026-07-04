@@ -144,7 +144,7 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
             } as const,
           }
         : {}),
-      sourceMedia: [],
+      referenceImages: [],
       ingredientGroups,
       steps,
       ...(normalizeText(printExtraction.note) ? { note: normalizeText(printExtraction.note) } : {}),

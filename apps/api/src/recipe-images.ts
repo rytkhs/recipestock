@@ -191,7 +191,7 @@ export const finalizeRecipeDraftImages = async ({
       existingContent
         ? [
             ...(existingContent.coverImage ? [existingContent.coverImage] : []),
-            ...(existingContent.sourceMedia ?? []),
+            ...(existingContent.referenceImages ?? []),
             ...existingContent.steps.flatMap((step) => step.images),
           ].map((image) => [image.objectKey, image] as const)
         : [],
@@ -211,8 +211,8 @@ export const finalizeRecipeDraftImages = async ({
       });
 
     const coverImage = await resolveDraftImage(draft.coverImage);
-    const sourceMedia = (
-      await Promise.all((draft.sourceMedia ?? []).map((image) => resolveDraftImage(image)))
+    const referenceImages = (
+      await Promise.all((draft.referenceImages ?? []).map((image) => resolveDraftImage(image)))
     ).filter((image): image is RecipeImage => Boolean(image));
     const steps: RecipeContent["steps"] = [];
 
@@ -236,7 +236,7 @@ export const finalizeRecipeDraftImages = async ({
         title: draft.title,
         yieldText: draft.yieldText,
         coverImage,
-        sourceMedia,
+        referenceImages,
         ingredientGroups: draft.ingredientGroups,
         steps,
         note: draft.note,
@@ -292,7 +292,7 @@ export const attachRecipeImageUrls = async (
   };
 
   const coverImage = content.coverImage ? await attachImageUrl(content.coverImage) : undefined;
-  const sourceMedia = await Promise.all((content.sourceMedia ?? []).map(attachImageUrl));
+  const referenceImages = await Promise.all((content.referenceImages ?? []).map(attachImageUrl));
   const steps = await Promise.all(
     content.steps.map(async (step) => ({
       ...step,
@@ -303,7 +303,7 @@ export const attachRecipeImageUrls = async (
   return recipeContentWithUrlsSchema.parse({
     ...content,
     coverImage,
-    sourceMedia,
+    referenceImages,
     steps,
   });
 };

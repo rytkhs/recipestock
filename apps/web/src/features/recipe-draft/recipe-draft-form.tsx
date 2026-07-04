@@ -2,7 +2,7 @@ import { Button, Input, Label, ProgressBar, TextArea, TextField } from "@heroui/
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   type DraftImageRef,
-  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
@@ -26,9 +26,8 @@ type RecipeDraftFormProps = {
   defaultValues: RecipeDraftFormValues;
   submitLabel: string;
   submitError?: string | null;
-  showSourceMediaInput?: boolean;
   coverImagePreviewUrl?: string;
-  sourceMediaPreviewUrls?: string[];
+  referenceImagePreviewUrls?: string[];
   stepImagePreviewUrls?: string[][];
   uploadImage?: (file: File) => Promise<DraftImageRef>;
   onSubmit(values: RecipeDraftFormValues): Promise<void> | void;
@@ -67,16 +66,20 @@ const addImagePreviewUrls = (
 
 const createImagePreviewUrlsByImageId = ({
   defaultValues,
-  sourceMediaPreviewUrls,
+  referenceImagePreviewUrls,
   stepImagePreviewUrls,
 }: {
   defaultValues: RecipeDraftFormValues;
-  sourceMediaPreviewUrls?: string[];
+  referenceImagePreviewUrls?: string[];
   stepImagePreviewUrls?: string[][];
 }): ImagePreviewUrlsByImageId => {
   const previewUrlsByImageId: ImagePreviewUrlsByImageId = {};
 
-  addImagePreviewUrls(previewUrlsByImageId, defaultValues.sourceMedia, sourceMediaPreviewUrls);
+  addImagePreviewUrls(
+    previewUrlsByImageId,
+    defaultValues.referenceImages,
+    referenceImagePreviewUrls,
+  );
 
   defaultValues.steps.forEach((step, stepIndex) => {
     addImagePreviewUrls(previewUrlsByImageId, step.images, stepImagePreviewUrls?.[stepIndex]);
@@ -86,13 +89,13 @@ const createImagePreviewUrlsByImageId = ({
 };
 
 const countFormImages = ({
-  sourceMedia,
+  referenceImages,
   steps,
 }: {
-  sourceMedia?: DraftImageRef[];
+  referenceImages?: DraftImageRef[];
   steps?: { images?: DraftImageRef[] }[];
 }) =>
-  (sourceMedia?.length ?? 0) +
+  (referenceImages?.length ?? 0) +
   (steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
 const createLocalPreviewUrl = (file: File) => URL.createObjectURL(file);
@@ -278,7 +281,7 @@ const StepImagesInput = ({
   onUploadStateChange(isUploading: boolean): void;
   previewUrlsByImageId?: ImagePreviewUrlsByImageId;
   uploadImage: (file: File) => Promise<DraftImageRef>;
-  variant?: "sourceMedia" | "step";
+  variant?: "referenceImages" | "step";
 }) => {
   const { field } = useController({ control, name });
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -291,17 +294,17 @@ const StepImagesInput = ({
   const images = field.value ?? [];
 
   localPreviewUrlsByImageIdRef.current = localPreviewUrlsByImageId;
-  const isSourceMedia = variant === "sourceMedia";
-  const imageCardClassName = isSourceMedia
+  const isReferenceImages = variant === "referenceImages";
+  const imageCardClassName = isReferenceImages
     ? "group relative aspect-[4/5] w-[min(70vw,240px)] shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted sm:w-56"
     : "group relative w-40 shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted sm:w-48";
-  const imageFrameClassName = isSourceMedia
+  const imageFrameClassName = isReferenceImages
     ? "grid h-full place-items-center"
     : "grid aspect-square place-items-center";
-  const imageClassName = isSourceMedia
+  const imageClassName = isReferenceImages
     ? "h-full w-full object-contain"
     : "h-full w-full object-cover";
-  const addButtonClassName = isSourceMedia
+  const addButtonClassName = isReferenceImages
     ? "aspect-[4/5] h-auto w-[min(70vw,240px)] shrink-0 snap-start rounded-[14px] border border-dashed border-brand-line-soft bg-brand-paper-muted font-semibold text-brand-walnut sm:w-56"
     : "aspect-square h-auto w-40 shrink-0 snap-start rounded-[14px] border border-dashed border-brand-line-soft bg-brand-paper-muted font-semibold text-brand-walnut sm:w-48";
 
@@ -526,9 +529,8 @@ export const RecipeDraftForm = ({
   defaultValues,
   submitLabel,
   submitError,
-  showSourceMediaInput = true,
   coverImagePreviewUrl,
-  sourceMediaPreviewUrls,
+  referenceImagePreviewUrls,
   stepImagePreviewUrls,
   uploadImage = uploadRecipeImage,
   onSubmit,
@@ -539,24 +541,24 @@ export const RecipeDraftForm = ({
   });
   const ingredientGroups = useFieldArray({ control, name: "ingredientGroups" });
   const steps = useFieldArray({ control, name: "steps" });
-  const watchedSourceMedia = useWatch({ control, name: "sourceMedia" });
+  const watchedReferenceImages = useWatch({ control, name: "referenceImages" });
   const watchedSteps = useWatch({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
   const totalImageCount = countFormImages({
-    sourceMedia: watchedSourceMedia,
+    referenceImages: watchedReferenceImages,
     steps: watchedSteps,
   });
   const isTotalImageLimitReached = totalImageCount >= MAX_RECIPE_TOTAL_IMAGES;
-  const isSourceMediaLimitReached =
-    (watchedSourceMedia?.length ?? 0) >= MAX_RECIPE_SOURCE_MEDIA_IMAGES;
+  const isReferenceImagesLimitReached =
+    (watchedReferenceImages?.length ?? 0) >= MAX_RECIPE_REFERENCE_IMAGES;
   const imagePreviewUrlsByImageId = useMemo(
     () =>
       createImagePreviewUrlsByImageId({
         defaultValues,
-        sourceMediaPreviewUrls,
+        referenceImagePreviewUrls,
         stepImagePreviewUrls,
       }),
-    [defaultValues, sourceMediaPreviewUrls, stepImagePreviewUrls],
+    [defaultValues, referenceImagePreviewUrls, stepImagePreviewUrls],
   );
   const handleFormSubmit = handleSubmit(onSubmit);
   const handleUploadStateChange = (isUploading: boolean) => {
@@ -578,22 +580,20 @@ export const RecipeDraftForm = ({
 
       <FormInput control={control} label="できあがり量" name="yieldText" />
 
-      {showSourceMediaInput ? (
-        <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
-          <legend className="px-2 font-bold text-brand-walnut">投稿画像</legend>
-          <StepImagesInput
-            control={control}
-            isAddDisabled={isSourceMediaLimitReached || isTotalImageLimitReached}
-            label="投稿画像"
-            name="sourceMedia"
-            addDisabledReason={imageLimitReachedText}
-            onUploadStateChange={handleUploadStateChange}
-            previewUrlsByImageId={imagePreviewUrlsByImageId}
-            uploadImage={uploadImage}
-            variant="sourceMedia"
-          />
-        </fieldset>
-      ) : null}
+      <fieldset className="grid min-w-0 gap-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
+        <legend className="px-2 font-bold text-brand-walnut">レシピ画像</legend>
+        <StepImagesInput
+          control={control}
+          isAddDisabled={isReferenceImagesLimitReached || isTotalImageLimitReached}
+          label="レシピ画像"
+          name="referenceImages"
+          addDisabledReason={imageLimitReachedText}
+          onUploadStateChange={handleUploadStateChange}
+          previewUrlsByImageId={imagePreviewUrlsByImageId}
+          uploadImage={uploadImage}
+          variant="referenceImages"
+        />
+      </fieldset>
 
       {ingredientGroups.fields.map((field, groupIndex) => (
         <IngredientGroupFields control={control} groupIndex={groupIndex} key={field.id} />

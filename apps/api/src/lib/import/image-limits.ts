@@ -1,5 +1,5 @@
 import {
-  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
   type RecipeDraftContent,
@@ -8,9 +8,9 @@ import {
 
 export const trimRecipeDraftContentImages = (draft: RecipeDraftContent): RecipeDraftContent => {
   let remainingImages = MAX_RECIPE_TOTAL_IMAGES;
-  const sourceMediaLimit = Math.min(MAX_RECIPE_SOURCE_MEDIA_IMAGES, Math.max(remainingImages, 0));
-  const sourceMedia = (draft.sourceMedia ?? []).slice(0, sourceMediaLimit);
-  remainingImages -= sourceMedia.length;
+  const referenceImagesLimit = Math.min(MAX_RECIPE_REFERENCE_IMAGES, Math.max(remainingImages, 0));
+  const referenceImages = (draft.referenceImages ?? []).slice(0, referenceImagesLimit);
+  remainingImages -= referenceImages.length;
 
   const steps: RecipeDraftContent["steps"] = [];
 
@@ -31,7 +31,7 @@ export const trimRecipeDraftContentImages = (draft: RecipeDraftContent): RecipeD
 
   return recipeDraftContentSchema.parse({
     ...draft,
-    sourceMedia,
+    referenceImages,
     steps,
   });
 };
