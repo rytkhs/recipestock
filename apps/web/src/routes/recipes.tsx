@@ -178,26 +178,23 @@ const ImportJobIsland = () => {
     }
   }, [jobs, queryClient]);
 
-  useEffect(() => {
-    const timers = jobs
-      .filter((job) => job.status === "succeeded" || job.status === "failed")
-      .map((job) => {
-        const delay =
-          job.status === "failed" ? importJobFailureDismissDelayMs : importJobSuccessDismissDelayMs;
+  const job = selectVisibleImportJob(jobs);
 
-        return window.setTimeout(() => {
-          dismissVisibleImportJob(job.id);
-        }, delay);
-      });
+  useEffect(() => {
+    if (!(job?.status === "succeeded" || job?.status === "failed")) {
+      return;
+    }
+
+    const delay =
+      job.status === "failed" ? importJobFailureDismissDelayMs : importJobSuccessDismissDelayMs;
+    const timer = window.setTimeout(() => {
+      dismissVisibleImportJob(job.id);
+    }, delay);
 
     return () => {
-      for (const timer of timers) {
-        window.clearTimeout(timer);
-      }
+      window.clearTimeout(timer);
     };
-  }, [jobs, dismissVisibleImportJob]);
-
-  const job = selectVisibleImportJob(jobs);
+  }, [job, dismissVisibleImportJob]);
 
   useEffect(() => {
     if (job) {

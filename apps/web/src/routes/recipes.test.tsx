@@ -258,6 +258,63 @@ describe("RecipesRoute", () => {
     );
   });
 
+  it("active jobを表示中は古い完了jobを自動dismissしない", async () => {
+    vi.useFakeTimers();
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_running",
+                kind: "url",
+                status: "running",
+                url: "https://example.com/recipes/current",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:20.000Z",
+                startedAt: "2026-06-01T00:00:21.000Z",
+                finishedAt: null,
+              },
+              {
+                id: "job_done",
+                kind: "url",
+                status: "succeeded",
+                url: "https://example.com/recipes/done",
+                recipeId: "recipe_done",
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: "2026-06-01T00:00:10.000Z",
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("取り込み中");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
+
+    expect(findFetchCall(fetchMock, "/api/import/jobs/job_done/dismiss")).toBeUndefined();
+    expect(screen.getByRole("status")).toHaveTextContent("取り込み中");
+    expect(screen.getByRole("status")).toHaveClass("opacity-100");
+  });
+
   it("URL import失敗バナーから同じURLで再試行できる", async () => {
     const fetchMock = mockFetch(
       async (input, init) => {
