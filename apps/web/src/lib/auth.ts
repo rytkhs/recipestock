@@ -22,6 +22,12 @@ export const authClient = createAuthClient({
   plugins: [emailOTPClient()],
 });
 
+export const authRedirect = {
+  assign: (url: string) => {
+    window.location.assign(url);
+  },
+};
+
 const assertAuthSuccess = (result: { error: unknown }) => {
   if (result.error) {
     throw new Error("auth_request_failed");
@@ -37,7 +43,7 @@ export const startGoogleLogin = async () => {
   assertAuthSuccess(result);
 
   if (result.data?.url) {
-    window.location.assign(result.data.url);
+    authRedirect.assign(result.data.url);
   }
 };
 

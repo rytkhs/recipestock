@@ -3,7 +3,7 @@ import {
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -38,9 +38,85 @@ const savedStepsWithImages = (imageCount: number, prefix: string) =>
     ),
   }));
 
+const getReferenceImageInput = () => {
+  const input = screen
+    .getAllByLabelText("レシピ画像を追加")
+    .find((element) => element.tagName === "INPUT");
+
+  if (!input) {
+    throw new Error("Reference image input not found");
+  }
+
+  return input;
+};
+
 describe("RecipesRoute", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("レシピ一覧の初回読み込みではカードskeletonを表示する", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return new Promise<Response>(() => {});
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(
+      screen.findByRole("status", { name: "レシピ一覧を読み込み中" }),
+    ).resolves.toBeInTheDocument();
+    await expect(screen.findAllByTestId("recipe-card-skeleton")).resolves.toHaveLength(8);
+  });
+
+  it("既存のレシピ一覧がある再取得中はカードを消さない", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return new Promise<Response>(() => {});
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes", (queryClient) => {
+      queryClient.setQueryData(["recipes", "", null], {
+        items: [
+          {
+            id: "recipe_123",
+            title: "Tomato pasta",
+            coverImageUrl: null,
+            sourceName: "Example Kitchen",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-26T00:00:00.000Z",
+            locked: false,
+          },
+        ],
+        nextCursor: null,
+      });
+    });
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByTestId("recipe-card-skeleton")).not.toBeInTheDocument();
   });
 
   it("レシピ一覧を表示して検索できる", async () => {
@@ -175,7 +251,7 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes");
 
-    await expect(screen.findByText("取り込みが完了しました。")).resolves.toBeInTheDocument();
+    await expect(screen.findByText("保存しました")).resolves.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "開く" })).toHaveAttribute(
       "href",
       "/recipes/recipe_123",
@@ -277,28 +353,52 @@ describe("RecipesRoute", () => {
     ]);
   });
 
-  it("private/login required errorをURL import失敗バナーに表示する", async () => {
-    mockFetch(
-      async (input) => {
+  it("URL import失敗バナーを一定時間後に自動で閉じる", async () => {
+    vi.useFakeTimers();
+    let dismissed = false;
+    const fetchMock = mockFetch(
+      async (input, init) => {
         if (input === "/api/recipes?limit=20") {
           return jsonResponse({ items: [], nextCursor: null });
         }
 
         if (getRequestPath(input) === "/api/import/jobs/recent") {
           return jsonResponse({
-            jobs: [
-              {
-                id: "job_private",
-                kind: "url",
-                status: "failed",
-                url: "https://www.instagram.com/p/DYsxvKyAZMg/",
-                recipeId: null,
-                errorCode: "private_or_login_required",
-                createdAt: "2026-06-01T00:00:00.000Z",
-                startedAt: "2026-06-01T00:00:01.000Z",
-                finishedAt: "2026-06-01T00:00:10.000Z",
-              },
-            ],
+            jobs: dismissed
+              ? []
+              : [
+                  {
+                    id: "job_failed",
+                    kind: "url",
+                    status: "failed",
+                    url: "https://example.com/recipes/tomato",
+                    recipeId: null,
+                    errorCode: "fetch_failed",
+                    createdAt: "2026-06-01T00:00:00.000Z",
+                    startedAt: "2026-06-01T00:00:01.000Z",
+                    finishedAt: "2026-06-01T00:00:10.000Z",
+                  },
+                ],
+          });
+        }
+
+        if (
+          getRequestPath(input) === "/api/import/jobs/job_failed/dismiss" &&
+          init?.method === "PATCH"
+        ) {
+          dismissed = true;
+          return jsonResponse({
+            job: {
+              id: "job_failed",
+              kind: "url",
+              status: "failed",
+              url: "https://example.com/recipes/tomato",
+              recipeId: null,
+              errorCode: "fetch_failed",
+              createdAt: "2026-06-01T00:00:00.000Z",
+              startedAt: "2026-06-01T00:00:01.000Z",
+              finishedAt: "2026-06-01T00:00:10.000Z",
+            },
           });
         }
 
@@ -309,46 +409,31 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes");
 
-    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
-      "この投稿を取得できませんでした。",
-    );
-  });
+    await vi.waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("ページを取得できませんでした。");
+    });
 
-  it("URL import jobの全体期限切れを表示する", async () => {
-    mockFetch(
-      async (input) => {
-        if (input === "/api/recipes?limit=20") {
-          return jsonResponse({ items: [], nextCursor: null });
-        }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
 
-        if (getRequestPath(input) === "/api/import/jobs/recent") {
-          return jsonResponse({
-            jobs: [
-              {
-                id: "job_timed_out",
-                kind: "url",
-                status: "failed",
-                url: "https://example.com/recipes/tomato",
-                recipeId: null,
-                errorCode: "job_timeout",
-                createdAt: "2026-06-01T00:00:00.000Z",
-                startedAt: "2026-06-01T00:00:01.000Z",
-                finishedAt: "2026-06-01T00:10:00.000Z",
-              },
-            ],
-          });
-        }
+    await vi.waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/import/jobs/job_failed/dismiss")).toEqual([
+        "/api/import/jobs/job_failed/dismiss",
+        expect.objectContaining({
+          credentials: "include",
+          method: "PATCH",
+        }),
+      ]);
+    });
 
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
 
-    await renderApp("/recipes");
-
-    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
-      "取り込み処理が時間内に完了しませんでした。再試行してください。",
-    );
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
   });
 
   it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {
@@ -481,32 +566,30 @@ describe("RecipesRoute", () => {
     await renderApp("/recipes/new");
 
     const coverImageInput = await screen.findByLabelText("カバー画像");
-    const titleInput = screen.getByLabelText("タイトル");
+    const titleInput = screen.getByLabelText("レシピ名");
     const yieldInput = screen.getByLabelText("できあがり量");
-    const referenceImageInput = screen.getByLabelText("レシピ画像");
+    const referenceImageInput = getReferenceImageInput();
+    expect(referenceImageInput).toBeDefined();
     const ingredientNameInput = screen.getByLabelText("材料名");
     expect(
       coverImageInput.compareDocumentPosition(titleInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      titleInput.compareDocumentPosition(yieldInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+      titleInput.compareDocumentPosition(referenceImageInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      referenceImageInput.compareDocumentPosition(yieldInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       yieldInput.compareDocumentPosition(ingredientNameInput) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(
-      yieldInput.compareDocumentPosition(referenceImageInput) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      referenceImageInput.compareDocumentPosition(ingredientNameInput) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(yieldInput).toHaveAttribute("placeholder", "例）2人分");
 
-    await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
+    await userEvent.type(await screen.findByLabelText("レシピ名"), "Tomato pasta");
     await userEvent.type(screen.getByLabelText("できあがり量"), "2人分");
     await userEvent.type(screen.getByLabelText("材料名"), "トマト缶");
-    await userEvent.type(screen.getByLabelText("分量"), "1缶");
-    await userEvent.type(screen.getByLabelText("手順"), "煮詰める");
+    await userEvent.type(screen.getByLabelText("量"), "1缶");
+    await userEvent.type(screen.getByLabelText("手順1"), "煮詰める");
     await userEvent.type(screen.getByLabelText("メモ"), "仕上げにオリーブオイル。");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
@@ -617,16 +700,16 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/new");
 
-    await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
+    await userEvent.type(await screen.findByLabelText("レシピ名"), "Tomato pasta");
     await userEvent.upload(
       screen.getByLabelText("カバー画像"),
       new File(["cover"], "cover.webp", { type: "image/webp" }),
     );
     await userEvent.upload(
-      screen.getByLabelText("レシピ画像"),
+      getReferenceImageInput() as HTMLElement,
       new File(["reference"], "reference.webp", { type: "image/webp" }),
     );
-    await userEvent.type(screen.getByLabelText("手順"), "煮詰める");
+    await userEvent.type(screen.getByLabelText("手順1"), "煮詰める");
     await userEvent.upload(
       screen.getByLabelText("手順1の画像"),
       new File(["step"], "step.webp", { type: "image/webp" }),
@@ -736,7 +819,7 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/new");
 
-    await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
+    await userEvent.type(await screen.findByLabelText("レシピ名"), "Tomato pasta");
     await userEvent.upload(
       screen.getByLabelText("カバー画像"),
       new File(["cover"], "cover.webp", { type: "image/webp" }),
@@ -775,6 +858,25 @@ describe("RecipesRoute", () => {
         coverImage: { type: "tmpObjectKey", key: "tmp/user_123/cover-1.webp" },
       },
     });
+  });
+
+  it("詳細画面の初回読み込みでは詳細skeletonを表示する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return new Promise<Response>(() => {});
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123");
+
+    await expect(
+      screen.findByRole("status", { name: "レシピ詳細を読み込み中" }),
+    ).resolves.toBeInTheDocument();
   });
 
   it("詳細画面でカバー画像と手順画像を表示する", async () => {
@@ -866,45 +968,6 @@ describe("RecipesRoute", () => {
     expect(screen.queryByAltText("手順2の画像1")).not.toBeInTheDocument();
   });
 
-  it("詳細画面でレシピ画像がなければレシピ画像セクションを表示しない", async () => {
-    mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/recipes/recipe_123") {
-          return jsonResponse({
-            recipe: {
-              id: "recipe_123",
-              title: "Tomato pasta",
-              content: {
-                title: "Tomato pasta",
-                referenceImages: [],
-                ingredientGroups: [],
-                steps: [{ text: "煮詰める", images: [] }],
-              },
-              source: {
-                sourceUrl: null,
-                normalizedSourceUrl: null,
-                sourceName: null,
-              },
-              createdAt: "2026-05-26T00:00:00.000Z",
-              updatedAt: "2026-05-26T00:00:00.000Z",
-              locked: false,
-            },
-          });
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/recipes/recipe_123");
-
-    await expect(
-      screen.findByRole("heading", { name: "Tomato pasta" }),
-    ).resolves.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "レシピ画像" })).not.toBeInTheDocument();
-  });
-
   it("ロック中Recipe詳細に直接アクセスしても本文と編集リンクを表示しない", async () => {
     mockFetch(
       async (input) => {
@@ -930,6 +993,25 @@ describe("RecipesRoute", () => {
     expect(screen.getByText("このレシピの詳細は現在表示できません。")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "編集" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "材料" })).not.toBeInTheDocument();
+  });
+
+  it("編集画面の初回読み込みではフォームskeletonを表示する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return new Promise<Response>(() => {});
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await expect(
+      screen.findByRole("status", { name: "レシピ編集フォームを読み込み中" }),
+    ).resolves.toBeInTheDocument();
   });
 
   it("ロック中Recipe編集に直接アクセスしてもフォームを表示しない", async () => {
@@ -1051,7 +1133,7 @@ describe("RecipesRoute", () => {
     await renderApp("/recipes/recipe_123");
     await userEvent.click(await screen.findByRole("button", { name: "操作メニュー" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: /編集/ }));
-    await expect(screen.findByRole("heading", { name: "レシピ編集" })).resolves.toBeInTheDocument();
+    await expect(screen.findByLabelText("レシピ名")).resolves.toBeInTheDocument();
     expect(screen.getByDisplayValue("Tomato pasta")).toBeInTheDocument();
     expect(screen.getByDisplayValue("2人分")).toBeInTheDocument();
     expect(screen.getByDisplayValue("トマト缶")).toBeInTheDocument();
@@ -1059,8 +1141,8 @@ describe("RecipesRoute", () => {
     expect(screen.getByDisplayValue("煮詰める")).toBeInTheDocument();
     expect(screen.getByDisplayValue("仕上げにオリーブオイル。")).toBeInTheDocument();
 
-    await userEvent.clear(screen.getByLabelText("タイトル"));
-    await userEvent.type(screen.getByLabelText("タイトル"), "Potato salad");
+    await userEvent.clear(screen.getByLabelText("レシピ名"));
+    await userEvent.type(screen.getByLabelText("レシピ名"), "Potato salad");
     await userEvent.clear(screen.getByLabelText("できあがり量"));
     await userEvent.type(screen.getByLabelText("できあがり量"), "3人分");
     await userEvent.click(screen.getByRole("button", { name: "更新" }));
@@ -1230,8 +1312,8 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123/edit");
 
-    await waitFor(() => {
-      expect(screen.getAllByText("保存済み画像")).toHaveLength(1);
+    const firstSavedImageRemoveButton = await screen.findByRole("button", {
+      name: "手順1の画像1を削除",
     });
     expect(screen.queryByAltText("手順1の画像1プレビュー")).not.toBeInTheDocument();
     expect(screen.getByAltText("手順1の画像2プレビュー")).toHaveAttribute(
@@ -1239,7 +1321,7 @@ describe("RecipesRoute", () => {
       "https://images.example/step-b.webp",
     );
 
-    const firstSavedImageCard = screen.getAllByText("保存済み画像")[0]?.closest(".group");
+    const firstSavedImageCard = firstSavedImageRemoveButton.closest(".group");
     expect(firstSavedImageCard).not.toBeNull();
     await userEvent.click(
       within(firstSavedImageCard as HTMLElement).getByRole("button", {
@@ -1277,44 +1359,6 @@ describe("RecipesRoute", () => {
     });
   });
 
-  it("編集画面でレシピ画像がなくてもレシピ画像入力を表示する", async () => {
-    const recipeResponse = {
-      recipe: {
-        id: "recipe_123",
-        title: "Tomato pasta",
-        content: {
-          title: "Tomato pasta",
-          referenceImages: [],
-          ingredientGroups: [],
-          steps: [{ text: "煮詰める", images: [] }],
-        },
-        source: {
-          sourceUrl: null,
-          normalizedSourceUrl: null,
-          sourceName: null,
-        },
-        createdAt: "2026-05-26T00:00:00.000Z",
-        updatedAt: "2026-05-26T00:00:00.000Z",
-        locked: false,
-      },
-    };
-    mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/recipes/recipe_123") {
-          return jsonResponse(recipeResponse);
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/recipes/recipe_123/edit");
-
-    await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
-    expect(screen.getByLabelText("レシピ画像")).toBeInTheDocument();
-  });
-
   it("編集画面でレシピ画像上限に達したらレシピ画像追加を無効にする", async () => {
     mockFetch(
       async (input) => {
@@ -1348,8 +1392,8 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123/edit");
 
-    await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
-    expect(screen.getByLabelText("レシピ画像")).toBeDisabled();
+    await expect(screen.findByLabelText("レシピ名")).resolves.toBeInTheDocument();
+    expect(getReferenceImageInput()).toBeDisabled();
     expect(screen.getByText("上限に達しました")).toBeInTheDocument();
     expect(screen.getByLabelText("手順1の画像")).not.toBeDisabled();
   });
@@ -1389,7 +1433,7 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123/edit");
 
-    await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
+    await expect(screen.findByLabelText("レシピ名")).resolves.toBeInTheDocument();
     expect(screen.getByLabelText("手順1の画像")).toBeDisabled();
     expect(screen.getByLabelText("手順2の画像")).not.toBeDisabled();
     expect(screen.getByText("上限に達しました")).toBeInTheDocument();
@@ -1435,9 +1479,9 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123/edit");
 
-    await expect(screen.findByLabelText("タイトル")).resolves.toBeInTheDocument();
+    await expect(screen.findByLabelText("レシピ名")).resolves.toBeInTheDocument();
     expect(screen.getByLabelText("カバー画像")).not.toBeDisabled();
-    expect(screen.getByLabelText("レシピ画像")).toBeDisabled();
+    expect(getReferenceImageInput()).toBeDisabled();
     expect(screen.getByLabelText("手順1の画像")).toBeDisabled();
     expect(screen.getAllByText("上限に達しました").length).toBeGreaterThan(1);
   });
@@ -1583,8 +1627,8 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123/edit");
 
-    await userEvent.clear(await screen.findByLabelText("タイトル"));
-    await userEvent.type(screen.getByLabelText("タイトル"), "Potato salad");
+    await userEvent.clear(await screen.findByLabelText("レシピ名"));
+    await userEvent.type(screen.getByLabelText("レシピ名"), "Potato salad");
     await userEvent.click(screen.getByRole("button", { name: "更新" }));
 
     await waitFor(() => {
@@ -1603,7 +1647,6 @@ describe("RecipesRoute", () => {
   });
 
   it("詳細画面から削除すると一覧に戻る", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const recipeResponse = {
       recipe: {
         id: "recipe_123",
@@ -1645,6 +1688,10 @@ describe("RecipesRoute", () => {
     await renderApp("/recipes/recipe_123");
     await userEvent.click(await screen.findByRole("button", { name: "操作メニュー" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: /削除/ }));
+    const deleteDialog = await screen.findByRole("alertdialog", {
+      name: "レシピを削除しますか？",
+    });
+    await userEvent.click(within(deleteDialog).getByRole("button", { name: "削除" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1680,7 +1727,7 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/new");
 
-    await userEvent.type(await screen.findByLabelText("タイトル"), "Tomato pasta");
+    await userEvent.type(await screen.findByLabelText("レシピ名"), "Tomato pasta");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
