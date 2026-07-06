@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createApp } from "../index";
+import { createSilentTestApp } from "../test-helpers";
 
 describe("Me routes", () => {
   it("現在ユーザー取得で未ログイン時に統一形式のunauthorizedを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => null,
         handleAuthRequest: async () => new Response(null, { status: 404 }),
@@ -33,7 +33,7 @@ describe("Me routes", () => {
 
   it("現在ユーザーの基礎情報を返しアプリユーザーを作成または再利用する", async () => {
     const calls: string[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },

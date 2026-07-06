@@ -8,7 +8,7 @@ type ErrorLogValue = {
 
 type LogFields = Record<string, unknown>;
 
-type BaseLogFields = {
+export type BaseLogFields = {
   jobId?: string;
   messageId?: string;
   requestId?: string;
@@ -21,6 +21,23 @@ export type Logger = {
   error: (event: string, fields?: LogFields) => void;
   info: (event: string, fields?: LogFields) => void;
   warn: (event: string, fields?: LogFields) => void;
+};
+
+export type LoggerFactory = (baseFields?: BaseLogFields) => Logger;
+
+export type LogEntry = LogFields & {
+  event: string;
+  level: LogLevel;
+  timestamp: string;
+};
+
+export type LogSink = {
+  write: (entry: LogEntry) => void;
+};
+
+export type MemoryLogSink = LogSink & {
+  clear: () => void;
+  entries: LogEntry[];
 };
 
 const normalizeError = (error: Error): ErrorLogValue => ({
@@ -61,31 +78,69 @@ const normalizeLogValue = (value: unknown, seen = new WeakSet<object>()): unknow
 const removeUndefined = <T extends Record<string, unknown>>(value: T): T =>
   Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
-const writeLog = (level: LogLevel, event: string, baseFields: BaseLogFields, fields: LogFields) => {
-  const entry = removeUndefined({
-    level,
-    event,
-    timestamp: new Date().toISOString(),
-    ...baseFields,
-    ...fields,
-  });
-  const line = JSON.stringify(normalizeLogValue(entry));
+export const createConsoleLogSink = (): LogSink => ({
+  write(entry) {
+    const line = JSON.stringify(entry);
 
-  if (level === "error") {
-    console.error(line);
-    return;
-  }
+    if (entry.level === "error") {
+      console.error(line);
+      return;
+    }
 
-  if (level === "warn") {
-    console.warn(line);
-    return;
-  }
+    if (entry.level === "warn") {
+      console.warn(line);
+      return;
+    }
 
-  console.info(line);
+    console.info(line);
+  },
+});
+
+export const createNoopLogSink = (): LogSink => ({
+  write: () => undefined,
+});
+
+export const createMemoryLogSink = (): MemoryLogSink => {
+  const entries: LogEntry[] = [];
+
+  return {
+    entries,
+    clear: () => {
+      entries.length = 0;
+    },
+    write: (entry) => {
+      entries.push(entry);
+    },
+  };
 };
 
-export const createLogger = (baseFields: BaseLogFields = {}): Logger => ({
-  error: (event, fields = {}) => writeLog("error", event, baseFields, fields),
-  info: (event, fields = {}) => writeLog("info", event, baseFields, fields),
-  warn: (event, fields = {}) => writeLog("warn", event, baseFields, fields),
+const defaultLogSink = createConsoleLogSink();
+
+const writeLog = (
+  sink: LogSink,
+  level: LogLevel,
+  event: string,
+  baseFields: BaseLogFields,
+  fields: LogFields,
+) => {
+  const entry = normalizeLogValue(
+    removeUndefined({
+      level,
+      event,
+      timestamp: new Date().toISOString(),
+      ...baseFields,
+      ...fields,
+    }),
+  ) as LogEntry;
+
+  sink.write(entry);
+};
+
+export const createLogger = (
+  baseFields: BaseLogFields = {},
+  { sink = defaultLogSink }: { sink?: LogSink } = {},
+): Logger => ({
+  error: (event, fields = {}) => writeLog(sink, "error", event, baseFields, fields),
+  info: (event, fields = {}) => writeLog(sink, "info", event, baseFields, fields),
+  warn: (event, fields = {}) => writeLog(sink, "warn", event, baseFields, fields),
 });

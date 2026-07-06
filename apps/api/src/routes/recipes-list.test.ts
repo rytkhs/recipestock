@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createApp } from "../index";
 import { InvalidRecipeListCursorError } from "../recipes";
+import { createSilentTestApp } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe list routes", () => {
   it("レシピ一覧取得で未ログイン時にunauthorizedを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => null,
         handleAuthRequest: async () => new Response(null, { status: 404 }),
@@ -36,7 +36,7 @@ describe("Recipe list routes", () => {
 
   it("ログイン済みユーザーがレシピ一覧を検索条件付きで取得できる", async () => {
     const calls: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -98,7 +98,7 @@ describe("Recipe list routes", () => {
   });
 
   it("Freeユーザーは最新5件以外のレシピがlockedとして一覧に表示される", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -167,7 +167,7 @@ describe("Recipe list routes", () => {
   });
 
   it("一覧cursorが不正な場合はinvalid_recipe_list_cursorを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },

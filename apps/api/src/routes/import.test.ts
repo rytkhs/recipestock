@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
-import { createApp } from "../index";
+import { createSilentTestApp } from "../test-helpers";
 
 const auth = {
   getSession: async () => ({
@@ -55,7 +55,7 @@ describe("Import job routes", () => {
       status: "created" as const,
       job: createJob(),
     }));
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       importJobRepository: createRepository({ createUrlJob, expireActiveJobsForUser }),
       importQueue: { send } as unknown as Queue<{ jobId: string }>,
@@ -104,7 +104,7 @@ describe("Import job routes", () => {
 
   it("active jobがある場合は既存jobを返しQueueに送らない", async () => {
     const send = vi.fn(async () => undefined);
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       importJobRepository: createRepository({
         createUrlJob: async () => ({
@@ -133,7 +133,7 @@ describe("Import job routes", () => {
   });
 
   it("URLが不正な場合はinvalid_urlを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       importJobRepository: createRepository(),
       importQueue: { send: vi.fn(async () => undefined) } as unknown as Queue<{ jobId: string }>,
@@ -152,7 +152,7 @@ describe("Import job routes", () => {
   });
 
   it("レシピ上限到達時はjobを作らずrecipe_limit_exceededを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       importJobRepository: createRepository({
         createUrlJob: async () => ({ status: "limitExceeded" }),
@@ -174,7 +174,7 @@ describe("Import job routes", () => {
 
   it("recent jobsはactiveと未dismissの完了jobを返す", async () => {
     const expireActiveJobsForUser = vi.fn(async () => 1);
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       importJobRepository: createRepository({
         expireActiveJobsForUser,
@@ -208,7 +208,7 @@ describe("Import job routes", () => {
   });
 
   it("jobをdismissする", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       importJobRepository: createRepository({
         dismissJob: async () =>

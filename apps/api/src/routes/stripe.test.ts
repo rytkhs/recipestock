@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "../billing";
-import { createApp } from "../index";
 import {
   type StripeBillingClient,
   type StripeSubscriptionState,
   type StripeWebhookEvent,
   StripeWebhookSignatureError,
 } from "../stripe-billing";
+import { createSilentTestApp } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -107,7 +107,7 @@ const requestWebhook = (
   },
   init: RequestInit = {},
 ) =>
-  createApp({ auth, ...dependencies }).request(
+  createSilentTestApp({ auth, ...dependencies }).request(
     "/api/stripe/webhook",
     {
       method: "POST",

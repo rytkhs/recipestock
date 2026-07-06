@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "../billing";
-import { createApp } from "../index";
 import { type StripeBillingClient } from "../stripe-billing";
+import { createSilentTestApp } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -77,7 +77,7 @@ describe("Billing routes", () => {
       createCheckoutSession: vi.fn(),
       updateCustomerEmail: vi.fn(),
     });
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => null,
         handleAuthRequest: async () => new Response(null, { status: 404 }),
@@ -110,7 +110,7 @@ describe("Billing routes", () => {
       createPortalSession: vi.fn(),
       updateCustomerEmail: vi.fn(),
     });
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => null,
         handleAuthRequest: async () => new Response(null, { status: 404 }),
@@ -155,7 +155,7 @@ describe("Billing routes", () => {
       },
     );
     const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>();
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({ setStripeCustomerId }),
       stripeBillingClient: createStripeClient({
@@ -207,7 +207,7 @@ describe("Billing routes", () => {
       },
     );
     const setStripeCustomerId = vi.fn<BillingRepository["setStripeCustomerId"]>();
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async (userId) => ({
@@ -256,7 +256,7 @@ describe("Billing routes", () => {
       throw new Error("Stripe update failed.");
     });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async (userId) => ({
@@ -316,7 +316,7 @@ describe("Billing routes", () => {
       },
     );
     const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>();
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({ setStripeCustomerId }),
       stripeBillingClient: createStripeClient({
@@ -364,7 +364,7 @@ describe("Billing routes", () => {
       },
     );
     const setStripeCustomerId = vi.fn<BillingRepository["setStripeCustomerId"]>();
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async (userId) => ({
@@ -412,7 +412,7 @@ describe("Billing routes", () => {
       throw new Error("Stripe update failed.");
     });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async (userId) => ({
@@ -459,7 +459,7 @@ describe("Billing routes", () => {
       createCheckoutSession: vi.fn(),
       updateCustomerEmail: vi.fn(),
     });
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({
         listSubscriptionsByUserId: async () => [
@@ -497,7 +497,7 @@ describe("Billing routes", () => {
         cancelAt: new Date("2026-07-04T00:00:00.000Z"),
       },
     }));
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({ getBillingStatus }),
       getCurrentDate: () => new Date("2026-06-04T00:00:00.000Z"),
@@ -523,7 +523,7 @@ describe("Billing routes", () => {
   });
 
   it("Pro対象subscriptionがなければBilling statusはsubscription nullを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: createRepository({
         getBillingStatus: async () => ({

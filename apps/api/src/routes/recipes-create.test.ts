@@ -1,12 +1,12 @@
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
-import { createApp } from "../index";
+import { createSilentTestApp } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe create routes", () => {
   it("ログイン済みユーザーがタイトルだけでレシピを保存できる", async () => {
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -85,7 +85,7 @@ describe("Recipe create routes", () => {
   });
 
   it("レシピ保存リクエストが不正な場合はvalidation_failedとdetailsを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -133,7 +133,7 @@ describe("Recipe create routes", () => {
 
   it("任意項目と出典情報をRecipeContentとSource metadataとして保存する", async () => {
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -218,7 +218,7 @@ describe("Recipe create routes", () => {
 
   it("正規化済み出典URLが送られてもsourceUrlから再計算して保存する", async () => {
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -281,7 +281,7 @@ describe("Recipe create routes", () => {
 
   it("Freeユーザーが保存上限到達済みならレシピを保存しない", async () => {
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -325,7 +325,7 @@ describe("Recipe create routes", () => {
 
   it("上限付き保存処理が成功した場合は保存済みレシピを返す", async () => {
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -375,7 +375,7 @@ describe("Recipe create routes", () => {
     const copies: unknown[] = [];
     const deletes: unknown[] = [];
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -474,7 +474,7 @@ describe("Recipe create routes", () => {
   it("画像だけの手順を確定objectKeyに変換して保存する", async () => {
     const copies: unknown[] = [];
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -585,7 +585,7 @@ describe("Recipe create routes", () => {
   it("外部cover画像URLを確定objectKeyに変換して保存する", async () => {
     const externalCopies: unknown[] = [];
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -685,7 +685,7 @@ describe("Recipe create routes", () => {
   it("同じ外部画像URLをcoverとレシピ画像で共有して保存する", async () => {
     const externalCopies: unknown[] = [];
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -786,7 +786,7 @@ describe("Recipe create routes", () => {
 
   it("外部画像URLの確定に失敗しても画像を省略してレシピを保存する", async () => {
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -883,7 +883,7 @@ describe("Recipe create routes", () => {
 
   it("レシピ保存が例外で失敗したらcopy済み確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -944,7 +944,7 @@ describe("Recipe create routes", () => {
 
   it("外部画像URLのcopy後にレシピ保存が失敗したら確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -1011,7 +1011,7 @@ describe("Recipe create routes", () => {
 
   it("外部画像URLのcopy後に保存上限超過なら確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -1079,7 +1079,7 @@ describe("Recipe create routes", () => {
 
   it("tmp画像の確定に失敗したらレシピを保存しない", async () => {
     const savedRecipes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -1152,7 +1152,7 @@ describe("Recipe create routes", () => {
     const savedRecipes: unknown[] = [];
     const copies: unknown[] = [];
     const deletes: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -1239,7 +1239,7 @@ describe("Recipe create routes", () => {
   it("tmp画像の実サイズが上限を超える場合はレシピを保存しない", async () => {
     const savedRecipes: unknown[] = [];
     const copies: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
