@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
 import { Header, MobileBottomNav } from "../components/header";
+import { LoadingStatus } from "../components/loading";
 import { ApiClientError } from "../lib/api";
 import { useAuthSession } from "../lib/auth";
 import { clearUserScopedCache } from "../lib/query-cache";
@@ -18,14 +19,7 @@ import { LoginRoute } from "./login";
 import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
 import { SettingsBillingRoute, SettingsIndexRoute } from "./settings";
 
-const LoadingPage = () => (
-  <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-10">
-    <div className="flex items-center gap-3">
-      <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
-      <p className="text-brand-muted text-sm">読み込み中</p>
-    </div>
-  </section>
-);
+const LoadingPage = () => <LoadingStatus />;
 
 const RequireViewer = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
@@ -86,7 +80,7 @@ const RootLayout = () => {
     <div className="min-h-screen bg-brand-cream text-brand-ink">
       <Header />
       <main
-        className={session.data ? "pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"}
+        className={session.data ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"}
       >
         <Outlet />
       </main>
