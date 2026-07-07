@@ -21,7 +21,9 @@ const renderIngredientsSection = (ingredientGroups: RecipeDraftFormValues["ingre
     });
 
     return (
-      <form onSubmit={(event) => void handleSubmit((values) => submittedValues.push(values))(event)}>
+      <form
+        onSubmit={(event) => void handleSubmit((values) => submittedValues.push(values))(event)}
+      >
         <IngredientsSection control={control} />
         <button type="submit">保存</button>
       </form>

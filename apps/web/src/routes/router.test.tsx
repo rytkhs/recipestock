@@ -25,7 +25,7 @@ describe("AppRouter", () => {
     ).resolves.toBeInTheDocument();
   });
 
-  it("認証確認中は共通ローディングを表示する", async () => {
+  it("認証確認中は未ログインナビと共通ローディングを出さず保護ルートskeletonを表示する", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (getRequestPath(input).endsWith("/get-session")) {
         return new Promise<Response>(() => {});
@@ -36,7 +36,10 @@ describe("AppRouter", () => {
 
     await renderApp("/recipes");
 
-    expect(screen.getByRole("status", { name: "読み込み中" })).toHaveTextContent("読み込み中");
+    expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
+    expect(screen.queryByRole("status", { name: "読み込み中" })).toBeNull();
+    expect(screen.getByText("レシピ一覧を読み込み中")).toBeInTheDocument();
+    expect(screen.getAllByTestId("recipe-card-skeleton")).toHaveLength(8);
   });
 
   it("未ログインで認証必須ルートに入るとログインへ遷移する", async () => {

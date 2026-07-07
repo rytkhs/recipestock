@@ -6,32 +6,64 @@ import {
   Outlet,
   RouterProvider,
   useNavigate,
+  useRouterState,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
 import { Header, MobileBottomNav } from "../components/header";
-import { LoadingStatus } from "../components/loading";
+import {
+  ImportUrlSkeleton,
+  RecipeDetailSkeleton,
+  RecipeFormSkeleton,
+  RecipeListSkeleton,
+  SettingsSkeleton,
+} from "../components/loading";
 import { ApiClientError } from "../lib/api";
-import { useAuthSession } from "../lib/auth";
+import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { clearUserScopedCache } from "../lib/query-cache";
+import { isProtectedAppPath } from "../lib/route-access";
 import { useViewer } from "../lib/viewer";
 import { ImportUrlRoute } from "./import";
 import { LoginRoute } from "./login";
 import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
 import { SettingsBillingRoute, SettingsIndexRoute } from "./settings";
 
-const LoadingPage = () => <LoadingStatus />;
+const ProtectedRouteSkeleton = () => {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  if (pathname === "/recipes") {
+    return <RecipeListSkeleton />;
+  }
+
+  if (pathname === "/recipes/new" || pathname.endsWith("/edit")) {
+    return <RecipeFormSkeleton />;
+  }
+
+  if (pathname.startsWith("/recipes/")) {
+    return <RecipeDetailSkeleton />;
+  }
+
+  if (pathname === "/import/url") {
+    return <ImportUrlSkeleton />;
+  }
+
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) {
+    return <SettingsSkeleton />;
+  }
+
+  return <RecipeListSkeleton />;
+};
 
 const RequireViewer = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const viewer = useViewer({ enabled: Boolean(session.data) });
+  const { session, status } = useAuthState();
+  const viewer = useViewer({ enabled: status === "authenticated" });
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!session.isPending && !session.data) {
+    if (status === "unauthenticated") {
       void navigate({ to: "/login", replace: true });
     }
-  }, [navigate, session.data, session.isPending]);
+  }, [navigate, status]);
 
   useEffect(() => {
     if (!(viewer.error instanceof ApiClientError) || viewer.error.code !== "unauthorized") {
@@ -44,11 +76,11 @@ const RequireViewer = ({ children }: { children: ReactNode }) => {
     });
   }, [navigate, queryClient, session, viewer.error]);
 
-  if (session.isPending || (session.data && viewer.isPending)) {
-    return <LoadingPage />;
+  if (status === "pending" || (status === "authenticated" && viewer.isPending)) {
+    return <ProtectedRouteSkeleton />;
   }
 
-  if (!session.data || !viewer.data) {
+  if (status !== "authenticated" || !viewer.data) {
     return null;
   }
 
@@ -56,31 +88,37 @@ const RequireViewer = ({ children }: { children: ReactNode }) => {
 };
 
 const RedirectAuthenticated = ({ children }: { children: ReactNode }) => {
-  const session = useAuthSession();
+  const { status } = useAuthState();
   const navigate = useNavigate();
-  const isInitialPending = session.isPending && !session.isRefetching;
 
   useEffect(() => {
-    if (!session.isPending && session.data) {
+    if (status === "authenticated") {
       void navigate({ to: "/recipes", replace: true });
     }
-  }, [navigate, session.data, session.isPending]);
+  }, [navigate, status]);
 
-  if (isInitialPending || session.data) {
-    return <LoadingPage />;
+  if (status === "pending" || status === "authenticated") {
+    return null;
   }
 
   return children;
 };
 
-const RootLayout = () => {
-  const session = useAuthSession();
+const RootLayoutContent = () => {
+  const { status } = useAuthState();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const shouldReservePrivateChrome =
+    status === "authenticated" || (status === "pending" && isProtectedAppPath(pathname));
 
   return (
     <div className="min-h-screen bg-brand-cream text-brand-ink">
       <Header />
       <main
-        className={session.data ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"}
+        className={
+          shouldReservePrivateChrome
+            ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-8"
+            : "pb-8"
+        }
       >
         <Outlet />
       </main>
@@ -88,6 +126,12 @@ const RootLayout = () => {
     </div>
   );
 };
+
+const RootLayout = () => (
+  <AuthStateProvider>
+    <RootLayoutContent />
+  </AuthStateProvider>
+);
 
 const rootRoute = createRootRoute({
   component: RootLayout,

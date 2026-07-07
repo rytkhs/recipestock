@@ -9,6 +9,16 @@ const detailStepSkeletonKeys = [
   "detail-step-tertiary",
 ];
 const formStepSkeletonKeys = ["form-step-primary", "form-step-secondary"];
+const gridRecipeSkeletonKeys = [
+  "route-grid-recipe-skeleton-1",
+  "route-grid-recipe-skeleton-2",
+  "route-grid-recipe-skeleton-3",
+  "route-grid-recipe-skeleton-4",
+  "route-grid-recipe-skeleton-5",
+  "route-grid-recipe-skeleton-6",
+  "route-grid-recipe-skeleton-7",
+  "route-grid-recipe-skeleton-8",
+];
 
 type SkeletonBlockProps = {
   className?: string;
@@ -72,6 +82,28 @@ export const RecipeCardSkeleton = ({ viewMode }: { viewMode: "grid" | "list" }) 
   );
 };
 
+export const RecipeListSkeleton = () => (
+  <section
+    aria-label="レシピ一覧を読み込み中"
+    className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10"
+    role="status"
+  >
+    <span className="sr-only">レシピ一覧を読み込み中</span>
+    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+      <SkeletonBlock className="h-11 w-full rounded-full" />
+      <SkeletonBlock className="h-10 w-20 rounded-full" />
+    </div>
+    <div className="mt-6 flex justify-end">
+      <SkeletonBlock className="h-10 w-24 rounded-full" />
+    </div>
+    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+      {gridRecipeSkeletonKeys.map((key) => (
+        <RecipeCardSkeleton key={key} viewMode="grid" />
+      ))}
+    </div>
+  </section>
+);
+
 const SectionSkeleton = ({ titleWidth, children }: { titleWidth: string; children: ReactNode }) => (
   <section className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
     <SkeletonBlock className={`h-5 ${titleWidth}`} />
@@ -80,11 +112,12 @@ const SectionSkeleton = ({ titleWidth, children }: { titleWidth: string; childre
 );
 
 export const RecipeDetailSkeleton = () => (
-  <article
+  <section
     aria-label="レシピ詳細を読み込み中"
     className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-10"
     role="status"
   >
+    <span className="sr-only">レシピ詳細を読み込み中</span>
     <div className="mb-5 flex items-center justify-between gap-4">
       <div className="min-w-0 flex-1">
         <SkeletonBlock className="h-8 w-3/4 rounded-[16px]" />
@@ -122,15 +155,16 @@ export const RecipeDetailSkeleton = () => (
         <SkeletonBlock className="h-20 w-full" />
       </SectionSkeleton>
     </div>
-  </article>
+  </section>
 );
 
 export const RecipeFormSkeleton = () => (
-  <form
+  <section
     aria-label="レシピ編集フォームを読み込み中"
     className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10"
     role="status"
   >
+    <span className="sr-only">レシピ編集フォームを読み込み中</span>
     <div className="sticky top-0 z-20 border-b border-brand-line-soft bg-brand-cream/95 px-3 py-2.5 backdrop-blur-md sm:top-3 sm:mt-3 sm:rounded-[20px] sm:border sm:px-5 sm:py-3 sm:shadow-pantry-sm">
       <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_auto] sm:gap-3">
         <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
@@ -185,5 +219,64 @@ export const RecipeFormSkeleton = () => (
         <SkeletonBlock className="h-24 w-full" />
       </SectionSkeleton>
     </div>
-  </form>
+  </section>
+);
+
+export const ImportUrlSkeleton = () => (
+  <section
+    aria-label="URL取り込み画面を読み込み中"
+    className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-10"
+    role="status"
+  >
+    <div className="mb-2 flex items-center gap-3">
+      <SkeletonBlock className="h-10 w-10 rounded-full" />
+      <div className="min-w-0 flex-1">
+        <SkeletonBlock className="h-7 w-44 rounded-[16px]" />
+        <SkeletonBlock className="mt-2 h-4 w-full max-w-md" />
+      </div>
+    </div>
+    <section className="mt-6 rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div>
+          <SkeletonBlock className="h-4 w-12" />
+          <SkeletonBlock className="mt-2 h-11 w-full" />
+        </div>
+        <SkeletonBlock className="h-11 w-full rounded-full sm:w-24" />
+      </div>
+    </section>
+  </section>
+);
+
+export const SettingsSkeleton = () => (
+  <section
+    aria-label="設定画面を読み込み中"
+    className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10"
+    role="status"
+  >
+    <div className="mb-6 flex items-center gap-3">
+      <SkeletonBlock className="h-10 w-10 rounded-full" />
+      <SkeletonBlock className="h-7 w-20 rounded-[16px]" />
+    </div>
+    <div className="grid gap-5">
+      <SectionSkeleton titleWidth="w-28">
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-4">
+            <SkeletonBlock className="h-5 w-36" />
+            <SkeletonBlock className="h-11 w-full" />
+            <SkeletonBlock className="h-10 w-40 rounded-full" />
+          </div>
+          <div className="grid gap-4">
+            <SkeletonBlock className="h-5 w-32" />
+            <SkeletonBlock className="h-11 w-full" />
+            <SkeletonBlock className="h-11 w-full" />
+            <SkeletonBlock className="h-10 w-36 rounded-full" />
+          </div>
+        </div>
+      </SectionSkeleton>
+      <SectionSkeleton titleWidth="w-20">
+        <SkeletonBlock className="h-5 w-40" />
+        <SkeletonBlock className="mt-4 h-10 w-28 rounded-full" />
+      </SectionSkeleton>
+    </div>
+  </section>
 );
