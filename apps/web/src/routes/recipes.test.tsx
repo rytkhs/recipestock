@@ -1002,13 +1002,15 @@ describe("RecipesRoute", () => {
     expect(coverImage).toHaveAttribute("src", "https://images.example/cover.webp");
     expect(coverImage).toHaveAttribute("width", "1200");
     expect(coverImage).toHaveAttribute("height", "800");
+    expect(coverImage).toHaveAttribute("decoding", "async");
+    expect(coverImage).toHaveAttribute("fetchpriority", "high");
     expect(coverImage).toHaveStyle({ aspectRatio: "1200 / 800" });
     expect(screen.getByRole("button", { name: "Tomato pastaを拡大" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "レシピ画像" })).toBeInTheDocument();
-    expect(screen.getByAltText("レシピ画像1")).toHaveAttribute(
-      "src",
-      "https://images.example/source-1.webp",
-    );
+    const firstReferenceImage = screen.getByAltText("レシピ画像1");
+    expect(firstReferenceImage).toHaveAttribute("src", "https://images.example/source-1.webp");
+    expect(firstReferenceImage).toHaveAttribute("loading", "lazy");
+    expect(firstReferenceImage).toHaveAttribute("decoding", "async");
     expect(screen.getByAltText("レシピ画像2")).toHaveAttribute(
       "src",
       "https://images.example/source-2.webp",
@@ -1017,6 +1019,8 @@ describe("RecipesRoute", () => {
     expect(stepImage).toHaveAttribute("src", "https://images.example/step.webp");
     expect(stepImage).toHaveAttribute("width", "800");
     expect(stepImage).toHaveAttribute("height", "1200");
+    expect(stepImage).toHaveAttribute("loading", "lazy");
+    expect(stepImage).toHaveAttribute("decoding", "async");
     expect(stepImage).toHaveStyle({ aspectRatio: "800 / 1200" });
     expect(screen.queryByAltText("手順2の画像1")).not.toBeInTheDocument();
   });

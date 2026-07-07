@@ -92,6 +92,15 @@ const importJobIslandAnimationMs = 220;
 const importJobIslandUnmountDelayMs = 320;
 const importJobSuccessDismissDelayMs = 4000;
 const importJobFailureDismissDelayMs = 10_000;
+const eagerRecipeThumbnailCount = 4;
+const recipeDetailCoverImageProps = {
+  decoding: "async",
+  fetchPriority: "high",
+} as const;
+const deferredRecipeContentImageProps = {
+  decoding: "async",
+  loading: "lazy",
+} as const;
 const gridRecipeSkeletonKeys = [
   "grid-recipe-skeleton-1",
   "grid-recipe-skeleton-2",
@@ -109,6 +118,12 @@ const listRecipeSkeletonKeys = [
   "list-recipe-skeleton-4",
   "list-recipe-skeleton-5",
 ];
+
+const getRecipeThumbnailImageProps = (index: number) =>
+  ({
+    decoding: "async",
+    loading: index < eagerRecipeThumbnailCount ? "eager" : "lazy",
+  }) as const;
 
 const ImportJobIsland = () => {
   const queryClient = useQueryClient();
@@ -958,16 +973,17 @@ export const RecipesIndexRoute = () => {
         {isInitialRecipesLoading
           ? recipeSkeletonKeys.map((key) => <RecipeCardSkeleton key={key} viewMode={viewMode} />)
           : null}
-        {recipes.map((recipe) => {
+        {recipes.map((recipe, recipeIndex) => {
           const isList = viewMode === "list";
           const content = isList ? (
             <div className="flex w-full items-center p-1.5 sm:p-2">
               <div className="relative aspect-square h-16 w-16 sm:h-20 sm:w-20 shrink-0 bg-brand-paper-muted overflow-hidden rounded-[10px] sm:rounded-[12px]">
                 {recipe.coverImageUrl ? (
                   <img
-                    src={recipe.coverImageUrl}
                     alt={recipe.title}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    src={recipe.coverImageUrl}
+                    {...getRecipeThumbnailImageProps(recipeIndex)}
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
@@ -1002,9 +1018,10 @@ export const RecipesIndexRoute = () => {
               <div className="relative aspect-[4/3] sm:aspect-video w-full bg-brand-paper-muted overflow-hidden rounded-t-[18px] sm:rounded-t-[20px]">
                 {recipe.coverImageUrl ? (
                   <img
-                    src={recipe.coverImageUrl}
                     alt={recipe.title}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    src={recipe.coverImageUrl}
+                    {...getRecipeThumbnailImageProps(recipeIndex)}
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
@@ -1305,6 +1322,7 @@ export const RecipeDetailRoute = () => {
                 aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
               }}
               width={recipe.content.coverImage.width}
+              {...recipeDetailCoverImageProps}
             />
           </RecipeImageZoomButton>
         ) : null}
@@ -1368,6 +1386,7 @@ export const RecipeDetailRoute = () => {
                     height={image.height}
                     src={image.url}
                     width={image.width}
+                    {...deferredRecipeContentImageProps}
                   />
                 </RecipeImageZoomButton>
               ) : null,
@@ -1464,6 +1483,7 @@ export const RecipeDetailRoute = () => {
                             src={image.url}
                             style={{ aspectRatio: `${image.width} / ${image.height}` }}
                             width={image.width}
+                            {...deferredRecipeContentImageProps}
                           />
                         </RecipeImageZoomButton>
                       ) : null,
