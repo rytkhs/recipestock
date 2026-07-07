@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createApp } from "../index";
+import { createSilentTestApp } from "../test-helpers";
 
 describe("Usage routes", () => {
   it("現在月のAI利用状況を返す", async () => {
     const calls: string[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },

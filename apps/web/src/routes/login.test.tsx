@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { authRedirect } from "../lib/auth";
 import {
   createSessionResponse,
   findFetchCall,
@@ -20,6 +21,7 @@ describe("LoginRoute", () => {
     const fetchMock = mockFetch(async () =>
       jsonResponse({ url: "https://accounts.google.com/o/oauth2/v2/auth" }),
     );
+    const assign = vi.spyOn(authRedirect, "assign").mockImplementation(() => {});
     await renderApp("/login");
 
     await userEvent.click(await screen.findByRole("button", { name: "Googleでログイン" }));
@@ -36,6 +38,7 @@ describe("LoginRoute", () => {
       provider: "google",
       disableRedirect: true,
     });
+    expect(assign).toHaveBeenCalledWith("https://accounts.google.com/o/oauth2/v2/auth");
   });
 
   it("ログインルートからメールとパスワードでログインする", async () => {

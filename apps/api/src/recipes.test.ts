@@ -15,7 +15,7 @@ const createRecipe = (): NewRecipeRecord => ({
   title: "Tomato pasta",
   content: {
     title: "Tomato pasta",
-    sourceMedia: [],
+    referenceImages: [],
     ingredientGroups: [],
     steps: [],
   },

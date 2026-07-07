@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createApp } from "../index";
+import { createSilentTestApp } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 const auth = {
@@ -11,7 +11,7 @@ const auth = {
 
 describe("Image routes", () => {
   it("ログイン済みユーザーが画像アップロード用URLを取得できる", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       imageService: {
         createUploadUrl: async ({ objectKey }) => ({
@@ -52,7 +52,7 @@ describe("Image routes", () => {
   });
 
   it("画像アップロード用URLの発行に失敗したらunknownエラーを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       imageService: {
         createUploadUrl: async () => {
@@ -90,7 +90,7 @@ describe("Image routes", () => {
   });
 
   it("画像アップロード用URLは認証を必須にする", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => null,
         handleAuthRequest: async () => new Response(null, { status: 404 }),
@@ -114,7 +114,7 @@ describe("Image routes", () => {
   });
 
   it("画像アップロード用URLは画像種別とサイズを検証する", async () => {
-    const testApp = createApp({ auth });
+    const testApp = createSilentTestApp({ auth });
 
     const invalidTypeResponse = await testApp.request(
       "/api/images/upload-url",
@@ -154,7 +154,7 @@ describe("Image routes", () => {
   });
 
   it("レシピ本文に含まれる画像だけ表示用URLを取得できる", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
@@ -171,7 +171,7 @@ describe("Image routes", () => {
               width: 1200,
               height: 800,
             },
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [],
             steps: [
               {
@@ -228,7 +228,7 @@ describe("Image routes", () => {
   });
 
   it("レシピ本文に含まれない画像は表示用URLを取得できない", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
@@ -240,7 +240,7 @@ describe("Image routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [],
             steps: [],
           },

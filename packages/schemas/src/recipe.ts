@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MAX_RECIPE_SOURCE_MEDIA_IMAGES = 20;
+export const MAX_RECIPE_REFERENCE_IMAGES = 20;
 export const MAX_RECIPE_STEP_IMAGES = 10;
 export const MAX_RECIPE_TOTAL_IMAGES = 100;
 
@@ -45,15 +45,15 @@ export const recipeImageWithUrlSchema = recipeImageSchema.extend({
 });
 
 const countRecipeImages = (content: {
-  sourceMedia?: unknown[];
+  referenceImages?: unknown[];
   steps?: { images?: unknown[] }[];
 }) =>
-  (content.sourceMedia?.length ?? 0) +
+  (content.referenceImages?.length ?? 0) +
   (content.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
 const validateRecipeTotalImages = (
   content: {
-    sourceMedia?: unknown[];
+    referenceImages?: unknown[];
     steps?: { images?: unknown[] }[];
   },
   ctx: z.RefinementCtx,
@@ -86,7 +86,7 @@ export const recipeContentSchema = z
     title: z.string().min(1),
     yieldText: z.string().optional(),
     coverImage: recipeImageSchema.optional(),
-    sourceMedia: z.array(recipeImageSchema).max(MAX_RECIPE_SOURCE_MEDIA_IMAGES).default([]),
+    referenceImages: z.array(recipeImageSchema).max(MAX_RECIPE_REFERENCE_IMAGES).default([]),
     ingredientGroups: z.array(ingredientGroupSchema).default([]),
     steps: z.array(recipeStepSchema).default([]),
     note: z.string().optional(),
@@ -99,7 +99,7 @@ export const recipeStepWithUrlSchema = recipeStepSchema.safeExtend({
 
 export const recipeContentWithUrlsSchema = recipeContentSchema.safeExtend({
   coverImage: recipeImageWithUrlSchema.optional(),
-  sourceMedia: z.array(recipeImageWithUrlSchema).max(MAX_RECIPE_SOURCE_MEDIA_IMAGES).default([]),
+  referenceImages: z.array(recipeImageWithUrlSchema).max(MAX_RECIPE_REFERENCE_IMAGES).default([]),
   steps: z.array(recipeStepWithUrlSchema).default([]),
 });
 
@@ -108,7 +108,7 @@ export const recipeDraftContentSchema = z
     title: z.string().min(1),
     yieldText: z.string().optional(),
     coverImage: draftImageRefSchema.optional(),
-    sourceMedia: z.array(draftImageRefSchema).max(MAX_RECIPE_SOURCE_MEDIA_IMAGES).default([]),
+    referenceImages: z.array(draftImageRefSchema).max(MAX_RECIPE_REFERENCE_IMAGES).default([]),
     ingredientGroups: z.array(ingredientGroupSchema).default([]),
     steps: z.array(recipeDraftStepSchema).default([]),
     note: z.string().optional(),

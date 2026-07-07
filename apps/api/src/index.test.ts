@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "./billing";
 import { type ImportJobRepository } from "./import-jobs";
-import { createApp, handleImportQueueMessageError } from "./index";
+import { handleImportQueueMessageError } from "./index";
+import { createLogger, createMemoryLogSink } from "./logger";
 import { type StripeBillingClient, StripeWebhookSignatureError } from "./stripe-billing";
+import { createSilentTestApp } from "./test-helpers";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -24,7 +26,7 @@ const env = {
 
 describe("API app composition", () => {
   it("APIレスポンスにsecure headersを付与する", async () => {
-    const testApp = createApp({ auth });
+    const testApp = createSilentTestApp({ auth });
 
     const response = await testApp.request("/api/me", {}, env);
 
@@ -33,8 +35,29 @@ describe("API app composition", () => {
     expect(response.headers.get("x-frame-options")).toBe("SAMEORIGIN");
   });
 
+  it("request loggerにloggerFactoryで作成したloggerを使う", async () => {
+    const sink = createMemoryLogSink();
+    const testApp = createSilentTestApp({
+      auth,
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+    });
+
+    const response = await testApp.request("/api/me", {}, env);
+
+    expect(response.status).toBe(401);
+    expect(sink.entries).toEqual([
+      expect.objectContaining({
+        event: "api_request_completed",
+        level: "warn",
+        method: "GET",
+        route: "/api/me",
+        status: 401,
+      }),
+    ]);
+  });
+
   it("CSRF対象APIへのcross-site form POSTは403を返す", async () => {
-    const testApp = createApp({ auth });
+    const testApp = createSilentTestApp({ auth });
 
     const response = await testApp.request(
       "/api/billing/checkout",
@@ -53,7 +76,7 @@ describe("API app composition", () => {
   });
 
   it("CSRF対象APIへのsame-origin form POSTは認証middlewareまで進む", async () => {
-    const testApp = createApp({ auth });
+    const testApp = createSilentTestApp({ auth });
 
     const response = await testApp.request(
       "/api/billing/checkout",
@@ -79,7 +102,7 @@ describe("API app composition", () => {
 
   it("Auth APIは認証middlewareを通さずBetter Authへ委譲する", async () => {
     let getSessionCalls = 0;
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => {
           getSessionCalls += 1;
@@ -111,7 +134,7 @@ describe("API app composition", () => {
   });
 
   it("Auth APIはCSRF middlewareで止めずBetter Authへ委譲する", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => {
           throw new Error("should not get session");
@@ -137,11 +160,11 @@ describe("API app composition", () => {
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 
-  it("Stripe webhookはcross-site form POSTでもCSRF middlewareで止めない", async () => {
+  it("Stripe webhookはcross-site POSTでもCSRF middlewareで止めない", async () => {
     const verifyWebhook = vi.fn<StripeBillingClient["verifyWebhook"]>(async () => {
       throw new StripeWebhookSignatureError();
     });
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth,
       billingRepository: {} as BillingRepository,
       stripeBillingClient: {
@@ -162,7 +185,7 @@ describe("API app composition", () => {
         method: "POST",
         body: "{}",
         headers: {
-          "content-type": "application/x-www-form-urlencoded",
+          "content-type": "application/json",
           origin: "https://evil.example.com",
           "sec-fetch-site": "cross-site",
           "stripe-signature": "sig_test",

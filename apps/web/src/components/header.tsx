@@ -24,12 +24,22 @@ const PublicNav = () => (
   </nav>
 );
 
-const AddRecipeMenu = ({ children }: { children: ReactNode }) => {
+const AddRecipeMenu = ({
+  "aria-label": ariaLabel,
+  children,
+  className,
+}: {
+  "aria-label"?: string;
+  children: ReactNode;
+  className: string;
+}) => {
   const navigate = useNavigate();
 
   return (
     <Dropdown>
-      {children}
+      <Dropdown.Trigger aria-label={ariaLabel} className={className}>
+        {children}
+      </Dropdown.Trigger>
       <Dropdown.Popover className="min-w-56 rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
         <Dropdown.Menu
           onAction={(key) => {
@@ -73,15 +83,9 @@ const AddRecipeMenu = ({ children }: { children: ReactNode }) => {
 
 const AppNav = () => (
   <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-x-1 gap-y-2">
-    <AddRecipeMenu>
-      <Button
-        className="rounded-full bg-brand-sage text-white font-semibold text-sm gap-1.5 hover:bg-brand-sage-dark"
-        size="sm"
-        variant="primary"
-      >
-        <CookingPot size={16} weight="bold" />
-        レシピ追加
-      </Button>
+    <AddRecipeMenu className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-brand-sage px-3 font-semibold text-sm text-white hover:bg-brand-sage-dark">
+      <CookingPot size={16} weight="bold" />
+      レシピ追加
     </AddRecipeMenu>
     <Link
       activeProps={{ className: "text-brand-sage font-semibold" }}
@@ -119,13 +123,21 @@ const MobileBottomNavLink = ({
 }) => (
   <Link
     aria-current={isActive ? "page" : undefined}
-    className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-[14px] no-underline text-[11px] font-semibold transition-colors ${
-      isActive ? "bg-brand-sage-soft/70 text-brand-sage-dark" : "text-brand-muted"
+    className={`group relative flex h-12 w-22 flex-col items-center justify-center gap-0.5 rounded-full no-underline transition-all duration-200 ${
+      isActive ? "text-brand-sage-dark" : "text-brand-muted hover:text-brand-walnut"
     }`}
     to={to}
   >
-    {icon}
-    {label}
+    <div
+      className={`relative z-10 transition-transform duration-300 ${isActive ? "[transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] scale-110 -translate-y-1" : "ease-out scale-100 group-hover:scale-110"}`}
+    >
+      {icon}
+    </div>
+    <span
+      className={`relative z-10 text-[10px] font-bold tracking-wide transition-opacity duration-200 ${isActive ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+    >
+      {label}
+    </span>
   </Link>
 );
 
@@ -140,28 +152,25 @@ export const MobileBottomNav = () => {
   return (
     <nav
       aria-label="Mobile navigation"
-      className="fixed inset-x-0 bottom-0 z-50 border-brand-line border-t bg-brand-paper/95 px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-pantry-lg backdrop-blur-md sm:hidden"
+      className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-max -translate-x-1/2 rounded-full border border-white/60 bg-brand-paper/85 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_16px_32px_-8px_rgba(0,0,0,0.15)] backdrop-blur-xl sm:hidden"
     >
-      <div className="mx-auto grid max-w-md grid-cols-[1fr_auto_1fr] items-end gap-3">
+      <div className="flex items-center gap-2 px-1">
         <MobileBottomNavLink
-          icon={<ListIcon size={22} weight="bold" />}
+          icon={<ListIcon size={24} weight={pathname.startsWith("/recipes") ? "fill" : "bold"} />}
           isActive={pathname.startsWith("/recipes")}
           label="レシピ"
           to="/recipes"
         />
-        <AddRecipeMenu>
-          <Button
-            className="h-16 min-w-16 rounded-full bg-brand-sage px-4 text-white shadow-pantry-lg hover:bg-brand-sage-dark"
-            variant="primary"
-          >
-            <span className="flex flex-col items-center gap-0.5 text-[11px] font-bold">
-              <CookingPot size={24} weight="bold" />
-              追加
-            </span>
-          </Button>
+        <AddRecipeMenu
+          aria-label="レシピ追加"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-sage text-white shadow-lg shadow-brand-sage/40 transition-all duration-200 hover:scale-105 hover:bg-brand-sage-dark"
+        >
+          <CookingPot size={24} weight="fill" />
         </AddRecipeMenu>
         <MobileBottomNavLink
-          icon={<UserCircle size={22} weight="bold" />}
+          icon={
+            <UserCircle size={24} weight={pathname.startsWith("/settings") ? "fill" : "bold"} />
+          }
           isActive={pathname.startsWith("/settings")}
           label="設定"
           to="/settings"

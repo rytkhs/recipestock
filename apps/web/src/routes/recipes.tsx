@@ -1,19 +1,54 @@
-import { Button, Dropdown, Input, Label, TextField } from "@heroui/react";
+import {
+  AlertDialog,
+  Button,
+  Dropdown,
+  Input,
+  Label,
+  ProgressCircle,
+  Surface,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+} from "@heroui/react";
 import {
   CaretLeft,
   CaretRight,
+  CheckCircle,
   DotsThreeVertical,
   Globe,
+  List,
   LockSimple,
   MagnifyingGlass,
   PencilSimple,
+  SquaresFour,
   Trash,
+  WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { type ListRecipesResponse } from "@recipestock/schemas";
+import {
+  type ImportJobSummary,
+  type ListRecipesResponse,
+  type RecentImportJobsResponse,
+} from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+  type TransitionEvent as ReactTransitionEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  RecipeCardSkeleton,
+  RecipeDetailSkeleton,
+  RecipeFormSkeleton,
+} from "../components/loading";
 import {
   dismissFinishedImportJob,
   fetchRecentImportJobs,
@@ -42,8 +77,45 @@ import {
   updateRecipe,
 } from "../features/recipes";
 
-const ImportJobBanner = () => {
+const importJobTimestamp = (job: ImportJobSummary) =>
+  Date.parse(job.finishedAt ?? job.startedAt ?? job.createdAt);
+
+const latestImportJob = (jobs: ImportJobSummary[]) =>
+  [...jobs].sort((a, b) => importJobTimestamp(b) - importJobTimestamp(a))[0] ?? null;
+
+const selectVisibleImportJob = (jobs: ImportJobSummary[]) =>
+  latestImportJob(jobs.filter((job) => job.status === "queued" || job.status === "running")) ??
+  latestImportJob(jobs.filter((job) => job.status === "failed")) ??
+  latestImportJob(jobs.filter((job) => job.status === "succeeded"));
+
+const importJobIslandAnimationMs = 220;
+const importJobIslandUnmountDelayMs = 320;
+const importJobSuccessDismissDelayMs = 4000;
+const importJobFailureDismissDelayMs = 10_000;
+const gridRecipeSkeletonKeys = [
+  "grid-recipe-skeleton-1",
+  "grid-recipe-skeleton-2",
+  "grid-recipe-skeleton-3",
+  "grid-recipe-skeleton-4",
+  "grid-recipe-skeleton-5",
+  "grid-recipe-skeleton-6",
+  "grid-recipe-skeleton-7",
+  "grid-recipe-skeleton-8",
+];
+const listRecipeSkeletonKeys = [
+  "list-recipe-skeleton-1",
+  "list-recipe-skeleton-2",
+  "list-recipe-skeleton-3",
+  "list-recipe-skeleton-4",
+  "list-recipe-skeleton-5",
+];
+
+const ImportJobIsland = () => {
   const queryClient = useQueryClient();
+  const [renderedJob, setRenderedJob] = useState<ImportJobSummary | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const previousJobIdRef = useRef<string | null>(null);
+  const dismissUnmountTimerRef = useRef<number | null>(null);
   const { data } = useQuery({
     queryKey: importJobQueryKeys.recent(),
     queryFn: fetchRecentImportJobs,
@@ -51,7 +123,7 @@ const ImportJobBanner = () => {
   });
   const dismissMutation = useMutation({
     mutationFn: dismissFinishedImportJob,
-    onSuccess: async () => {
+    onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
     },
   });
@@ -63,102 +135,198 @@ const ImportJobBanner = () => {
   });
   const jobs = data?.jobs ?? [];
 
+  const dismissVisibleImportJob = useCallback(
+    (jobId: string) => {
+      queryClient.setQueryData<RecentImportJobsResponse>(importJobQueryKeys.recent(), (current) =>
+        current
+          ? {
+              ...current,
+              jobs: current.jobs.filter((job) => job.id !== jobId),
+            }
+          : current,
+      );
+      setIsVisible(false);
+
+      if (dismissUnmountTimerRef.current) {
+        window.clearTimeout(dismissUnmountTimerRef.current);
+      }
+
+      dismissUnmountTimerRef.current = window.setTimeout(() => {
+        setRenderedJob((current) => (current?.id === jobId ? null : current));
+        if (previousJobIdRef.current === jobId) {
+          previousJobIdRef.current = null;
+        }
+        dismissUnmountTimerRef.current = null;
+      }, importJobIslandUnmountDelayMs);
+
+      dismissMutation.mutate(jobId);
+    },
+    [dismissMutation, queryClient],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (dismissUnmountTimerRef.current) {
+        window.clearTimeout(dismissUnmountTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (jobs.some((job) => job.status === "succeeded")) {
       void invalidateRecipeLists(queryClient);
     }
   }, [jobs, queryClient]);
 
-  if (jobs.length === 0) {
+  const job = selectVisibleImportJob(jobs);
+
+  useEffect(() => {
+    if (!(job?.status === "succeeded" || job?.status === "failed")) {
+      return;
+    }
+
+    const delay =
+      job.status === "failed" ? importJobFailureDismissDelayMs : importJobSuccessDismissDelayMs;
+    const timer = window.setTimeout(() => {
+      dismissVisibleImportJob(job.id);
+    }, delay);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [job, dismissVisibleImportJob]);
+
+  useEffect(() => {
+    if (job) {
+      const previousJobId = previousJobIdRef.current;
+      previousJobIdRef.current = job.id;
+      setRenderedJob(job);
+
+      if (previousJobId === job.id) {
+        setIsVisible(true);
+        return;
+      }
+
+      setIsVisible(false);
+      const animationFrame = window.requestAnimationFrame(() => {
+        setIsVisible(true);
+      });
+
+      return () => window.cancelAnimationFrame(animationFrame);
+    }
+
+    previousJobIdRef.current = null;
+    setIsVisible(false);
+
+    const unmountTimer = window.setTimeout(() => {
+      setRenderedJob(null);
+    }, importJobIslandUnmountDelayMs);
+
+    return () => {
+      window.clearTimeout(unmountTimer);
+    };
+  }, [job]);
+
+  const visibleJob = renderedJob ?? job;
+
+  if (!visibleJob) {
     return null;
   }
 
+  const isActive = visibleJob.status === "queued" || visibleJob.status === "running";
+  const isSucceeded = visibleJob.status === "succeeded";
+  const isFailed = visibleJob.status === "failed";
+  const title = isSucceeded
+    ? "保存しました"
+    : isFailed
+      ? "取り込めませんでした"
+      : visibleJob.status === "queued"
+        ? "取り込み待ち"
+        : "取り込み中";
+  const description = isFailed ? getImportJobFailureMessage(visibleJob) : visibleJob.url;
+
   return (
-    <div className="mt-6 grid gap-3">
-      {jobs.map((job) => {
-        if (job.status === "succeeded") {
-          return (
-            <div
-              className="rounded-[14px] border border-brand-sage-soft bg-brand-sage-soft/30 p-4 text-sm"
-              key={job.id}
-              role="status"
+    <Surface
+      className={`fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 mx-auto flex max-w-[460px] items-center gap-3 rounded-[20px] border border-brand-line-soft bg-brand-paper/95 px-4 py-3 text-sm shadow-pantry backdrop-blur-xl transition-[opacity,transform] ease-out motion-reduce:transition-none sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-[76px] sm:w-[min(460px,calc(100vw-2rem))] sm:-translate-x-1/2 ${
+        isVisible
+          ? "translate-y-0 scale-100 opacity-100"
+          : "pointer-events-none translate-y-6 opacity-0 sm:-translate-y-2 sm:scale-[0.98]"
+      }`}
+      role={isFailed ? "alert" : "status"}
+      style={{ transitionDuration: `${importJobIslandAnimationMs}ms` }}
+      variant="transparent"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+            isSucceeded
+              ? "bg-brand-sage-soft text-brand-sage-dark"
+              : isFailed
+                ? "bg-brand-danger/10 text-brand-danger"
+                : "bg-brand-orange-soft/60 text-brand-orange"
+          }`}
+        >
+          {isActive ? (
+            <ProgressCircle
+              aria-label="取り込み中"
+              className="text-brand-orange"
+              color="warning"
+              isIndeterminate
+              size="sm"
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="font-semibold text-brand-sage-dark">取り込みが完了しました。</p>
-                <div className="flex gap-2">
-                  {job.recipeId ? (
-                    <Link
-                      className="inline-flex min-h-9 items-center justify-center rounded-full bg-brand-sage px-4 font-semibold text-white text-sm hover:bg-brand-sage-dark transition-colors"
-                      params={{ recipeId: job.recipeId }}
-                      to="/recipes/$recipeId"
-                    >
-                      開く
-                    </Link>
-                  ) : null}
-                  <Button
-                    className="rounded-full"
-                    size="sm"
-                    variant="secondary"
-                    onPress={() => dismissMutation.mutate(job.id)}
-                  >
-                    閉じる
-                  </Button>
-                </div>
-              </div>
-            </div>
-          );
-        }
+              <ProgressCircle.Track>
+                <ProgressCircle.TrackCircle />
+                <ProgressCircle.FillCircle />
+              </ProgressCircle.Track>
+            </ProgressCircle>
+          ) : null}
+          {isSucceeded ? <CheckCircle size={19} weight="fill" /> : null}
+          {isFailed ? <WarningCircle size={19} weight="fill" /> : null}
+        </div>
 
-        if (job.status === "failed") {
-          return (
-            <div
-              className="rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-4 text-sm"
-              key={job.id}
-              role="alert"
-            >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="font-semibold text-brand-danger">
-                  取り込みに失敗しました。{getImportJobFailureMessage(job)}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
-                    isDisabled={!job.url || retryMutation.isPending}
-                    size="sm"
-                    variant="primary"
-                    onPress={() => retryMutation.mutate(job)}
-                  >
-                    再試行
-                  </Button>
-                  <Button
-                    className="rounded-full"
-                    size="sm"
-                    variant="secondary"
-                    onPress={() => dismissMutation.mutate(job.id)}
-                  >
-                    閉じる
-                  </Button>
-                </div>
-              </div>
-            </div>
-          );
-        }
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold text-brand-ink text-sm">{title}</p>
+          {description ? (
+            <p className="mt-0.5 truncate text-brand-muted text-xs">{description}</p>
+          ) : null}
+        </div>
+      </div>
 
-        return (
-          <div
-            className="rounded-[14px] border border-brand-line bg-brand-paper p-4 text-sm"
-            key={job.id}
-            role="status"
+      <div className="flex shrink-0 items-center gap-1.5">
+        {isSucceeded && visibleJob.recipeId ? (
+          <Link
+            className="inline-flex min-h-8 items-center justify-center rounded-full bg-brand-sage px-3 font-semibold text-white text-xs no-underline transition-colors hover:bg-brand-sage-dark"
+            params={{ recipeId: visibleJob.recipeId }}
+            to="/recipes/$recipeId"
           >
-            <div className="flex items-center gap-3">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
-              <p className="font-semibold text-brand-walnut">取り込み中...</p>
-            </div>
-            {job.url ? <p className="mt-2 break-all text-brand-muted text-xs">{job.url}</p> : null}
-          </div>
-        );
-      })}
-    </div>
+            開く
+          </Link>
+        ) : null}
+        {isFailed ? (
+          <Button
+            className="h-8 rounded-full bg-brand-sage px-3 text-white text-xs font-semibold hover:bg-brand-sage-dark"
+            isDisabled={!visibleJob.url || retryMutation.isPending}
+            size="sm"
+            variant="primary"
+            onPress={() => retryMutation.mutate(visibleJob)}
+          >
+            再試行
+          </Button>
+        ) : null}
+        {!isActive ? (
+          <Button
+            aria-label="閉じる"
+            className="h-8 w-8 rounded-full bg-transparent text-brand-muted hover:bg-brand-paper-muted hover:text-brand-walnut"
+            isIconOnly
+            size="sm"
+            variant="ghost"
+            onPress={() => dismissVisibleImportJob(visibleJob.id)}
+          >
+            <X size={16} weight="bold" />
+          </Button>
+        ) : null}
+      </div>
+    </Surface>
   );
 };
 
@@ -172,6 +340,43 @@ type RecipeLightboxImage = {
   id: string;
   url: string;
   width: number;
+};
+
+const lightboxSlideEasing = "cubic-bezier(0.22, 1, 0.36, 1)";
+const lightboxRestEasing = "cubic-bezier(0.2, 0, 0, 1)";
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const getResistedDragOffset = (deltaX: number, stageWidth: number) => {
+  const sign = Math.sign(deltaX);
+  const edgeLimit = Math.max(104, stageWidth * 0.32);
+
+  return sign * edgeLimit * (1 - Math.exp(-Math.abs(deltaX) / edgeLimit));
+};
+
+const getSwipeTransition = ({
+  dragOffsetPx,
+  isReturning,
+  stageWidth,
+  velocityX,
+}: {
+  dragOffsetPx: number;
+  isReturning: boolean;
+  stageWidth: number;
+  velocityX: number;
+}) => {
+  if (isReturning) {
+    const dragProgress = stageWidth > 0 ? Math.abs(dragOffsetPx) / stageWidth : 0;
+    const durationMs = Math.round(clamp(170 + dragProgress * 20, 170, 190));
+
+    return `transform ${durationMs}ms ${lightboxRestEasing}`;
+  }
+
+  const remainingDistance = Math.max(0, stageWidth - Math.abs(dragOffsetPx));
+  const effectiveVelocity = Math.max(Math.abs(velocityX), 0.72);
+  const durationMs = Math.round(clamp(remainingDistance / effectiveVelocity, 160, 240));
+
+  return `transform ${durationMs}ms ${lightboxSlideEasing}`;
 };
 
 const RecipeImageZoomButton = ({
@@ -213,6 +418,26 @@ const RecipeImageLightbox = ({
   const hasMultipleImages = images.length > 1;
   const hasPreviousImage = index > 0;
   const hasNextImage = index < images.length - 1;
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const swipeGestureRef = useRef<{
+    isHorizontal: boolean | null;
+    lastTime: number;
+    lastX: number;
+    pointerId: number;
+    stageWidth: number;
+    startTime: number;
+    startX: number;
+    startY: number;
+    velocityX: number;
+  } | null>(null);
+  const dragAnimationFrameRef = useRef<number | null>(null);
+  const pendingDragOffsetRef = useRef(0);
+  const currentDragOffsetRef = useRef(0);
+  const didDragRef = useRef(false);
+  const [dragOffsetPx, setDragOffsetPx] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [trackTransition, setTrackTransition] = useState(`transform 220ms ${lightboxSlideEasing}`);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -220,6 +445,14 @@ const RecipeImageLightbox = ({
 
     return () => {
       document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dragAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragAnimationFrameRef.current);
+      }
     };
   }, []);
 
@@ -235,22 +468,241 @@ const RecipeImageLightbox = ({
       }
 
       if (event.key === "ArrowLeft" && hasPreviousImage) {
-        onChangeIndex(index - 1);
+        requestSlide(-1);
         return;
       }
 
       if (event.key === "ArrowRight" && hasNextImage) {
-        onChangeIndex(index + 1);
+        requestSlide(1);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [hasNextImage, hasPreviousImage, image, index, onChangeIndex, onClose]);
+  });
 
   if (!image) {
     return null;
   }
+
+  function updateDragOffset(nextOffset: number) {
+    if (dragAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragAnimationFrameRef.current);
+      dragAnimationFrameRef.current = null;
+    }
+
+    pendingDragOffsetRef.current = nextOffset;
+    currentDragOffsetRef.current = nextOffset;
+    setDragOffsetPx(nextOffset);
+  }
+
+  function scheduleDragOffset(nextOffset: number) {
+    currentDragOffsetRef.current = nextOffset;
+    pendingDragOffsetRef.current = nextOffset;
+
+    if (dragAnimationFrameRef.current !== null) {
+      return;
+    }
+
+    dragAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      dragAnimationFrameRef.current = null;
+      setDragOffsetPx(pendingDragOffsetRef.current);
+    });
+  }
+
+  function startSlide(direction: -1 | 1, velocityX = 0) {
+    if (isAnimating) {
+      return;
+    }
+
+    if ((direction === -1 && !hasPreviousImage) || (direction === 1 && !hasNextImage)) {
+      return;
+    }
+
+    setIsDragging(false);
+    setIsAnimating(true);
+    setTrackTransition(
+      getSwipeTransition({
+        dragOffsetPx: currentDragOffsetRef.current,
+        isReturning: false,
+        stageWidth: stageRef.current?.clientWidth ?? window.innerWidth,
+        velocityX,
+      }),
+    );
+    updateDragOffset(0);
+    onChangeIndex(index + direction);
+  }
+
+  function requestSlide(direction: -1 | 1) {
+    if (isDragging) {
+      return;
+    }
+
+    startSlide(direction);
+  }
+
+  function settleToRest() {
+    setIsDragging(false);
+    setTrackTransition(
+      getSwipeTransition({
+        dragOffsetPx: currentDragOffsetRef.current,
+        isReturning: true,
+        stageWidth: stageRef.current?.clientWidth ?? window.innerWidth,
+        velocityX: 0,
+      }),
+    );
+    setIsAnimating(Math.abs(currentDragOffsetRef.current) >= 1);
+    updateDragOffset(0);
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!hasMultipleImages || isAnimating || event.pointerType !== "touch") {
+      return;
+    }
+
+    swipeGestureRef.current = {
+      isHorizontal: null,
+      lastTime: event.timeStamp,
+      lastX: event.clientX,
+      pointerId: event.pointerId,
+      stageWidth: event.currentTarget.clientWidth,
+      startTime: event.timeStamp,
+      startX: event.clientX,
+      startY: event.clientY,
+      velocityX: 0,
+    };
+    didDragRef.current = false;
+    setIsDragging(true);
+    updateDragOffset(0);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const gesture = swipeGestureRef.current;
+
+    if (!gesture || gesture.pointerId !== event.pointerId || isAnimating) {
+      return;
+    }
+
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    const absDeltaX = Math.abs(deltaX);
+    const absDeltaY = Math.abs(deltaY);
+
+    if (gesture.isHorizontal === null) {
+      if (Math.max(absDeltaX, absDeltaY) < 4) {
+        return;
+      }
+
+      gesture.isHorizontal = absDeltaX > absDeltaY * 1.05;
+
+      if (!gesture.isHorizontal) {
+        setIsDragging(false);
+        return;
+      }
+    }
+
+    if (!gesture.isHorizontal) {
+      return;
+    }
+
+    didDragRef.current = true;
+    event.preventDefault();
+
+    const elapsedMs = Math.max(1, event.timeStamp - gesture.lastTime);
+    const instantVelocityX = (event.clientX - gesture.lastX) / elapsedMs;
+    gesture.velocityX = gesture.velocityX * 0.65 + instantVelocityX * 0.35;
+    gesture.lastX = event.clientX;
+    gesture.lastTime = event.timeStamp;
+
+    const isBlockedDirection = (deltaX > 0 && !hasPreviousImage) || (deltaX < 0 && !hasNextImage);
+    scheduleDragOffset(
+      isBlockedDirection ? getResistedDragOffset(deltaX, gesture.stageWidth) : deltaX,
+    );
+  }
+
+  function handlePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const gesture = swipeGestureRef.current;
+
+    if (!gesture || gesture.pointerId !== event.pointerId) {
+      return;
+    }
+
+    swipeGestureRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (!gesture.isHorizontal) {
+      setIsDragging(false);
+      updateDragOffset(0);
+      return;
+    }
+
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    const absDeltaX = Math.abs(deltaX);
+    const absDeltaY = Math.abs(deltaY);
+    const elapsedMs = Math.max(1, event.timeStamp - gesture.startTime);
+    const releaseVelocityX =
+      (event.clientX - gesture.lastX) / Math.max(1, event.timeStamp - gesture.lastTime);
+    const velocityX = gesture.velocityX * 0.7 + releaseVelocityX * 0.3;
+    const distanceThreshold = Math.max(40, gesture.stageWidth * 0.1);
+    const isDirectionIntentional = absDeltaX > absDeltaY * 1.2;
+    const isDistanceSwipe = absDeltaX >= distanceThreshold;
+    const isFlickSwipe = Math.abs(velocityX) >= 0.38 && elapsedMs <= 420 && absDeltaX >= 18;
+    const isSwipe = isDirectionIntentional && (isDistanceSwipe || isFlickSwipe);
+
+    if (isSwipe && deltaX < 0 && hasNextImage) {
+      setIsDragging(false);
+      startSlide(1, velocityX);
+      return;
+    }
+
+    if (isSwipe && deltaX > 0 && hasPreviousImage) {
+      setIsDragging(false);
+      startSlide(-1, velocityX);
+      return;
+    }
+
+    settleToRest();
+  }
+
+  function handlePointerCancel(event: ReactPointerEvent<HTMLDivElement>) {
+    const gesture = swipeGestureRef.current;
+
+    if (gesture?.pointerId !== event.pointerId) {
+      return;
+    }
+
+    swipeGestureRef.current = null;
+    settleToRest();
+  }
+
+  function handleTransitionEnd(event: ReactTransitionEvent<HTMLElement>) {
+    if (event.propertyName !== "transform" || !isAnimating) {
+      return;
+    }
+
+    setIsAnimating(false);
+    updateDragOffset(0);
+  }
+
+  function handleSlideClick(event: ReactMouseEvent<HTMLElement>) {
+    if (didDragRef.current) {
+      didDragRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  }
+
+  const shouldTransitionTrack = !isDragging && isAnimating;
 
   return (
     <div
@@ -293,20 +745,51 @@ const RecipeImageLightbox = ({
           isDisabled={!hasPreviousImage}
           isIconOnly
           variant="secondary"
-          onPress={() => onChangeIndex(index - 1)}
+          onPress={() => requestSlide(-1)}
         >
           <CaretLeft size={24} weight="bold" />
         </Button>
       ) : null}
 
-      <img
-        alt={`${image.alt} 拡大`}
-        className="relative z-10 max-h-[86vh] max-w-[92vw] rounded-[14px] object-contain shadow-pantry-lg"
-        height={image.height}
-        src={image.url}
-        style={{ aspectRatio: `${image.width} / ${image.height}` }}
-        width={image.width}
-      />
+      <div
+        className="relative z-10 h-[86vh] w-[92vw] touch-pan-y overflow-hidden"
+        ref={stageRef}
+        onPointerCancel={handlePointerCancel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translateX(calc(${-index * 100}% + ${dragOffsetPx}px))`,
+            transition: shouldTransitionTrack ? trackTransition : "none",
+            willChange: isDragging || isAnimating ? "transform" : undefined,
+          }}
+          onTransitionEnd={handleTransitionEnd}
+        >
+          {images.map((slideImage, slideIndex) => (
+            <button
+              className="absolute inset-0 flex items-center justify-center border-0 bg-transparent p-0 text-white"
+              key={slideImage.id}
+              style={{ transform: `translateX(${slideIndex * 100}%)` }}
+              tabIndex={-1}
+              type="button"
+              onClick={handleSlideClick}
+            >
+              <img
+                alt={`${slideImage.alt} 拡大`}
+                className="max-h-full max-w-full select-none rounded-[14px] object-contain shadow-pantry-lg"
+                draggable={false}
+                height={slideImage.height}
+                src={slideImage.url}
+                style={{ aspectRatio: `${slideImage.width} / ${slideImage.height}` }}
+                width={slideImage.width}
+              />
+            </button>
+          ))}
+        </div>
+      </div>
 
       {hasMultipleImages ? (
         <Button
@@ -315,7 +798,7 @@ const RecipeImageLightbox = ({
           isDisabled={!hasNextImage}
           isIconOnly
           variant="secondary"
-          onPress={() => onChangeIndex(index + 1)}
+          onPress={() => requestSlide(1)}
         >
           <CaretRight size={24} weight="bold" />
         </Button>
@@ -328,7 +811,21 @@ export const RecipesIndexRoute = () => {
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    try {
+      return (localStorage.getItem("recipeViewMode") as "grid" | "list") || "grid";
+    } catch {
+      return "grid";
+    }
+  });
   const [loadedPages, setLoadedPages] = useState<ListRecipesResponse[]>([]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("recipeViewMode", viewMode);
+    } catch {}
+  }, [viewMode]);
+
   const { data, error, isFetching, refetch } = useQuery({
     queryKey: recipesQueryKeys.list(query, cursor),
     queryFn: () => listRecipes({ query, cursor }),
@@ -336,6 +833,8 @@ export const RecipesIndexRoute = () => {
   const activePages = cursor ? loadedPages.concat(data ? [data] : []) : data ? [data] : [];
   const recipes = activePages.flatMap((page) => page.items);
   const nextCursor = activePages.at(-1)?.nextCursor ?? null;
+  const isInitialRecipesLoading = isFetching && recipes.length === 0 && !error;
+  const recipeSkeletonKeys = viewMode === "grid" ? gridRecipeSkeletonKeys : listRecipeSkeletonKeys;
 
   const submitSearch = (event: { preventDefault: () => void }) => {
     event.preventDefault();
@@ -378,7 +877,7 @@ export const RecipesIndexRoute = () => {
           </TextField>
         </div>
         <Button
-          className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold hover:bg-brand-paper-muted"
+          className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold hover:bg-brand-paper-muted shrink-0"
           type="submit"
           variant="secondary"
         >
@@ -386,7 +885,7 @@ export const RecipesIndexRoute = () => {
         </Button>
       </form>
 
-      <ImportJobBanner />
+      <ImportJobIsland />
 
       {error ? (
         <div className="mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-4">
@@ -395,10 +894,9 @@ export const RecipesIndexRoute = () => {
           </p>
         </div>
       ) : null}
-      {isFetching && recipes.length === 0 ? (
-        <div className="mt-10 flex items-center justify-center gap-3">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
-          <p className="text-brand-muted text-sm">読み込み中</p>
+      {isInitialRecipesLoading ? (
+        <div aria-label="レシピ一覧を読み込み中" className="sr-only" role="status">
+          レシピ一覧を読み込み中
         </div>
       ) : null}
       {!isFetching && recipes.length === 0 && !error ? (
@@ -411,11 +909,60 @@ export const RecipesIndexRoute = () => {
         </div>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {recipes.length > 0 || isInitialRecipesLoading ? (
+        <div className="mt-6 flex justify-end">
+          <ToggleButtonGroup
+            aria-label="レシピ一覧の表示形式"
+            disallowEmptySelection
+            className="inline-flex shrink-0 p-1 rounded-full border border-brand-line-soft bg-brand-paper-raised"
+            selectedKeys={[viewMode]}
+            selectionMode="single"
+            size="md"
+            onSelectionChange={(keys) => {
+              const [selectedKey] = keys;
+
+              if (selectedKey === "grid" || selectedKey === "list") {
+                setViewMode(selectedKey);
+              }
+            }}
+          >
+            <ToggleButton
+              aria-label="グリッド表示"
+              className="h-9 w-9 rounded-full text-brand-muted transition-all duration-200 data-[selected=true]:bg-brand-paper data-[selected=true]:shadow-pantry-sm data-[selected=true]:text-brand-ink hover:text-brand-ink sm:h-10 sm:w-10"
+              id="grid"
+              isIconOnly
+              variant="ghost"
+            >
+              <SquaresFour size={18} weight={viewMode === "grid" ? "fill" : "bold"} />
+            </ToggleButton>
+            <ToggleButton
+              aria-label="リスト表示"
+              className="h-9 w-9 rounded-full text-brand-muted transition-all duration-200 data-[selected=true]:bg-brand-paper data-[selected=true]:shadow-pantry-sm data-[selected=true]:text-brand-ink hover:text-brand-ink sm:h-10 sm:w-10"
+              id="list"
+              isIconOnly
+              variant="ghost"
+            >
+              <List size={18} weight="bold" />
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </div>
+      ) : null}
+
+      <div
+        className={
+          viewMode === "grid"
+            ? "mt-3 grid grid-cols-2 gap-3 sm:gap-5 sm:grid-cols-3 lg:grid-cols-4"
+            : "mt-3 flex flex-col gap-2 sm:gap-3"
+        }
+      >
+        {isInitialRecipesLoading
+          ? recipeSkeletonKeys.map((key) => <RecipeCardSkeleton key={key} viewMode={viewMode} />)
+          : null}
         {recipes.map((recipe) => {
-          const content = (
-            <>
-              <div className="relative aspect-video w-full bg-brand-paper-muted overflow-hidden rounded-t-[20px]">
+          const isList = viewMode === "list";
+          const content = isList ? (
+            <div className="flex w-full items-center p-1.5 sm:p-2">
+              <div className="relative aspect-square h-16 w-16 sm:h-20 sm:w-20 shrink-0 bg-brand-paper-muted overflow-hidden rounded-[10px] sm:rounded-[12px]">
                 {recipe.coverImageUrl ? (
                   <img
                     src={recipe.coverImageUrl}
@@ -424,27 +971,64 @@ export const RecipesIndexRoute = () => {
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
-                    <div className="text-brand-line text-4xl">🍳</div>
+                    <div className="text-brand-line text-2xl">🍳</div>
                   </div>
                 )}
               </div>
-              <div className="flex flex-1 flex-col p-4">
-                <h2 className="line-clamp-2 font-bold text-base leading-tight text-brand-ink">
+              <div className="flex flex-1 flex-col justify-center px-4 py-1 min-w-0">
+                <h2 className="line-clamp-2 font-bold text-sm sm:text-base leading-tight text-brand-ink">
                   {recipe.title}
                 </h2>
-                <div className="mt-auto pt-3 flex items-center justify-between">
+                <div className="mt-2 flex items-center justify-between">
                   {recipe.sourceName ? (
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-paper-muted px-2.5 py-1 text-xs font-medium text-brand-muted">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-paper-muted px-2 py-0.5 text-[10px] sm:text-xs font-medium text-brand-muted truncate max-w-[80%]">
                       <SourceIcon />
-                      {recipe.sourceName}
+                      <span className="truncate">{recipe.sourceName}</span>
                     </div>
                   ) : (
                     <div />
                   )}
                   {recipe.locked ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-brand-line px-2 py-1 font-medium text-brand-muted text-xs">
-                      <LockSimple size={12} weight="bold" />
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-brand-line px-1.5 py-0.5 font-medium text-brand-muted text-[10px] sm:text-xs">
+                      <LockSimple size={10} weight="bold" />
                       ロック中
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="relative aspect-[4/3] sm:aspect-video w-full bg-brand-paper-muted overflow-hidden rounded-t-[18px] sm:rounded-t-[20px]">
+                {recipe.coverImageUrl ? (
+                  <img
+                    src={recipe.coverImageUrl}
+                    alt={recipe.title}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <div className="text-brand-line text-3xl sm:text-4xl">🍳</div>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-1 flex-col p-3 sm:p-4">
+                <h2 className="line-clamp-2 font-bold text-sm sm:text-base leading-tight text-brand-ink">
+                  {recipe.title}
+                </h2>
+                <div className="mt-auto pt-2.5 sm:pt-3 flex items-center justify-between">
+                  {recipe.sourceName ? (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-paper-muted px-2.5 py-1 text-[10px] sm:text-xs font-medium text-brand-muted truncate max-w-[70%]">
+                      <SourceIcon />
+                      <span className="truncate">{recipe.sourceName}</span>
+                    </div>
+                  ) : (
+                    <div />
+                  )}
+                  {recipe.locked ? (
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-brand-line px-2 py-1 font-medium text-brand-muted text-[10px] sm:text-xs">
+                      <LockSimple size={10} weight="bold" />
+                      <span className="hidden sm:inline">ロック中</span>
                     </span>
                   ) : null}
                 </div>
@@ -456,7 +1040,7 @@ export const RecipesIndexRoute = () => {
             return (
               <div
                 key={recipe.id}
-                className="flex flex-col overflow-hidden rounded-[20px] border border-brand-line-soft bg-brand-paper opacity-60"
+                className={`flex overflow-hidden rounded-[18px] sm:rounded-[20px] border border-brand-line-soft bg-brand-paper opacity-60 ${isList ? "flex-row items-center" : "flex-col"}`}
               >
                 {content}
               </div>
@@ -468,7 +1052,7 @@ export const RecipesIndexRoute = () => {
               key={recipe.id}
               to="/recipes/$recipeId"
               params={{ recipeId: recipe.id }}
-              className="group flex flex-col overflow-hidden rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm transition-shadow duration-200 hover:shadow-pantry"
+              className={`group flex overflow-hidden rounded-[18px] sm:rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm transition-shadow duration-200 hover:shadow-pantry ${isList ? "flex-row items-center" : "flex-col"}`}
             >
               {content}
             </Link>
@@ -510,16 +1094,14 @@ export const NewRecipeRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
-      <h1 className="text-brand-ink font-bold text-2xl">レシピ作成</h1>
-      <RecipeDraftForm
-        defaultValues={createEmptyRecipeDraftFormValues()}
-        showSourceMediaInput={false}
-        submitError={submitError}
-        submitLabel="保存"
-        onSubmit={onSubmit}
-      />
-    </section>
+    <RecipeDraftForm
+      defaultValues={createEmptyRecipeDraftFormValues()}
+      submitError={submitError}
+      submitLabel="保存"
+      title="新しいレシピを追加"
+      onClose={() => void navigate({ to: "/recipes" })}
+      onSubmit={onSubmit}
+    />
   );
 };
 
@@ -528,6 +1110,7 @@ export const RecipeDetailRoute = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const deleteMutation = useMutation({
     mutationFn: () => deleteRecipe(recipeId),
     onSuccess: async () => {
@@ -561,15 +1144,15 @@ export const RecipeDetailRoute = () => {
       });
     }
 
-    recipe.content.sourceMedia?.forEach((image, imageIndex) => {
+    recipe.content.referenceImages?.forEach((image, imageIndex) => {
       if (!image.url) {
         return;
       }
 
       images.push({
-        alt: `投稿画像${imageIndex + 1}`,
+        alt: `レシピ画像${imageIndex + 1}`,
         height: image.height,
-        id: `source:${image.objectKey}`,
+        id: `reference:${image.objectKey}`,
         url: image.url,
         width: image.width,
       });
@@ -595,9 +1178,8 @@ export const RecipeDetailRoute = () => {
   }, [recipe]);
 
   const confirmDelete = () => {
-    if (window.confirm("このレシピを削除しますか？")) {
-      deleteMutation.mutate();
-    }
+    setIsDeleteDialogOpen(false);
+    deleteMutation.mutate();
   };
   const openLightbox = (imageId: string) => {
     const nextLightboxIndex = lightboxImages.findIndex((image) => image.id === imageId);
@@ -614,14 +1196,7 @@ export const RecipeDetailRoute = () => {
   }, [lightboxImages.length, lightboxIndex]);
 
   if (isLoading) {
-    return (
-      <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-10">
-        <div className="flex items-center gap-3">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
-          <p className="text-brand-muted text-sm">読み込み中</p>
-        </div>
-      </section>
-    );
+    return <RecipeDetailSkeleton />;
   }
 
   if (error || !recipe) {
@@ -644,7 +1219,7 @@ export const RecipeDetailRoute = () => {
     );
   }
 
-  const sourceMedia = recipe.content.sourceMedia ?? [];
+  const referenceImages = recipe.content.referenceImages ?? [];
   const shouldShowIngredientsSection =
     Boolean(recipe.content.yieldText) || recipe.content.ingredientGroups.length > 0;
   const coverImageId = recipe.content.coverImage
@@ -657,30 +1232,37 @@ export const RecipeDetailRoute = () => {
     : undefined;
 
   return (
-    <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-brand-ink font-bold text-2xl sm:text-3xl leading-tight">
+    <article className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10">
+      <div className="sticky top-0 z-20 border-brand-line-soft border-b bg-brand-cream/95 px-3 py-2.5 backdrop-blur sm:top-3 sm:mt-3 sm:rounded-[20px] sm:border sm:px-5 sm:py-3 sm:shadow-pantry-sm">
+        <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] sm:gap-3">
+          <Button
+            aria-label="レシピ一覧へ戻る"
+            className="h-10 w-10 rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut hover:bg-brand-paper-muted sm:h-11 sm:w-11"
+            isIconOnly
+            variant="secondary"
+            onPress={() => {
+              void navigate({ to: "/recipes" });
+            }}
+          >
+            <CaretLeft size={21} weight="bold" />
+          </Button>
+          <h1 className="min-w-0 truncate text-center font-bold text-brand-ink text-md leading-tight sm:text-xl">
             {recipe.title}
           </h1>
-        </div>
-        <div className="shrink-0">
           <Dropdown>
-            <Button
+            <Dropdown.Trigger
               aria-label="操作メニュー"
-              className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut hover:bg-brand-paper-muted"
-              isIconOnly
-              variant="secondary"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut hover:bg-brand-paper-muted sm:h-11 sm:w-11"
             >
               <DotsThreeVertical size={20} weight="bold" />
-            </Button>
+            </Dropdown.Trigger>
             <Dropdown.Popover className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
               <Dropdown.Menu
                 onAction={(key) => {
                   if (key === "edit") {
                     void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
                   } else if (key === "delete") {
-                    confirmDelete();
+                    setIsDeleteDialogOpen(true);
                   }
                 }}
               >
@@ -702,52 +1284,86 @@ export const RecipeDetailRoute = () => {
         </div>
       </div>
 
-      {recipe.content.coverImage?.url ? (
-        <RecipeImageZoomButton
-          alt={recipe.title}
-          className="relative mx-auto mt-5 block w-fit max-w-[min(100%,calc(40svh*var(--cover-aspect)))] overflow-hidden rounded-[20px] shadow-pantry-sm sm:max-w-[min(100%,calc(32rem*var(--cover-aspect)))]"
-          onOpen={() => {
-            if (coverImageId) {
-              openLightbox(coverImageId);
-            }
-          }}
-          style={coverImageStyle}
-        >
-          <img
+      <div className="px-3 pt-4 sm:px-0 sm:pt-6">
+        {recipe.content.coverImage?.url ? (
+          <RecipeImageZoomButton
             alt={recipe.title}
-            className="block h-auto max-h-[40svh] w-full rounded-[20px] sm:max-h-[32rem]"
-            height={recipe.content.coverImage.height}
-            src={recipe.content.coverImage.url}
-            style={{
-              aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
+            className="relative mx-auto block w-fit max-w-[min(100%,640px,calc(30svh*var(--cover-aspect)))] overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:max-w-[min(100%,640px,calc(360px*var(--cover-aspect)))] sm:rounded-[18px]"
+            onOpen={() => {
+              if (coverImageId) {
+                openLightbox(coverImageId);
+              }
             }}
-            width={recipe.content.coverImage.width}
-          />
-        </RecipeImageZoomButton>
-      ) : null}
+            style={coverImageStyle}
+          >
+            <img
+              alt={recipe.title}
+              className="block h-auto max-h-[30svh] w-full rounded-[16px] object-contain sm:max-h-[360px] sm:rounded-[18px]"
+              height={recipe.content.coverImage.height}
+              src={recipe.content.coverImage.url}
+              style={{
+                aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
+              }}
+              width={recipe.content.coverImage.width}
+            />
+          </RecipeImageZoomButton>
+        ) : null}
+        <p className="mx-auto mt-5 max-w-3xl font-bold text-xl text-brand-ink leading-tight sm:mt-5 sm:text-2xl">
+          {recipe.title}
+        </p>
+      </div>
 
       {deleteMutation.error ? (
-        <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
+        <div className="mx-4 mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3 sm:mx-0">
           <p className="text-brand-danger text-sm" role="alert">
             レシピを削除できませんでした。
           </p>
         </div>
       ) : null}
 
-      {sourceMedia.some((image) => image.url) ? (
-        <section className="mt-8">
-          <h2 className="text-brand-walnut font-bold text-lg">投稿画像</h2>
+      <AlertDialog.Backdrop isOpen={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialog.Container placement="center" size="sm">
+          <AlertDialog.Dialog>
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="danger" />
+              <AlertDialog.Heading>レシピを削除しますか？</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Footer>
+              <Button
+                isDisabled={deleteMutation.isPending}
+                variant="tertiary"
+                onPress={() => setIsDeleteDialogOpen(false)}
+              >
+                キャンセル
+              </Button>
+              <Button
+                isDisabled={deleteMutation.isPending}
+                variant="danger"
+                onPress={confirmDelete}
+              >
+                削除
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
+
+      {referenceImages.some((image) => image.url) ? (
+        <section className="mx-4 mt-7 sm:mx-0">
+          <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-base">
+            レシピ画像
+          </h2>
           <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2">
-            {sourceMedia.map((image, imageIndex) =>
+            {referenceImages.map((image, imageIndex) =>
               image.url ? (
                 <RecipeImageZoomButton
-                  alt={`投稿画像${imageIndex + 1}`}
-                  className="grid aspect-[4/5] w-[min(78vw,320px)] shrink-0 snap-start place-items-center overflow-hidden rounded-[14px] bg-brand-paper-muted shadow-pantry-sm sm:w-64"
+                  alt={`レシピ画像${imageIndex + 1}`}
+                  className="grid aspect-[4/5] w-[min(40vw,160px)] shrink-0 snap-start place-items-center overflow-hidden rounded-[14px] bg-brand-paper-muted shadow-pantry-sm sm:w-[128px]"
                   key={image.objectKey}
-                  onOpen={() => openLightbox(`source:${image.objectKey}`)}
+                  onOpen={() => openLightbox(`reference:${image.objectKey}`)}
                 >
                   <img
-                    alt={`投稿画像${imageIndex + 1}`}
+                    alt={`レシピ画像${imageIndex + 1}`}
                     className="h-full w-full object-contain"
                     height={image.height}
                     src={image.url}
@@ -761,82 +1377,99 @@ export const RecipeDetailRoute = () => {
       ) : null}
 
       {shouldShowIngredientsSection ? (
-        <section className="mt-8 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 className="text-brand-walnut font-bold text-lg">材料</h2>
+        <section className="mx-3 mt-6 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:mx-0 sm:mt-7 sm:rounded-[18px]">
+          <div className="flex items-baseline justify-between gap-3 border-brand-line-soft border-b bg-brand-paper-muted/70 px-3.5 py-3 sm:gap-4 sm:px-5">
+            <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-base">
+              材料
+            </h2>
             {recipe.content.yieldText ? (
-              <p className="text-brand-muted text-sm">{recipe.content.yieldText}</p>
+              <p className="shrink-0 text-brand-ink text-sm font-medium sm:text-base">
+                {recipe.content.yieldText}
+              </p>
             ) : null}
           </div>
-          {recipe.content.ingredientGroups.map((group) => (
-            <div
-              className="mt-4"
-              key={
-                group.label ??
-                group.ingredients
-                  .map((ingredient) => `${ingredient.name}:${ingredient.amount}`)
-                  .join("|")
-              }
-            >
-              {group.label ? (
-                <h3 className="font-semibold text-brand-walnut text-sm">{group.label}</h3>
-              ) : null}
-              <ul className="mt-2 space-y-1.5">
-                {group.ingredients.map((ingredient) => (
-                  <li
-                    className="flex items-center justify-between border-b border-brand-line-soft/60 pb-1.5 text-sm last:border-0"
-                    key={`${ingredient.name}:${ingredient.amount}`}
-                  >
-                    <span className="text-brand-ink">{ingredient.name}</span>
-                    <span className="text-brand-muted font-medium">{ingredient.amount || ""}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          <div className="px-3.5 py-3 sm:px-5">
+            {recipe.content.ingredientGroups.map((group) => (
+              <div
+                className="mt-4 first:mt-0"
+                key={
+                  group.label ??
+                  group.ingredients
+                    .map((ingredient) => `${ingredient.name}:${ingredient.amount}`)
+                    .join("|")
+                }
+              >
+                {group.label ? (
+                  <h3 className="font-medium text-brand-walnut text-sm">{group.label}</h3>
+                ) : null}
+                <ul className="mt-2 space-y-2">
+                  {group.ingredients.map((ingredient) => (
+                    <li
+                      className="grid grid-cols-[minmax(0,1fr)_minmax(3rem,max-content)] items-end gap-2 text-sm sm:gap-3 sm:text-base"
+                      key={`${ingredient.name}:${ingredient.amount}`}
+                    >
+                      <span className="flex min-w-0 items-baseline gap-3 text-brand-ink">
+                        <span className="min-w-0">{ingredient.name}</span>
+                        <span className="mb-1 h-px min-w-6 flex-1 border-brand-line-soft border-b border-dashed" />
+                      </span>
+                      <span className="text-right text-brand-ink font-medium">
+                        {ingredient.amount || ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </section>
       ) : null}
 
       {recipe.content.steps.length > 0 ? (
-        <section className="mt-8">
-          <h2 className="text-brand-walnut font-bold text-lg">手順</h2>
-          <ol className="mt-4 space-y-5">
+        <section className="mx-3 mt-5 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:mx-0 sm:rounded-[18px]">
+          <div className="border-brand-line-soft border-b bg-brand-paper-muted/70 px-3.5 py-3 sm:px-5">
+            <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-base">
+              手順
+            </h2>
+          </div>
+          <ol className="divide-y divide-brand-line-soft px-3.5 sm:px-5">
             {recipe.content.steps.map((step, stepIndex) => (
               <li
-                className="flex gap-4"
+                className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-2.5 py-3.5 sm:grid-cols-[3.5rem_minmax(0,1fr)] sm:gap-4 sm:py-4"
                 key={step.images.map((image) => image.objectKey).join(":") || step.text}
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-sage text-white text-xs font-bold">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brand-orange-soft bg-brand-orange-soft/30 text-brand-orange text-sm font-bold sm:h-11 sm:w-11 sm:text-base">
                   {stepIndex + 1}
                 </div>
-                <div className="min-w-0 flex-1 pt-0.5">
+                <div className="min-w-0 pt-1">
                   {step.text ? (
-                    <p className="text-brand-ink text-sm leading-relaxed">{step.text}</p>
-                  ) : null}
-                  {step.images.some((image) => image.url) ? (
-                    <div className="mt-3 flex snap-x gap-3 overflow-x-auto pb-2">
-                      {step.images.map((image, imageIndex) =>
-                        image.url ? (
-                          <RecipeImageZoomButton
-                            alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
-                            className="block w-48 shrink-0 snap-start rounded-[14px] sm:w-56"
-                            key={image.objectKey}
-                            onOpen={() => openLightbox(`step:${image.objectKey}`)}
-                          >
-                            <img
-                              alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
-                              className="block max-h-80 w-full rounded-[14px] object-contain"
-                              height={image.height}
-                              src={image.url}
-                              style={{ aspectRatio: `${image.width} / ${image.height}` }}
-                              width={image.width}
-                            />
-                          </RecipeImageZoomButton>
-                        ) : null,
-                      )}
-                    </div>
+                    <p className="whitespace-pre-wrap text-brand-ink text-sm leading-6 sm:text-base">
+                      {step.text}
+                    </p>
                   ) : null}
                 </div>
+                {step.images.some((image) => image.url) ? (
+                  <div className="col-span-2 flex snap-x gap-3 overflow-x-auto pb-2 pl-[calc(2.25rem+0.625rem)] sm:pl-[calc(3.5rem+1rem)]">
+                    {step.images.map((image, imageIndex) =>
+                      image.url ? (
+                        <RecipeImageZoomButton
+                          alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
+                          className="block w-[min(38vw,160px)] shrink-0 snap-start rounded-[14px] sm:w-[144px]"
+                          key={image.objectKey}
+                          onOpen={() => openLightbox(`step:${image.objectKey}`)}
+                        >
+                          <img
+                            alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
+                            className="block max-h-[160px] w-full rounded-[14px] object-contain"
+                            height={image.height}
+                            src={image.url}
+                            style={{ aspectRatio: `${image.width} / ${image.height}` }}
+                            width={image.width}
+                          />
+                        </RecipeImageZoomButton>
+                      ) : null,
+                    )}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ol>
@@ -844,17 +1477,21 @@ export const RecipeDetailRoute = () => {
       ) : null}
 
       {recipe.content.note ? (
-        <section className="mt-8 rounded-[20px] border border-brand-line-soft bg-brand-paper-muted p-5">
-          <h2 className="text-brand-walnut font-bold text-lg">メモ</h2>
-          <p className="mt-3 whitespace-pre-wrap text-brand-ink text-sm leading-relaxed">
+        <section className="mx-4 mt-5 overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:mx-0">
+          <div className="border-brand-line-soft border-b bg-brand-paper-muted/70 px-4 py-3 sm:px-5">
+            <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-base">
+              メモ
+            </h2>
+          </div>
+          <p className="whitespace-pre-wrap px-4 py-3 text-brand-ink text-sm leading-6 sm:px-5 sm:text-base">
             {recipe.content.note}
           </p>
         </section>
       ) : null}
 
       {recipe.source.sourceName || recipe.source.sourceUrl ? (
-        <section className="mt-8">
-          <h2 className="text-brand-walnut font-bold text-lg">出典</h2>
+        <section className="mx-4 mt-7 sm:mx-0">
+          <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-lg">出典</h2>
           <div className="mt-3 flex items-center gap-2">
             <Globe size={16} className="text-brand-wheat" weight="bold" />
             <div>
@@ -918,43 +1555,33 @@ export const EditRecipeRoute = () => {
   };
 
   if (isLoading) {
-    return (
-      <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-10">
-        <div className="flex items-center gap-3">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-sage border-t-transparent" />
-          <p className="text-brand-muted text-sm">読み込み中</p>
-        </div>
-      </section>
-    );
+    return <RecipeFormSkeleton />;
   }
 
   if (error || !recipe || recipe.locked) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-10">
+      <section className="mx-auto w-full max-w-4xl px-4 sm:px-6 lg:px-10 py-10">
         <h1 className="text-brand-ink font-bold text-2xl">レシピを編集できません</h1>
       </section>
     );
   }
 
-  const sourceMedia = recipe.content.sourceMedia ?? [];
-  const showSourceMediaInput = sourceMedia.some((image) => image.url);
+  const referenceImages = recipe.content.referenceImages ?? [];
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
-      <h1 className="text-brand-ink font-bold text-2xl">レシピ編集</h1>
-      <RecipeDraftForm
-        key={recipe.id}
-        coverImagePreviewUrl={recipe.content.coverImage?.url}
-        defaultValues={recipeDetailToFormValues(recipe)}
-        showSourceMediaInput={showSourceMediaInput}
-        sourceMediaPreviewUrls={sourceMedia.map((image) => image.url ?? "")}
-        submitError={submitError}
-        submitLabel="更新"
-        stepImagePreviewUrls={recipe.content.steps.map((step) =>
-          step.images.map((image) => image.url ?? ""),
-        )}
-        onSubmit={onSubmit}
-      />
-    </section>
+    <RecipeDraftForm
+      key={recipe.id}
+      coverImagePreviewUrl={recipe.content.coverImage?.url}
+      defaultValues={recipeDetailToFormValues(recipe)}
+      referenceImagePreviewUrls={referenceImages.map((image) => image.url ?? "")}
+      submitError={submitError}
+      submitLabel="更新"
+      title="レシピを編集"
+      stepImagePreviewUrls={recipe.content.steps.map((step) =>
+        step.images.map((image) => image.url ?? ""),
+      )}
+      onClose={() => void navigate({ to: "/recipes/$recipeId", params: { recipeId } })}
+      onSubmit={onSubmit}
+    />
   );
 };

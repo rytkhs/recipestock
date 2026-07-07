@@ -1,5 +1,5 @@
 import {
-  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
@@ -240,7 +240,7 @@ describe("URL import flow", () => {
       return {
         recipeDraftContent: {
           title: "Deterministic recipe",
-          sourceMedia: [],
+          referenceImages: [],
           ingredientGroups: [],
           steps: [],
         },
@@ -852,7 +852,7 @@ describe("URL import flow", () => {
           type: "externalImageUrl",
           url: imageUrl,
         },
-        sourceMedia: [
+        referenceImages: [
           {
             type: "externalImageUrl",
             url: imageUrl,
@@ -978,7 +978,7 @@ describe("URL import flow", () => {
           type: "externalImageUrl",
           url: "https://cdn.example.com/cover.jpg",
         },
-        sourceMedia: [
+        referenceImages: [
           { type: "externalImageUrl", url: "https://cdn.example.com/cover.jpg" },
           { type: "externalImageUrl", url: "https://cdn.example.com/step.jpg" },
         ],
@@ -1100,13 +1100,13 @@ describe("URL import flow", () => {
   });
 
   it("AI import結果の画像上限超過は切り詰めて成功する", async () => {
-    const sourceMediaUrls = createImageUrls(MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1, "source");
+    const referenceImageUrls = createImageUrls(MAX_RECIPE_REFERENCE_IMAGES + 1, "source");
     const stepImageUrlGroups = createStepImageUrlGroups(
-      MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+      MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_REFERENCE_IMAGES,
       "step",
     );
     const stepImageUrls = stepImageUrlGroups.flat();
-    const imageCandidates = [createImageUrl("cover"), ...sourceMediaUrls, ...stepImageUrls].map(
+    const imageCandidates = [createImageUrl("cover"), ...referenceImageUrls, ...stepImageUrls].map(
       (url, position) => ({
         id: `img_${position}`,
         url,
@@ -1127,7 +1127,7 @@ describe("URL import flow", () => {
           imageCandidates,
           imagePlacement: {
             coverImageUrl: createImageUrl("cover"),
-            sourceMediaUrls,
+            referenceImageUrls,
           },
           source: {
             sourceUrl: "https://www.example.com/recipes/image-limits",
@@ -1163,7 +1163,7 @@ describe("URL import flow", () => {
       },
     });
 
-    expect(result.recipeDraftContent.sourceMedia).toHaveLength(MAX_RECIPE_SOURCE_MEDIA_IMAGES);
+    expect(result.recipeDraftContent.referenceImages).toHaveLength(MAX_RECIPE_REFERENCE_IMAGES);
     expect(
       result.recipeDraftContent.steps.every((step) => step.images.length <= MAX_RECIPE_STEP_IMAGES),
     ).toBe(true);
@@ -1193,7 +1193,7 @@ describe("URL import flow", () => {
         return {
           recipeDraftContent: {
             title: "Deterministic soup",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [{ ingredients: [{ name: "Salt", amount: "1 tsp" }] }],
             steps: [{ text: "Simmer.", images: [] }],
           },
@@ -1553,8 +1553,11 @@ const createStepImageUrlGroups = (imageCount: number, prefix: string) =>
     createImageUrls(MAX_RECIPE_STEP_IMAGES + 1, `${prefix}-${stepIndex}`),
   );
 
-const countDraftImages = (content: { sourceMedia?: unknown[]; steps?: { images?: unknown[] }[] }) =>
-  (content.sourceMedia?.length ?? 0) +
+const countDraftImages = (content: {
+  referenceImages?: unknown[];
+  steps?: { images?: unknown[] }[];
+}) =>
+  (content.referenceImages?.length ?? 0) +
   (content.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
 
 const getFetchHeader = (init: RequestInit | undefined, name: string) => {

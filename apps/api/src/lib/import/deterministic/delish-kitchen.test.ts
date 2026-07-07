@@ -85,7 +85,7 @@ describe("delishKitchenImportAdapter", () => {
           type: "externalImageUrl",
           url: COVER_IMAGE_URL,
         },
-        sourceMedia: [],
+        referenceImages: [],
         ingredientGroups: [
           {
             ingredients: [{ name: "あたたかいごはん", amount: "どんぶり2杯(400g)" }],
@@ -178,7 +178,7 @@ describe("delishKitchenImportAdapter", () => {
           type: "externalImageUrl",
           url: COVER_IMAGE_URL,
         },
-        sourceMedia: [],
+        referenceImages: [],
         ingredientGroups: [
           {
             ingredients: [{ name: "あたたかいごはん", amount: "どんぶり2杯(400g)" }],

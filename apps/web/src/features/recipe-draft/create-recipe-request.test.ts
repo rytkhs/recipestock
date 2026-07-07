@@ -127,7 +127,7 @@ describe("formValuesToCreateRecipeRequest", () => {
         content: {
           title: "Tomato pasta",
           yieldText: "2人分",
-          sourceMedia: [],
+          referenceImages: [],
           ingredientGroups: [
             { label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] },
           ],
@@ -146,7 +146,7 @@ describe("formValuesToCreateRecipeRequest", () => {
     ).toEqual({
       title: "Tomato pasta",
       yieldText: "2人分",
-      sourceMedia: [],
+      referenceImages: [],
       note: "仕上げにオリーブオイル。",
       ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ text: "煮詰める", images: [] }],

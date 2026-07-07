@@ -103,7 +103,7 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
         ? {
             imagePlacement: {
               coverImageUrl: thumbnail.url,
-              sourceMediaUrls: [],
+              referenceImageUrls: [],
             },
           }
         : {}),

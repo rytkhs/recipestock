@@ -7,6 +7,22 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "build/**"]
     },
+    "@recipestock/api#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@recipestock/db#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@recipestock/schemas#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@recipestock/shared#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "dev": {
       "cache": false,
       "persistent": true
@@ -16,7 +32,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": []
     },
     "typecheck": {
       "dependsOn": ["^build"],

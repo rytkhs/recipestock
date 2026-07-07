@@ -25,6 +25,20 @@ describe("AppRouter", () => {
     ).resolves.toBeInTheDocument();
   });
 
+  it("認証確認中は共通ローディングを表示する", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (getRequestPath(input).endsWith("/get-session")) {
+        return new Promise<Response>(() => {});
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/recipes");
+
+    expect(screen.getByRole("status", { name: "読み込み中" })).toHaveTextContent("読み込み中");
+  });
+
   it("未ログインで認証必須ルートに入るとログインへ遷移する", async () => {
     mockFetch(async () => new Response(null, { status: 404 }));
     await renderApp("/recipes");
@@ -133,56 +147,6 @@ describe("AppRouter", () => {
     await renderApp("/");
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-  });
-
-  it("ヘッダーのレシピ追加Dropdownから手入力作成へ遷移する", async () => {
-    mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/recipes?limit=20") {
-          return jsonResponse({ items: [], nextCursor: null });
-        }
-
-        if (getRequestPath(input) === "/api/import/jobs/recent") {
-          return jsonResponse({ jobs: [] });
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/recipes");
-
-    await userEvent.click(await screen.findByRole("button", { name: "レシピ追加" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /手入力/ }));
-
-    await expect(screen.findByRole("heading", { name: "レシピ作成" })).resolves.toBeInTheDocument();
-  });
-
-  it("ヘッダーのレシピ追加DropdownからURL取り込みへ遷移する", async () => {
-    mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/recipes?limit=20") {
-          return jsonResponse({ items: [], nextCursor: null });
-        }
-
-        if (getRequestPath(input) === "/api/import/jobs/recent") {
-          return jsonResponse({ jobs: [] });
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/recipes");
-
-    await userEvent.click(await screen.findByRole("button", { name: "レシピ追加" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /URLから/ }));
-
-    await expect(
-      screen.findByRole("heading", { name: "URLから取り込む" }),
-    ).resolves.toBeInTheDocument();
   });
 
   it("ログアウトするとユーザー依存キャッシュを消してログインへ遷移する", async () => {

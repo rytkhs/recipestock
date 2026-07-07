@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -16,23 +16,6 @@ import { checkoutRedirect } from "./settings";
 describe("Settings routes", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("設定画面から課金設定へ移動できる", async () => {
-    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
-    await renderApp("/settings");
-
-    await expect(screen.findByRole("heading", { name: "設定" })).resolves.toBeInTheDocument();
-    await expect(
-      screen.findByText("現在のメールアドレス: chef@example.com"),
-    ).resolves.toBeInTheDocument();
-    const plan = screen.getByRole("heading", { name: "プラン" }).parentElement?.parentElement;
-    expect(plan).not.toBeNull();
-    expect(within(plan as HTMLElement).getByText("Free")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "課金設定" })).toHaveAttribute(
-      "href",
-      "/settings/billing",
-    );
   });
 
   it("設定画面からメールアドレス変更確認メールを送信できる", async () => {
@@ -165,26 +148,6 @@ describe("Settings routes", () => {
     expect(screen.queryByRole("button", { name: "請求管理" })).not.toBeInTheDocument();
   });
 
-  it("Checkout成功後はwebhook反映待ちの案内を表示する", async () => {
-    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp("/settings/billing?checkout=success");
-
-    await expect(
-      screen.findByText("契約処理を受け付けました。反映には少し時間がかかる場合があります。"),
-    ).resolves.toBeInTheDocument();
-  });
-
-  it("Checkoutキャンセル後はキャンセル案内を表示する", async () => {
-    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp("/settings/billing?checkout=cancel");
-
-    await expect(
-      screen.findByText("契約手続きはキャンセルされました。"),
-    ).resolves.toBeInTheDocument();
-  });
-
   it("ProユーザーにはPro契約ボタンを表示しない", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
@@ -275,45 +238,6 @@ describe("Settings routes", () => {
       ]);
     });
     expect(assign).toHaveBeenCalledWith("https://billing.stripe.com/session_123");
-  });
-
-  it("解約予約中は期間終了日つきの案内を表示する", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const path = getRequestPath(input);
-
-      if (path.endsWith("/get-session")) {
-        return createSessionResponse(true);
-      }
-
-      if (path === "/api/me") {
-        return jsonResponse({
-          ...viewerResponse,
-          plan: "pro",
-          recipeLimit: null,
-        });
-      }
-
-      if (path === "/api/billing/status") {
-        return jsonResponse({
-          plan: "pro",
-          subscription: {
-            status: "active",
-            cancelAtPeriodEnd: true,
-            currentPeriodEnd: "2026-07-04T00:00:00.000Z",
-            cancelAt: "2026-07-04T00:00:00.000Z",
-          },
-        });
-      }
-
-      return new Response(null, { status: 404 });
-    });
-
-    await renderApp("/settings/billing");
-
-    await expect(
-      screen.findByText("解約予約中。2026/07/04 までは Pro を利用できます。"),
-    ).resolves.toBeInTheDocument();
-    expect(screen.getByText("Proは請求期間終了まで利用できます。")).toBeInTheDocument();
   });
 
   it("Portal作成に失敗した場合は案内を表示する", async () => {

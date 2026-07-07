@@ -1,7 +1,7 @@
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
-import { createApp } from "../index";
 import { type RecipeRecord } from "../recipes";
+import { createSilentTestApp } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 const recipeImage = (objectKey: string, width = 1200, height = 800) => ({
@@ -16,7 +16,7 @@ const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
   title: "Tomato pasta",
   content: {
     title: "Tomato pasta",
-    sourceMedia: [],
+    referenceImages: [],
     ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
     steps: [{ text: "煮詰める", images: [] }],
   },
@@ -38,7 +38,7 @@ const sameOriginHeaders = {
 describe("Recipe mutation routes", () => {
   it("ログイン済みユーザーがレシピ本文全体を更新できる", async () => {
     const updates: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -121,7 +121,7 @@ describe("Recipe mutation routes", () => {
   });
 
   it("レシピ更新で対象が存在しない場合はnot_foundを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -156,7 +156,7 @@ describe("Recipe mutation routes", () => {
 
   it("レシピ更新で所有者が違う場合はnot_foundを返す", async () => {
     const calls: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -194,7 +194,7 @@ describe("Recipe mutation routes", () => {
   });
 
   it("レシピ更新リクエストが不正な場合はvalidation_failedを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -236,7 +236,7 @@ describe("Recipe mutation routes", () => {
 
   it("ロック中Recipeは更新できず画像確定もDB更新も実行しない", async () => {
     const updates: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -320,7 +320,7 @@ describe("Recipe mutation routes", () => {
       content: {
         title: "Tomato pasta",
         coverImage: recipeImage("recipes/user_123/recipe_123/old-cover.webp"),
-        sourceMedia: [recipeImage("recipes/user_123/recipe_123/old-source.webp")],
+        referenceImages: [recipeImage("recipes/user_123/recipe_123/old-source.webp")],
         ingredientGroups: [],
         steps: [
           {
@@ -330,7 +330,7 @@ describe("Recipe mutation routes", () => {
         ],
       },
     });
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -438,7 +438,7 @@ describe("Recipe mutation routes", () => {
       content: {
         title: "Tomato pasta",
         coverImage: recipeImage("recipes/user_123/recipe_123/old-cover.webp"),
-        sourceMedia: [],
+        referenceImages: [],
         ingredientGroups: [],
         steps: [
           {
@@ -448,7 +448,7 @@ describe("Recipe mutation routes", () => {
         ],
       },
     });
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -553,7 +553,7 @@ describe("Recipe mutation routes", () => {
   it("レシピ更新が例外で失敗したらcopy済み確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
     const existing = baseRecipe();
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -620,7 +620,7 @@ describe("Recipe mutation routes", () => {
   it("tmp画像の確定に失敗したらレシピを更新しない", async () => {
     const updates: unknown[] = [];
     const existing = baseRecipe();
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -693,7 +693,7 @@ describe("Recipe mutation routes", () => {
     const deletes: unknown[] = [];
     const existing = baseRecipe();
     const imageIds = ["cover", "step"];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -774,7 +774,7 @@ describe("Recipe mutation routes", () => {
     const updates: unknown[] = [];
     const copies: unknown[] = [];
     const existing = baseRecipe();
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -846,7 +846,7 @@ describe("Recipe mutation routes", () => {
   it("更新対象に含まれない既存画像keyは保持しない", async () => {
     const updates: unknown[] = [];
     const existing = baseRecipe();
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -912,7 +912,7 @@ describe("Recipe mutation routes", () => {
   it("ログイン済みユーザーが自分のレシピを物理削除できる", async () => {
     const deletes: unknown[] = [];
     const deletedPrefixes: string[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -967,7 +967,7 @@ describe("Recipe mutation routes", () => {
   });
 
   it("レシピ削除で対象が存在しない場合はnot_foundを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -1001,7 +1001,7 @@ describe("Recipe mutation routes", () => {
 
   it("レシピ削除で所有者が違う場合はnot_foundを返す", async () => {
     const calls: unknown[] = [];
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createApp } from "../index";
+import { createSilentTestApp } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe detail routes", () => {
   it("レシピ詳細取得で未ログイン時にunauthorizedを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => null,
         handleAuthRequest: async () => new Response(null, { status: 404 }),
@@ -36,7 +36,7 @@ describe("Recipe detail routes", () => {
   });
 
   it("保存済みレシピを詳細画面用に取得できる", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -54,7 +54,7 @@ describe("Recipe detail routes", () => {
           content: {
             title: "Tomato pasta",
             yieldText: "2人分",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
             steps: [{ text: "煮詰める", images: [] }],
             note: "仕上げにオリーブオイル。",
@@ -95,7 +95,7 @@ describe("Recipe detail routes", () => {
   });
 
   it("保存済みレシピの画像に表示用URLを付与する", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -117,7 +117,7 @@ describe("Recipe detail routes", () => {
               width: 1200,
               height: 800,
             },
-            sourceMedia: [
+            referenceImages: [
               {
                 objectKey: "recipes/user_123/recipe_123/source.webp",
                 width: 1080,
@@ -180,7 +180,7 @@ describe("Recipe detail routes", () => {
             height: 800,
             url: "https://images.example/recipes/user_123/recipe_123/cover.webp",
           },
-          sourceMedia: [
+          referenceImages: [
             {
               objectKey: "recipes/user_123/recipe_123/source.webp",
               width: 1080,
@@ -207,7 +207,7 @@ describe("Recipe detail routes", () => {
   });
 
   it("一部の手順画像URL作成に失敗しても画像情報と対応関係を保持する", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -224,7 +224,7 @@ describe("Recipe detail routes", () => {
           title: "Tomato pasta",
           content: {
             title: "Tomato pasta",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [],
             steps: [
               {
@@ -309,7 +309,7 @@ describe("Recipe detail routes", () => {
   });
 
   it("ロック中Recipe詳細は本文を返さない", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },
@@ -326,7 +326,7 @@ describe("Recipe detail routes", () => {
           title: "Locked pasta",
           content: {
             title: "Locked pasta",
-            sourceMedia: [],
+            referenceImages: [],
             ingredientGroups: [{ ingredients: [{ name: "秘密の材料", amount: "1つ" }] }],
             steps: [{ text: "煮る", images: [] }],
           },
@@ -372,7 +372,7 @@ describe("Recipe detail routes", () => {
   });
 
   it("保存済みレシピが存在しない場合はnot_foundを返す", async () => {
-    const testApp = createApp({
+    const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
           user: { id: "user_123", email: "user@example.com" },

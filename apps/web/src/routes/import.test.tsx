@@ -70,7 +70,7 @@ describe("Import routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByText("取り込み中...")).toBeInTheDocument();
+    expect(screen.getByText("取り込み待ち")).toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/import/url/jobs")).toEqual([
       "/api/import/url/jobs",
       expect.objectContaining({
@@ -241,6 +241,6 @@ describe("Import routes", () => {
     await userEvent.click(await screen.findByRole("link", { name: "処理状況を見る" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByText("取り込み中...")).toBeInTheDocument();
+    expect(screen.getByText("取り込み中")).toBeInTheDocument();
   });
 });

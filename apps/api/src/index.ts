@@ -16,7 +16,7 @@ import {
   processImportJob,
 } from "./import-jobs";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
-import { createLogger } from "./logger";
+import { createLogger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
 import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
@@ -34,8 +34,9 @@ export { YtDlpMetadataContainer } from "./ytdlp-metadata-container";
 
 const IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS = 4;
 
-type AppDependencies = {
+export type AppDependencies = {
   auth?: AuthService;
+  loggerFactory?: LoggerFactory;
   meRepository?: MeRepository;
   usageRepository?: UsageRepository;
   billingRepository?: BillingRepository;
@@ -53,10 +54,10 @@ type AppDependencies = {
   getCurrentDate?: () => Date;
 };
 
-const createLoggerMiddleware = () =>
+const createLoggerMiddleware = (loggerFactory: LoggerFactory) =>
   createMiddleware<ApiEnv>(async (c, next) => {
     const requestId = crypto.randomUUID();
-    const logger = createLogger({
+    const logger = loggerFactory({
       requestId,
       route: c.req.path,
     });
@@ -91,13 +92,14 @@ const createLoggerMiddleware = () =>
 export const createApp = (dependencies: AppDependencies = {}) => {
   const app = new Hono<ApiEnv>().basePath("/api");
   const auth = dependencies.auth ?? authService;
+  const loggerFactory = dependencies.loggerFactory ?? createLogger;
   const csrfProtection = csrf();
 
   app.onError((error, c) => {
     const response = error instanceof HTTPException ? error.getResponse() : unknownResponse();
     const logger =
       c.var.logger ??
-      createLogger({
+      loggerFactory({
         requestId: c.var.requestId,
         route: c.req.path,
       });
@@ -111,7 +113,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
 
     return response;
   });
-  app.use("*", createLoggerMiddleware());
+  app.use("*", createLoggerMiddleware(loggerFactory));
   app.use("*", secureHeaders());
   app.use("/billing/*", csrfProtection);
   app.use("/images/*", csrfProtection);

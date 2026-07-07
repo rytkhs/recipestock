@@ -45,7 +45,7 @@ const sourceExtractionImageCandidateSchema = z.strictObject({
 
 const sourceExtractionImagePlacementSchema = z.strictObject({
   coverImageUrl: z.string().url().optional(),
-  sourceMediaUrls: z.array(z.string().url()),
+  referenceImageUrls: z.array(z.string().url()),
 });
 
 const sourceExtractionResultSchema = z.strictObject({

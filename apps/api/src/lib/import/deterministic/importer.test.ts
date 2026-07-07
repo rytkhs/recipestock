@@ -1,5 +1,5 @@
 import {
-  MAX_RECIPE_SOURCE_MEDIA_IMAGES,
+  MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
@@ -156,7 +156,7 @@ describe("createDeterministicImporter", () => {
           return {
             recipeDraftContent: {
               title: "",
-              sourceMedia: [],
+              referenceImages: [],
               ingredientGroups: [],
               steps: [],
             },
@@ -189,11 +189,9 @@ describe("createDeterministicImporter", () => {
             recipeDraftContent: {
               title: "Tomato soup",
               coverImage: createDraftImage("cover"),
-              sourceMedia: createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES + 1, "source"),
+              referenceImages: createDraftImages(MAX_RECIPE_REFERENCE_IMAGES + 1, "source"),
               ingredientGroups: [],
-              steps: createStepsWithImages(
-                MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_SOURCE_MEDIA_IMAGES,
-              ),
+              steps: createStepsWithImages(MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_REFERENCE_IMAGES),
             },
             source: {
               sourceUrl: NORMALIZED_URL,
@@ -211,8 +209,8 @@ describe("createDeterministicImporter", () => {
       fetchOptions: FETCH_OPTIONS,
     });
 
-    expect(result?.recipeDraftContent.sourceMedia).toEqual(
-      createDraftImages(MAX_RECIPE_SOURCE_MEDIA_IMAGES, "source"),
+    expect(result?.recipeDraftContent.referenceImages).toEqual(
+      createDraftImages(MAX_RECIPE_REFERENCE_IMAGES, "source"),
     );
     expect(
       result?.recipeDraftContent.steps.every(
@@ -263,7 +261,7 @@ const createPage = (url: string) => ({
 const createResult = () => ({
   recipeDraftContent: {
     title: "Tomato soup",
-    sourceMedia: [],
+    referenceImages: [],
     ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
     steps: [{ text: "Cook.", images: [] }],
   },
@@ -291,10 +289,10 @@ const createStepsWithImages = (imageCount: number) =>
 const countDraftImages = (
   content:
     | {
-        sourceMedia?: unknown[];
+        referenceImages?: unknown[];
         steps?: { images?: unknown[] }[];
       }
     | undefined,
 ) =>
-  (content?.sourceMedia?.length ?? 0) +
+  (content?.referenceImages?.length ?? 0) +
   (content?.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);

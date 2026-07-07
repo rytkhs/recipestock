@@ -9,8 +9,8 @@ A user-owned saved recipe record in the database. A **Recipe** has one **RecipeC
 _Avoid_: Recipe draft, recipe JSON, recipe body
 
 **RecipeContent**:
-The saved body of a **Recipe**. It contains the title, yield text, extracted source media, ingredient groups, steps, and optional note.
-**sourceMedia** is recipe-relevant media extracted from the original page or post that is not tied to a specific step. It belongs to **RecipeContent**, not **Source** metadata.
+The saved body of a **Recipe**. It contains the title, yield text, reference images, ingredient groups, steps, and optional note.
+**referenceImages** are recipe-level images that are not a cover image and are not tied to a specific step. They may be user-added or extracted from the original page or post. They belong to **RecipeContent**, not **Source** metadata.
 _Avoid_: content blob, recipe record, draft
 
 **RecipeDraftContent**:

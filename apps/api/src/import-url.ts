@@ -1005,7 +1005,7 @@ const resolveDraftImageUrls = (
       title: draft.title,
       yieldText: draft.yieldText,
       coverImage: resolveImage(draft.coverImageUrl),
-      sourceMedia: [],
+      referenceImages: [],
       ingredientGroups: draft.ingredientGroups,
       steps: draft.steps.map((step) => ({
         text: step.text,
@@ -1035,9 +1035,9 @@ const applyDeterministicImagePlacement = (
           },
         }
       : {}),
-    sourceMedia: [
-      ...placement.sourceMediaUrls.map((url) => ({ type: "externalImageUrl" as const, url })),
-      ...(draft.sourceMedia ?? []),
+    referenceImages: [
+      ...placement.referenceImageUrls.map((url) => ({ type: "externalImageUrl" as const, url })),
+      ...(draft.referenceImages ?? []),
     ],
   });
 };

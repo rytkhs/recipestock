@@ -165,7 +165,7 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
             } as const,
           }
         : {}),
-      sourceMedia: [],
+      referenceImages: [],
       ingredientGroups,
       steps,
       ...(note ? { note } : {}),
