@@ -187,8 +187,7 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
 
   const yieldField = useController({ control, name: "yieldText" });
 
-  const shouldShowSingleGroupLabel =
-    fields.length !== 1 || Boolean(fields[0]?.label?.trim());
+  const shouldShowSingleGroupLabel = fields.length !== 1 || Boolean(fields[0]?.label?.trim());
 
   return (
     <section
