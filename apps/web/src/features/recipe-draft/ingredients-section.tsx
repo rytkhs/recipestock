@@ -187,7 +187,8 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
 
   const yieldField = useController({ control, name: "yieldText" });
 
-  const isSingleEmptyLabelGroup = fields.length === 1;
+  const shouldShowSingleGroupLabel =
+    fields.length !== 1 || Boolean(fields[0]?.label?.trim());
 
   return (
     <section
@@ -236,7 +237,7 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
             key={field.id}
             control={control}
             groupIndex={groupIndex}
-            showGroupLabel={!isSingleEmptyLabelGroup}
+            showGroupLabel={shouldShowSingleGroupLabel}
             onRemoveGroup={fields.length > 1 ? () => remove(groupIndex) : undefined}
           />
         ))}
