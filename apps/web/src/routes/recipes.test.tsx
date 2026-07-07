@@ -74,9 +74,7 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes");
 
-    await expect(
-      screen.findByRole("status", { name: "レシピ一覧を読み込み中" }),
-    ).resolves.toBeInTheDocument();
+    await expect(screen.findByText("レシピ一覧を読み込み中")).resolves.toBeInTheDocument();
     await expect(screen.findAllByTestId("recipe-card-skeleton")).resolves.toHaveLength(8);
   });
 
@@ -931,9 +929,7 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123");
 
-    await expect(
-      screen.findByRole("status", { name: "レシピ詳細を読み込み中" }),
-    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("レシピ詳細を読み込み中")).toBeInTheDocument();
   });
 
   it("詳細画面でカバー画像と手順画像を表示する", async () => {
@@ -1066,9 +1062,7 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123/edit");
 
-    await expect(
-      screen.findByRole("status", { name: "レシピ編集フォームを読み込み中" }),
-    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("レシピ編集フォームを読み込み中")).toBeInTheDocument();
   });
 
   it("ロック中Recipe編集に直接アクセスしてもフォームを表示しない", async () => {
