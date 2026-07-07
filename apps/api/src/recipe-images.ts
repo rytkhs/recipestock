@@ -8,7 +8,7 @@ import {
   recipeContentSchema,
   recipeContentWithUrlsSchema,
 } from "@recipestock/schemas";
-import { getRecipeImageKeys, type RecipeImageService } from "./images";
+import { createRecipeImageDisplayUrl, getRecipeImageKeys, type RecipeImageService } from "./images";
 import { createRecipeId } from "./recipes";
 
 type FinalizeRecipeDraftImagesParams = {
@@ -276,29 +276,18 @@ export const getRemovedRecipeImageKeys = (previous: RecipeContent, next: RecipeC
 
 export const attachRecipeImageUrls = async (
   content: RecipeContent,
-  imageService: RecipeImageService | undefined,
 ): Promise<RecipeContentWithUrls> => {
-  if (!imageService) {
-    return recipeContentWithUrlsSchema.parse(content);
-  }
+  const attachImageUrl = (image: RecipeImage) => ({
+    ...image,
+    url: createRecipeImageDisplayUrl({ objectKey: image.objectKey }),
+  });
 
-  const attachImageUrl = async (image: RecipeImage) => {
-    try {
-      const result = await imageService.createSignedGetUrl({ objectKey: image.objectKey });
-      return { ...image, url: result.url };
-    } catch {
-      return image;
-    }
-  };
-
-  const coverImage = content.coverImage ? await attachImageUrl(content.coverImage) : undefined;
-  const referenceImages = await Promise.all((content.referenceImages ?? []).map(attachImageUrl));
-  const steps = await Promise.all(
-    content.steps.map(async (step) => ({
-      ...step,
-      images: await Promise.all(step.images.map(attachImageUrl)),
-    })),
-  );
+  const coverImage = content.coverImage ? attachImageUrl(content.coverImage) : undefined;
+  const referenceImages = (content.referenceImages ?? []).map(attachImageUrl);
+  const steps = content.steps.map((step) => ({
+    ...step,
+    images: step.images.map(attachImageUrl),
+  }));
 
   return recipeContentWithUrlsSchema.parse({
     ...content,

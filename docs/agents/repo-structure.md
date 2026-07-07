@@ -55,7 +55,7 @@ Put server-side behavior here:
 - AI usage-limit checks
 - Free / Pro save limits
 - recipe lock computation
-- R2 signed URL issuing
+- authenticated R2 image serving and stable image URL generation
 - Stripe Checkout and Customer Portal
 - Stripe webhook handling
 - Resend integration

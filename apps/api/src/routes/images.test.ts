@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { createSilentTestApp } from "../test-helpers";
-import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 const auth = {
   getSession: async () => ({
@@ -8,6 +7,37 @@ const auth = {
   }),
   handleAuthRequest: async () => new Response(null, { status: 404 }),
 };
+
+const imageBytes = new TextEncoder().encode("image bytes");
+
+const createR2ObjectBody = (key: string) =>
+  ({
+    key,
+    version: "version_123",
+    size: imageBytes.byteLength,
+    etag: "etag_123",
+    httpEtag: '"etag_123"',
+    uploaded: new Date("2026-05-31T00:00:00.000Z"),
+    checksums: {},
+    httpMetadata: { contentType: "image/webp" },
+    customMetadata: {},
+    storageClass: "Standard",
+    writeHttpMetadata: (headers: Headers) => {
+      headers.set("content-type", "image/webp");
+    },
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(imageBytes);
+        controller.close();
+      },
+    }),
+    bodyUsed: false,
+    arrayBuffer: async () => imageBytes.buffer.slice(0),
+    bytes: async () => imageBytes,
+    text: async () => "image bytes",
+    json: async () => ({}),
+    blob: async () => new Blob([imageBytes], { type: "image/webp" }),
+  }) as R2ObjectBody;
 
 describe("Image routes", () => {
   it("ログイン済みユーザーが画像アップロード用URLを取得できる", async () => {
@@ -18,9 +48,6 @@ describe("Image routes", () => {
           url: `https://upload.example/${objectKey}`,
           expiresAt: new Date("2026-05-31T00:15:00.000Z"),
         }),
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
-        },
         copyObject: async () => {
           throw new Error("should not copy an object");
         },
@@ -57,9 +84,6 @@ describe("Image routes", () => {
       imageService: {
         createUploadUrl: async () => {
           throw new Error("signing failed");
-        },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
         },
         copyObject: async () => {
           throw new Error("should not copy an object");
@@ -153,113 +177,46 @@ describe("Image routes", () => {
     });
   });
 
-  it("レシピ本文に含まれる画像だけ表示用URLを取得できる", async () => {
+  it("ログイン済みユーザーが自分のレシピ画像を取得できる", async () => {
+    const calls: unknown[] = [];
     const testApp = createSilentTestApp({
       auth,
-      recipeRepository: {
-        createRecipeEnforcingPlanLimit: async () => {
-          throw new Error("should not create a recipe");
-        },
-        getRecipe: async (userId, recipeId) => ({
-          id: recipeId,
-          userId,
-          title: "Tomato pasta",
-          content: {
-            title: "Tomato pasta",
-            coverImage: {
-              objectKey: "recipes/user_123/recipe_123/cover.webp",
-              width: 1200,
-              height: 800,
-            },
-            referenceImages: [],
-            ingredientGroups: [],
-            steps: [
-              {
-                text: "煮詰める",
-                images: [
-                  {
-                    objectKey: "recipes/user_123/recipe_123/step.webp",
-                    width: 800,
-                    height: 1200,
-                  },
-                ],
-              },
-            ],
-          },
-          originType: "manual",
-          sourceUrl: null,
-          normalizedSourceUrl: null,
-          sourceName: null,
-          searchText: "tomato pasta",
-          createdAt: new Date("2026-05-31T00:00:00.000Z"),
-          updatedAt: new Date("2026-05-31T00:00:00.000Z"),
-        }),
-        listRecipes: unusedListRecipes,
-        updateRecipe: unusedUpdateRecipe,
-        deleteRecipe: unusedDeleteRecipe,
-      },
-      imageService: {
-        createUploadUrl: async () => {
-          throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async ({ objectKey }) => ({
-          url: `https://images.example/${objectKey}`,
-          expiresAt: new Date("2026-05-31T00:15:00.000Z"),
-        }),
-        copyObject: async () => {
-          throw new Error("should not copy an object");
-        },
-        deleteObject: async () => undefined,
-        deletePrefixBestEffort: async () => undefined,
-      },
     });
 
     const response = await testApp.request(
-      "/api/images/signed-url?key=recipes/user_123/recipe_123/step.webp",
+      "/api/images/object/recipes/user_123/recipe_123/step.webp",
       undefined,
-      { APP_ENV: "development" },
+      {
+        APP_ENV: "development",
+        RECIPE_IMAGES: {
+          get: async (key: string, options: unknown) => {
+            calls.push({ key, options });
+            return createR2ObjectBody(key);
+          },
+        },
+      },
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      url: "https://images.example/recipes/user_123/recipe_123/step.webp",
-      expiresAt: "2026-05-31T00:15:00.000Z",
-    });
+    expect(response.headers.get("content-type")).toBe("image/webp");
+    expect(response.headers.get("cache-control")).toBe("private, max-age=604800");
+    expect(response.headers.get("etag")).toBe('"etag_123"');
+    expect(calls).toEqual([
+      {
+        key: "recipes/user_123/recipe_123/step.webp",
+        options: { onlyIf: expect.any(Headers) },
+      },
+    ]);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(imageBytes);
   });
 
-  it("レシピ本文に含まれない画像は表示用URLを取得できない", async () => {
+  it("他ユーザーのレシピ画像は取得できない", async () => {
     const testApp = createSilentTestApp({
       auth,
-      recipeRepository: {
-        createRecipeEnforcingPlanLimit: async () => {
-          throw new Error("should not create a recipe");
-        },
-        getRecipe: async (userId, recipeId) => ({
-          id: recipeId,
-          userId,
-          title: "Tomato pasta",
-          content: {
-            title: "Tomato pasta",
-            referenceImages: [],
-            ingredientGroups: [],
-            steps: [],
-          },
-          originType: "manual",
-          sourceUrl: null,
-          normalizedSourceUrl: null,
-          sourceName: null,
-          searchText: "tomato pasta",
-          createdAt: new Date("2026-05-31T00:00:00.000Z"),
-          updatedAt: new Date("2026-05-31T00:00:00.000Z"),
-        }),
-        listRecipes: unusedListRecipes,
-        updateRecipe: unusedUpdateRecipe,
-        deleteRecipe: unusedDeleteRecipe,
-      },
     });
 
     const response = await testApp.request(
-      "/api/images/signed-url?key=recipes/user_123/recipe_123/missing.webp",
+      "/api/images/object/recipes/user_999/recipe_123/step.webp",
       undefined,
       { APP_ENV: "development" },
     );
