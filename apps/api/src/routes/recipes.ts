@@ -20,7 +20,11 @@ import {
 } from "../api-error";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
-import { createRecipeImageService, type RecipeImageService } from "../images";
+import {
+  createRecipeImageDisplayUrl,
+  createRecipeImageService,
+  type RecipeImageService,
+} from "../images";
 import { requireAuth } from "../middleware/auth";
 import {
   attachRecipeImageUrls,
@@ -161,19 +165,13 @@ export const createRecipeRoutes = ({
         throw error;
       }
 
-      const images = imageService ?? createRecipeImageService(c.env);
       const itemsWithImages = await Promise.all(
-        result.items.map(async (item) => {
+        result.items.map((item) => {
           const base = toRecipeListItem(item);
           if (!item.locked && item.coverImageObjectKey) {
-            try {
-              const urlResult = await images.createSignedGetUrl({
-                objectKey: item.coverImageObjectKey,
-              });
-              base.coverImageUrl = urlResult.url;
-            } catch {
-              // ignore
-            }
+            base.coverImageUrl = createRecipeImageDisplayUrl({
+              objectKey: item.coverImageObjectKey,
+            });
           }
           return base;
         }),
@@ -204,14 +202,13 @@ export const createRecipeRoutes = ({
         return c.json(getRecipeResponseSchema.parse({ recipe: toLockedRecipeDetail(recipe) }));
       }
 
-      const images = imageService ?? createRecipeImageService(c.env);
       const detail = toRecipeDetail(recipe);
 
       return c.json(
         getRecipeResponseSchema.parse({
           recipe: {
             ...detail,
-            content: await attachRecipeImageUrls(recipe.content, images),
+            content: await attachRecipeImageUrls(recipe.content),
           },
         }),
       );

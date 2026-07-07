@@ -1,6 +1,11 @@
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRecipeImageService, getImageDimensions } from "./images";
+import {
+  createRecipeImageDisplayUrl,
+  createRecipeImageObjectResponse,
+  createRecipeImageService,
+  getImageDimensions,
+} from "./images";
 
 const onePixelPng = Uint8Array.from(
   atob(
@@ -23,6 +28,14 @@ const concatBytes = (...parts: Uint8Array[]) => {
 
 const asciiBytes = (value: string) =>
   Uint8Array.from([...value].map((character) => character.charCodeAt(0)));
+
+const createReadableStream = (body: Uint8Array) =>
+  new ReadableStream({
+    start(controller) {
+      controller.enqueue(body);
+      controller.close();
+    },
+  });
 
 const uint16BE = (value: number) => Uint8Array.of((value >> 8) & 0xff, value & 0xff);
 
@@ -159,6 +172,89 @@ afterEach(() => {
 });
 
 describe("RecipeImageService", () => {
+  it("画像objectKeyから同一オリジンのstable URLを作る", () => {
+    expect(
+      createRecipeImageDisplayUrl({
+        objectKey: "recipes/user_123/recipe_123/cover image.webp",
+      }),
+    ).toBe("/api/images/object/recipes/user_123/recipe_123/cover%20image.webp");
+  });
+
+  it("R2 objectをbufferingせず画像レスポンスとして返す", async () => {
+    const body = asciiBytes("image body");
+    const bucket = {
+      get: async () =>
+        ({
+          key: "recipes/user_123/recipe_123/cover.webp",
+          version: "version_123",
+          size: body.byteLength,
+          etag: "etag_123",
+          httpEtag: '"etag_123"',
+          uploaded: new Date("2026-05-31T00:00:00.000Z"),
+          checksums: {},
+          httpMetadata: { contentType: "image/webp" },
+          customMetadata: {},
+          storageClass: "Standard",
+          writeHttpMetadata: (headers: Headers) => {
+            headers.set("content-type", "image/webp");
+          },
+          body: createReadableStream(body),
+          bodyUsed: false,
+          arrayBuffer: async () => body.buffer.slice(0),
+          bytes: async () => body,
+          text: async () => "image body",
+          json: async () => ({}),
+          blob: async () => new Blob([body], { type: "image/webp" }),
+        }) as R2ObjectBody,
+    };
+
+    const response = await createRecipeImageObjectResponse({
+      bucket: bucket as unknown as R2Bucket,
+      objectKey: "recipes/user_123/recipe_123/cover.webp",
+      requestHeaders: new Headers(),
+    });
+
+    expect(response?.status).toBe(200);
+    expect(response?.headers.get("content-type")).toBe("image/webp");
+    expect(response?.headers.get("cache-control")).toBe("private, max-age=604800");
+    expect(response?.headers.get("etag")).toBe('"etag_123"');
+    expect(response?.headers.get("last-modified")).toBe("Sun, 31 May 2026 00:00:00 GMT");
+    if (!response) {
+      throw new Error("response was null");
+    }
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(body);
+  });
+
+  it("R2 conditional getがbodyなしobjectを返したら304を返す", async () => {
+    const bucket = {
+      get: async () =>
+        ({
+          key: "recipes/user_123/recipe_123/cover.webp",
+          version: "version_123",
+          size: 10,
+          etag: "etag_123",
+          httpEtag: '"etag_123"',
+          uploaded: new Date("2026-05-31T00:00:00.000Z"),
+          checksums: {},
+          httpMetadata: { contentType: "image/webp" },
+          customMetadata: {},
+          storageClass: "Standard",
+          writeHttpMetadata: (headers: Headers) => {
+            headers.set("content-type", "image/webp");
+          },
+        }) as R2Object,
+    };
+
+    const response = await createRecipeImageObjectResponse({
+      bucket: bucket as unknown as R2Bucket,
+      objectKey: "recipes/user_123/recipe_123/cover.webp",
+      requestHeaders: new Headers({ "if-none-match": '"etag_123"' }),
+    });
+
+    expect(response?.status).toBe(304);
+    expect(response?.headers.get("etag")).toBe('"etag_123"');
+  });
+
   it("tmp画像の実バイト列から寸法を取得して確定objectへコピーする", async () => {
     const { puts, service } = createTestImageService();
 

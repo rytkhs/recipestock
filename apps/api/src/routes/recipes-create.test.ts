@@ -403,9 +403,6 @@ describe("Recipe create routes", () => {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
         },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
-        },
         getObjectSize: async () => 1024,
         copyObject: async (sourceKey, destinationKey) => {
           copies.push({ sourceKey, destinationKey });
@@ -501,9 +498,6 @@ describe("Recipe create routes", () => {
       imageService: {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
         },
         getObjectSize: async () => 1024,
         copyObject: async (sourceKey, destinationKey) => {
@@ -613,9 +607,6 @@ describe("Recipe create routes", () => {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
         },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
-        },
         copyObject: async () => {
           throw new Error("should not copy a tmp object");
         },
@@ -712,9 +703,6 @@ describe("Recipe create routes", () => {
       imageService: {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
         },
         copyObject: async () => {
           throw new Error("should not copy a tmp object");
@@ -814,9 +802,6 @@ describe("Recipe create routes", () => {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
         },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
-        },
         copyObject: async () => {
           throw new Error("should not copy a tmp object");
         },
@@ -903,9 +888,6 @@ describe("Recipe create routes", () => {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
         },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
-        },
         getObjectSize: async () => 1024,
         copyObject: async () => ({ width: 1200, height: 800 }),
         deleteObject: async (objectKey) => {
@@ -963,9 +945,6 @@ describe("Recipe create routes", () => {
       imageService: {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
         },
         copyObject: async () => {
           throw new Error("should not copy a tmp object");
@@ -1028,9 +1007,6 @@ describe("Recipe create routes", () => {
       imageService: {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
         },
         copyObject: async () => {
           throw new Error("should not copy a tmp object");
@@ -1107,9 +1083,6 @@ describe("Recipe create routes", () => {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
         },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
-        },
         getObjectSize: async () => 1024,
         copyObject: async () => {
           throw new Error("copy failed");
@@ -1179,9 +1152,6 @@ describe("Recipe create routes", () => {
       imageService: {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
         },
         getObjectSize: async (objectKey) =>
           objectKey === "tmp/user_123/step.webp" ? MAX_IMAGE_UPLOAD_SIZE_BYTES + 1 : 1024,
@@ -1266,9 +1236,6 @@ describe("Recipe create routes", () => {
       imageService: {
         createUploadUrl: async () => {
           throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL");
         },
         getObjectSize: async () => MAX_IMAGE_UPLOAD_SIZE_BYTES + 1,
         copyObject: async (sourceKey, destinationKey) => {

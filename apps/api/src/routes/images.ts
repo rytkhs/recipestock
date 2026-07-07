@@ -1,9 +1,6 @@
-import { createDb } from "@recipestock/db";
 import {
   createImageUploadUrlRequestSchema,
   createImageUploadUrlResponseSchema,
-  getImageSignedUrlQuerySchema,
-  getImageSignedUrlResponseSchema,
   imageContentTypeSchema,
   MAX_IMAGE_UPLOAD_SIZE_BYTES,
 } from "@recipestock/schemas";
@@ -18,29 +15,43 @@ import {
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
 import {
+  createRecipeImageObjectResponse,
   createRecipeImageService,
-  getRecipeImageKeys,
   imageExtensionFromContentType,
   type RecipeImageService,
   recipeIdFromImageObjectKey,
 } from "../images";
 import { requireAuth } from "../middleware/auth";
-import {
-  createRecipeId as createDefaultImageId,
-  createRecipeRepository,
-  type RecipeRepository,
-} from "../recipes";
+import { createRecipeId as createDefaultImageId } from "../recipes";
 
 type ImageRouteDependencies = {
   auth: AuthService;
-  recipeRepository?: RecipeRepository;
   imageService?: RecipeImageService;
   createImageId?: () => string;
 };
 
+const IMAGE_OBJECT_ROUTE_PREFIX = "/api/images/object/";
+
+const objectKeyFromImageObjectPath = (pathname: string) => {
+  if (!pathname.startsWith(IMAGE_OBJECT_ROUTE_PREFIX)) {
+    return null;
+  }
+
+  const encodedObjectKey = pathname.slice(IMAGE_OBJECT_ROUTE_PREFIX.length);
+
+  if (!encodedObjectKey) {
+    return null;
+  }
+
+  try {
+    return encodedObjectKey.split("/").map(decodeURIComponent).join("/");
+  } catch {
+    return null;
+  }
+};
+
 export const createImageRoutes = ({
   auth,
-  recipeRepository,
   imageService,
   createImageId,
 }: ImageRouteDependencies) => {
@@ -92,44 +103,26 @@ export const createImageRoutes = ({
         }),
       );
     })
-    .get("/signed-url", requireAuth(auth), async (c) => {
+    .get("/object/*", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
-      const query = getImageSignedUrlQuerySchema.safeParse(c.req.query());
+      const objectKey = objectKeyFromImageObjectPath(new URL(c.req.url).pathname);
 
-      if (!query.success) {
-        return validationFailedResponse(query.error.flatten());
+      if (!objectKey) {
+        return notFoundResponse("Image was not found.");
       }
 
-      const recipeId = recipeIdFromImageObjectKey(userId, query.data.key);
+      const recipeId = recipeIdFromImageObjectKey(userId, objectKey);
 
       if (!recipeId) {
         return forbiddenResponse();
       }
 
-      const repository =
-        recipeRepository ??
-        createRecipeRepository(createDb(c.env.DATABASE_URL), {
-          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          now: new Date(),
-        });
-      const recipe = await repository.getRecipe(userId, recipeId);
-
-      if (!recipe) {
-        return notFoundResponse("Recipe was not found.");
-      }
-
-      if (!getRecipeImageKeys(recipe.content).has(query.data.key)) {
-        return forbiddenResponse();
-      }
-
-      const images = imageService ?? createRecipeImageService(c.env);
-      const signedUrl = await images.createSignedGetUrl({ objectKey: query.data.key });
-
-      return c.json(
-        getImageSignedUrlResponseSchema.parse({
-          url: signedUrl.url,
-          expiresAt: signedUrl.expiresAt.toISOString(),
-        }),
+      return (
+        (await createRecipeImageObjectResponse({
+          bucket: c.env.RECIPE_IMAGES,
+          objectKey,
+          requestHeaders: c.req.raw.headers,
+        })) ?? notFoundResponse("Image was not found.")
       );
     });
 };

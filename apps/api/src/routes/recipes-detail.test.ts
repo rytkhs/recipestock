@@ -150,20 +150,6 @@ describe("Recipe detail routes", () => {
         updateRecipe: unusedUpdateRecipe,
         deleteRecipe: unusedDeleteRecipe,
       },
-      imageService: {
-        createUploadUrl: async () => {
-          throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async ({ objectKey }) => ({
-          url: `https://images.example/${objectKey}`,
-          expiresAt: new Date("2026-05-31T00:15:00.000Z"),
-        }),
-        copyObject: async () => {
-          throw new Error("should not copy an object");
-        },
-        deleteObject: async () => undefined,
-        deletePrefixBestEffort: async () => undefined,
-      },
     });
 
     const response = await testApp.request("/api/recipes/recipe_123", undefined, {
@@ -178,14 +164,14 @@ describe("Recipe detail routes", () => {
             objectKey: "recipes/user_123/recipe_123/cover.webp",
             width: 1200,
             height: 800,
-            url: "https://images.example/recipes/user_123/recipe_123/cover.webp",
+            url: "/api/images/object/recipes/user_123/recipe_123/cover.webp",
           },
           referenceImages: [
             {
               objectKey: "recipes/user_123/recipe_123/source.webp",
               width: 1080,
               height: 1080,
-              url: "https://images.example/recipes/user_123/recipe_123/source.webp",
+              url: "/api/images/object/recipes/user_123/recipe_123/source.webp",
             },
           ],
           steps: [
@@ -196,7 +182,7 @@ describe("Recipe detail routes", () => {
                   objectKey: "recipes/user_123/recipe_123/step.webp",
                   width: 800,
                   height: 1200,
-                  url: "https://images.example/recipes/user_123/recipe_123/step.webp",
+                  url: "/api/images/object/recipes/user_123/recipe_123/step.webp",
                 },
               ],
             },
@@ -206,7 +192,7 @@ describe("Recipe detail routes", () => {
     });
   });
 
-  it("一部の手順画像URL作成に失敗しても画像情報と対応関係を保持する", async () => {
+  it("複数の手順画像にstable URLを付与して対応関係を保持する", async () => {
     const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
@@ -256,26 +242,6 @@ describe("Recipe detail routes", () => {
         updateRecipe: unusedUpdateRecipe,
         deleteRecipe: unusedDeleteRecipe,
       },
-      imageService: {
-        createUploadUrl: async () => {
-          throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async ({ objectKey }) => {
-          if (objectKey.endsWith("step-a.webp")) {
-            throw new Error("signed URL failed");
-          }
-
-          return {
-            url: `https://images.example/${objectKey}`,
-            expiresAt: new Date("2026-05-31T00:15:00.000Z"),
-          };
-        },
-        copyObject: async () => {
-          throw new Error("should not copy an object");
-        },
-        deleteObject: async () => undefined,
-        deletePrefixBestEffort: async () => undefined,
-      },
     });
 
     const response = await testApp.request("/api/recipes/recipe_123", undefined, {
@@ -293,12 +259,13 @@ describe("Recipe detail routes", () => {
                   objectKey: "recipes/user_123/recipe_123/step-a.webp",
                   width: 1200,
                   height: 800,
+                  url: "/api/images/object/recipes/user_123/recipe_123/step-a.webp",
                 },
                 {
                   objectKey: "recipes/user_123/recipe_123/step-b.webp",
                   width: 800,
                   height: 1200,
-                  url: "https://images.example/recipes/user_123/recipe_123/step-b.webp",
+                  url: "/api/images/object/recipes/user_123/recipe_123/step-b.webp",
                 },
               ],
             },
@@ -342,19 +309,6 @@ describe("Recipe detail routes", () => {
         listRecipes: unusedListRecipes,
         updateRecipe: unusedUpdateRecipe,
         deleteRecipe: unusedDeleteRecipe,
-      },
-      imageService: {
-        createUploadUrl: async () => {
-          throw new Error("should not create an upload URL");
-        },
-        createSignedGetUrl: async () => {
-          throw new Error("should not create a signed GET URL for locked recipe");
-        },
-        copyObject: async () => {
-          throw new Error("should not copy an object");
-        },
-        deleteObject: async () => undefined,
-        deletePrefixBestEffort: async () => undefined,
       },
     });
 

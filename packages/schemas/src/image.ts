@@ -16,16 +16,6 @@ export const createImageUploadUrlResponseSchema = z.object({
   expiresAt: z.string().min(1),
 });
 
-export const getImageSignedUrlQuerySchema = z.object({
-  key: z.string().min(1),
-});
-
-export const getImageSignedUrlResponseSchema = z.object({
-  url: z.string().min(1),
-  expiresAt: z.string().min(1),
-});
-
 export type ImageContentType = z.infer<typeof imageContentTypeSchema>;
 export type CreateImageUploadUrlRequest = z.infer<typeof createImageUploadUrlRequestSchema>;
 export type CreateImageUploadUrlResponse = z.infer<typeof createImageUploadUrlResponseSchema>;
-export type GetImageSignedUrlResponse = z.infer<typeof getImageSignedUrlResponseSchema>;

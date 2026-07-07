@@ -127,7 +127,6 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/images",
       createImageRoutes({
         auth,
-        recipeRepository: dependencies.recipeRepository,
         imageService: dependencies.imageService,
         createImageId: dependencies.createImageId,
       }),

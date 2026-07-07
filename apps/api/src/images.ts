@@ -22,10 +22,6 @@ export type CreateUploadUrlParams = {
   contentType: ImageContentType;
 };
 
-export type CreateSignedGetUrlParams = {
-  objectKey: string;
-};
-
 export type CopyExternalImageUrlParams = {
   sourceUrl: string;
   destinationKeyPrefix: string;
@@ -33,7 +29,6 @@ export type CopyExternalImageUrlParams = {
 
 export type RecipeImageService = {
   createUploadUrl(params: CreateUploadUrlParams): Promise<ImageUrlResult>;
-  createSignedGetUrl(params: CreateSignedGetUrlParams): Promise<ImageUrlResult>;
   getObjectSize?(objectKey: string): Promise<number | null>;
   copyObject(sourceKey: string, destinationKey: string): Promise<ImageDimensions>;
   copyExternalImageUrl?(
@@ -45,6 +40,8 @@ export type RecipeImageService = {
 
 const EXTERNAL_IMAGE_FETCH_TIMEOUT_MS = 10_000;
 const MAX_EXTERNAL_IMAGE_REDIRECTS = 5;
+const RECIPE_IMAGE_DISPLAY_URL_PREFIX = "/api/images/object";
+const RECIPE_IMAGE_CACHE_CONTROL = "private, max-age=604800";
 
 const addSeconds = (date: Date, seconds: number) => new Date(date.getTime() + seconds * 1000);
 
@@ -55,6 +52,51 @@ const createR2ObjectUrl = (env: Bindings, objectKey: string) =>
   `https://${env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/${encodeURIComponent(
     env.R2_BUCKET_NAME,
   )}/${encodeObjectKey(objectKey)}`;
+
+export const createRecipeImageDisplayUrl = ({ objectKey }: { objectKey: string }) =>
+  `${RECIPE_IMAGE_DISPLAY_URL_PREFIX}/${encodeObjectKey(objectKey)}`;
+
+const hasR2ObjectBody = (object: R2Object | R2ObjectBody): object is R2ObjectBody =>
+  "body" in object;
+
+const createRecipeImageResponseHeaders = (object: R2Object) => {
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("cache-control", RECIPE_IMAGE_CACHE_CONTROL);
+  headers.set("etag", object.httpEtag);
+  headers.set("last-modified", object.uploaded.toUTCString());
+  headers.set("content-length", String(object.size));
+
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/octet-stream");
+  }
+
+  return headers;
+};
+
+export const createRecipeImageObjectResponse = async ({
+  bucket,
+  objectKey,
+  requestHeaders,
+}: {
+  bucket: R2Bucket;
+  objectKey: string;
+  requestHeaders: Headers;
+}) => {
+  const object = await bucket.get(objectKey, { onlyIf: requestHeaders });
+
+  if (!object) {
+    return null;
+  }
+
+  const headers = createRecipeImageResponseHeaders(object);
+
+  if (!hasR2ObjectBody(object)) {
+    return new Response(null, { status: 304, headers });
+  }
+
+  return new Response(object.body, { headers });
+};
 
 const createR2PresignedUrl = async ({
   env,
@@ -187,12 +229,6 @@ export const createRecipeImageService = (env: Bindings): RecipeImageService => (
   async createUploadUrl({ objectKey, contentType }) {
     return {
       url: await createR2PresignedUrl({ env, objectKey, method: "PUT", contentType }),
-      expiresAt: addSeconds(new Date(), IMAGE_UPLOAD_URL_EXPIRES_IN_SECONDS),
-    };
-  },
-  async createSignedGetUrl({ objectKey }) {
-    return {
-      url: await createR2PresignedUrl({ env, objectKey, method: "GET" }),
       expiresAt: addSeconds(new Date(), IMAGE_UPLOAD_URL_EXPIRES_IN_SECONDS),
     };
   },
