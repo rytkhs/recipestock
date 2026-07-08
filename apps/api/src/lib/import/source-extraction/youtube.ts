@@ -4,7 +4,7 @@ import {
   type SourceExtractionContext,
   type SourceExtractionMatchInput,
 } from "./types";
-import { type YouTubeThumbnail } from "./youtube-data";
+import { YouTubeDataError, type YouTubeThumbnail } from "./youtube-data";
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"]);
 const YOUTUBE_SHORT_HOSTS = new Set(["youtu.be", "www.youtu.be"]);
@@ -32,10 +32,7 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
       );
     }
 
-    const video = await context.youtubeDataClient.getVideo({
-      videoId,
-      timeoutMs: context.timeoutMs,
-    });
+    const video = await getYouTubeVideoMetadata(context, videoId);
     if (!video) {
       throw new RecipeImportError(
         "extraction_failed",
@@ -138,6 +135,24 @@ export const createYouTubeCanonicalUrl = (videoId: string) =>
 const normalizeYouTubeVideoId = (value: string | null | undefined) => {
   if (!value || !YOUTUBE_VIDEO_ID.test(value)) return null;
   return value;
+};
+
+const getYouTubeVideoMetadata = async (context: SourceExtractionContext, videoId: string) => {
+  try {
+    return await context.youtubeDataClient?.getVideo({
+      videoId,
+      timeoutMs: context.timeoutMs,
+    });
+  } catch (error) {
+    if (error instanceof YouTubeDataError) {
+      throw new RecipeImportError(
+        "extraction_failed",
+        "YouTube video details could not be extracted.",
+      );
+    }
+
+    throw error;
+  }
 };
 
 const selectBestYouTubeThumbnail = (value: YouTubeThumbnail[]): YouTubeThumbnail | undefined =>

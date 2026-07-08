@@ -5,6 +5,7 @@ import {
   getYouTubeVideoId,
   youtubeSourceExtractionAdapter,
 } from "./youtube";
+import { YouTubeDataError } from "./youtube-data";
 
 const VIDEO_ID = "FyLCRXMANAM";
 const CANONICAL_URL = "https://www.youtube.com/watch?v=FyLCRXMANAM";
@@ -156,6 +157,25 @@ describe("YouTube source extraction adapter", () => {
         },
       }),
     ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("YouTube Data API errorはRecipeImportErrorへ変換する", async () => {
+    await expect(
+      youtubeSourceExtractionAdapter.extract({
+        normalizedUrl: CANONICAL_URL,
+        host: "youtube.com",
+        timeoutMs: 1000,
+        fetchHtml: createFetchHtml(),
+        youtubeDataClient: {
+          getVideo: vi.fn(async () => {
+            throw new YouTubeDataError("quota_exceeded", "quota exceeded");
+          }),
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: "RecipeImportError",
       code: "extraction_failed",
     } satisfies Partial<RecipeImportError>);
   });
