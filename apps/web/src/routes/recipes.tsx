@@ -125,6 +125,63 @@ const getRecipeThumbnailImageProps = (index: number) =>
     loading: index < eagerRecipeThumbnailCount ? "eager" : "lazy",
   }) as const;
 
+const RecipeCardActionMenu = ({
+  isList,
+  recipeId,
+  title,
+  onDelete,
+}: {
+  isList: boolean;
+  recipeId: string;
+  title: string;
+  onDelete: () => void;
+}) => {
+  const navigate = useNavigate();
+
+  return (
+    <div
+      className={`absolute z-10 ${
+        isList ? "top-2 right-2 sm:top-3 sm:right-3" : "top-1 right-1 sm:top-2 sm:right-2"
+      }`}
+    >
+      <Dropdown>
+        <Dropdown.Trigger
+          aria-label={`${title}の操作メニュー`}
+          className={`flex h-8 w-8 items-center justify-center sm:h-9 sm:w-9 ${
+            isList ? "text-brand-walnut" : "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]"
+          }`}
+        >
+          <DotsThreeVertical size={19} weight="bold" />
+        </Dropdown.Trigger>
+        <Dropdown.Popover className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
+          <Dropdown.Menu
+            onAction={(key) => {
+              if (key === "edit") {
+                void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
+              } else if (key === "delete") {
+                onDelete();
+              }
+            }}
+          >
+            <Dropdown.Item id="edit" textValue="編集">
+              <div className="flex items-center gap-2 text-brand-walnut">
+                <PencilSimple size={16} weight="bold" />
+                <span className="text-sm font-semibold">編集</span>
+              </div>
+            </Dropdown.Item>
+            <Dropdown.Item id="delete" textValue="削除">
+              <div className="flex items-center gap-2 text-brand-danger">
+                <Trash size={16} weight="bold" />
+                <span className="text-sm font-semibold">削除</span>
+              </div>
+            </Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown>
+    </div>
+  );
+};
+
 const ImportJobIsland = () => {
   const queryClient = useQueryClient();
   const [renderedJob, setRenderedJob] = useState<ImportJobSummary | null>(null);
@@ -823,9 +880,11 @@ const RecipeImageLightbox = ({
 };
 
 export const RecipesIndexRoute = () => {
+  const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     try {
       return (localStorage.getItem("recipeViewMode") as "grid" | "list") || "grid";
@@ -844,6 +903,13 @@ export const RecipesIndexRoute = () => {
   const { data, error, isFetching, refetch } = useQuery({
     queryKey: recipesQueryKeys.list(query, cursor),
     queryFn: () => listRecipes({ query, cursor }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (recipeId: string) => deleteRecipe(recipeId),
+    onSuccess: async (_response, recipeId) => {
+      removeRecipeDetail(queryClient, recipeId);
+      await invalidateRecipeLists(queryClient);
+    },
   });
   const activePages = cursor ? loadedPages.concat(data ? [data] : []) : data ? [data] : [];
   const recipes = activePages.flatMap((page) => page.items);
@@ -868,6 +934,15 @@ export const RecipesIndexRoute = () => {
     if (nextCursor) {
       void refetch();
     }
+  };
+  const confirmDelete = () => {
+    if (!deleteTargetId) {
+      return;
+    }
+
+    const recipeId = deleteTargetId;
+    setDeleteTargetId(null);
+    deleteMutation.mutate(recipeId);
   };
 
   return (
@@ -906,6 +981,13 @@ export const RecipesIndexRoute = () => {
         <div className="mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-4">
           <p className="text-brand-danger text-sm" role="alert">
             レシピ一覧を読み込めませんでした。
+          </p>
+        </div>
+      ) : null}
+      {deleteMutation.error ? (
+        <div className="mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-4">
+          <p className="text-brand-danger text-sm" role="alert">
+            レシピを削除できませんでした。
           </p>
         </div>
       ) : null}
@@ -991,7 +1073,7 @@ export const RecipesIndexRoute = () => {
                   </div>
                 )}
               </div>
-              <div className="flex flex-1 flex-col justify-center px-4 py-1 min-w-0">
+              <div className="flex min-w-0 flex-1 flex-col justify-center py-1 pr-10 pl-4 sm:pr-12">
                 <h2 className="line-clamp-2 font-bold text-sm sm:text-base leading-tight text-brand-ink">
                   {recipe.title}
                 </h2>
@@ -1065,14 +1147,24 @@ export const RecipesIndexRoute = () => {
           }
 
           return (
-            <Link
+            <div
               key={recipe.id}
-              to="/recipes/$recipeId"
-              params={{ recipeId: recipe.id }}
-              className={`group flex min-w-0 overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm transition-shadow duration-200 hover:shadow-pantry sm:rounded-[20px] ${isList ? "flex-row items-center" : "flex-col"}`}
+              className={`group relative flex min-w-0 overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm transition-shadow duration-200 hover:shadow-pantry sm:rounded-[20px] ${isList ? "flex-row items-center" : "flex-col"}`}
             >
-              {content}
-            </Link>
+              <Link
+                to="/recipes/$recipeId"
+                params={{ recipeId: recipe.id }}
+                className={`flex min-w-0 flex-1 ${isList ? "flex-row items-center" : "flex-col"}`}
+              >
+                {content}
+              </Link>
+              <RecipeCardActionMenu
+                isList={isList}
+                recipeId={recipe.id}
+                title={recipe.title}
+                onDelete={() => setDeleteTargetId(recipe.id)}
+              />
+            </div>
           );
         })}
       </div>
@@ -1089,6 +1181,40 @@ export const RecipesIndexRoute = () => {
           </Button>
         </div>
       ) : null}
+
+      <AlertDialog.Backdrop
+        isOpen={Boolean(deleteTargetId)}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setDeleteTargetId(null);
+          }
+        }}
+      >
+        <AlertDialog.Container placement="center" size="sm">
+          <AlertDialog.Dialog>
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="danger" />
+              <AlertDialog.Heading>レシピを削除しますか？</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Footer>
+              <Button
+                isDisabled={deleteMutation.isPending}
+                variant="tertiary"
+                onPress={() => setDeleteTargetId(null)}
+              >
+                キャンセル
+              </Button>
+              <Button
+                isDisabled={deleteMutation.isPending}
+                variant="danger"
+                onPress={confirmDelete}
+              >
+                削除
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </section>
   );
 };
