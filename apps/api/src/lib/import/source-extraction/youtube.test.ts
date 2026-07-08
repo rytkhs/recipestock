@@ -5,6 +5,7 @@ import {
   getYouTubeVideoId,
   youtubeSourceExtractionAdapter,
 } from "./youtube";
+import { YouTubeDataError } from "./youtube-data";
 
 const VIDEO_ID = "FyLCRXMANAM";
 const CANONICAL_URL = "https://www.youtube.com/watch?v=FyLCRXMANAM";
@@ -36,36 +37,31 @@ describe("YouTube source extraction URL handling", () => {
 });
 
 describe("YouTube source extraction adapter", () => {
-  it("videoDetailsからAI inputと最大サムネイルcover配置を作る", async () => {
-    const fetchHtml = createFetchHtml(
-      createPage(
-        CANONICAL_URL,
-        createYouTubeHtml({
-          videoId: VIDEO_ID,
-          title: "鶏むねキャベツ鍋",
-          author: "Recipe Channel",
-          shortDescription: "材料\nキャベツ 500g\n鶏むね肉 350g\n作り方\n煮る",
-          thumbnail: {
-            thumbnails: [
-              { url: "https://i.ytimg.com/vi/FyLCRXMANAM/default.jpg", width: 120, height: 90 },
-              {
-                url: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
-                width: 1280,
-                height: 720,
-              },
-            ],
-          },
-        }),
-      ),
-    );
+  it("YouTube Data API metadataからAI inputと最大サムネイルcover配置を作る", async () => {
+    const fetchHtml = createFetchHtml();
+    const youtubeDataClient = createYouTubeDataClient({
+      title: "鶏むねキャベツ鍋",
+      channelTitle: "Recipe Channel",
+      description: "材料\nキャベツ 500g\n鶏むね肉 350g\n作り方\n煮る",
+      thumbnails: [
+        { url: "https://i.ytimg.com/vi/FyLCRXMANAM/default.jpg", width: 120, height: 90 },
+        {
+          url: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
     const result = await youtubeSourceExtractionAdapter.extract({
       normalizedUrl: "https://youtu.be/FyLCRXMANAM?si=vxf25wqv_kohdf4L",
       host: "youtu.be",
       timeoutMs: 1000,
       fetchHtml,
+      youtubeDataClient,
     });
 
-    expect(fetchHtml).toHaveBeenCalledWith(CANONICAL_URL);
+    expect(fetchHtml).not.toHaveBeenCalled();
+    expect(youtubeDataClient.getVideo).toHaveBeenCalledWith({ videoId: VIDEO_ID, timeoutMs: 1000 });
     expect(result).toEqual({
       promptProfile: "social",
       input: {
@@ -105,26 +101,23 @@ describe("YouTube source extraction adapter", () => {
   });
 
   it("説明欄が空でもtitleとthumbnailで成功する", async () => {
+    const fetchHtml = createFetchHtml();
     const result = await youtubeSourceExtractionAdapter.extract({
       normalizedUrl: CANONICAL_URL,
       host: "youtube.com",
       timeoutMs: 1000,
-      fetchHtml: createFetchHtml(
-        CANONICAL_URL,
-        createYouTubeHtml({
-          videoId: VIDEO_ID,
-          title: "説明欄なしShorts",
-          author: "Recipe Channel",
-          shortDescription: "",
-          thumbnail: {
-            thumbnails: [
-              { url: "https://i.ytimg.com/vi/FyLCRXMANAM/hqdefault.jpg", width: 480, height: 360 },
-            ],
-          },
-        }),
-      ),
+      fetchHtml,
+      youtubeDataClient: createYouTubeDataClient({
+        title: "説明欄なしShorts",
+        channelTitle: "Recipe Channel",
+        description: "",
+        thumbnails: [
+          { url: "https://i.ytimg.com/vi/FyLCRXMANAM/hqdefault.jpg", width: 480, height: 360 },
+        ],
+      }),
     });
 
+    expect(fetchHtml).not.toHaveBeenCalled();
     expect(result.input.markdownContent).toBe(
       ["# 説明欄なしShorts", "", "Source: YouTube", "Channel: Recipe Channel"].join("\n"),
     );
@@ -136,17 +129,53 @@ describe("YouTube source extraction adapter", () => {
     });
   });
 
-  it("ytInitialPlayerResponse不在はextraction_failedにする", async () => {
+  it("YouTube Data API client未設定はextraction_failedにする", async () => {
+    const fetchHtml = createFetchHtml();
     await expect(
       youtubeSourceExtractionAdapter.extract({
         normalizedUrl: CANONICAL_URL,
         host: "youtube.com",
         timeoutMs: 1000,
-        fetchHtml: createFetchHtml(
-          createPage(CANONICAL_URL, "<html><body>No player response</body></html>"),
-        ),
+        fetchHtml,
       }),
     ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+
+    expect(fetchHtml).not.toHaveBeenCalled();
+  });
+
+  it("動画metadataが見つからない場合はextraction_failedにする", async () => {
+    await expect(
+      youtubeSourceExtractionAdapter.extract({
+        normalizedUrl: CANONICAL_URL,
+        host: "youtube.com",
+        timeoutMs: 1000,
+        fetchHtml: createFetchHtml(),
+        youtubeDataClient: {
+          getVideo: vi.fn(async () => null),
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("YouTube Data API errorはRecipeImportErrorへ変換する", async () => {
+    await expect(
+      youtubeSourceExtractionAdapter.extract({
+        normalizedUrl: CANONICAL_URL,
+        host: "youtube.com",
+        timeoutMs: 1000,
+        fetchHtml: createFetchHtml(),
+        youtubeDataClient: {
+          getVideo: vi.fn(async () => {
+            throw new YouTubeDataError("quota_exceeded", "quota exceeded");
+          }),
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: "RecipeImportError",
       code: "extraction_failed",
     } satisfies Partial<RecipeImportError>);
   });
@@ -157,14 +186,12 @@ describe("YouTube source extraction adapter", () => {
         normalizedUrl: CANONICAL_URL,
         host: "youtube.com",
         timeoutMs: 1000,
-        fetchHtml: createFetchHtml(
-          CANONICAL_URL,
-          createYouTubeHtml({
-            videoId: "LZ7gPKzDrzY",
-            title: "別動画",
-            shortDescription: "材料",
-          }),
-        ),
+        fetchHtml: createFetchHtml(),
+        youtubeDataClient: createYouTubeDataClient({
+          videoId: "LZ7gPKzDrzY",
+          title: "別動画",
+          description: "材料",
+        }),
       }),
     ).rejects.toMatchObject({
       code: "extraction_failed",
@@ -172,24 +199,32 @@ describe("YouTube source extraction adapter", () => {
   });
 });
 
-const createPage = (url: string, body: string) => ({
-  finalUrl: url,
-  contentType: "text/html; charset=utf-8",
-  body,
+const createFetchHtml = () =>
+  vi.fn(async () => ({
+    finalUrl: CANONICAL_URL,
+    contentType: "text/html; charset=utf-8",
+    body: "",
+  }));
+
+const createYouTubeDataClient = ({
+  videoId = VIDEO_ID,
+  title,
+  description = "",
+  channelTitle = "",
+  thumbnails = [],
+}: {
+  videoId?: string;
+  title: string;
+  description?: string;
+  channelTitle?: string;
+  thumbnails?: Array<{ url: string; width?: number; height?: number }>;
+}) => ({
+  getVideo: vi.fn(async () => ({
+    videoId,
+    canonicalUrl: createYouTubeCanonicalUrl(videoId),
+    title,
+    description,
+    channelTitle,
+    thumbnails,
+  })),
 });
-
-const createFetchHtml = (pageOrUrl: ReturnType<typeof createPage> | string, body?: string) => {
-  const page = typeof pageOrUrl === "string" ? createPage(pageOrUrl, body ?? "") : pageOrUrl;
-  return vi.fn(async () => page);
-};
-
-const createYouTubeHtml = (videoDetails: unknown) => `
-  <html>
-    <head>
-      <script>
-        var ytInitialPlayerResponse = ${JSON.stringify({ videoDetails })};
-      </script>
-    </head>
-    <body></body>
-  </html>
-`;

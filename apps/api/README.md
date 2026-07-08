@@ -30,6 +30,9 @@ URL import AI provider selection is controlled by `IMPORT_AI_PROVIDER`. Set it t
 `openrouter`, or `groq`. OpenRouter requires `OPENROUTER_API_KEY` and `OPENROUTER_TEXT_MODEL`.
 Groq requires `GROQ_API_KEY` and `GROQ_TEXT_MODEL`.
 
+YouTube URL import uses YouTube Data API v3. Set `YOUTUBE_DATA_API_KEY` to enable
+YouTube source extraction.
+
 ## R2 setup
 
 Create the development R2 bucket after Cloudflare login:
@@ -89,6 +92,7 @@ pnpm --filter @recipestock/api exec wrangler secret put R2_ACCESS_KEY_ID
 pnpm --filter @recipestock/api exec wrangler secret put R2_SECRET_ACCESS_KEY
 pnpm --filter @recipestock/api exec wrangler secret put GROQ_API_KEY
 pnpm --filter @recipestock/api exec wrangler secret put OPENROUTER_API_KEY
+pnpm --filter @recipestock/api exec wrangler secret put YOUTUBE_DATA_API_KEY
 ```
 
 Do not commit `.dev.vars` or other secret files.

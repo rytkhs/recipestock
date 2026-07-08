@@ -699,26 +699,24 @@ describe("URL import flow", () => {
       ingredientGroups: [{ ingredients: [{ name: "キャベツ", amount: "500g" }] }],
       steps: [{ text: "煮る。", imageUrls: [] }],
     }));
-    const fetcher = vi.fn(async (url: string) => ({
-      finalUrl: url,
-      contentType: "text/html",
-      body: createYouTubeHtml({
+    const fetcher = vi.fn();
+    const youtubeDataClient = {
+      getVideo: vi.fn(async () => ({
         videoId: "FyLCRXMANAM",
+        canonicalUrl: "https://www.youtube.com/watch?v=FyLCRXMANAM",
         title: "鶏むねキャベツ鍋",
-        author: "Recipe Channel",
-        shortDescription: "材料\nキャベツ 500g\n作り方\n煮る。",
-        thumbnail: {
-          thumbnails: [
-            { url: "https://i.ytimg.com/vi/FyLCRXMANAM/default.jpg", width: 120, height: 90 },
-            {
-              url: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
-              width: 1280,
-              height: 720,
-            },
-          ],
-        },
-      }),
-    }));
+        channelTitle: "Recipe Channel",
+        description: "材料\nキャベツ 500g\n作り方\n煮る。",
+        thumbnails: [
+          { url: "https://i.ytimg.com/vi/FyLCRXMANAM/default.jpg", width: 120, height: 90 },
+          {
+            url: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      })),
+    };
 
     await expect(
       importRecipeFromUrl({
@@ -729,6 +727,7 @@ describe("URL import flow", () => {
         },
         usageRepository,
         fetcher,
+        youtubeDataClient,
         deterministicImporter: {
           async tryImport() {
             return null;
@@ -753,11 +752,11 @@ describe("URL import flow", () => {
       warnings: [],
     });
 
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher).toHaveBeenCalledWith(
-      "https://www.youtube.com/watch?v=FyLCRXMANAM",
-      expect.any(Object),
-    );
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(youtubeDataClient.getVideo).toHaveBeenCalledWith({
+      videoId: "FyLCRXMANAM",
+      timeoutMs: expect.any(Number),
+    });
     expect(aiNormalize).toHaveBeenCalledWith(
       expect.objectContaining({
         promptProfile: "social",
@@ -788,11 +787,7 @@ describe("URL import flow", () => {
           AI_TEXT_MODEL: "@cf/test",
         },
         usageRepository: createUsageRepositoryStub(),
-        fetcher: async (url) => ({
-          finalUrl: url,
-          contentType: "text/html",
-          body: "<html><article><h1>Generic recipe</h1><p>Enough recipe text.</p></article></html>",
-        }),
+        fetcher: vi.fn(),
         deterministicImporter: {
           async tryImport() {
             return null;
@@ -1575,21 +1570,6 @@ const getFetchHeader = (init: RequestInit | undefined, name: string) => {
 
   return Object.entries(headers).find(([key]) => key.toLowerCase() === normalizedName)?.[1];
 };
-
-const createYouTubeHtml = (videoDetails: unknown) => `
-  <html>
-    <head>
-      <script>
-        var ytInitialPlayerResponse = ${JSON.stringify({ videoDetails })};
-      </script>
-    </head>
-    <body>
-      <article>
-        <h1>Generic YouTube page text should not be used.</h1>
-      </article>
-    </body>
-  </html>
-`;
 
 const createInstagramEmbedHtml = ({
   caption,

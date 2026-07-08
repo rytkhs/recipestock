@@ -20,6 +20,10 @@ import {
 import { getRecipeImportSystemPrompt } from "./lib/import/prompts";
 import { defaultSourceExtractor, type SourceExtractor } from "./lib/import/source-extraction";
 import {
+  createYouTubeDataClient,
+  type YouTubeDataClient,
+} from "./lib/import/source-extraction/youtube-data";
+import {
   type FetchedImportPage,
   type ImportErrorCode,
   type RecipeImportAIDraftContent,
@@ -309,6 +313,7 @@ export const importRecipeFromUrl = async ({
   aiProvider,
   fetcher,
   ytdlpMetadataClient,
+  youtubeDataClient,
   deterministicImporter = defaultDeterministicImporter,
   sourceExtractor = defaultSourceExtractor,
   now = new Date(),
@@ -323,6 +328,7 @@ export const importRecipeFromUrl = async ({
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
   ytdlpMetadataClient?: YtDlpMetadataClient;
+  youtubeDataClient?: YouTubeDataClient;
   deterministicImporter?: DeterministicImporter;
   sourceExtractor?: SourceExtractor;
   now?: Date;
@@ -355,6 +361,7 @@ export const importRecipeFromUrl = async ({
     fetcher: deterministicFetcher,
     fetchOptions,
     ytdlpMetadataClient,
+    youtubeDataClient: youtubeDataClient ?? resolveYouTubeDataClient(env),
   });
   assertImportJobDeadline(deadline, currentDate());
   const conversion = sourceExtractionResult
@@ -601,6 +608,11 @@ const resolveImportTimeoutMs = (env: Partial<Bindings>) => {
 const resolveImportMaxHtmlBytes = (env: Partial<Bindings>) => {
   const value = Number(env.IMPORT_MAX_HTML_BYTES ?? 2_000_000);
   return Number.isInteger(value) && value > 0 ? value : 2_000_000;
+};
+
+const resolveYouTubeDataClient = (env: Partial<Bindings>): YouTubeDataClient | undefined => {
+  const apiKey = env.YOUTUBE_DATA_API_KEY?.trim();
+  return apiKey ? createYouTubeDataClient({ apiKey }) : undefined;
 };
 
 const resolveImportFetcher = (env: Partial<Bindings>): RecipeImportFetcher => {
