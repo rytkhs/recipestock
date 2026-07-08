@@ -87,41 +87,48 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
         </div>
       </div>
       <div className="mt-6 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-        <form
-          className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
-          onSubmit={submit}
-        >
+        <form className="grid min-w-0 gap-4" onSubmit={submit}>
           <TextField className="min-w-0" isRequired>
-            <Label className="text-brand-walnut font-semibold text-sm">URL</Label>
-            <Input
-              className="w-full min-w-0"
-              inputMode="url"
-              type="url"
-              value={url}
-              onChange={(event) => updateUrl(event.target.value)}
-            />
+            <div className="mb-1 flex min-w-0 items-center justify-between gap-3">
+              <Label className="text-brand-walnut font-semibold text-sm">URL</Label>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  aria-label="ペースト"
+                  className="h-7 min-h-7 rounded-full border border-brand-line bg-brand-paper px-2 text-brand-walnut text-xs hover:bg-brand-paper-muted"
+                  isDisabled={isSubmitting}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                  onPress={pasteUrl}
+                >
+                  <ClipboardText size={14} weight="bold" />
+                  <span>ペースト</span>
+                </Button>
+                <Button
+                  aria-label="クリア"
+                  className="h-7 min-h-7 rounded-full px-2 text-brand-muted text-xs hover:bg-brand-paper-muted hover:text-brand-walnut"
+                  isDisabled={isSubmitting || url.length === 0}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                  onPress={() => updateUrl("")}
+                >
+                  <X size={14} weight="bold" />
+                  <span>クリア</span>
+                </Button>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <Input
+                className="w-full min-w-0"
+                inputMode="url"
+                type="url"
+                value={url}
+                onChange={(event) => updateUrl(event.target.value)}
+              />
+            </div>
           </TextField>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <Button
-              className="rounded-full border border-brand-line bg-brand-paper px-4 text-brand-walnut font-semibold hover:bg-brand-paper-muted"
-              isDisabled={isSubmitting}
-              type="button"
-              variant="secondary"
-              onPress={pasteUrl}
-            >
-              <ClipboardText size={16} weight="bold" />
-              ペースト
-            </Button>
-            <Button
-              className="rounded-full text-brand-muted font-semibold hover:bg-brand-paper-muted hover:text-brand-walnut"
-              isDisabled={isSubmitting || url.length === 0}
-              type="button"
-              variant="ghost"
-              onPress={() => updateUrl("")}
-            >
-              <X size={16} weight="bold" />
-              クリア
-            </Button>
+          <div className="flex justify-end">
             <Button
               className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
               isDisabled={isSubmitting}
