@@ -22,7 +22,7 @@ import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { clearUserScopedCache } from "../lib/query-cache";
 import { isProtectedAppPath } from "../lib/route-access";
 import { useViewer } from "../lib/viewer";
-import { ImportUrlRoute } from "./import";
+import { ImportUrlRoute, type ImportUrlSearch } from "./import";
 import { LoginRoute } from "./login";
 import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
 import { SettingsBillingRoute, SettingsIndexRoute } from "./settings";
@@ -204,14 +204,25 @@ const loginRoute = createRoute({
   ),
 });
 
+const stringSearchParam = (value: unknown) => (typeof value === "string" ? value : undefined);
+
 const importUrlRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import/url",
-  component: () => (
-    <RequireViewer>
-      <ImportUrlRoute />
-    </RequireViewer>
-  ),
+  validateSearch: (search): ImportUrlSearch => ({
+    text: stringSearchParam(search.text),
+    title: stringSearchParam(search.title),
+    url: stringSearchParam(search.url),
+  }),
+  component: () => {
+    const search = importUrlRoute.useSearch();
+
+    return (
+      <RequireViewer>
+        <ImportUrlRoute search={search} />
+      </RequireViewer>
+    );
+  },
 });
 
 const settingsRoute = createRoute({

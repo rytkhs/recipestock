@@ -63,6 +63,105 @@ describe("Import routes", () => {
     );
   });
 
+  it("共有URLのurl paramを入力欄の初期値にする", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(`/import/url?url=${encodeURIComponent("https://example.com/recipes/tomato")}`);
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato",
+    );
+  });
+
+  it("共有URLのtext paramから最初のURLを入力欄の初期値にする", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(
+      `/import/url?text=${encodeURIComponent("Check https://example.com/recipes/tomato")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato",
+    );
+  });
+
+  it("url paramとtext paramが両方ある場合はurl paramを優先する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(
+      `/import/url?url=${encodeURIComponent("https://example.com/recipes/url")}&text=${encodeURIComponent("Check https://example.com/recipes/text")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/url",
+    );
+  });
+
+  it("共有URLの初期値でimport jobを作成する", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/import/url/jobs") {
+          return jsonResponse(
+            {
+              kind: "created",
+              job: {
+                id: "job_123",
+                kind: "url",
+                status: "queued",
+                url: "https://example.com/recipes/tomato",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: null,
+                finishedAt: null,
+              },
+            },
+            { status: 202 },
+          );
+        }
+
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_123",
+                kind: "url",
+                status: "queued",
+                url: "https://example.com/recipes/tomato",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: null,
+                finishedAt: null,
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp(`/import/url?url=${encodeURIComponent("https://example.com/recipes/tomato")}`);
+
+    await userEvent.click(await screen.findByRole("button", { name: "取り込む" }));
+
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
+    expect(findFetchCall(fetchMock, "/api/import/url/jobs")).toEqual([
+      "/api/import/url/jobs",
+      expect.objectContaining({
+        credentials: "include",
+        method: "POST",
+        body: JSON.stringify({ url: "https://example.com/recipes/tomato" }),
+      }),
+    ]);
+  });
+
   it("URLを入力してimport jobを作成しレシピ一覧へ遷移する", async () => {
     const fetchMock = mockFetch(
       async (input) => {

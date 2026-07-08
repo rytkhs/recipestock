@@ -5,9 +5,27 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
 
-export const ImportUrlRoute = () => {
+export type ImportUrlSearch = {
+  text?: string;
+  title?: string;
+  url?: string;
+};
+
+const extractFirstUrl = (text: string) => text.match(/https?:\/\/\S+/i)?.[0]?.trim() ?? "";
+
+export const getInitialImportUrl = ({ text, url }: ImportUrlSearch) => {
+  const sharedUrl = url?.trim();
+
+  if (sharedUrl) {
+    return sharedUrl;
+  }
+
+  return text ? extractFirstUrl(text) : "";
+};
+
+export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) => {
   const navigate = useNavigate();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(() => getInitialImportUrl(search));
   const [error, setError] = useState<string | null>(null);
   const [activeJob, setActiveJob] = useState<ImportJobSummary | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
