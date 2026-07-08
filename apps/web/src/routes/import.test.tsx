@@ -12,6 +12,55 @@ import {
 describe("Import routes", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  const mockClipboardReadText = (readText: () => Promise<string>) => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText: vi.fn(readText) },
+    });
+  };
+
+  it("ペーストボタンでクリップボードのURLを入力する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+    mockClipboardReadText(async () => " https://example.com/recipes/pasted ");
+
+    await renderApp("/import/url");
+
+    await userEvent.click(await screen.findByRole("button", { name: "ペースト" }));
+
+    expect(screen.getByLabelText("URL")).toHaveValue("https://example.com/recipes/pasted");
+  });
+
+  it("クリアボタンで入力URLを空にする", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp("/import/url");
+
+    const input = await screen.findByLabelText("URL");
+    await userEvent.type(input, "https://example.com/recipes/tomato");
+    await userEvent.click(screen.getByRole("button", { name: "クリア" }));
+
+    expect(input).toHaveValue("");
+  });
+
+  it("クリップボードを読み取れない場合はエラーを表示する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+    mockClipboardReadText(async () => {
+      throw new Error("NotAllowedError");
+    });
+
+    await renderApp("/import/url");
+
+    await userEvent.click(await screen.findByRole("button", { name: "ペースト" }));
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "クリップボードを読み取れませんでした。",
+    );
   });
 
   it("URLを入力してimport jobを作成しレシピ一覧へ遷移する", async () => {

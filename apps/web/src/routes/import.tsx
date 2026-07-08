@@ -1,5 +1,5 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
-import { Link as LinkIcon } from "@phosphor-icons/react";
+import { ClipboardText, Link as LinkIcon, X } from "@phosphor-icons/react";
 import { type ImportJobSummary } from "@recipestock/schemas";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
@@ -11,6 +11,27 @@ export const ImportUrlRoute = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeJob, setActiveJob] = useState<ImportJobSummary | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const updateUrl = (nextUrl: string) => {
+    setUrl(nextUrl);
+    setError(null);
+    setActiveJob(null);
+  };
+
+  const pasteUrl = async () => {
+    if (!navigator.clipboard?.readText) {
+      setError("クリップボードを読み取れませんでした。");
+      setActiveJob(null);
+      return;
+    }
+
+    try {
+      updateUrl((await navigator.clipboard.readText()).trim());
+    } catch {
+      setError("クリップボードを読み取れませんでした。");
+      setActiveJob(null);
+    }
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -59,17 +80,39 @@ export const ImportUrlRoute = () => {
               inputMode="url"
               type="url"
               value={url}
-              onChange={(event) => setUrl(event.target.value)}
+              onChange={(event) => updateUrl(event.target.value)}
             />
           </TextField>
-          <Button
-            className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
-            isDisabled={isSubmitting}
-            type="submit"
-            variant="primary"
-          >
-            取り込む
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Button
+              className="rounded-full border border-brand-line bg-brand-paper px-4 text-brand-walnut font-semibold hover:bg-brand-paper-muted"
+              isDisabled={isSubmitting}
+              type="button"
+              variant="secondary"
+              onPress={pasteUrl}
+            >
+              <ClipboardText size={16} weight="bold" />
+              ペースト
+            </Button>
+            <Button
+              className="rounded-full text-brand-muted font-semibold hover:bg-brand-paper-muted hover:text-brand-walnut"
+              isDisabled={isSubmitting || url.length === 0}
+              type="button"
+              variant="ghost"
+              onPress={() => updateUrl("")}
+            >
+              <X size={16} weight="bold" />
+              クリア
+            </Button>
+            <Button
+              className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+              isDisabled={isSubmitting}
+              type="submit"
+              variant="primary"
+            >
+              取り込む
+            </Button>
+          </div>
         </form>
         {error ? (
           <div className="mt-4 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
