@@ -83,11 +83,11 @@ export const CoverImageTitleBlock = ({
   };
 
   return (
-    <section className="overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:rounded-[18px]">
-      <div className="grid gap-4 p-3.5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:p-5">
-        <div className="grid gap-2">
+    <section className="min-w-0 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:rounded-[18px]">
+      <div className="grid min-w-0 gap-4 p-3.5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:p-5">
+        <div className="grid min-w-0 gap-2">
           <Label className="text-sm font-bold text-brand-walnut">カバー画像</Label>
-          <div className="relative w-fit shrink-0">
+          <div className="relative w-full max-w-[15rem] shrink-0 sm:w-fit">
             <input
               ref={inputRef}
               accept={imageInputAccept}
@@ -99,7 +99,7 @@ export const CoverImageTitleBlock = ({
             />
             <button
               aria-label="カバー画像を選択"
-              className="grid aspect-[4/3] w-full min-w-[9rem] max-w-[15rem] place-items-center overflow-hidden rounded-[14px] border border-dashed border-brand-line bg-brand-paper-muted text-brand-muted shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)] transition-colors hover:border-brand-sage/60 hover:bg-brand-paper-raised hover:text-brand-sage sm:aspect-square sm:w-36 sm:min-w-0"
+              className="grid aspect-[4/3] w-full min-w-0 place-items-center overflow-hidden rounded-[14px] border border-dashed border-brand-line bg-brand-paper-muted text-brand-muted shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)] transition-colors hover:border-brand-sage/60 hover:bg-brand-paper-raised hover:text-brand-sage sm:aspect-square sm:w-36"
               disabled={isUploading}
               type="button"
               onClick={() => inputRef.current?.click()}

@@ -871,19 +871,19 @@ export const RecipesIndexRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-8">
-      <form className="mt-2 flex gap-3 items-end" onSubmit={submitSearch}>
-        <div className="flex-1 relative">
-          <TextField>
+    <section className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10">
+      <form className="mt-2 flex min-w-0 items-end gap-3" onSubmit={submitSearch}>
+        <div className="relative min-w-0 flex-1">
+          <TextField className="min-w-0">
             <Label className="sr-only">検索</Label>
-            <div className="relative">
+            <div className="relative min-w-0">
               <MagnifyingGlass
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-wheat"
                 size={18}
                 weight="bold"
               />
               <Input
-                className="pl-10"
+                className="w-full min-w-0 pl-10"
                 placeholder="レシピを検索..."
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
@@ -892,7 +892,7 @@ export const RecipesIndexRoute = () => {
           </TextField>
         </div>
         <Button
-          className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold hover:bg-brand-paper-muted shrink-0"
+          className="shrink-0 rounded-full border border-brand-line bg-brand-paper-raised font-semibold text-brand-walnut hover:bg-brand-paper-muted"
           type="submit"
           variant="secondary"
         >
@@ -976,7 +976,7 @@ export const RecipesIndexRoute = () => {
         {recipes.map((recipe, recipeIndex) => {
           const isList = viewMode === "list";
           const content = isList ? (
-            <div className="flex w-full items-center p-1.5 sm:p-2">
+            <div className="flex min-w-0 w-full items-center p-1.5 sm:p-2">
               <div className="relative aspect-square h-16 w-16 sm:h-20 sm:w-20 shrink-0 bg-brand-paper-muted overflow-hidden rounded-[10px] sm:rounded-[12px]">
                 {recipe.coverImageUrl ? (
                   <img
@@ -995,9 +995,9 @@ export const RecipesIndexRoute = () => {
                 <h2 className="line-clamp-2 font-bold text-sm sm:text-base leading-tight text-brand-ink">
                   {recipe.title}
                 </h2>
-                <div className="mt-2 flex items-center justify-between">
+                <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
                   {recipe.sourceName ? (
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-paper-muted px-2 py-0.5 text-[10px] sm:text-xs font-medium text-brand-muted truncate max-w-[80%]">
+                    <div className="inline-flex min-w-0 flex-1 items-center gap-1.5 truncate rounded-full bg-brand-paper-muted px-2 py-0.5 font-medium text-[10px] text-brand-muted sm:text-xs">
                       <SourceIcon />
                       <span className="truncate">{recipe.sourceName}</span>
                     </div>
@@ -1005,9 +1005,9 @@ export const RecipesIndexRoute = () => {
                     <div />
                   )}
                   {recipe.locked ? (
-                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-brand-line px-1.5 py-0.5 font-medium text-brand-muted text-[10px] sm:text-xs">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand-line px-1.5 py-0.5 font-medium text-[10px] text-brand-muted sm:text-xs">
                       <LockSimple size={10} weight="bold" />
-                      ロック中
+                      <span className="hidden sm:inline">ロック中</span>
                     </span>
                   ) : null}
                 </div>
@@ -1029,13 +1029,13 @@ export const RecipesIndexRoute = () => {
                   </div>
                 )}
               </div>
-              <div className="flex flex-1 flex-col p-3 sm:p-4">
+              <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">
                 <h2 className="line-clamp-2 font-bold text-sm sm:text-base leading-tight text-brand-ink">
                   {recipe.title}
                 </h2>
-                <div className="mt-auto pt-2.5 sm:pt-3 flex items-center justify-between">
+                <div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-2.5 sm:pt-3">
                   {recipe.sourceName ? (
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-paper-muted px-2.5 py-1 text-[10px] sm:text-xs font-medium text-brand-muted truncate max-w-[70%]">
+                    <div className="inline-flex min-w-0 flex-1 items-center gap-1.5 truncate rounded-full bg-brand-paper-muted px-2.5 py-1 font-medium text-[10px] text-brand-muted sm:text-xs">
                       <SourceIcon />
                       <span className="truncate">{recipe.sourceName}</span>
                     </div>
@@ -1043,7 +1043,7 @@ export const RecipesIndexRoute = () => {
                     <div />
                   )}
                   {recipe.locked ? (
-                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-brand-line px-2 py-1 font-medium text-brand-muted text-[10px] sm:text-xs">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand-line px-2 py-1 font-medium text-[10px] text-brand-muted sm:text-xs">
                       <LockSimple size={10} weight="bold" />
                       <span className="hidden sm:inline">ロック中</span>
                     </span>
@@ -1057,7 +1057,7 @@ export const RecipesIndexRoute = () => {
             return (
               <div
                 key={recipe.id}
-                className={`flex overflow-hidden rounded-[18px] sm:rounded-[20px] border border-brand-line-soft bg-brand-paper opacity-60 ${isList ? "flex-row items-center" : "flex-col"}`}
+                className={`flex min-w-0 overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper opacity-60 sm:rounded-[20px] ${isList ? "flex-row items-center" : "flex-col"}`}
               >
                 {content}
               </div>
@@ -1069,7 +1069,7 @@ export const RecipesIndexRoute = () => {
               key={recipe.id}
               to="/recipes/$recipeId"
               params={{ recipeId: recipe.id }}
-              className={`group flex overflow-hidden rounded-[18px] sm:rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm transition-shadow duration-200 hover:shadow-pantry ${isList ? "flex-row items-center" : "flex-col"}`}
+              className={`group flex min-w-0 overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm transition-shadow duration-200 hover:shadow-pantry sm:rounded-[20px] ${isList ? "flex-row items-center" : "flex-col"}`}
             >
               {content}
             </Link>

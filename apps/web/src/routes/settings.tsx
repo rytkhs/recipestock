@@ -115,32 +115,33 @@ export const SettingsIndexRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-8">
-      <div className="flex items-center gap-3 mb-6">
+    <section className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10">
+      <div className="mb-6 flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-sage-soft text-brand-sage">
           <Gear size={20} weight="bold" />
         </div>
         <h1 className="text-brand-ink font-bold text-2xl">設定</h1>
       </div>
 
-      <div className="grid gap-5">
-        <div className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
-          <div className="flex items-center gap-2 mb-4">
+      <div className="grid min-w-0 gap-5">
+        <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
+          <div className="mb-4 flex min-w-0 items-center gap-2">
             <User size={18} weight="bold" className="text-brand-walnut" />
             <h2 className="text-brand-walnut font-bold text-lg">アカウント</h2>
           </div>
-          <p className="text-brand-muted text-sm">
+          <p className="break-all text-brand-muted text-sm">
             現在のメールアドレス: {viewer.data?.email ?? ""}
           </p>
-          <div className="mt-5 grid gap-6 md:grid-cols-2">
-            <form className="grid content-start gap-4" onSubmit={handleEmailChange}>
+          <div className="mt-5 grid min-w-0 gap-6 md:grid-cols-2">
+            <form className="grid min-w-0 content-start gap-4" onSubmit={handleEmailChange}>
               <h3 className="text-brand-walnut font-semibold text-base">メールアドレス変更</h3>
-              <TextField isRequired type="email">
+              <TextField className="min-w-0" isRequired type="email">
                 <Label className="text-brand-walnut font-semibold text-sm">
                   新しいメールアドレス
                 </Label>
                 <Input
                   autoComplete="email"
+                  className="w-full min-w-0"
                   inputMode="email"
                   value={newEmail}
                   onChange={(event) => setNewEmail(event.target.value)}
@@ -170,22 +171,24 @@ export const SettingsIndexRoute = () => {
               ) : null}
             </form>
 
-            <form className="grid content-start gap-4" onSubmit={handlePasswordChange}>
+            <form className="grid min-w-0 content-start gap-4" onSubmit={handlePasswordChange}>
               <h3 className="text-brand-walnut font-semibold text-base">パスワード変更</h3>
-              <TextField isRequired type="password">
+              <TextField className="min-w-0" isRequired type="password">
                 <Label className="text-brand-walnut font-semibold text-sm">現在のパスワード</Label>
                 <Input
                   autoComplete="current-password"
+                  className="w-full min-w-0"
                   maxLength={128}
                   minLength={8}
                   value={currentPassword}
                   onChange={(event) => setCurrentPassword(event.target.value)}
                 />
               </TextField>
-              <TextField isRequired type="password">
+              <TextField className="min-w-0" isRequired type="password">
                 <Label className="text-brand-walnut font-semibold text-sm">新しいパスワード</Label>
                 <Input
                   autoComplete="new-password"
+                  className="w-full min-w-0"
                   maxLength={128}
                   minLength={8}
                   value={newPassword}
@@ -218,8 +221,8 @@ export const SettingsIndexRoute = () => {
           </div>
         </div>
 
-        <div className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
+          <div className="mb-3 flex min-w-0 items-center gap-2">
             <CreditCard size={18} weight="bold" className="text-brand-walnut" />
             <h2 className="text-brand-walnut font-bold text-lg">プラン</h2>
           </div>
@@ -310,8 +313,8 @@ export const SettingsBillingRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-8">
-      <div className="flex items-center gap-3 mb-6">
+    <section className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10">
+      <div className="mb-6 flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-orange-soft text-brand-orange">
           <CreditCard size={20} weight="bold" />
         </div>
@@ -319,18 +322,18 @@ export const SettingsBillingRoute = () => {
       </div>
 
       {message ? (
-        <div className="mb-6 rounded-[14px] border border-brand-line-soft bg-brand-paper p-4">
+        <div className="mb-6 min-w-0 rounded-[14px] border border-brand-line-soft bg-brand-paper p-4">
           <p className="text-brand-walnut text-sm">{message}</p>
         </div>
       ) : null}
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <div className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+      <div className="grid min-w-0 gap-5 md:grid-cols-2">
+        <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
           <h2 className="text-brand-walnut font-bold text-lg">現在のプラン</h2>
           <p className="mt-3 font-bold text-2xl text-brand-ink">{isPro ? "Pro" : "Free"}</p>
           {cancellationMessage ? (
             <div className="mt-3 rounded-[14px] bg-brand-paper-muted p-3">
-              <p className="text-brand-walnut text-sm">{cancellationMessage}</p>
+              <p className="break-words text-brand-walnut text-sm">{cancellationMessage}</p>
             </div>
           ) : null}
           <p className="mt-3 text-brand-muted text-sm">
@@ -346,7 +349,7 @@ export const SettingsBillingRoute = () => {
           </p>
         </div>
 
-        <div className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+        <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
           <h2 className="text-brand-walnut font-bold text-lg">Pro</h2>
           <p className="mt-2 text-brand-muted text-sm">
             保存件数の上限なしでレシピを保存できます。
@@ -379,14 +382,14 @@ export const SettingsBillingRoute = () => {
           )}
           {error ? (
             <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
-              <p className="text-brand-danger text-sm" role="alert">
+              <p className="break-words text-brand-danger text-sm" role="alert">
                 {error}
               </p>
             </div>
           ) : null}
           {portalError ? (
             <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
-              <p className="text-brand-danger text-sm" role="alert">
+              <p className="break-words text-brand-danger text-sm" role="alert">
                 {portalError}
               </p>
             </div>

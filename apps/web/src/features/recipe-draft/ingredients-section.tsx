@@ -30,9 +30,9 @@ const IngredientGroupBlock = ({
   });
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       {showGroupLabel && (
-        <div className="grid gap-2 border-t border-brand-line-soft pt-4 first:border-t-0 first:pt-0 sm:flex sm:items-center">
+        <div className="grid min-w-0 gap-2 border-t border-brand-line-soft pt-4 first:border-t-0 first:pt-0 sm:flex sm:items-center">
           <Input
             aria-label="グループ名"
             className="h-9 min-w-0 flex-1 text-sm font-semibold sm:h-10 sm:text-base"
@@ -116,7 +116,7 @@ const IngredientRow = ({
   });
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_6rem_auto] items-center gap-2 rounded-[14px] border border-transparent py-0.5 transition-colors hover:border-brand-line-soft hover:bg-brand-paper-raised/70 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:py-1">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_5rem_auto] items-center gap-2 rounded-[14px] border border-transparent py-0.5 transition-colors hover:border-brand-line-soft hover:bg-brand-paper-raised/70 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:py-1">
       <Input
         aria-label="材料名"
         className="h-9 min-w-0 text-sm sm:h-10 sm:text-base"
@@ -212,7 +212,7 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
         </Button>
       </div>
 
-      <div className="grid gap-4 px-3.5 py-3 sm:px-5">
+      <div className="grid min-w-0 gap-4 px-3.5 py-3 sm:px-5">
         <div className="grid gap-2 sm:max-w-48">
           <label className="text-brand-walnut text-sm font-semibold" htmlFor="recipe-yield-text">
             できあがり量

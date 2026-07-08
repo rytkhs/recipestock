@@ -115,12 +115,12 @@ export const LoginRoute = () => {
   }[mode];
 
   return (
-    <section className="min-h-[calc(100vh-60px)] flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md rounded-[28px] border border-brand-line-soft bg-brand-paper p-8 shadow-pantry">
+    <section className="flex min-h-[calc(100svh-60px)] items-center justify-center px-4 py-10">
+      <div className="min-w-0 w-full max-w-md rounded-[28px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry sm:p-8">
         <h1 className="text-brand-ink font-bold text-2xl text-center">{modeTitle}</h1>
         <p className="mt-2 text-brand-muted text-sm text-center">Recipe Stockにようこそ</p>
 
-        <div className="mt-8 grid gap-4">
+        <div className="mt-8 grid min-w-0 gap-4">
           <Button
             className="w-full rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold gap-2 hover:bg-brand-paper-muted"
             variant="secondary"
@@ -130,34 +130,36 @@ export const LoginRoute = () => {
             Googleでログイン
           </Button>
 
-          <div className="relative flex items-center gap-3 py-2">
-            <div className="flex-1 border-t border-brand-line" />
+          <div className="relative flex min-w-0 items-center gap-3 py-2">
+            <div className="min-w-0 flex-1 border-t border-brand-line" />
             <span className="text-brand-muted text-xs font-medium">または</span>
-            <div className="flex-1 border-t border-brand-line" />
+            <div className="min-w-0 flex-1 border-t border-brand-line" />
           </div>
 
           {mode === "signIn" ? (
-            <form className="grid gap-4" onSubmit={handleSignIn}>
-              <TextField isRequired type="email">
+            <form className="grid min-w-0 gap-4" onSubmit={handleSignIn}>
+              <TextField className="min-w-0" isRequired type="email">
                 <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
                   <EnvelopeSimple size={14} weight="bold" />
                   メールアドレス
                 </Label>
                 <Input
                   autoComplete="email"
+                  className="w-full min-w-0"
                   inputMode="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
               </TextField>
 
-              <TextField isRequired type="password">
+              <TextField className="min-w-0" isRequired type="password">
                 <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
                   <Key size={14} weight="bold" />
                   パスワード
                 </Label>
                 <Input
                   autoComplete="current-password"
+                  className="w-full min-w-0"
                   maxLength={128}
                   minLength={8}
                   value={password}
@@ -176,27 +178,29 @@ export const LoginRoute = () => {
           ) : null}
 
           {mode === "signUp" ? (
-            <form className="grid gap-4" onSubmit={handleSignUp}>
-              <TextField isRequired type="email">
+            <form className="grid min-w-0 gap-4" onSubmit={handleSignUp}>
+              <TextField className="min-w-0" isRequired type="email">
                 <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
                   <EnvelopeSimple size={14} weight="bold" />
                   メールアドレス
                 </Label>
                 <Input
                   autoComplete="email"
+                  className="w-full min-w-0"
                   inputMode="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
               </TextField>
 
-              <TextField isRequired type="password">
+              <TextField className="min-w-0" isRequired type="password">
                 <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
                   <Key size={14} weight="bold" />
                   パスワード
                 </Label>
                 <Input
                   autoComplete="new-password"
+                  className="w-full min-w-0"
                   maxLength={128}
                   minLength={8}
                   value={password}
@@ -215,12 +219,12 @@ export const LoginRoute = () => {
           ) : null}
 
           {mode === "verifySignUp" ? (
-            <form className="grid gap-4" onSubmit={handleVerifySignUp}>
-              <TextField isRequired>
+            <form className="grid min-w-0 gap-4" onSubmit={handleVerifySignUp}>
+              <TextField className="min-w-0" isRequired>
                 <Label className="text-brand-walnut font-semibold text-sm">確認コード</Label>
                 <Input
                   autoComplete="one-time-code"
-                  className="text-center text-lg tracking-[0.3em] font-bold"
+                  className="w-full min-w-0 text-center text-lg tracking-[0.3em] font-bold"
                   inputMode="numeric"
                   maxLength={6}
                   minLength={6}
@@ -241,14 +245,15 @@ export const LoginRoute = () => {
           ) : null}
 
           {mode === "requestReset" ? (
-            <form className="grid gap-4" onSubmit={handleRequestReset}>
-              <TextField isRequired type="email">
+            <form className="grid min-w-0 gap-4" onSubmit={handleRequestReset}>
+              <TextField className="min-w-0" isRequired type="email">
                 <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
                   <EnvelopeSimple size={14} weight="bold" />
                   メールアドレス
                 </Label>
                 <Input
                   autoComplete="email"
+                  className="w-full min-w-0"
                   inputMode="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
@@ -266,12 +271,12 @@ export const LoginRoute = () => {
           ) : null}
 
           {mode === "resetPassword" ? (
-            <form className="grid gap-4" onSubmit={handleResetPassword}>
-              <TextField isRequired>
+            <form className="grid min-w-0 gap-4" onSubmit={handleResetPassword}>
+              <TextField className="min-w-0" isRequired>
                 <Label className="text-brand-walnut font-semibold text-sm">確認コード</Label>
                 <Input
                   autoComplete="one-time-code"
-                  className="text-center text-lg tracking-[0.3em] font-bold"
+                  className="w-full min-w-0 text-center text-lg tracking-[0.3em] font-bold"
                   inputMode="numeric"
                   maxLength={6}
                   minLength={6}
@@ -281,13 +286,14 @@ export const LoginRoute = () => {
                 />
               </TextField>
 
-              <TextField isRequired type="password">
+              <TextField className="min-w-0" isRequired type="password">
                 <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
                   <Key size={14} weight="bold" />
                   新しいパスワード
                 </Label>
                 <Input
                   autoComplete="new-password"
+                  className="w-full min-w-0"
                   maxLength={128}
                   minLength={8}
                   value={password}

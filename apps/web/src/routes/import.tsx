@@ -35,26 +35,27 @@ export const ImportUrlRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-8">
-      <div className="flex items-center gap-3 mb-2">
+    <section className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-10">
+      <div className="mb-2 flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-orange-soft text-brand-orange">
           <LinkIcon size={20} weight="bold" />
         </div>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-brand-ink font-bold text-2xl">URLから取り込む</h1>
           <p className="text-brand-muted text-sm">
             レシピサイトのURLを入力すると、AIがレシピを自動で取り込みます
           </p>
         </div>
       </div>
-      <div className="mt-6 rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+      <div className="mt-6 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
         <form
-          className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+          className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
           onSubmit={submit}
         >
-          <TextField isRequired>
+          <TextField className="min-w-0" isRequired>
             <Label className="text-brand-walnut font-semibold text-sm">URL</Label>
             <Input
+              className="w-full min-w-0"
               inputMode="url"
               type="url"
               value={url}
@@ -72,7 +73,7 @@ export const ImportUrlRoute = () => {
         </form>
         {error ? (
           <div className="mt-4 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
-            <p className="text-brand-danger text-sm" role="alert">
+            <p className="break-words text-brand-danger text-sm" role="alert">
               {error}
             </p>
           </div>
