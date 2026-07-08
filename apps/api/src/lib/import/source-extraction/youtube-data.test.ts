@@ -106,6 +106,19 @@ describe("YouTube Data API client", () => {
     } satisfies Partial<YouTubeDataError>);
   });
 
+  it("Response前のfetch rejectionはrequest_failedにする", async () => {
+    const client = createYouTubeDataClient({
+      apiKey: "test-api-key",
+      fetcher: vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    });
+
+    await expect(client.getVideo({ videoId: VIDEO_ID, timeoutMs: 1000 })).rejects.toMatchObject({
+      code: "request_failed",
+    } satisfies Partial<YouTubeDataError>);
+  });
+
   it("timeoutを分類する", async () => {
     const client = createYouTubeDataClient({
       apiKey: "test-api-key",

@@ -106,7 +106,11 @@ export const createYouTubeDataClient = ({
         throw new YouTubeDataError("timeout", "YouTube Data API request timed out.");
       }
 
-      throw error;
+      if (error instanceof YouTubeDataError) {
+        throw error;
+      }
+
+      throw new YouTubeDataError("request_failed", "YouTube video metadata could not be fetched.");
     } finally {
       clearTimeout(timeout);
     }
