@@ -48,6 +48,7 @@ export type Bindings = {
   GROQ_TEXT_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_TEXT_MODEL?: string;
+  YOUTUBE_DATA_API_KEY?: string;
   FREE_AI_MONTHLY_LIMIT?: string;
   PRO_AI_MONTHLY_LIMIT?: string;
   IMPORT_TIMEOUT_MS: string;

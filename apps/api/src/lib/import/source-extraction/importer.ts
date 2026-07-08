@@ -7,6 +7,7 @@ import {
   type SourceExtractionContext,
   type SourceExtractionResult,
 } from "./types";
+import { type YouTubeDataClient } from "./youtube-data";
 
 type SourceExtractionFetchOptions = {
   timeoutMs: number;
@@ -19,13 +20,20 @@ export type SourceExtractor = {
     fetcher: RecipeImportFetcher;
     fetchOptions: SourceExtractionFetchOptions;
     ytdlpMetadataClient?: YtDlpMetadataClient;
+    youtubeDataClient?: YouTubeDataClient;
   }): Promise<SourceExtractionResult | null>;
 };
 
 export const createSourceExtractor = (
   adapters: readonly SourceExtractionAdapter[] = [],
 ): SourceExtractor => ({
-  async tryExtract({ normalizedUrl, fetcher, fetchOptions, ytdlpMetadataClient }) {
+  async tryExtract({
+    normalizedUrl,
+    fetcher,
+    fetchOptions,
+    ytdlpMetadataClient,
+    youtubeDataClient,
+  }) {
     const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
     const matchInput = { normalizedUrl, host };
     const adapter = adapters.find((candidate) => candidate.match(matchInput));
@@ -36,6 +44,7 @@ export const createSourceExtractor = (
       host,
       timeoutMs: fetchOptions.timeoutMs,
       ytdlpMetadataClient,
+      youtubeDataClient,
       async fetchHtml(url) {
         assertImportUrlAllowed(url);
         const page = await fetcher(url, fetchOptions);

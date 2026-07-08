@@ -17,6 +17,7 @@ import {
   RecipeImportError,
   type RecipeImportFetcher,
 } from "./import-url";
+import { type YouTubeDataClient } from "./lib/import/source-extraction/youtube-data";
 import { createLogger, type Logger } from "./logger";
 import {
   deleteObjectsBestEffort,
@@ -635,6 +636,7 @@ export type ProcessImportJobDependencies = {
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
   ytdlpMetadataClient?: YtDlpMetadataClient;
+  youtubeDataClient?: YouTubeDataClient;
   createRecipeId?: () => string;
   createImageId?: () => string;
   getCurrentDate?: () => Date;
@@ -651,6 +653,7 @@ export const processImportJob = async ({
   aiProvider,
   fetcher,
   ytdlpMetadataClient,
+  youtubeDataClient,
   createRecipeId,
   createImageId,
   getCurrentDate,
@@ -741,6 +744,7 @@ export const processImportJob = async ({
         createYtDlpMetadataClient({
           binding: env.YTDLP_METADATA_CONTAINER,
         }),
+      youtubeDataClient,
       now,
       deadline,
       getCurrentDate,

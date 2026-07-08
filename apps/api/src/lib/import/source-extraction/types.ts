@@ -7,6 +7,7 @@ import {
   type RecipeImportImagePlacement,
   type RecipeImportSocialAIInput,
 } from "../types";
+import { type YouTubeDataClient } from "./youtube-data";
 
 export type SourceExtractionMatchInput = {
   normalizedUrl: string;
@@ -19,6 +20,7 @@ export type SourceExtractionContext = {
   timeoutMs: number;
   fetchHtml(url: string): Promise<FetchedImportPage>;
   ytdlpMetadataClient?: YtDlpMetadataClient;
+  youtubeDataClient?: YouTubeDataClient;
 };
 
 export type SourceExtractionResult = {
