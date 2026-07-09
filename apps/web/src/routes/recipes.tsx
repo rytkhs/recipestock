@@ -76,6 +76,7 @@ import {
   removeRecipeDetail,
   updateRecipe,
 } from "../features/recipes";
+import { RecipeThumbnail } from "../features/recipes/recipe-thumbnail";
 
 const importJobTimestamp = (job: ImportJobSummary) =>
   Date.parse(job.finishedAt ?? job.startedAt ?? job.createdAt);
@@ -92,7 +93,6 @@ const importJobIslandAnimationMs = 220;
 const importJobIslandUnmountDelayMs = 320;
 const importJobSuccessDismissDelayMs = 4000;
 const importJobFailureDismissDelayMs = 10_000;
-const eagerRecipeThumbnailCount = 4;
 const recipeDetailCoverImageProps = {
   decoding: "async",
   fetchPriority: "high",
@@ -118,12 +118,6 @@ const listRecipeSkeletonKeys = [
   "list-recipe-skeleton-4",
   "list-recipe-skeleton-5",
 ];
-
-const getRecipeThumbnailImageProps = (index: number) =>
-  ({
-    decoding: "async",
-    loading: index < eagerRecipeThumbnailCount ? "eager" : "lazy",
-  }) as const;
 
 const RecipeCardActionMenu = ({
   isList,
@@ -1061,11 +1055,10 @@ export const RecipesIndexRoute = () => {
             <div className="flex min-w-0 w-full items-center p-1.5 sm:p-2">
               <div className="relative aspect-square h-16 w-16 sm:h-20 sm:w-20 shrink-0 bg-brand-paper-muted overflow-hidden rounded-[10px] sm:rounded-[12px]">
                 {recipe.coverImageUrl ? (
-                  <img
+                  <RecipeThumbnail
                     alt={recipe.title}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    index={recipeIndex}
                     src={recipe.coverImageUrl}
-                    {...getRecipeThumbnailImageProps(recipeIndex)}
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
@@ -1099,11 +1092,10 @@ export const RecipesIndexRoute = () => {
             <>
               <div className="relative aspect-[4/3] sm:aspect-video w-full bg-brand-paper-muted overflow-hidden rounded-t-[18px] sm:rounded-t-[20px]">
                 {recipe.coverImageUrl ? (
-                  <img
+                  <RecipeThumbnail
                     alt={recipe.title}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    index={recipeIndex}
                     src={recipe.coverImageUrl}
-                    {...getRecipeThumbnailImageProps(recipeIndex)}
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
