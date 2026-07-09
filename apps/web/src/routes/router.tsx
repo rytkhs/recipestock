@@ -20,7 +20,7 @@ import {
 import { ApiClientError } from "../lib/api";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { clearUserScopedCache } from "../lib/query-cache";
-import { isProtectedAppPath } from "../lib/route-access";
+import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
 import { useViewer } from "../lib/viewer";
 import { ImportUrlRoute, type ImportUrlSearch } from "./import";
 import { LoginRoute } from "./login";
@@ -58,23 +58,37 @@ const RequireViewer = ({ children }: { children: ReactNode }) => {
   const { session, status } = useAuthState();
   const viewer = useViewer({ enabled: status === "authenticated" });
   const navigate = useNavigate();
+  const currentHref = useRouterState({ select: (state) => state.location.href });
+  const currentPathname = useRouterState({ select: (state) => state.location.pathname });
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      void navigate({ to: "/login", replace: true });
+    if (status === "unauthenticated" && isProtectedAppPath(currentPathname)) {
+      void navigate({
+        to: "/login",
+        search: { redirect: currentHref },
+        replace: true,
+      });
     }
-  }, [navigate, status]);
+  }, [currentHref, currentPathname, navigate, status]);
 
   useEffect(() => {
-    if (!(viewer.error instanceof ApiClientError) || viewer.error.code !== "unauthorized") {
+    if (
+      !(viewer.error instanceof ApiClientError) ||
+      viewer.error.code !== "unauthorized" ||
+      !isProtectedAppPath(currentPathname)
+    ) {
       return;
     }
 
     clearUserScopedCache(queryClient);
     void session.refetch().finally(() => {
-      void navigate({ to: "/login", replace: true });
+      void navigate({
+        to: "/login",
+        search: { redirect: currentHref },
+        replace: true,
+      });
     });
-  }, [navigate, queryClient, session, viewer.error]);
+  }, [currentHref, currentPathname, navigate, queryClient, session, viewer.error]);
 
   if (status === "pending" || (status === "authenticated" && viewer.isPending)) {
     return <ProtectedRouteSkeleton />;
@@ -87,15 +101,21 @@ const RequireViewer = ({ children }: { children: ReactNode }) => {
   return children;
 };
 
-const RedirectAuthenticated = ({ children }: { children: ReactNode }) => {
+const RedirectAuthenticated = ({
+  children,
+  redirectTo = "/recipes",
+}: {
+  children: ReactNode;
+  redirectTo?: string;
+}) => {
   const { status } = useAuthState();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (status === "authenticated") {
-      void navigate({ to: "/recipes", replace: true });
+      void navigate({ href: redirectTo, replace: true });
     }
-  }, [navigate, status]);
+  }, [navigate, redirectTo, status]);
 
   if (status === "pending" || status === "authenticated") {
     return null;
@@ -194,14 +214,26 @@ const editRecipeRoute = createRoute({
   ),
 });
 
+type LoginSearch = {
+  redirect?: string;
+};
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  component: () => (
-    <RedirectAuthenticated>
-      <LoginRoute />
-    </RedirectAuthenticated>
-  ),
+  validateSearch: (search): LoginSearch => ({
+    redirect: stringSearchParam(search.redirect),
+  }),
+  component: () => {
+    const search = loginRoute.useSearch();
+    const redirectTo = resolveAuthRedirect(search.redirect);
+
+    return (
+      <RedirectAuthenticated redirectTo={redirectTo}>
+        <LoginRoute redirectTo={redirectTo} />
+      </RedirectAuthenticated>
+    );
+  },
 });
 
 const stringSearchParam = (value: unknown) => (typeof value === "string" ? value : undefined);

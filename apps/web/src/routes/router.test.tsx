@@ -49,6 +49,17 @@ describe("AppRouter", () => {
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
   });
 
+  it("未ログインで共有URLに入るとqueryをログイン復帰先へ保持する", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }));
+    const sharedUrl = "https://example.com/recipes/tomato?portion=2";
+    const importPath = `/import/url?url=${encodeURIComponent(sharedUrl)}`;
+    const { appRouter } = await renderApp(importPath);
+
+    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.pathname).toBe("/login");
+    expect(appRouter.state.location.search).toEqual({ redirect: importPath });
+  });
+
   it("ログイン済みでログインルートに入るとレシピ一覧へ遷移する", async () => {
     mockFetch(
       async (input) => {

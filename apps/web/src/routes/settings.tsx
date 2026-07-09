@@ -1,5 +1,5 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
-import { CreditCard, Gear, SignOut, User } from "@phosphor-icons/react";
+import { CreditCard, Gear, ShareNetwork, SignOut, User } from "@phosphor-icons/react";
 import {
   type CreateBillingPortalResponse,
   type CreateCheckoutResponse,
@@ -22,6 +22,8 @@ const createBillingPortal = () =>
 
 const fetchBillingStatus = () =>
   parseApiResponse<GetBillingStatusResponse>(api.api.billing.status.$get());
+
+const IOS_SHARE_SHORTCUT_URL = "https://www.icloud.com/shortcuts/d2133bab6d044f4e9799b80983db9332";
 
 export const checkoutRedirect = {
   assign(url: string) {
@@ -238,6 +240,27 @@ export const SettingsIndexRoute = () => {
           >
             課金設定
           </Link>
+        </div>
+
+        <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
+          <div className="mb-3 flex min-w-0 items-center gap-2">
+            <ShareNetwork size={18} weight="bold" className="text-brand-walnut" />
+            <h2 className="text-brand-walnut font-bold text-lg">共有から取り込む</h2>
+          </div>
+          <p className="text-brand-muted text-sm">
+            iPhoneやiPadの共有メニューから、WebページやSNS投稿のURLを取り込めます。
+          </p>
+          <a
+            className="mt-4 inline-flex min-h-10 items-center justify-center rounded-full bg-brand-sage px-5 font-semibold text-white text-sm transition-colors hover:bg-brand-sage-dark"
+            href={IOS_SHARE_SHORTCUT_URL}
+            rel="noreferrer"
+            target="_blank"
+          >
+            ショートカットを追加
+          </a>
+          <p className="mt-3 text-brand-muted text-xs">
+            追加後、共有メニューから「Recipe Stockに保存」を選択してください。
+          </p>
         </div>
       </div>
 

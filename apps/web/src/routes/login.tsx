@@ -14,7 +14,7 @@ import {
 
 type LoginMode = "signIn" | "signUp" | "verifySignUp" | "requestReset" | "resetPassword";
 
-export const LoginRoute = () => {
+export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string }) => {
   const navigate = useNavigate();
   const session = useAuthSession();
   const [mode, setMode] = useState<LoginMode>("signIn");
@@ -37,9 +37,9 @@ export const LoginRoute = () => {
     setMessage(null);
 
     try {
-      await signInWithEmailPassword(email, password);
+      await signInWithEmailPassword(email, password, redirectTo);
       await session.refetch();
-      await navigate({ to: "/recipes" });
+      await navigate({ href: redirectTo });
     } catch {
       setError("メールアドレスまたはパスワードが正しくありません。");
     }
@@ -51,7 +51,7 @@ export const LoginRoute = () => {
     setMessage(null);
 
     try {
-      await signUpWithEmailPassword(email, password);
+      await signUpWithEmailPassword(email, password, redirectTo);
       setMode("verifySignUp");
       setPassword("");
       setMessage("確認コードを送信しました。");
@@ -68,7 +68,7 @@ export const LoginRoute = () => {
     try {
       await verifySignUpOtp(email, otp);
       await session.refetch();
-      await navigate({ to: "/recipes" });
+      await navigate({ href: redirectTo });
     } catch {
       setError("確認コードを検証できませんでした。");
     }
@@ -124,7 +124,7 @@ export const LoginRoute = () => {
           <Button
             className="w-full rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold gap-2 hover:bg-brand-paper-muted"
             variant="secondary"
-            onPress={() => void startGoogleLogin()}
+            onPress={() => void startGoogleLogin(redirectTo)}
           >
             <GoogleLogo size={20} weight="bold" />
             Googleでログイン
