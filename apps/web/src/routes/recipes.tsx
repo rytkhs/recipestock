@@ -940,7 +940,7 @@ export const RecipesIndexRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10">
+    <section className="mx-auto w-full max-w-[1120px] px-4 py-3 sm:py-8 sm:px-6 lg:px-10">
       <form className="mt-2 flex min-w-0 items-end gap-3" onSubmit={submitSearch}>
         <div className="relative min-w-0 flex-1">
           <TextField className="min-w-0">

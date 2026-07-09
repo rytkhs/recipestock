@@ -141,7 +141,7 @@ export const CoverImageTitleBlock = ({
         <TextField aria-label="レシピ名" className="grid min-w-0 content-start gap-2" isRequired>
           <Label className="text-sm font-bold text-brand-walnut">レシピ名</Label>
           <Input
-            className="min-h-12 w-full rounded-[14px] bg-brand-paper-raised px-3.5 text-xl font-bold leading-tight placeholder:text-brand-wheat sm:text-2xl"
+            className="w-full rounded-[14px] bg-brand-paper-raised px-3.5 text-base leading-tight placeholder:text-brand-wheat"
             name={titleField.name}
             placeholder="レシピ名を入力"
             ref={titleField.ref}
