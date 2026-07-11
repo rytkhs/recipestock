@@ -136,14 +136,17 @@ describe("AppRouter", () => {
           cancelAt: null,
         },
       });
-      queryClient.setQueryData(["recipes", "", null], { items: [], nextCursor: null });
+      queryClient.setQueryData(["recipes", { query: "" }], {
+        pages: [{ items: [], nextCursor: null }],
+        pageParams: [null],
+      });
     });
 
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/me")).toBeDefined();
     expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
     expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();
-    expect(queryClient.getQueryData(["recipes", "", null])).toBeUndefined();
+    expect(queryClient.getQueryData(["recipes", { query: "" }])).toBeUndefined();
   });
 
   it("ログイン済みで初期ルートに入るとレシピ一覧へ遷移する", async () => {
@@ -188,7 +191,10 @@ describe("AppRouter", () => {
       return new Response(null, { status: 404 });
     });
     const { queryClient } = await renderApp("/settings");
-    queryClient.setQueryData(["recipes", "", null], { items: [], nextCursor: null });
+    queryClient.setQueryData(["recipes", { query: "" }], {
+      pages: [{ items: [], nextCursor: null }],
+      pageParams: [null],
+    });
     queryClient.setQueryData(["recipe", "recipe_123"], { id: "recipe_123" });
     queryClient.setQueryData(["viewer"], viewerResponse);
     queryClient.setQueryData(["billing-status"], {
@@ -211,7 +217,7 @@ describe("AppRouter", () => {
       }),
     ]);
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
-    expect(queryClient.getQueryData(["recipes", "", null])).toBeUndefined();
+    expect(queryClient.getQueryData(["recipes", { query: "" }])).toBeUndefined();
     expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
     expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
     expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();

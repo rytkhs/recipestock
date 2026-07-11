@@ -25,12 +25,8 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import {
-  type ImportJobSummary,
-  type ListRecipesResponse,
-  type RecentImportJobsResponse,
-} from "@recipestock/schemas";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type ImportJobSummary, type RecentImportJobsResponse } from "@recipestock/schemas";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   type CSSProperties,
@@ -74,6 +70,7 @@ import {
   recipeMutationErrorMessage,
   recipesQueryKeys,
   removeRecipeDetail,
+  syncDeletedRecipeCaches,
   updateRecipe,
 } from "../features/recipes";
 import { RecipeThumbnail } from "../features/recipes/recipe-thumbnail";
@@ -877,7 +874,6 @@ export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
-  const [cursor, setCursor] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     try {
@@ -886,47 +882,36 @@ export const RecipesIndexRoute = () => {
       return "grid";
     }
   });
-  const [loadedPages, setLoadedPages] = useState<ListRecipesResponse[]>([]);
-
   useEffect(() => {
     try {
       localStorage.setItem("recipeViewMode", viewMode);
     } catch {}
   }, [viewMode]);
 
-  const { data, error, isFetching, refetch } = useQuery({
-    queryKey: recipesQueryKeys.list(query, cursor),
-    queryFn: () => listRecipes({ query, cursor }),
+  const { data, error, fetchNextPage, hasNextPage, isFetching } = useInfiniteQuery({
+    queryKey: recipesQueryKeys.list(query),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => listRecipes({ query, cursor: pageParam }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
   const deleteMutation = useMutation({
     mutationFn: (recipeId: string) => deleteRecipe(recipeId),
     onSuccess: async (_response, recipeId) => {
-      removeRecipeDetail(queryClient, recipeId);
-      await invalidateRecipeLists(queryClient);
+      await syncDeletedRecipeCaches(queryClient, recipeId);
     },
   });
-  const activePages = cursor ? loadedPages.concat(data ? [data] : []) : data ? [data] : [];
-  const recipes = activePages.flatMap((page) => page.items);
-  const nextCursor = activePages.at(-1)?.nextCursor ?? null;
+  const recipes = data?.pages.flatMap((page) => page.items) ?? [];
   const isInitialRecipesLoading = isFetching && recipes.length === 0 && !error;
   const recipeSkeletonKeys = viewMode === "grid" ? gridRecipeSkeletonKeys : listRecipeSkeletonKeys;
 
   const submitSearch = (event: { preventDefault: () => void }) => {
     event.preventDefault();
-    setLoadedPages([]);
-    setCursor(null);
     setQuery(searchInput.trim());
   };
 
   const loadNextPage = () => {
-    if (data?.nextCursor) {
-      setLoadedPages((pages) => pages.concat(data));
-      setCursor(data.nextCursor);
-      return;
-    }
-
-    if (nextCursor) {
-      void refetch();
+    if (hasNextPage && !isFetching) {
+      void fetchNextPage();
     }
   };
   const confirmDelete = () => {
@@ -1161,7 +1146,7 @@ export const RecipesIndexRoute = () => {
         })}
       </div>
 
-      {nextCursor ? (
+      {hasNextPage ? (
         <div className="mt-8 flex justify-center">
           <Button
             className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold hover:bg-brand-paper-muted"
@@ -1249,8 +1234,7 @@ export const RecipeDetailRoute = () => {
   const deleteMutation = useMutation({
     mutationFn: () => deleteRecipe(recipeId),
     onSuccess: async () => {
-      removeRecipeDetail(queryClient, recipeId);
-      await invalidateRecipeLists(queryClient);
+      await syncDeletedRecipeCaches(queryClient, recipeId);
       await navigate({ to: "/recipes" });
     },
   });
