@@ -251,7 +251,7 @@ const importUrlRoute = createRoute({
 
     return (
       <RequireViewer>
-        <ImportUrlRoute search={search} />
+        <ImportUrlRoute key={JSON.stringify([search.url, search.text])} search={search} />
       </RequireViewer>
     );
   },

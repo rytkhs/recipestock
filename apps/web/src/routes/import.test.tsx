@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -95,6 +95,26 @@ describe("Import routes", () => {
     await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
       "https://example.com/recipes/url",
     );
+  });
+
+  it("同じimportルートで共有URLが変わると入力欄を更新する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+    const { appRouter } = await renderApp(
+      `/import/url?url=${encodeURIComponent("https://example.com/recipes/first")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/first",
+    );
+
+    await act(async () => {
+      await appRouter.navigate({
+        to: "/import/url",
+        search: { url: "https://example.com/recipes/second" },
+      });
+    });
+
+    expect(screen.getByLabelText("URL")).toHaveValue("https://example.com/recipes/second");
   });
 
   it("共有URLの初期値でimport jobを作成する", async () => {
