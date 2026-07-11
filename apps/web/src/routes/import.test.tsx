@@ -97,6 +97,30 @@ describe("Import routes", () => {
     );
   });
 
+  it("共有テキストのURLに続く句点を除外する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(
+      `/import/url?text=${encodeURIComponent("このレシピです https://example.com/recipes/tomato。")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato",
+    );
+  });
+
+  it("かぎ括弧で囲まれた共有テキストからURLだけを抽出する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(
+      `/import/url?text=${encodeURIComponent("「https://example.com/recipes/tomato」")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato",
+    );
+  });
+
   it("山括弧で囲まれた共有テキストからURLだけを抽出する", async () => {
     mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
 
