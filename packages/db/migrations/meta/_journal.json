@@ -50,6 +50,13 @@
       "when": 1780763751938,
       "tag": "0006_clammy_falcon",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783696664641,
+      "tag": "0007_remarkable_spectrum",
+      "breakpoints": true
     }
   ]
 }

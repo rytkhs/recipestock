@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -14,6 +14,7 @@ import {
 describe("AppRouter", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("初期ルートを表示する", async () => {
@@ -58,6 +59,44 @@ describe("AppRouter", () => {
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
     expect(appRouter.state.location.pathname).toBe("/login");
     expect(appRouter.state.location.search).toEqual({ redirect: importPath });
+  });
+
+  it("PWA復帰時にpending handoffをURL取り込み画面で受理する", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true })),
+    );
+    const sharedUrl = "https://example.com/recipes/shared";
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+
+        if (path === "/api/ios-share/handoffs/pending") {
+          return jsonResponse({
+            handoff: {
+              id: "handoff_1",
+              url: sharedUrl,
+              createdAt: "2026-07-11T00:00:00.000Z",
+            },
+          });
+        }
+
+        if (path === "/api/ios-share/handoffs/handoff_1/delivery" && init?.method === "PATCH") {
+          return jsonResponse({ status: "delivered_to_pwa" });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes");
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(sharedUrl);
+    expect(appRouter.state.location.pathname).toBe("/import/url");
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/ios-share/handoffs/handoff_1/delivery")).toBeDefined();
+    });
   });
 
   it("ログイン済みでログインルートに入るとレシピ一覧へ遷移する", async () => {
