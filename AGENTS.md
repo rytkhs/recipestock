@@ -57,9 +57,9 @@ If code, tests, and documentation disagree and the intended behavior cannot be e
 
 ## Implementation Constraints
 
-- Before choosing an implementation, examine the underlying problem, relevant adjacent systems, and plausible alternatives. Prefer a coherent solution that addresses the root cause over the smallest local patch.
-- Keep the implementation within the requested scope. Report broader changes separately when they would produce a better result.
-- Do not preserve backward compatibility unless requested. Update affected callers and remove superseded code within scope.
+- Before choosing an implementation, inspect enough of the underlying problem and adjacent system to avoid a narrowly local fix. Consider plausible alternatives in proportion to the decision's scope and risk, then choose the most coherent solution within the requested scope. Do not narrate routine alternatives unless they materially affect the decision.
+- Keep the implementation within the requested scope. Report broader changes separately when they materially affect correctness or the recommended approach.
+- Prefer a clean replacement over backward-compatible layering. Do not add deprecated aliases, dual paths, or migration shims without an identified consumer that requires them. Update all controlled callers and remove superseded code within scope. Ask before breaking an external contract or persisted data format.
 - Do not add fallback paths unless a concrete required failure mode justifies them. Fix the primary path instead of masking its failure.
 - If a key assumption proves false, the planned approach cannot work, or continuing requires a material design decision, stop before introducing a workaround. Report the evidence, impact, and options, then ask for direction.
 - Prefer the existing stack and local patterns. Do not add speculative abstractions, features, or cleanup.
@@ -79,7 +79,7 @@ pnpm test
 pnpm build
 ```
 
-- Run tests with escalated permissions because Wrangler or Vitest for Cloudflare Workers may write outside the workspace or bind to localhost.
+- Run test commands with sandbox escalation from the start because most tests require network access, localhost binding, or Cloudflare Workers resources. Type checking, linting, and other commands that do not require these capabilities should use the default sandbox.
 - Use `pnpm lint:fix` or `pnpm format` only when needed, then inspect the resulting diff.
 - After database schema changes, run `pnpm db:generate` and inspect the migration. Run `pnpm db:migrate` only when applying it is part of the request.
 - If full validation is too expensive, run targeted tests and relevant package checks. Record why any required validation could not run.
