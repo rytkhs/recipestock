@@ -85,6 +85,54 @@ describe("Import routes", () => {
     );
   });
 
+  it("共有テキストのURLに続く文末のピリオドを除外する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(
+      `/import/url?text=${encodeURIComponent("Check https://example.com/recipes/tomato.")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato",
+    );
+  });
+
+  it("山括弧で囲まれた共有テキストからURLだけを抽出する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(
+      `/import/url?text=${encodeURIComponent("<https://example.com/recipes/tomato>")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato",
+    );
+  });
+
+  it("丸括弧で囲まれた共有テキストから余分な閉じ括弧を除外する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(
+      `/import/url?text=${encodeURIComponent("(https://example.com/recipes/tomato)")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato",
+    );
+  });
+
+  it("URL自身に含まれる対応済みの丸括弧は保持する", async () => {
+    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp(
+      `/import/url?text=${encodeURIComponent("See https://example.com/recipes/tomato_(easy)")}`,
+    );
+
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato_(easy)",
+    );
+  });
+
   it("url paramとtext paramが両方ある場合はurl paramを優先する", async () => {
     mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
 

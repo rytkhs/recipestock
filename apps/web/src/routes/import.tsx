@@ -11,7 +11,23 @@ export type ImportUrlSearch = {
   url?: string;
 };
 
-const extractFirstUrl = (text: string) => text.match(/https?:\/\/\S+/i)?.[0]?.trim() ?? "";
+const trimTrailingUrlDelimiters = (url: string) => {
+  let trimmedUrl = url.replace(/[.,!?:;>]+$/u, "");
+  const openingParentheses = [...trimmedUrl].filter((character) => character === "(").length;
+  let closingParentheses = [...trimmedUrl].filter((character) => character === ")").length;
+
+  while (trimmedUrl.endsWith(")") && closingParentheses > openingParentheses) {
+    trimmedUrl = trimmedUrl.slice(0, -1).replace(/[.,!?:;>]+$/u, "");
+    closingParentheses -= 1;
+  }
+
+  return trimmedUrl;
+};
+
+const extractFirstUrl = (text: string) => {
+  const candidate = text.match(/https?:\/\/\S+/i)?.[0];
+  return candidate ? trimTrailingUrlDelimiters(candidate) : "";
+};
 
 export const getInitialImportUrl = ({ text, url }: ImportUrlSearch) => {
   const sharedUrl = url?.trim();
