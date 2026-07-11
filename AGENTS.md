@@ -1,191 +1,156 @@
 # AGENTS.md
 
-## Project Role
+## Repository Context
 
-This file defines how AI agents should work in this repository.
+Recipe Stock is a PWA for converting recipes from websites, YouTube, social posts, books, images, and screenshots into one searchable saved format.
 
-Recipe Stock is a PWA for saving recipes from recipe websites, YouTube, social posts, books, images, and screenshots into a unified format that can be searched and viewed later.
+This file contains repository-wide instructions for AI agents. A more specific `AGENTS.md` or `AGENTS.override.md` closer to the working directory takes precedence for that subtree.
 
 ## Communication
 
-- Respond to the user in Japanese by default.
+- Respond to the user in Japanese by default. Use another language when the user requests it or the artifact requires it.
 - Use English for code identifiers, file names, type names, function names, database columns, API fields, and error codes.
-- Add comments only when they explain intent or a non-obvious constraint.
-- When asked to write commit messages, use a short Japanese summary unless the user requests another style.
+- Treat the user as technically proficient. Lead with the result and include only the evidence, constraints, trade-offs, and next actions needed to assess it.
+- Do not infer unstated business intent, revenue intent, priorities, evaluations, emotions, or background circumstances.
+- Omit generic introductions, praise, reassurance, obvious context, and evaluative restatements after a decision.
+- Add code comments only when they explain intent or a non-obvious constraint.
+- When asked for a commit message, use a short Japanese summary unless the user requests another style.
 
-## Response and Explanation Policy
+## Working Agreement
 
-Treat the user as technically proficient.
+### Read, Review, Diagnose, and Plan
 
-### 1. Do not add obvious context
+For requests to explain, investigate, review, diagnose, or plan:
 
-Do not state cautions, general principles, or introductory explanations that can reasonably be assumed from the user’s message.
+- Inspect the relevant code, configuration, documentation, tests, and available evidence.
+- Report findings with concrete file or command evidence.
+- Do not modify files or external state unless the user also asks for changes.
+- For a diagnosis, identify the cause before proposing or implementing a fix.
 
-#### Prohibited
+### Change, Build, and Fix
 
-* Explaining constraints that follow directly from the user’s design as “important,” “key,” or “something to note.”
-* Adding implementation considerations that a competent engineer would normally account for when the user did not ask about them.
+For requests to implement, change, build, or fix:
 
-#### When constraints may be stated
+- Make the requested in-scope local changes without asking for routine confirmation.
+- Inspect existing implementations, nearby tests, and relevant project documentation before editing.
+- Update affected callers, contracts, tests, and documentation together. Do not add compatibility shims unless the user requests them.
+- Run relevant non-destructive validation and review the final diff before reporting completion.
+- Preserve user changes and leave unrelated files untouched.
 
-State a constraint only when all of the following apply:
+### Approval Boundaries
 
-* The user’s proposal clearly breaks or cannot work as described.
-* There is a non-obvious constraint involving an external API, legal requirements, billing, or security.
-* The constraint changes the next design decision.
-* Explaining the constraint directly affects a concrete implementation step.
+Ask for confirmation before:
 
-### 2. Do not append evaluative reinforcement after a decision
+- destructive actions or discarding user work;
+- external writes such as pushes, pull requests, deployments, messages, or changes to hosted services;
+- purchases, billable operations, credential changes, or production data changes;
+- adding or replacing a major dependency, framework, service, or architectural choice;
+- materially expanding the requested scope.
 
-After stating a design decision, do not add a sentence that evaluates, emphasizes, or generally justifies that decision.
+Sandbox permission prompts required to run an already-authorized in-scope command are execution approvals, not a reason to stop the task.
 
-#### Prohibited
+### Ambiguity and Assumptions
 
-When a policy is complete as “Do A,” do not follow it with statements such as:
+- Ask a focused question only when the answer cannot be found locally and different choices would materially change behavior, an API contract, a data model, security, cost, or the user-visible result.
+- Otherwise, make the smallest reasonable assumption, state it when it affects the result, and continue.
+- Do not guess when required evidence is missing. Narrow the conclusion or report what remains unverified.
 
-* 「〜しないことが重要です」
-* 「〜を避けるべきです」
-* 「重要なのは〜」
+## Planning
 
-State reasons or trade-offs only when they are necessary for comparing options, explaining constraints, or resolving an implementation branch. Otherwise, end with the decision.
+Before editing for a large or cross-cutting change, provide a short implementation plan. Large changes include new features, database or API contract changes, auth, billing, AI usage limits, production integrations, and cross-package refactors.
 
-### 3. Do not infer unstated intent
+Include only what applies:
 
-Do not infer or state any of the following unless the user explicitly provides them:
+- specifications, ADRs, and implementation files to inspect;
+- packages, contracts, data flow, or state transitions likely to change;
+- test and verification approach;
+- failure behavior and relevant security or privacy effects;
+- specification, migration, or ADR updates;
+- open questions that materially affect implementation.
 
-* Business intent
-* Revenue intent
-* Priorities
-* Evaluations
-* Emotions
-* Background circumstances
+Proceed after the plan unless an approval boundary or material open question requires user input. Small, focused changes may be implemented directly.
 
-## Work Planning
+## Sources of Truth
 
-For larger changes, present a short implementation plan before editing. Include:
+Read the narrowest relevant documentation before changing behavior:
 
-- which docs you read or will read
-- which files or packages you expect to touch
-- the test and verification approach
-- whether any specification or ADR update may be needed
+1. `CONTEXT.md` for domain terminology and invariants.
+2. `docs/agents/tech-stack.md` for approved technologies and dependency guidance.
+3. `docs/agents/repo-structure.md` for ownership and file placement.
+4. Relevant ADRs under `docs/adr/` for accepted architectural decisions.
+5. Relevant product and development documents under `docs/dev/`.
 
-Large changes include new features, database changes, API contract changes, billing changes, auth changes, AI usage-limit changes, and cross-package refactors.
+Project workflow references:
 
-Small changes may be implemented directly. Examples include typo fixes, narrow documentation edits, focused tests, and obvious local bug fixes.
+- GitHub Issues are the issue and PRD tracker for `rytkhs/recipestock`; see `docs/agents/issue-tracker.md`.
+- Use the five-label triage vocabulary in `docs/agents/triage-labels.md`.
+- Follow the domain documentation workflow in `docs/agents/domain.md`.
 
-## Basic Policy
+If code and documentation disagree, do not silently choose one. Determine which is authoritative from tests, history, and adjacent references, then report or resolve the discrepancy within scope.
 
-* Prioritize clean implementation.
-* When editing, do not preserve backward compatibility; assume breaking changes.
-* Process only within the instructed scope.
-* Do not add unnecessary implementations.
-* Ask for confirmation when there are unclear points or important decisions to make.
+## Architecture Constraints
 
-## Fallbacks
+- Follow `docs/agents/tech-stack.md` and `docs/agents/repo-structure.md` rather than duplicating their rules here.
+- Prefer the existing stack and local patterns before introducing a new abstraction or dependency.
+- Keep API request and response schemas, handlers, clients, and tests synchronized.
+- Keep database schema, generated migrations, exported types, and affected queries synchronized.
+- Do not hard-code secrets or environment-specific sensitive values.
+- Before changing a major stack choice, explain the reason, affected documentation, migration cost, and implementation impact, and obtain confirmation.
 
-* Do not implement redundant fallbacks.
-* If implementing a fallback, clearly state the reason for doing so.
+## Editing and Tool Use
 
-## Architecture Guardrails
+- Use `rg` or `rg --files` first for repository search when available.
+- Resolve prerequisite discovery and validation before acting; do not skip them because the intended change seems obvious.
+- Parallelize independent reads when useful. Keep dependent steps sequential and synthesize findings before editing.
+- If a search result is empty or suspiciously narrow, try a meaningful alternate query or location before concluding that nothing exists.
+- Keep changes scoped. Do not add speculative features, abstractions, fallbacks, or cleanup.
+- If a fallback is required for a concrete failure mode, make the trigger explicit and explain the reason.
+- Never discard or overwrite unrelated user changes. Do not use destructive Git commands unless explicitly requested and approved.
 
-Follow the architecture in `/docs/agents/tech-stack.md`.
+## Testing and Verification
 
-Follow the repository placement rules in `/docs/agents/repo-structure.md`.
+Use the smallest relevant validation first, then expand according to the affected surface.
 
-Current stack summary:
+### Commands
 
-- Frontend: Vite + React + TypeScript
-- Routing: TanStack Router
-- Server state: TanStack Query
-- Forms and validation: React Hook Form + Zod
-- API: Hono + Hono RPC client
-- Database: Neon PostgreSQL + Drizzle ORM
-- Storage and deploy target: Cloudflare Workers + Cloudflare R2
-- Auth: Better Auth
-- Email: Resend
-- Billing: Stripe
-- AI: Vercel AI SDK + Cloudflare AI Gateway
-- Repository shape: pnpm workspace + Turborepo
+```bash
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
 
-Repository structure summary:
+- Use `pnpm lint:fix` or `pnpm format` only when changes are needed, then inspect the resulting diff.
+- Run test commands with escalated permissions because Wrangler or Vitest for Cloudflare Workers may write outside the workspace or bind to localhost.
+- Use `pnpm db:generate` after database schema changes and inspect the generated migration.
+- Run `pnpm db:migrate` only when applying a migration is part of the user's requested environment change.
+- If full validation is too expensive, run targeted tests plus the relevant package checks.
+- If a required command is unavailable or cannot run, report the reason and the remaining unverified risk.
 
-- `apps/web`: browser-facing React SPA, routes, UI, hooks, forms, PWA behavior, and client-only import helpers
-- `apps/api`: Hono API on Cloudflare Workers, auth, validation, recipe/import/image/billing routes, integrations, and server-only logic
-- `packages/db`: Drizzle schema, migrations, Neon client setup, and exported database types
-- `packages/schemas`: Zod schemas and shared API-facing request/response/content types
-- `packages/shared`: deterministic logic shared by API and frontend, such as URL normalization, search text generation, constants, and plan limits
-- `packages/config`: shared TypeScript, lint, and formatting configuration
+### Change-Specific Checks
 
-Before adding, replacing, or bypassing these choices, explain the reason, affected docs, migration cost, and implementation impact.
+- Prefer focused tests for schemas, URL normalization, search text generation, `RecipeContent` / `RecipeDraftContent` conversion, AI usage counting, Stripe webhook idempotency and plan synchronization, and R2 object-key conversion or cleanup decisions.
+- For API changes, test validation, success responses, and relevant error responses.
+- For database changes, verify migration output and affected read/write paths.
+- For frontend changes, preserve existing design tokens, components, interaction patterns, responsive behavior, and relevant loading, empty, error, and disabled states.
+- Render and inspect visual changes for layout, overflow, clipping, spacing, and consistency before finalizing.
 
-## Testing And Verification
+### Definition of Done
 
-After making changes, run the relevant package checks and verification scripts:
+A change is complete when:
 
-### Key Commands
+- the requested behavior is implemented without unrelated scope;
+- relevant tests are added or updated and the appropriate checks pass;
+- affected contracts, migrations, documentation, and ADRs are synchronized;
+- the final diff has been reviewed for regressions and unintended changes;
+- any unrun validation, unresolved blocker, or remaining risk is stated explicitly.
 
-- Typecheck:
-  ```bash
-  pnpm typecheck
-  ```
-- Lint & Formatting:
-  ```bash
-  pnpm lint
-  ```
-  ```bash
-  pnpm lint:fix
-  ```
-- Tests:
-  ```bash
-  pnpm test
-  ```
-  Run all test commands with escalated permissions. Some test runners, such as Wrangler/Vitest for Cloudflare Workers, need to write logs outside the workspace and listen on localhost.
-- Build Validation:
-  ```bash
-  pnpm build
-  ```
-- Development Server:
-  ```bash
-  pnpm dev
-  ```
+## Final Report
 
-If the commands are not set up yet or cannot be run, say that explicitly in the final report.
+Lead with the outcome. Summarize:
 
-### Database Commands (Drizzle ORM)
+- what changed;
+- validation performed and its result;
+- blockers, assumptions, or unverified items that materially affect the result.
 
-If you modify the database schema or need to run migrations:
-
-- Generate migrations:
-  ```bash
-  pnpm db:generate
-  ```
-- Apply migrations:
-  ```bash
-  pnpm db:migrate
-  ```
-
-Prefer unit tests around shared logic and boundary-heavy behavior:
-
-- Zod schemas
-- URL normalization
-- search text generation
-- `RecipeContent` / `RecipeDraftContent` conversion
-- AI usage counting
-- Stripe webhook idempotency and plan synchronization
-- R2 object key conversion and cleanup decisions
-
-For API contract changes, keep request/response schemas and handlers in sync and test both validation and error responses.
-
-## Agent skills
-
-### Issue tracker
-
-Issues and PRDs are tracked in GitHub Issues for `rytkhs/recipestock`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The repo uses the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-This is a single-context repo. Read the root `CONTEXT.md` and `docs/adr/` when present; detailed product docs live under `docs/dev/`. See `docs/agents/domain.md`.
+Do not claim completion when required work remains.
