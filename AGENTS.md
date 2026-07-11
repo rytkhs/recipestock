@@ -8,11 +8,6 @@ Recipe Stock is a PWA for converting recipes from websites, YouTube, social post
 
 - Respond in Japanese by default. Use another language when requested or required by the artifact.
 - Use English for code identifiers, file names, types, functions, database columns, API fields, and error codes.
-- Treat the user as technically proficient. Lead with the result and omit secondary detail and repetition.
-- Do not infer unstated intent, priorities, evaluations, emotions, or background.
-- Omit generic introductions, praise, reassurance, obvious context, and evaluative restatements.
-- Add code comments only for intent or non-obvious constraints.
-- Write commit messages with a short Japanese summary unless requested otherwise.
 
 ## Authorization by Request Type
 
@@ -51,7 +46,6 @@ Read the narrowest relevant sources before changing behavior:
 2. `docs/agents/tech-stack.md` for technology and dependency choices.
 3. `docs/agents/repo-structure.md` for ownership and file placement.
 4. Relevant records under `docs/adr/`.
-5. Relevant product and development documents under `docs/dev/`.
 
 Workflow references:
 
@@ -91,7 +85,6 @@ pnpm build
 - If full validation is too expensive, run targeted tests and relevant package checks. Record why any required validation could not run.
 - When changing schemas, URL normalization, search text, content conversion, AI usage counting, Stripe webhook idempotency or plan synchronization, or R2 key or cleanup decisions, add or update focused tests.
 - For API changes, test validation, success responses, and relevant errors.
-- For frontend changes, preserve existing tokens, components, interaction patterns, responsive behavior, and relevant states. Render and inspect layout, overflow, clipping, spacing, and consistency.
 
 Work is complete when the requested behavior is implemented, affected tests and contracts are updated where needed, relevant checks pass, required documentation or migrations are synchronized, and the final diff contains no unintended changes.
 
