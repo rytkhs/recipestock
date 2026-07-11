@@ -95,19 +95,24 @@ describe("RecipesRoute", () => {
     );
 
     await renderApp("/recipes", (queryClient) => {
-      queryClient.setQueryData(["recipes", "", null], {
-        items: [
+      queryClient.setQueryData(["recipes", { query: "" }], {
+        pages: [
           {
-            id: "recipe_123",
-            title: "Tomato pasta",
-            coverImageUrl: null,
-            sourceName: "Example Kitchen",
-            createdAt: "2026-05-25T00:00:00.000Z",
-            updatedAt: "2026-05-26T00:00:00.000Z",
-            locked: false,
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
           },
         ],
-        nextCursor: null,
+        pageParams: [null],
       });
     });
 
@@ -563,6 +568,135 @@ describe("RecipesRoute", () => {
       }),
     );
     expect(nextPageRequests).toBe(2);
+  });
+
+  it("次ページ読み込み後に以前のページのRecipeを削除すると一覧から消える", async () => {
+    let deleted = false;
+    let firstPageRequests = 0;
+    mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+
+        if (path === "/api/recipes?limit=20") {
+          firstPageRequests += 1;
+          return jsonResponse({
+            items: deleted
+              ? [
+                  {
+                    id: "recipe_456",
+                    title: "Potato salad",
+                    coverImageUrl: null,
+                    sourceName: null,
+                    createdAt: "2026-05-25T00:00:00.000Z",
+                    updatedAt: "2026-05-26T00:00:00.000Z",
+                    locked: false,
+                  },
+                ]
+              : [
+                  {
+                    id: "recipe_123",
+                    title: "Tomato pasta",
+                    coverImageUrl: null,
+                    sourceName: null,
+                    createdAt: "2026-05-25T00:00:00.000Z",
+                    updatedAt: "2026-05-26T00:00:00.000Z",
+                    locked: false,
+                  },
+                ],
+            nextCursor: deleted ? null : "cursor_2",
+          });
+        }
+
+        if (path === "/api/recipes?limit=20&cursor=cursor_2") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_456",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (path === "/api/recipes/recipe_123" && init?.method === "DELETE") {
+          deleted = true;
+          return jsonResponse({ ok: true });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+    await userEvent.click(screen.getByRole("button", { name: "もっと見る" }));
+    await screen.findByRole("heading", { name: "Potato salad" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Tomato pastaの操作メニュー" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "削除" }));
+    const deleteDialog = await screen.findByRole("alertdialog", {
+      name: "レシピを削除しますか？",
+    });
+    await userEvent.click(within(deleteDialog).getByRole("button", { name: "削除" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Tomato pasta" })).not.toBeInTheDocument();
+      expect(screen.getAllByRole("heading", { name: "Potato salad" })).toHaveLength(1);
+      expect(firstPageRequests).toBe(2);
+    });
+  });
+
+  it("一覧からのRecipe削除に失敗するとRecipeを残してエラーを表示する", async () => {
+    mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+
+        if (path === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (path === "/api/recipes/recipe_123" && init?.method === "DELETE") {
+          return new Response(null, { status: 500 });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+    await userEvent.click(screen.getByRole("button", { name: "Tomato pastaの操作メニュー" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "削除" }));
+    const deleteDialog = await screen.findByRole("alertdialog", {
+      name: "レシピを削除しますか？",
+    });
+    await userEvent.click(within(deleteDialog).getByRole("button", { name: "削除" }));
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "レシピを削除できませんでした。",
+    );
+    expect(screen.getByRole("heading", { name: "Tomato pasta" })).toBeInTheDocument();
   });
 
   it("新規レシピを保存して詳細画面で閲覧する", async () => {

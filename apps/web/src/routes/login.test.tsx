@@ -87,6 +87,41 @@ describe("LoginRoute", () => {
     expect(findFetchCall(fetchMock, "/api/me")).toBeDefined();
   });
 
+  it("メールとパスワードでログインした後に共有URLへ戻る", async () => {
+    let authenticated = false;
+    const sharedUrl = "https://example.com/recipes/tomato";
+    const redirect = `/import/url?url=${encodeURIComponent(sharedUrl)}`;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+
+      if (path === "/api/auth/sign-in/email" && init?.method === "POST") {
+        authenticated = true;
+        return jsonResponse({ token: "session_token" });
+      }
+
+      if (path === "/api/me" && authenticated) {
+        return jsonResponse(viewerResponse);
+      }
+
+      return new Response(null, { status: 404 });
+    });
+    await renderApp(`/login?redirect=${encodeURIComponent(redirect)}`);
+
+    await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
+    await userEvent.type(screen.getByLabelText("パスワード"), "password123");
+    await userEvent.click(screen.getByRole("button", { name: "ログイン" }));
+
+    const signInCall = findFetchCall(fetchMock, "/api/auth/sign-in/email");
+    expect(JSON.parse(String(signInCall?.[1]?.body))).toMatchObject({
+      callbackURL: redirect,
+    });
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(sharedUrl);
+  });
+
   it("ログインルートから新規登録してOTP検証に進む", async () => {
     const fetchMock = mockFetch(async () => jsonResponse({ token: null }));
     await renderApp("/login");

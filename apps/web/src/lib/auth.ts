@@ -34,10 +34,10 @@ const assertAuthSuccess = (result: { error: unknown }) => {
   }
 };
 
-export const startGoogleLogin = async () => {
+export const startGoogleLogin = async (callbackURL = "/recipes") => {
   const result = await authClient.signIn.social({
     provider: "google",
-    callbackURL: "/recipes",
+    callbackURL,
     disableRedirect: true,
   });
   assertAuthSuccess(result);
@@ -52,11 +52,15 @@ const buildInternalName = (email: string) => {
   return localPart && localPart.length > 0 ? localPart : "user";
 };
 
-export const signInWithEmailPassword = async (email: string, password: string) => {
+export const signInWithEmailPassword = async (
+  email: string,
+  password: string,
+  callbackURL = "/recipes",
+) => {
   const result = await authClient.signIn.email({
     email,
     password,
-    callbackURL: "/recipes",
+    callbackURL,
   });
   assertAuthSuccess(result);
 };
@@ -85,12 +89,16 @@ export const changePassword = async (currentPassword: string, newPassword: strin
 
 export const useAuthSession = () => authClient.useSession();
 
-export const signUpWithEmailPassword = async (email: string, password: string) => {
+export const signUpWithEmailPassword = async (
+  email: string,
+  password: string,
+  callbackURL = "/recipes",
+) => {
   const result = await authClient.signUp.email({
     name: buildInternalName(email),
     email,
     password,
-    callbackURL: "/recipes",
+    callbackURL,
   });
   assertAuthSuccess(result);
 };
