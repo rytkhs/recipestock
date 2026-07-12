@@ -4,10 +4,7 @@ export const MAX_RECIPE_REFERENCE_IMAGES = 20;
 export const MAX_RECIPE_STEP_IMAGES = 10;
 export const MAX_RECIPE_TOTAL_IMAGES = 100;
 
-const webUrlSchema = z.url().refine((value) => {
-  const protocol = new URL(value).protocol;
-  return protocol === "http:" || protocol === "https:";
-});
+const webUrlSchema = z.url({ protocol: /^https?$/ });
 
 export const draftImageRefSchema = z.discriminatedUnion("type", [
   z.object({

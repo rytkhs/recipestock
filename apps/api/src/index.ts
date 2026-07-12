@@ -16,6 +16,7 @@ import {
   processImportJob,
 } from "./import-jobs";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
+import { type IosShareService } from "./ios-share";
 import { createLogger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
 import { createRecipeRepository, type RecipeRepository } from "./recipes";
@@ -23,6 +24,7 @@ import { createAuthRoutes } from "./routes/auth";
 import { createBillingRoutes } from "./routes/billing";
 import { createImageRoutes } from "./routes/images";
 import { createImportRoutes } from "./routes/import";
+import { createIosShareRoutes } from "./routes/ios-share";
 import { createMeRoutes } from "./routes/me";
 import { createRecipeRoutes } from "./routes/recipes";
 import { createStripeRoutes } from "./routes/stripe";
@@ -42,6 +44,7 @@ export type AppDependencies = {
   billingRepository?: BillingRepository;
   recipeRepository?: RecipeRepository;
   importJobRepository?: ImportJobRepository;
+  iosShareService?: IosShareService;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
   importAIProvider?: RecipeImportAIProvider;
@@ -118,6 +121,9 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   app.use("/billing/*", csrfProtection);
   app.use("/images/*", csrfProtection);
   app.use("/import/*", csrfProtection);
+  app.use("/ios-share/channels", csrfProtection);
+  app.use("/ios-share/channels/*", csrfProtection);
+  app.use("/ios-share/handoffs/*", csrfProtection);
   app.use("/recipes", csrfProtection);
   app.use("/recipes/*", csrfProtection);
 
@@ -138,6 +144,14 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         importJobRepository: dependencies.importJobRepository,
         importQueue: dependencies.importQueue,
         createImportJobId: dependencies.createImportJobId,
+        getCurrentDate: dependencies.getCurrentDate,
+      }),
+    )
+    .route(
+      "/ios-share",
+      createIosShareRoutes({
+        auth,
+        iosShareService: dependencies.iosShareService,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )

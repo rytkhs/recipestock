@@ -16,6 +16,52 @@ import { checkoutRedirect } from "./settings";
 describe("Settings routes", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("PWAからShortcut連携トークンを発行する", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true })),
+    );
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/ios-share/channels" && init?.method === "GET") {
+          return jsonResponse({ channels: [] });
+        }
+        if (path === "/api/ios-share/channels" && init?.method === "POST") {
+          return jsonResponse(
+            {
+              channel: {
+                id: "channel_1",
+                name: "iPhone",
+                tokenSuffix: "aaaaaa",
+                createdAt: "2026-07-11T00:00:00.000Z",
+                lastUsedAt: null,
+              },
+              token: `rssc_${"a".repeat(64)}`,
+            },
+            { status: 201 },
+          );
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "連携トークンを発行" }));
+
+    await expect(screen.findByLabelText("連携トークン")).resolves.toHaveValue(
+      `rssc_${"a".repeat(64)}`,
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          getRequestPath(input) === "/api/ios-share/channels" && init?.method === "POST",
+      ),
+    ).toBe(true);
   });
 
   it("設定画面からメールアドレス変更確認メールを送信できる", async () => {

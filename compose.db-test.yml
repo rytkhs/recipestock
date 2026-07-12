@@ -1,0 +1,10 @@
+services:
+  db:
+    image: neondatabase/neon_local:latest
+    ports:
+      - "127.0.0.1:${NEON_LOCAL_PORT:-55432}:5432"
+    environment:
+      NEON_API_KEY: ${NEON_API_KEY}
+      NEON_PROJECT_ID: ${NEON_PROJECT_ID}
+      PARENT_BRANCH_ID: ${NEON_PARENT_BRANCH_ID}
+      DELETE_BRANCH: "true"
