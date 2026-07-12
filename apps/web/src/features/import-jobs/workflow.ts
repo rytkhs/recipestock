@@ -12,6 +12,10 @@ export const retryImportUrlJob = async (
   }
 
   const result = await createImportUrlJob(job.url);
-  await dismissFinishedImportJob(job.id);
+  try {
+    await dismissFinishedImportJob(job.id);
+  } catch {
+    // Retry has already started; dismissing the old finished job is best-effort cleanup.
+  }
   return result;
 };

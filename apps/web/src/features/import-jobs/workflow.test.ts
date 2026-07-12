@@ -95,6 +95,78 @@ describe("retryImportUrlJob", () => {
     );
   });
 
+  it("新しいjob作成後のdismissが404でも再試行を成功扱いにする", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (getRequestPath(input) === "/api/import/url/jobs" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            kind: "created",
+            job: createJob({
+              id: "job_retry",
+              status: "queued",
+              errorCode: null,
+              startedAt: null,
+              finishedAt: null,
+            }),
+          },
+          { status: 202 },
+        );
+      }
+
+      if (
+        getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
+        init?.method === "PATCH"
+      ) {
+        return jsonResponse(
+          { error: { code: "not_found", message: "Import job was not found." } },
+          { status: 404 },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await expect(retryImportUrlJob(createJob())).resolves.toMatchObject({
+      kind: "created",
+      job: { id: "job_retry" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("新しいjob作成後のdismissがネットワークエラーでも再試行を成功扱いにする", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (getRequestPath(input) === "/api/import/url/jobs" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            kind: "created",
+            job: createJob({
+              id: "job_retry",
+              status: "queued",
+              errorCode: null,
+              startedAt: null,
+              finishedAt: null,
+            }),
+          },
+          { status: 202 },
+        );
+      }
+
+      if (
+        getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
+        init?.method === "PATCH"
+      ) {
+        throw new TypeError("Failed to fetch");
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await expect(retryImportUrlJob(createJob())).resolves.toMatchObject({
+      kind: "created",
+      job: { id: "job_retry" },
+    });
+  });
+
   it("URLがないjobはerrorにする", async () => {
     await expect(retryImportUrlJob(createJob({ url: null }))).rejects.toThrow(
       "Import job URL is missing.",
