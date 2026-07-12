@@ -13,6 +13,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "turbo test",
+    "test:db": "pnpm --filter @recipestock/api test:db",
+    "test:all": "pnpm test && pnpm test:db",
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {

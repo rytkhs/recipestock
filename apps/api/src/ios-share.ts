@@ -1,3 +1,4 @@
+import { NeonDbError } from "@neondatabase/serverless";
 import { type DbClient, iosShareChannels, iosShareHandoffs } from "@recipestock/db";
 import {
   type IosShareChannel,
@@ -7,6 +8,7 @@ import {
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 const HANDOFF_TTL_MS = 30 * 60 * 1000;
+const PENDING_HANDOFF_UNIQUE_CONSTRAINT = "ios_share_handoffs_channel_pending_uidx";
 const TOKEN_PREFIX = "rssc_";
 
 export type IosShareChannelRecord = {
@@ -131,6 +133,11 @@ const mapChannel = (channel: IosShareChannelRecord): IosShareChannel => ({
   lastUsedAt: channel.lastUsedAt?.toISOString() ?? null,
 });
 
+const isPendingHandoffUniqueViolation = (error: unknown) =>
+  error instanceof NeonDbError &&
+  error.code === "23505" &&
+  error.constraint === PENDING_HANDOFF_UNIQUE_CONSTRAINT;
+
 export const createIosShareToken = () =>
   `${TOKEN_PREFIX}${crypto.randomUUID().replaceAll("-", "")}${crypto
     .randomUUID()
@@ -199,7 +206,8 @@ export const createIosShareRepository = (db: DbClient): IosShareRepository => ({
   },
 
   async submitHandoff({ id, tokenHash, url, now, expiresAt }) {
-    const result = await db.execute<IosShareHandoffSqlRow>(sql`
+    const insertHandoff = () =>
+      db.execute<IosShareHandoffSqlRow>(sql`
       with selected_channel as (
         select id, user_id
         from ios_share_channels
@@ -223,6 +231,10 @@ export const createIosShareRepository = (db: DbClient): IosShareRepository => ({
           and superseded_at is null
         returning id
       ),
+      supersede_barrier as (
+        select count(*) as affected_count
+        from superseded
+      ),
       inserted as (
         insert into ios_share_handoffs (
           id,
@@ -242,6 +254,7 @@ export const createIosShareRepository = (db: DbClient): IosShareRepository => ({
           ${now.toISOString()}::timestamptz,
           ${now.toISOString()}::timestamptz
         from selected_channel
+        cross join supersede_barrier
         where exists (select 1 from touched_channel)
         returning
           id,
@@ -257,6 +270,17 @@ export const createIosShareRepository = (db: DbClient): IosShareRepository => ({
       )
       select * from inserted
     `);
+
+    let result: Awaited<ReturnType<typeof insertHandoff>>;
+    try {
+      result = await insertHandoff();
+    } catch (error) {
+      if (!isPendingHandoffUniqueViolation(error)) {
+        throw error;
+      }
+      result = await insertHandoff();
+    }
+
     const row = result.rows[0];
     return row ? mapHandoffSqlRow(row) : null;
   },

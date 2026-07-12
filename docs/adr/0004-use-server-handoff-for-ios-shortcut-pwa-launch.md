@@ -8,7 +8,7 @@ Share HandoffはImport Jobと分離する。Share Handoffの作成やdeliveryで
 
 ShortcutはCookie sessionを利用できないため、設定画面でユーザー・端末単位のBearer tokenを発行する。平文tokenは発行時に一度だけ返し、DBにはSHA-256 hashだけを保存する。tokenの権限はShare Handoffの作成と状態確認に限定する。Cookie認証を使う設定・delivery endpointにはCSRFを適用し、Shortcut endpointにはBearer認証を適用する。
 
-Share Handoffは30分で期限切れになる。同一チャンネルから新しいShare Handoffが作成された場合、既存のpendingをsupersedeする。この更新はneon-httpの制約に合わせ、単一SQLとDB制約でアトミックに行う。
+Share Handoffは30分で期限切れになる。同一チャンネルから新しいShare Handoffが作成された場合、既存のpendingをsupersedeする。この更新はneon-httpの制約に合わせ、単一SQLとDB制約でアトミックに行う。`INSERT`は既存pendingを更新するdata-modifying CTEの`RETURNING`結果へ明示的に依存させる。同一チャンネルへの同時リクエストでpendingのpartial unique indexと競合した場合は、その制約の`23505`に限りSQL全体を一度だけ再試行する。
 
 Shortcutは追加時のimport questionでBearer tokenを受け取り、共有実行時に次の順で処理する。
 

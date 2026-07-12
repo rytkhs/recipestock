@@ -1,0 +1,9 @@
+# Database統合テストにNeon ephemeral branchを使用する
+
+RepositoryのSQL、migration、PostgreSQL制約、および本番で使用する`@neondatabase/serverless`のHTTP接続をまとめて検証するため、Database統合テストにはNeon Localが作成するephemeral branchを使用する。
+
+テストは実データを含まないテスト専用Neon projectのbranchを親にする。`production`またはproduction由来のデータを含むbranchは親にしない。Neon Localの起動時にbranchを作成し、テストの成否にかかわらず停止時に削除する。各実行ではリポジトリ内の全migrationを適用し、migrationをschemaのSource of Truthとして検証する。
+
+通常の`pnpm test`はDatabaseやネットワークなしで実行できる高速テストとして維持する。Database統合テストは`pnpm test:db`、両方の完全検証は`pnpm test:all`で実行する。将来CIを導入する場合は`pnpm test:all`を必須チェックにする。
+
+Serviceやrouteのテストで使用しているin-memory adapterは、Database adapterの代替検証には使わない。Serviceの振る舞いを高速に検証する目的で維持し、SQL、制約、日時比較、同時実行などPostgreSQL固有の保証はDatabase統合テストで検証する。

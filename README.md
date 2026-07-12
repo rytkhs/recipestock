@@ -124,9 +124,30 @@ pnpm --filter @recipestock/web dev
 | `pnpm lint` | Biome による lint / format check |
 | `pnpm format` | Biome による format |
 | `pnpm test` | Vitest を実行 |
+| `pnpm test:db` | Neon ephemeral branchでDatabase統合テストを実行 |
+| `pnpm test:all` | 通常テストとDatabase統合テストを実行 |
 | `pnpm db:generate` | Drizzle migration を生成 |
 | `pnpm db:migrate` | Drizzle migration を適用 |
 | `pnpm deploy` | Web build 後に Cloudflare Worker へ deploy |
+
+### Database integration tests
+
+`pnpm test:db`はDockerでNeon Localを起動し、テスト専用Neon projectにephemeral branchを作成する。全migrationとDatabase統合テストを実行した後、成功・失敗にかかわらずbranchを削除する。通常の開発用または本番用`DATABASE_URL`は使用しない。
+
+事前にDockerを起動し、次の環境変数を設定する。ローカルではgit管理外の`.env.test.local`から自動的に読み込む。
+
+- `NEON_API_KEY`: テスト専用projectでbranchを作成・削除できるAPI key
+- `NEON_PROJECT_ID`: 実データを含まないテスト専用Neon project
+- `NEON_PARENT_BRANCH_ID`: 空の親branch
+- `NEON_LOCAL_PORT`: Neon Localの公開port。省略時は`55432`
+
+```bash
+cp .env.example .env.test.local
+# .env.test.localへテスト専用projectの値を設定
+pnpm test:db
+```
+
+日常の高速テストには`pnpm test`を使用し、Databaseまたはrepositoryを変更した場合は`pnpm test:all`を実行する。
 
 Cloudflare Worker の deploy 前検証:
 

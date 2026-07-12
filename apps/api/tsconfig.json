@@ -1,4 +1,4 @@
 {
   "extends": "../../packages/config/tsconfig/worker.json",
-  "include": ["src", "vitest.config.ts"]
+  "include": ["src", "test", "vitest.config.ts", "vitest.db.config.ts"]
 }
