@@ -111,4 +111,122 @@ describe("iOS Share repository with Neon Postgres", () => {
       expect.objectContaining({ id: expect.stringMatching(/^dbtest_concurrent_handoff_[ab]_/) }),
     );
   });
+
+  it("異なるchannelの未配送handoffも同じuserの新しいhandoffで置き換える", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_cross_channel_user_${runId}`;
+    const firstChannelId = `dbtest_cross_channel_first_${runId}`;
+    const secondChannelId = `dbtest_cross_channel_second_${runId}`;
+    const firstTokenHash = `dbtest_cross_channel_token_first_${runId}`;
+    const secondTokenHash = `dbtest_cross_channel_token_second_${runId}`;
+    const firstId = `dbtest_cross_channel_handoff_first_${runId}`;
+    const secondId = `dbtest_cross_channel_handoff_second_${runId}`;
+
+    await repository.createChannel({
+      id: firstChannelId,
+      userId,
+      name: "First cross-channel test channel",
+      tokenHash: firstTokenHash,
+      tokenSuffix: runId.slice(-6),
+      createdAt: now,
+      lastUsedAt: null,
+      revokedAt: null,
+    });
+    await repository.createChannel({
+      id: secondChannelId,
+      userId,
+      name: "Second cross-channel test channel",
+      tokenHash: secondTokenHash,
+      tokenSuffix: runId.slice(-6),
+      createdAt: now,
+      lastUsedAt: null,
+      revokedAt: null,
+    });
+
+    await repository.submitHandoff({
+      id: firstId,
+      tokenHash: firstTokenHash,
+      url: "https://example.com/cross-channel-first",
+      now,
+      expiresAt: new Date(now.getTime() + 30 * 60 * 1000),
+    });
+
+    const secondNow = new Date(now.getTime() + 1000);
+    await repository.submitHandoff({
+      id: secondId,
+      tokenHash: secondTokenHash,
+      url: "https://example.com/cross-channel-second",
+      now: secondNow,
+      expiresAt: new Date(secondNow.getTime() + 30 * 60 * 1000),
+    });
+
+    await expect(
+      repository.inspectHandoff({ handoffId: firstId, tokenHash: firstTokenHash }),
+    ).resolves.toMatchObject({ supersededAt: secondNow });
+
+    await repository.deliverHandoff({
+      handoffId: secondId,
+      userId,
+      target: "pwa",
+      now: new Date(secondNow.getTime() + 1000),
+    });
+
+    await expect(
+      repository.findPendingHandoff({ userId, now: new Date(secondNow.getTime() + 1000) }),
+    ).resolves.toBeNull();
+  });
+
+  it("異なるchannelへの同時submitも同じuserにpendingを一件だけ残す", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_concurrent_cross_channel_user_${runId}`;
+    const channelIds = [
+      `dbtest_concurrent_cross_channel_a_${runId}`,
+      `dbtest_concurrent_cross_channel_b_${runId}`,
+    ];
+    const tokenHashes = [
+      `dbtest_concurrent_cross_channel_token_a_${runId}`,
+      `dbtest_concurrent_cross_channel_token_b_${runId}`,
+    ];
+    const handoffIds = [
+      `dbtest_concurrent_cross_channel_handoff_a_${runId}`,
+      `dbtest_concurrent_cross_channel_handoff_b_${runId}`,
+    ];
+
+    await Promise.all(
+      channelIds.map((channelId, index) =>
+        repository.createChannel({
+          id: channelId,
+          userId,
+          name: `Concurrent cross-channel test channel ${index}`,
+          tokenHash: tokenHashes[index] as string,
+          tokenSuffix: runId.slice(-6),
+          createdAt: now,
+          lastUsedAt: null,
+          revokedAt: null,
+        }),
+      ),
+    );
+
+    await Promise.all(
+      handoffIds.map((id, index) =>
+        repository.submitHandoff({
+          id,
+          tokenHash: tokenHashes[index] as string,
+          url: `https://example.com/concurrent-cross-channel/${index}`,
+          now: new Date(now.getTime() + index),
+          expiresAt: new Date(now.getTime() + 30 * 60 * 1000),
+        }),
+      ),
+    );
+
+    const handoffs = await Promise.all(
+      handoffIds.map((handoffId, index) =>
+        repository.inspectHandoff({ handoffId, tokenHash: tokenHashes[index] as string }),
+      ),
+    );
+    expect(handoffs.filter((handoff) => handoff?.supersededAt === null)).toHaveLength(1);
+    await expect(repository.findPendingHandoff({ userId, now })).resolves.toMatchObject({
+      id: expect.stringMatching(/^dbtest_concurrent_cross_channel_handoff_[ab]_/),
+    });
+  });
 });

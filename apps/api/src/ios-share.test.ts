@@ -36,7 +36,7 @@ const createRepository = () => {
       );
       if (!channel) return null;
       for (const handoff of handoffs) {
-        if (handoff.channelId === channel.id && !handoff.deliveredAt && !handoff.supersededAt) {
+        if (handoff.userId === channel.userId && !handoff.deliveredAt && !handoff.supersededAt) {
           handoff.supersededAt = createdAt;
         }
       }
@@ -192,7 +192,7 @@ describe("iOS Share repository", () => {
   const pendingConstraintError = () => {
     const error = new NeonDbError("duplicate key value violates unique constraint");
     error.code = "23505";
-    error.constraint = "ios_share_handoffs_channel_pending_uidx";
+    error.constraint = "ios_share_handoffs_user_pending_uidx";
     return error;
   };
 
@@ -215,12 +215,25 @@ describe("iOS Share repository", () => {
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
+  it("NeonDbErrorのクラス実体が異なる一意制約競合も一度再試行する", async () => {
+    const execute = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "23505",
+        constraint: "ios_share_handoffs_user_pending_uidx",
+      })
+      .mockResolvedValueOnce({ rows: [handoffRow] });
+
+    await expect(submit(execute)).resolves.toMatchObject({ id: "handoff_1" });
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
   it("再試行後も一意制約競合なら例外を返す", async () => {
     const execute = vi.fn().mockRejectedValue(pendingConstraintError());
 
     await expect(submit(execute)).rejects.toMatchObject({
       code: "23505",
-      constraint: "ios_share_handoffs_channel_pending_uidx",
+      constraint: "ios_share_handoffs_user_pending_uidx",
     });
     expect(execute).toHaveBeenCalledTimes(2);
   });

@@ -36,8 +36,8 @@ export const iosShareHandoffs = pgTable(
   (table) => [
     index("ios_share_handoffs_user_id_created_at_idx").on(table.userId, table.createdAt),
     index("ios_share_handoffs_channel_id_created_at_idx").on(table.channelId, table.createdAt),
-    uniqueIndex("ios_share_handoffs_channel_pending_uidx")
-      .on(table.channelId)
+    uniqueIndex("ios_share_handoffs_user_pending_uidx")
+      .on(table.userId)
       .where(sql`${table.deliveredAt} is null and ${table.supersededAt} is null`),
   ],
 );

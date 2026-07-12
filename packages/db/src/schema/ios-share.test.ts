@@ -11,10 +11,10 @@ describe("iOS share schema", () => {
     );
   });
 
-  it("チャンネルごとの未配送handoffを一件に制限する", () => {
+  it("ユーザーごとの未配送handoffを一件に制限する", () => {
     expect(getTableName(iosShareHandoffs)).toBe("ios_share_handoffs");
     expect(getTableConfig(iosShareHandoffs).indexes.map((index) => index.config.name)).toContain(
-      "ios_share_handoffs_channel_pending_uidx",
+      "ios_share_handoffs_user_pending_uidx",
     );
   });
 });

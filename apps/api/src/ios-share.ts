@@ -8,7 +8,7 @@ import {
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 const HANDOFF_TTL_MS = 30 * 60 * 1000;
-const PENDING_HANDOFF_UNIQUE_CONSTRAINT = "ios_share_handoffs_channel_pending_uidx";
+const PENDING_HANDOFF_UNIQUE_CONSTRAINT = "ios_share_handoffs_user_pending_uidx";
 const TOKEN_PREFIX = "rssc_";
 
 export type IosShareChannelRecord = {
@@ -133,10 +133,20 @@ const mapChannel = (channel: IosShareChannelRecord): IosShareChannel => ({
   lastUsedAt: channel.lastUsedAt?.toISOString() ?? null,
 });
 
-const isPendingHandoffUniqueViolation = (error: unknown) =>
-  error instanceof NeonDbError &&
-  error.code === "23505" &&
-  error.constraint === PENDING_HANDOFF_UNIQUE_CONSTRAINT;
+const isPendingHandoffUniqueViolation = (error: unknown) => {
+  if (error instanceof NeonDbError) {
+    return error.code === "23505" && error.constraint === PENDING_HANDOFF_UNIQUE_CONSTRAINT;
+  }
+
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const databaseError = error as { code?: unknown; constraint?: unknown };
+  return (
+    databaseError.code === "23505" && databaseError.constraint === PENDING_HANDOFF_UNIQUE_CONSTRAINT
+  );
+};
 
 export const createIosShareToken = () =>
   `${TOKEN_PREFIX}${crypto.randomUUID().replaceAll("-", "")}${crypto
@@ -226,7 +236,7 @@ export const createIosShareRepository = (db: DbClient): IosShareRepository => ({
         set
           superseded_at = ${now.toISOString()}::timestamptz,
           updated_at = ${now.toISOString()}::timestamptz
-        where channel_id = (select id from selected_channel)
+        where user_id = (select user_id from selected_channel)
           and delivered_at is null
           and superseded_at is null
         returning id
