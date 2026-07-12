@@ -5,7 +5,7 @@ import { useState } from "react";
 import { createIosShareChannel, listIosShareChannels, revokeIosShareChannel } from "./api";
 import { isStandaloneWebApp } from "./display-mode";
 
-const IOS_SHARE_SHORTCUT_URL = "https://www.icloud.com/shortcuts/d2133bab6d044f4e9799b80983db9332";
+const IOS_SHARE_SHORTCUT_URL = "https://www.icloud.com/shortcuts/b7da139e3563470697523b5a0daad14e";
 const queryKey = ["ios-share", "channels"] as const;
 
 export const IosShareSettingsCard = () => {
@@ -67,10 +67,11 @@ export const IosShareSettingsCard = () => {
         </div>
       ) : (
         <>
-          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-            <TextField>
+          <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <TextField className="min-w-0">
               <Label className="text-brand-walnut font-semibold text-sm">端末名</Label>
               <Input
+                className="w-full min-w-0"
                 value={name}
                 maxLength={60}
                 onChange={(event) => setName(event.target.value)}
@@ -86,8 +87,13 @@ export const IosShareSettingsCard = () => {
           </div>
 
           {issuedToken ? (
-            <div className="mt-4 grid gap-3">
-              <Input aria-label="連携トークン" readOnly value={issuedToken} />
+            <div className="mt-4 grid min-w-0 gap-3">
+              <Input
+                className="w-full min-w-0"
+                aria-label="連携トークン"
+                readOnly
+                value={issuedToken}
+              />
               <div className="flex flex-wrap gap-2">
                 <Button
                   className="rounded-full font-semibold"
