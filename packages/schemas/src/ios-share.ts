@@ -25,13 +25,7 @@ export const listIosShareChannelsResponseSchema = z.object({
 });
 
 export const createIosShareHandoffRequestSchema = z.object({
-  url: z
-    .url()
-    .max(4096)
-    .refine((value) => {
-      const protocol = new URL(value).protocol;
-      return protocol === "http:" || protocol === "https:";
-    }),
+  url: z.url({ protocol: /^https?$/ }).max(4096),
 });
 
 export const iosShareHandoffStatusSchema = z.enum([

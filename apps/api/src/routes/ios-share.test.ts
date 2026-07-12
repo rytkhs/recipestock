@@ -78,6 +78,27 @@ describe("iOS Share routes", () => {
     expect(response.status).toBe(401);
   });
 
+  it("malformed URLはvalidation_failedを返す", async () => {
+    const app = createSilentTestApp({ auth, iosShareService: createService() });
+    const response = await app.request(
+      "/api/ios-share/shortcut/handoffs",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer noisy-client-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ url: "http://[" }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "validation_failed" },
+    });
+  });
+
   it("認証ユーザーへpending handoffを返してPWA deliveryを受け付ける", async () => {
     const app = createSilentTestApp({ auth, iosShareService: createService() });
     const pending = await app.request("/api/ios-share/handoffs/pending", {}, env);

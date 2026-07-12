@@ -18,10 +18,7 @@ export const importJobKindSchema = z.enum(["url"]);
 
 export const importJobStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
 
-const importableUrlSchema = z.url().refine((value) => {
-  const protocol = new URL(value).protocol;
-  return protocol === "http:" || protocol === "https:";
-});
+const importableUrlSchema = z.url({ protocol: /^https?$/ });
 
 export const importUrlRequestSchema = z.object({
   url: importableUrlSchema,
