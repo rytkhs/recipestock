@@ -83,13 +83,13 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
     try {
       const response = await createImportUrlJob(url);
 
+      if (search.handoff && search.source === "ios-shortcut" && !isStandaloneWebApp()) {
+        await deliverIosShareHandoff(search.handoff, "browser").catch(() => undefined);
+      }
+
       if (response.kind === "existing_active_job") {
         setActiveJob(response.job);
         return;
-      }
-
-      if (search.handoff && search.source === "ios-shortcut" && !isStandaloneWebApp()) {
-        await deliverIosShareHandoff(search.handoff, "browser").catch(() => undefined);
       }
 
       await navigate({ to: "/recipes" });

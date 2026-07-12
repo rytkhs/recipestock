@@ -127,6 +127,62 @@ describe("Import routes", () => {
     });
   });
 
+  it("Safari fallbackでactive jobがある場合もbrowser deliveryを記録して入力URLを保持する", async () => {
+    const sharedUrl = "https://example.com/recipes/tomato";
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/import/url/jobs" && init?.method === "POST") {
+          return jsonResponse(
+            {
+              kind: "existing_active_job",
+              job: {
+                id: "job_active",
+                kind: "url",
+                status: "running",
+                url: "https://example.com/recipes/active",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-07-11T00:00:00.000Z",
+                startedAt: "2026-07-11T00:00:01.000Z",
+                finishedAt: null,
+              },
+            },
+            { status: 202 },
+          );
+        }
+        if (path === "/api/ios-share/handoffs/handoff_1/delivery" && init?.method === "PATCH") {
+          return jsonResponse({ status: "delivered_to_browser" });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp(
+      `/import/url?url=${encodeURIComponent(sharedUrl)}&handoff=handoff_1&source=ios-shortcut`,
+    );
+    const input = await screen.findByLabelText("URL");
+    await userEvent.click(await screen.findByRole("button", { name: "取り込む" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "別のレシピを取り込み中です。しばらく待ってから再度実行してください。",
+    );
+    expect(alert).toHaveTextContent("https://example.com/recipes/active");
+    expect(input).toHaveValue(sharedUrl);
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/ios-share/handoffs/handoff_1/delivery")).toEqual([
+        "/api/ios-share/handoffs/handoff_1/delivery",
+        expect.objectContaining({
+          credentials: "include",
+          method: "PATCH",
+          body: JSON.stringify({ target: "browser" }),
+        }),
+      ]);
+    });
+  });
+
   it("共有URLのtext paramから最初のURLを入力欄の初期値にする", async () => {
     mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
 
