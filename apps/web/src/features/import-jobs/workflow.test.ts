@@ -48,7 +48,7 @@ describe("retryImportUrlJob", () => {
     vi.restoreAllMocks();
   });
 
-  it("finished jobをdismissして同じURLでimport jobを作成する", async () => {
+  it("同じURLでimport jobを作成してからfinished jobをdismissする", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       if (
         getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
@@ -83,16 +83,88 @@ describe("retryImportUrlJob", () => {
       },
     });
     expect(fetchMock.mock.calls.map(([input]) => getRequestPath(input))).toEqual([
-      "/api/import/jobs/job_123/dismiss",
       "/api/import/url/jobs",
+      "/api/import/jobs/job_123/dismiss",
     ]);
-    expect(fetchMock.mock.calls[1]?.[1]).toEqual(
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({
         credentials: "include",
         method: "POST",
         body: JSON.stringify({ url: "https://example.com/recipes/tomato" }),
       }),
     );
+  });
+
+  it("新しいjob作成後のdismissが404でも再試行を成功扱いにする", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (getRequestPath(input) === "/api/import/url/jobs" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            kind: "created",
+            job: createJob({
+              id: "job_retry",
+              status: "queued",
+              errorCode: null,
+              startedAt: null,
+              finishedAt: null,
+            }),
+          },
+          { status: 202 },
+        );
+      }
+
+      if (
+        getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
+        init?.method === "PATCH"
+      ) {
+        return jsonResponse(
+          { error: { code: "not_found", message: "Import job was not found." } },
+          { status: 404 },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await expect(retryImportUrlJob(createJob())).resolves.toMatchObject({
+      kind: "created",
+      job: { id: "job_retry" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("新しいjob作成後のdismissがネットワークエラーでも再試行を成功扱いにする", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (getRequestPath(input) === "/api/import/url/jobs" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            kind: "created",
+            job: createJob({
+              id: "job_retry",
+              status: "queued",
+              errorCode: null,
+              startedAt: null,
+              finishedAt: null,
+            }),
+          },
+          { status: 202 },
+        );
+      }
+
+      if (
+        getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
+        init?.method === "PATCH"
+      ) {
+        throw new TypeError("Failed to fetch");
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await expect(retryImportUrlJob(createJob())).resolves.toMatchObject({
+      kind: "created",
+      job: { id: "job_retry" },
+    });
   });
 
   it("URLがないjobはerrorにする", async () => {

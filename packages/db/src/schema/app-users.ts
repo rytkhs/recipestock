@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   pgTable,
@@ -67,11 +68,13 @@ export const appUsers = pgTable(
     plan: text("plan", { enum: ["free", "pro"] })
       .notNull()
       .default("free"),
+    savedRecipeCount: integer("saved_recipe_count").notNull().default(0),
     stripeCustomerId: text("stripe_customer_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check("app_users_saved_recipe_count_nonnegative", sql`${table.savedRecipeCount} >= 0`),
     uniqueIndex("app_users_stripe_customer_id_uidx")
       .on(table.stripeCustomerId)
       .where(sql`${table.stripeCustomerId} is not null`),

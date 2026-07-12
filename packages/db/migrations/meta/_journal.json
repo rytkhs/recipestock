@@ -64,6 +64,13 @@
       "when": 1783844527611,
       "tag": "0008_true_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783856315655,
+      "tag": "0009_sticky_vision",
+      "breakpoints": true
     }
   ]
 }

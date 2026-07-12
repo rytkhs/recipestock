@@ -68,11 +68,6 @@ export type ListRecipesResult = {
   nextCursor: string | null;
 };
 
-type LockedAppUser = {
-  userId: string;
-  plan: Plan;
-};
-
 type RecipeSqlRow = {
   id: string;
   userId: string;
@@ -85,13 +80,6 @@ type RecipeSqlRow = {
   searchText: string;
   createdAt: Date | string;
   updatedAt: Date | string;
-};
-
-export type RecipeWriteSession = {
-  ensureAppUser(userId: string): Promise<void>;
-  lockAppUser(userId: string): Promise<LockedAppUser | null>;
-  countRecipes(userId: string): Promise<number>;
-  insertRecipe(recipe: NewRecipeRecord): Promise<RecipeRecord>;
 };
 
 export type RecipeRepository = {
@@ -222,32 +210,6 @@ export const normalizeRecipeSearchTerms = (query?: string) =>
     .map((term) => term.trim())
     .filter(Boolean) ?? [];
 
-export const createRecipeWithPlanLimitInSession = async (
-  session: RecipeWriteSession,
-  recipe: NewRecipeRecord,
-): Promise<CreateRecipeResult> => {
-  await session.ensureAppUser(recipe.userId);
-
-  const appUser = await session.lockAppUser(recipe.userId);
-
-  if (!appUser) {
-    throw new Error(`App user was not created for ${recipe.userId}`);
-  }
-
-  if (appUser.plan === "free") {
-    const recipeCount = await session.countRecipes(recipe.userId);
-
-    if (recipeCount >= PLAN_LIMITS.free.savedRecipes) {
-      return { status: "limitExceeded" };
-    }
-  }
-
-  return {
-    status: "created",
-    recipe: await session.insertRecipe(recipe),
-  };
-};
-
 export const createRecipeRepository = (
   db: DbClient,
   planSyncOptions: AppUserPlanSyncOptions = {},
@@ -259,20 +221,15 @@ export const createRecipeRepository = (
     });
 
     const result = await db.execute<RecipeSqlRow>(sql`
-      with ensured_user as (
-        insert into app_users (user_id)
-        values (${recipe.userId})
-        on conflict (user_id) do nothing
-        returning plan
-      ),
-      selected_user as (
-        select ensured_user.plan
-        from ensured_user
-        union all
-        select app_users.plan
-        from app_users
-        where app_users.user_id = ${recipe.userId}
-        limit 1
+      with reserved_user as (
+        update app_users
+        set saved_recipe_count = saved_recipe_count + 1
+        where user_id = ${recipe.userId}
+          and (
+            plan = 'pro'
+            or saved_recipe_count < ${PLAN_LIMITS.free.savedRecipes}
+          )
+        returning user_id
       ),
       inserted_recipe as (
         insert into recipes (
@@ -300,16 +257,7 @@ export const createRecipeRepository = (
           ${recipe.searchText},
           ${recipe.createdAt.toISOString()}::timestamptz,
           ${recipe.updatedAt.toISOString()}::timestamptz
-        from selected_user
-        where selected_user.plan = 'pro'
-          or (
-            selected_user.plan = 'free'
-            and (
-              select count(*)
-              from recipes
-              where recipes.user_id = ${recipe.userId}
-            ) < ${PLAN_LIMITS.free.savedRecipes}
-          )
+        from reserved_user
         returning
           id,
           user_id as "userId",
@@ -430,12 +378,25 @@ export const createRecipeRepository = (
     return row ? mapRecipeRow(row) : null;
   },
   async deleteRecipe(userId, recipeId) {
-    const deletedRows = await db
-      .delete(recipes)
-      .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
-      .returning({ id: recipes.id });
+    const result = await db.execute<{ id: string }>(sql`
+      with deleted_recipe as (
+        delete from recipes
+        where user_id = ${userId}
+          and id = ${recipeId}
+        returning id
+      ),
+      updated_user as (
+        update app_users
+        set saved_recipe_count = greatest(saved_recipe_count - 1, 0)
+        where user_id = ${userId}
+          and exists (select 1 from deleted_recipe)
+        returning user_id
+      )
+      select id
+      from deleted_recipe
+    `);
 
-    return deletedRows.length > 0;
+    return result.rows.length > 0;
   },
 });
 

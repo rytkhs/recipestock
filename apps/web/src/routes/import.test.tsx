@@ -127,7 +127,7 @@ describe("Import routes", () => {
     });
   });
 
-  it("Safari fallbackでactive jobがある場合もbrowser deliveryを記録して入力URLを保持する", async () => {
+  it("Safari fallbackでimport jobを作成してbrowser deliveryを記録する", async () => {
     const sharedUrl = "https://example.com/recipes/tomato";
     const fetchMock = mockFetch(
       async (input, init) => {
@@ -135,16 +135,16 @@ describe("Import routes", () => {
         if (path === "/api/import/url/jobs" && init?.method === "POST") {
           return jsonResponse(
             {
-              kind: "existing_active_job",
+              kind: "created",
               job: {
-                id: "job_active",
+                id: "job_123",
                 kind: "url",
-                status: "running",
-                url: "https://example.com/recipes/active",
+                status: "queued",
+                url: sharedUrl,
                 recipeId: null,
                 errorCode: null,
                 createdAt: "2026-07-11T00:00:00.000Z",
-                startedAt: "2026-07-11T00:00:01.000Z",
+                startedAt: null,
                 finishedAt: null,
               },
             },
@@ -154,6 +154,12 @@ describe("Import routes", () => {
         if (path === "/api/ios-share/handoffs/handoff_1/delivery" && init?.method === "PATCH") {
           return jsonResponse({ status: "delivered_to_browser" });
         }
+        if (path === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+        if (path === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
         return new Response(null, { status: 404 });
       },
       { authenticated: true },
@@ -162,15 +168,10 @@ describe("Import routes", () => {
     await renderApp(
       `/import/url?url=${encodeURIComponent(sharedUrl)}&handoff=handoff_1&source=ios-shortcut`,
     );
-    const input = await screen.findByLabelText("URL");
+    await screen.findByLabelText("URL");
     await userEvent.click(await screen.findByRole("button", { name: "取り込む" }));
 
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(
-      "別のレシピを取り込み中です。しばらく待ってから再度実行してください。",
-    );
-    expect(alert).toHaveTextContent("https://example.com/recipes/active");
-    expect(input).toHaveValue(sharedUrl);
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     await waitFor(() => {
       expect(findFetchCall(fetchMock, "/api/ios-share/handoffs/handoff_1/delivery")).toEqual([
         "/api/ios-share/handoffs/handoff_1/delivery",
@@ -420,7 +421,7 @@ describe("Import routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByText("取り込み待ち")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1件を取り込み中");
     expect(findFetchCall(fetchMock, "/api/import/url/jobs")).toEqual([
       "/api/import/url/jobs",
       expect.objectContaining({
@@ -491,50 +492,7 @@ describe("Import routes", () => {
     );
   });
 
-  it("active jobがある場合は入力画面に警告を表示して入力URLを保持する", async () => {
-    mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/import/url/jobs") {
-          return jsonResponse(
-            {
-              kind: "existing_active_job",
-              job: {
-                id: "job_active",
-                kind: "url",
-                status: "running",
-                url: "https://example.com/recipes/active",
-                recipeId: null,
-                errorCode: null,
-                createdAt: "2026-06-01T00:00:00.000Z",
-                startedAt: "2026-06-01T00:00:01.000Z",
-                finishedAt: null,
-              },
-            },
-            { status: 202 },
-          );
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/import/url");
-
-    const input = await screen.findByLabelText("URL");
-    await userEvent.type(input, "https://example.com/recipes/new");
-    await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(
-      "別のレシピを取り込み中です。しばらく待ってから再度実行してください。",
-    );
-    expect(alert).toHaveTextContent("https://example.com/recipes/active");
-    expect(input).toHaveValue("https://example.com/recipes/new");
-    expect(screen.getByRole("heading", { name: "URLから取り込む" })).toBeInTheDocument();
-  });
-
-  it("active jobの警告から処理状況を確認できる", async () => {
+  it("同じURLのactive jobがある場合もレシピ一覧へ遷移する", async () => {
     mockFetch(
       async (input) => {
         if (getRequestPath(input) === "/api/import/url/jobs") {
@@ -588,9 +546,8 @@ describe("Import routes", () => {
 
     await userEvent.type(await screen.findByLabelText("URL"), "https://example.com/recipes/new");
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
-    await userEvent.click(await screen.findByRole("link", { name: "処理状況を見る" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByText("取り込み中")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1件を取り込み中");
   });
 });
