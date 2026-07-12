@@ -48,7 +48,7 @@ describe("retryImportUrlJob", () => {
     vi.restoreAllMocks();
   });
 
-  it("finished jobをdismissして同じURLでimport jobを作成する", async () => {
+  it("同じURLでimport jobを作成してからfinished jobをdismissする", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       if (
         getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
@@ -83,10 +83,10 @@ describe("retryImportUrlJob", () => {
       },
     });
     expect(fetchMock.mock.calls.map(([input]) => getRequestPath(input))).toEqual([
-      "/api/import/jobs/job_123/dismiss",
       "/api/import/url/jobs",
+      "/api/import/jobs/job_123/dismiss",
     ]);
-    expect(fetchMock.mock.calls[1]?.[1]).toEqual(
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({
         credentials: "include",
         method: "POST",

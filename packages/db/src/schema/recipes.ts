@@ -44,8 +44,8 @@ export const importJobs = pgTable(
   },
   (table) => [
     index("import_jobs_user_id_updated_at_idx").on(table.userId, table.updatedAt),
-    uniqueIndex("import_jobs_user_active_idx")
-      .on(table.userId)
-      .where(sql`${table.status} in ('queued', 'running')`),
+    uniqueIndex("import_jobs_user_normalized_url_active_idx")
+      .on(table.userId, table.normalizedUrl)
+      .where(sql`${table.status} in ('queued', 'running') and ${table.normalizedUrl} is not null`),
   ],
 );

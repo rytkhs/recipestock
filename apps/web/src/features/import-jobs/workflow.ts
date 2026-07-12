@@ -11,6 +11,7 @@ export const retryImportUrlJob = async (
     throw new Error("Import job URL is missing.");
   }
 
+  const result = await createImportUrlJob(job.url);
   await dismissFinishedImportJob(job.id);
-  return createImportUrlJob(job.url);
+  return result;
 };

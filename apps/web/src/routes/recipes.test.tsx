@@ -222,6 +222,56 @@ describe("RecipesRoute", () => {
     expect(screen.queryByRole("link", { name: "Locked pasta" })).not.toBeInTheDocument();
   });
 
+  it("複数のactive import jobを集約して個別表示する", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_running",
+                kind: "url",
+                status: "running",
+                url: "https://example.com/recipes/running",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: null,
+              },
+              {
+                id: "job_queued",
+                kind: "url",
+                status: "queued",
+                url: "https://example.com/recipes/queued",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:02.000Z",
+                startedAt: null,
+                finishedAt: null,
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await userEvent.click(await screen.findByRole("button", { name: "2件を取り込み中" }));
+    expect(screen.getByText("https://example.com/recipes/running")).toBeInTheDocument();
+    expect(screen.getByText("https://example.com/recipes/queued")).toBeInTheDocument();
+    expect(screen.getByText("取り込み待ち")).toBeInTheDocument();
+    expect(screen.getByText("取り込み中")).toBeInTheDocument();
+  });
+
   it("URL import成功バナーから作成されたレシピを開ける", async () => {
     mockFetch(
       async (input) => {
@@ -254,14 +304,15 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes");
 
-    await expect(screen.findByText("保存しました")).resolves.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "1件保存しました" }));
+    expect(screen.getByText("保存しました")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "開く" })).toHaveAttribute(
       "href",
       "/recipes/recipe_123",
     );
   });
 
-  it("active jobを表示中は古い完了jobを自動dismissしない", async () => {
+  it("active jobを表示中でも成功jobを自動dismissする", async () => {
     vi.useFakeTimers();
     const fetchMock = mockFetch(
       async (input) => {
@@ -310,12 +361,14 @@ describe("RecipesRoute", () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(8000);
+      await vi.advanceTimersByTimeAsync(4000);
     });
 
-    expect(findFetchCall(fetchMock, "/api/import/jobs/job_done/dismiss")).toBeUndefined();
-    expect(screen.getByRole("status")).toHaveTextContent("取り込み中");
-    expect(screen.getByRole("status")).toHaveClass("opacity-100");
+    expect(findFetchCall(fetchMock, "/api/import/jobs/job_done/dismiss")).toEqual([
+      "/api/import/jobs/job_done/dismiss",
+      expect.objectContaining({ method: "PATCH" }),
+    ]);
+    expect(screen.getByRole("status")).toHaveTextContent("1件を取り込み中");
   });
 
   it("URL import失敗バナーから同じURLで再試行できる", async () => {
@@ -389,9 +442,10 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes");
 
-    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
-      "ページを取得できませんでした。",
-    );
+    await vi.waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("1件取り込めませんでした");
+    });
+    await userEvent.click(screen.getByRole("button", { name: "1件取り込めませんでした" }));
     await userEvent.click(screen.getByRole("button", { name: "再試行" }));
 
     await waitFor(() => {
@@ -413,7 +467,7 @@ describe("RecipesRoute", () => {
     ]);
   });
 
-  it("URL import失敗バナーを一定時間後に自動で閉じる", async () => {
+  it("URL import失敗は時間経過で自動dismissしない", async () => {
     vi.useFakeTimers();
     let dismissed = false;
     const fetchMock = mockFetch(
@@ -470,30 +524,15 @@ describe("RecipesRoute", () => {
     await renderApp("/recipes");
 
     await vi.waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("ページを取得できませんでした。");
+      expect(screen.getByRole("alert")).toHaveTextContent("1件取り込めませんでした");
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(20_000);
     });
 
-    await vi.waitFor(() => {
-      expect(findFetchCall(fetchMock, "/api/import/jobs/job_failed/dismiss")).toEqual([
-        "/api/import/jobs/job_failed/dismiss",
-        expect.objectContaining({
-          credentials: "include",
-          method: "PATCH",
-        }),
-      ]);
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(320);
-    });
-
-    await vi.waitFor(() => {
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    });
+    expect(findFetchCall(fetchMock, "/api/import/jobs/job_failed/dismiss")).toBeUndefined();
+    expect(screen.getByRole("alert")).toHaveTextContent("1件取り込めませんでした");
   });
 
   it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {

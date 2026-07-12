@@ -25,7 +25,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { type ImportJobSummary, type RecentImportJobsResponse } from "@recipestock/schemas";
+import { type RecentImportJobsResponse } from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -75,21 +75,7 @@ import {
 } from "../features/recipes";
 import { RecipeThumbnail } from "../features/recipes/recipe-thumbnail";
 
-const importJobTimestamp = (job: ImportJobSummary) =>
-  Date.parse(job.finishedAt ?? job.startedAt ?? job.createdAt);
-
-const latestImportJob = (jobs: ImportJobSummary[]) =>
-  [...jobs].sort((a, b) => importJobTimestamp(b) - importJobTimestamp(a))[0] ?? null;
-
-const selectVisibleImportJob = (jobs: ImportJobSummary[]) =>
-  latestImportJob(jobs.filter((job) => job.status === "queued" || job.status === "running")) ??
-  latestImportJob(jobs.filter((job) => job.status === "failed")) ??
-  latestImportJob(jobs.filter((job) => job.status === "succeeded"));
-
-const importJobIslandAnimationMs = 220;
-const importJobIslandUnmountDelayMs = 320;
 const importJobSuccessDismissDelayMs = 4000;
-const importJobFailureDismissDelayMs = 10_000;
 const recipeDetailCoverImageProps = {
   decoding: "async",
   fetchPriority: "high",
@@ -175,10 +161,10 @@ const RecipeCardActionMenu = ({
 
 const ImportJobIsland = () => {
   const queryClient = useQueryClient();
-  const [renderedJob, setRenderedJob] = useState<ImportJobSummary | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const previousJobIdRef = useRef<string | null>(null);
-  const dismissUnmountTimerRef = useRef<number | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const observedSuccessIdsRef = useRef(new Set<string>());
+  const successTimersRef = useRef(new Map<string, number>());
   const { data } = useQuery({
     queryKey: importJobQueryKeys.recent(),
     queryFn: fetchRecentImportJobs,
@@ -193,13 +179,22 @@ const ImportJobIsland = () => {
   const retryMutation = useMutation({
     mutationFn: retryImportUrlJob,
     onSuccess: async () => {
+      setRetryError(null);
       await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
+    },
+    onError: () => {
+      setRetryError("再試行を開始できませんでした。");
     },
   });
   const jobs = data?.jobs ?? [];
 
-  const dismissVisibleImportJob = useCallback(
+  const dismissImportJob = useCallback(
     (jobId: string) => {
+      const timer = successTimersRef.current.get(jobId);
+      if (timer) {
+        window.clearTimeout(timer);
+        successTimersRef.current.delete(jobId);
+      }
       queryClient.setQueryData<RecentImportJobsResponse>(importJobQueryKeys.recent(), (current) =>
         current
           ? {
@@ -208,20 +203,6 @@ const ImportJobIsland = () => {
             }
           : current,
       );
-      setIsVisible(false);
-
-      if (dismissUnmountTimerRef.current) {
-        window.clearTimeout(dismissUnmountTimerRef.current);
-      }
-
-      dismissUnmountTimerRef.current = window.setTimeout(() => {
-        setRenderedJob((current) => (current?.id === jobId ? null : current));
-        if (previousJobIdRef.current === jobId) {
-          previousJobIdRef.current = null;
-        }
-        dismissUnmountTimerRef.current = null;
-      }, importJobIslandUnmountDelayMs);
-
       dismissMutation.mutate(jobId);
     },
     [dismissMutation, queryClient],
@@ -229,107 +210,68 @@ const ImportJobIsland = () => {
 
   useEffect(() => {
     return () => {
-      if (dismissUnmountTimerRef.current) {
-        window.clearTimeout(dismissUnmountTimerRef.current);
+      for (const timer of successTimersRef.current.values()) {
+        window.clearTimeout(timer);
       }
+      successTimersRef.current.clear();
     };
   }, []);
 
   useEffect(() => {
-    if (jobs.some((job) => job.status === "succeeded")) {
-      void invalidateRecipeLists(queryClient);
-    }
-  }, [jobs, queryClient]);
-
-  const job = selectVisibleImportJob(jobs);
-
-  useEffect(() => {
-    if (!(job?.status === "succeeded" || job?.status === "failed")) {
-      return;
-    }
-
-    const delay =
-      job.status === "failed" ? importJobFailureDismissDelayMs : importJobSuccessDismissDelayMs;
-    const timer = window.setTimeout(() => {
-      dismissVisibleImportJob(job.id);
-    }, delay);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [job, dismissVisibleImportJob]);
-
-  useEffect(() => {
-    if (job) {
-      const previousJobId = previousJobIdRef.current;
-      previousJobIdRef.current = job.id;
-      setRenderedJob(job);
-
-      if (previousJobId === job.id) {
-        setIsVisible(true);
-        return;
+    for (const job of jobs) {
+      if (job.status !== "succeeded" || observedSuccessIdsRef.current.has(job.id)) {
+        continue;
       }
 
-      setIsVisible(false);
-      const animationFrame = window.requestAnimationFrame(() => {
-        setIsVisible(true);
-      });
-
-      return () => window.cancelAnimationFrame(animationFrame);
+      observedSuccessIdsRef.current.add(job.id);
+      void invalidateRecipeLists(queryClient);
+      const timer = window.setTimeout(() => {
+        successTimersRef.current.delete(job.id);
+        dismissImportJob(job.id);
+      }, importJobSuccessDismissDelayMs);
+      successTimersRef.current.set(job.id, timer);
     }
+  }, [dismissImportJob, jobs, queryClient]);
 
-    previousJobIdRef.current = null;
-    setIsVisible(false);
-
-    const unmountTimer = window.setTimeout(() => {
-      setRenderedJob(null);
-    }, importJobIslandUnmountDelayMs);
-
-    return () => {
-      window.clearTimeout(unmountTimer);
-    };
-  }, [job]);
-
-  const visibleJob = renderedJob ?? job;
-
-  if (!visibleJob) {
+  if (jobs.length === 0) {
     return null;
   }
 
-  const isActive = visibleJob.status === "queued" || visibleJob.status === "running";
-  const isSucceeded = visibleJob.status === "succeeded";
-  const isFailed = visibleJob.status === "failed";
-  const title = isSucceeded
-    ? "保存しました"
-    : isFailed
-      ? "取り込めませんでした"
-      : visibleJob.status === "queued"
-        ? "取り込み待ち"
-        : "取り込み中";
-  const description = isFailed ? getImportJobFailureMessage(visibleJob) : visibleJob.url;
+  const activeJobs = jobs.filter((job) => job.status === "queued" || job.status === "running");
+  const failedJobs = jobs.filter((job) => job.status === "failed");
+  const succeededJobs = jobs.filter((job) => job.status === "succeeded");
+  const summary = [
+    activeJobs.length > 0 ? `${activeJobs.length}件を取り込み中` : null,
+    failedJobs.length > 0 ? `${failedJobs.length}件取り込めませんでした` : null,
+    succeededJobs.length > 0 ? `${succeededJobs.length}件保存しました` : null,
+  ]
+    .filter(Boolean)
+    .join("・");
+  const hasFailure = failedJobs.length > 0;
+  const hasActive = activeJobs.length > 0;
 
   return (
     <Surface
-      className={`fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 mx-auto flex max-w-[460px] items-center gap-3 rounded-[20px] border border-brand-line-soft bg-brand-paper/95 px-4 py-3 text-sm shadow-pantry backdrop-blur-xl transition-[opacity,transform] ease-out motion-reduce:transition-none sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-[76px] sm:w-[min(460px,calc(100vw-2rem))] sm:-translate-x-1/2 ${
-        isVisible
-          ? "translate-y-0 scale-100 opacity-100"
-          : "pointer-events-none translate-y-6 opacity-0 sm:-translate-y-2 sm:scale-[0.98]"
-      }`}
-      role={isFailed ? "alert" : "status"}
-      style={{ transitionDuration: `${importJobIslandAnimationMs}ms` }}
+      className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 mx-auto max-w-[520px] rounded-[20px] border border-brand-line-soft bg-brand-paper/95 text-sm shadow-pantry backdrop-blur-xl sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-[76px] sm:w-[min(520px,calc(100vw-2rem))] sm:-translate-x-1/2"
+      role={hasFailure ? "alert" : "status"}
       variant="transparent"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <button
+        aria-expanded={isExpanded}
+        className="flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left"
+        type="button"
+        onClick={() => setIsExpanded((current) => !current)}
+      >
         <div
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-            isSucceeded
-              ? "bg-brand-sage-soft text-brand-sage-dark"
-              : isFailed
-                ? "bg-brand-danger/10 text-brand-danger"
-                : "bg-brand-orange-soft/60 text-brand-orange"
+            hasFailure
+              ? "bg-brand-danger/10 text-brand-danger"
+              : hasActive
+                ? "bg-brand-orange-soft/60 text-brand-orange"
+                : "bg-brand-sage-soft text-brand-sage-dark"
           }`}
         >
-          {isActive ? (
+          {hasActive && !hasFailure ? (
             <ProgressCircle
               aria-label="取り込み中"
               className="text-brand-orange"
@@ -343,52 +285,87 @@ const ImportJobIsland = () => {
               </ProgressCircle.Track>
             </ProgressCircle>
           ) : null}
-          {isSucceeded ? <CheckCircle size={19} weight="fill" /> : null}
-          {isFailed ? <WarningCircle size={19} weight="fill" /> : null}
+          {!hasActive && !hasFailure ? <CheckCircle size={19} weight="fill" /> : null}
+          {hasFailure ? <WarningCircle size={19} weight="fill" /> : null}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-brand-ink text-sm">{title}</p>
-          {description ? (
-            <p className="mt-0.5 truncate text-brand-muted text-xs">{description}</p>
+        <p className="min-w-0 flex-1 truncate font-semibold text-brand-ink text-sm">{summary}</p>
+        <CaretRight
+          className={`shrink-0 text-brand-muted transition-transform ${isExpanded ? "rotate-90" : ""}`}
+          size={17}
+          weight="bold"
+        />
+      </button>
+
+      {isExpanded ? (
+        <div className="max-h-[min(55vh,420px)] overflow-y-auto border-brand-line-soft border-t px-3 py-2">
+          {jobs.map((job) => {
+            const isActive = job.status === "queued" || job.status === "running";
+            const isFailed = job.status === "failed";
+            const isSucceeded = job.status === "succeeded";
+            const status =
+              job.status === "queued"
+                ? "取り込み待ち"
+                : job.status === "running"
+                  ? "取り込み中"
+                  : isFailed
+                    ? "取り込めませんでした"
+                    : "保存しました";
+
+            return (
+              <div
+                className="flex min-w-0 items-center gap-3 rounded-[14px] px-2 py-2"
+                key={job.id}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-brand-ink text-xs">{status}</p>
+                  <p className="mt-0.5 truncate text-brand-muted text-xs">
+                    {isFailed ? getImportJobFailureMessage(job) : job.url}
+                  </p>
+                </div>
+                {isSucceeded && job.recipeId ? (
+                  <Link
+                    className="inline-flex min-h-8 shrink-0 items-center justify-center rounded-full bg-brand-sage px-3 font-semibold text-white text-xs no-underline hover:bg-brand-sage-dark"
+                    params={{ recipeId: job.recipeId }}
+                    to="/recipes/$recipeId"
+                    onClick={() => dismissImportJob(job.id)}
+                  >
+                    開く
+                  </Link>
+                ) : null}
+                {isFailed ? (
+                  <Button
+                    className="h-8 shrink-0 rounded-full bg-brand-sage px-3 text-white text-xs font-semibold hover:bg-brand-sage-dark"
+                    isDisabled={!job.url || retryMutation.isPending}
+                    size="sm"
+                    variant="primary"
+                    onPress={() => retryMutation.mutate(job)}
+                  >
+                    再試行
+                  </Button>
+                ) : null}
+                {!isActive ? (
+                  <Button
+                    aria-label={`${job.url ?? status}を閉じる`}
+                    className="h-8 w-8 shrink-0 rounded-full bg-transparent text-brand-muted hover:bg-brand-paper-muted hover:text-brand-walnut"
+                    isIconOnly
+                    size="sm"
+                    variant="ghost"
+                    onPress={() => dismissImportJob(job.id)}
+                  >
+                    <X size={16} weight="bold" />
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
+          {retryError ? (
+            <p className="px-2 pb-1 text-brand-danger text-xs" role="alert">
+              {retryError}
+            </p>
           ) : null}
         </div>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1.5">
-        {isSucceeded && visibleJob.recipeId ? (
-          <Link
-            className="inline-flex min-h-8 items-center justify-center rounded-full bg-brand-sage px-3 font-semibold text-white text-xs no-underline transition-colors hover:bg-brand-sage-dark"
-            params={{ recipeId: visibleJob.recipeId }}
-            to="/recipes/$recipeId"
-          >
-            開く
-          </Link>
-        ) : null}
-        {isFailed ? (
-          <Button
-            className="h-8 rounded-full bg-brand-sage px-3 text-white text-xs font-semibold hover:bg-brand-sage-dark"
-            isDisabled={!visibleJob.url || retryMutation.isPending}
-            size="sm"
-            variant="primary"
-            onPress={() => retryMutation.mutate(visibleJob)}
-          >
-            再試行
-          </Button>
-        ) : null}
-        {!isActive ? (
-          <Button
-            aria-label="閉じる"
-            className="h-8 w-8 rounded-full bg-transparent text-brand-muted hover:bg-brand-paper-muted hover:text-brand-walnut"
-            isIconOnly
-            size="sm"
-            variant="ghost"
-            onPress={() => dismissVisibleImportJob(visibleJob.id)}
-          >
-            <X size={16} weight="bold" />
-          </Button>
-        ) : null}
-      </div>
+      ) : null}
     </Surface>
   );
 };

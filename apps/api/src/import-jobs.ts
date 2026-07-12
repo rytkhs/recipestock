@@ -213,10 +213,10 @@ export const createImportJobRepository = (
         returning plan
       ),
       selected_user as (
-        select ensured_user.plan
+        select ensured_user.plan, 0 as saved_recipe_count
         from ensured_user
         union all
-        select app_users.plan
+        select app_users.plan, app_users.saved_recipe_count
         from app_users
         where app_users.user_id = ${userId}
         limit 1
@@ -240,6 +240,7 @@ export const createImportJobRepository = (
           'existingActiveJob'::text as "resultStatus"
         from import_jobs
         where user_id = ${userId}
+          and normalized_url = ${normalizedUrl}
           and status in ('queued', 'running')
         order by created_at desc
         limit 1
@@ -249,11 +250,7 @@ export const createImportJobRepository = (
           selected_user.plan,
           case
             when selected_user.plan = 'pro' then false
-            else (
-              select count(*)
-              from recipes
-              where recipes.user_id = ${userId}
-            ) >= ${PLAN_LIMITS.free.savedRecipes}
+            else selected_user.saved_recipe_count >= ${PLAN_LIMITS.free.savedRecipes}
           end as exceeded
         from selected_user
       ),
@@ -333,7 +330,13 @@ export const createImportJobRepository = (
       const [activeJob] = await db
         .select()
         .from(importJobs)
-        .where(and(eq(importJobs.userId, userId), inArray(importJobs.status, activeStatuses)))
+        .where(
+          and(
+            eq(importJobs.userId, userId),
+            eq(importJobs.normalizedUrl, normalizedUrl),
+            inArray(importJobs.status, activeStatuses),
+          ),
+        )
         .orderBy(desc(importJobs.createdAt), desc(importJobs.id))
         .limit(1);
 
@@ -366,8 +369,17 @@ export const createImportJobRepository = (
           or(inArray(importJobs.status, activeStatuses), isNull(importJobs.dismissedAt)),
         ),
       )
-      .orderBy(desc(importJobs.updatedAt), desc(importJobs.id))
-      .limit(5);
+      .orderBy(
+        sql`case ${importJobs.status}
+          when 'running' then 0
+          when 'queued' then 1
+          when 'failed' then 2
+          when 'succeeded' then 3
+          else 4
+        end`,
+        desc(importJobs.updatedAt),
+        desc(importJobs.id),
+      );
 
     return rows.map(mapImportJobRow);
   },
@@ -460,28 +472,22 @@ export const createImportJobRepository = (
           and user_id = ${recipe.userId}
         for update
       ),
-      selected_user as (
-        select plan
-        from app_users
-        where user_id = ${recipe.userId}
-      ),
       eligible_job as (
         select locked_job.id
         from locked_job
         where locked_job.status = 'running'
           and locked_job.created_at > ${expiresBefore.toISOString()}::timestamptz
       ),
-      recipe_limit as (
-        select
-          case
-            when selected_user.plan = 'pro' then false
-            else (
-              select count(*)
-              from recipes
-              where recipes.user_id = ${recipe.userId}
-            ) >= ${PLAN_LIMITS.free.savedRecipes}
-          end as exceeded
-        from selected_user
+      reserved_user as (
+        update app_users
+        set saved_recipe_count = saved_recipe_count + 1
+        where user_id = ${recipe.userId}
+          and exists (select 1 from eligible_job)
+          and (
+            plan = 'pro'
+            or saved_recipe_count < ${PLAN_LIMITS.free.savedRecipes}
+          )
+        returning user_id
       ),
       inserted_recipe as (
         insert into recipes (
@@ -510,8 +516,7 @@ export const createImportJobRepository = (
           ${recipe.createdAt.toISOString()}::timestamptz,
           ${recipe.updatedAt.toISOString()}::timestamptz
         from eligible_job
-        cross join recipe_limit
-        where recipe_limit.exceeded = false
+        cross join reserved_user
         returning id
       ),
       succeeded_job as (
@@ -536,7 +541,7 @@ export const createImportJobRepository = (
           finished_at = ${now.toISOString()}::timestamptz,
           updated_at = ${now.toISOString()}::timestamptz
         where id in (select id from eligible_job)
-          and exists (select 1 from recipe_limit where exceeded = true)
+          and not exists (select 1 from reserved_user)
         returning id
       ),
       timed_out_job as (

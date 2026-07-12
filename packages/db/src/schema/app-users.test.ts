@@ -15,6 +15,16 @@ describe("appUsers schema", () => {
       "app_users_stripe_customer_id_uidx",
     );
   });
+
+  it("保存Recipe件数と非負制約を持つ", () => {
+    const config = getTableConfig(appUsers);
+
+    expect(appUsers.savedRecipeCount.notNull).toBe(true);
+    expect(appUsers.savedRecipeCount.default).toBe(0);
+    expect(config.checks.map((check) => check.name)).toContain(
+      "app_users_saved_recipe_count_nonnegative",
+    );
+  });
 });
 
 describe("subscriptions schema", () => {
