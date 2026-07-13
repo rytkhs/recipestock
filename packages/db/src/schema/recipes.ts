@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 export const recipes = pgTable(
   "recipes",
@@ -30,6 +39,9 @@ export const importJobs = pgTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     kind: text("kind", { enum: ["url"] }).notNull(),
+    createdVia: text("created_via", { enum: ["web", "ios_shortcut"] })
+      .notNull()
+      .default("web"),
     status: text("status", { enum: ["queued", "running", "succeeded", "failed"] }).notNull(),
     url: text("url"),
     normalizedUrl: text("normalized_url"),
@@ -37,6 +49,12 @@ export const importJobs = pgTable(
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    completionNotificationRequested: boolean("completion_notification_requested")
+      .notNull()
+      .default(false),
+    completionNotificationSentAt: timestamp("completion_notification_sent_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -47,5 +65,21 @@ export const importJobs = pgTable(
     uniqueIndex("import_jobs_user_normalized_url_active_idx")
       .on(table.userId, table.normalizedUrl)
       .where(sql`${table.status} in ('queued', 'running') and ${table.normalizedUrl} is not null`),
+  ],
+);
+
+export const shortcutImportRequests = pgTable(
+  "shortcut_import_requests",
+  {
+    userId: text("user_id").notNull(),
+    requestId: uuid("request_id").notNull(),
+    importJobId: text("import_job_id").notNull(),
+    responseKind: text("response_kind", { enum: ["created", "existing_active_job"] }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("shortcut_import_requests_user_request_id_uidx").on(table.userId, table.requestId),
+    index("shortcut_import_requests_user_id_created_at_idx").on(table.userId, table.createdAt),
+    index("shortcut_import_requests_import_job_id_idx").on(table.importJobId),
   ],
 );

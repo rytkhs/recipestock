@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { importJobSummarySchema } from "./import";
 
 export const iosShareChannelNameSchema = z.string().trim().min(1).max(60);
 export const iosShareTokenSchema = z.string().startsWith("rssc_").min(32).max(160);
@@ -26,6 +27,16 @@ export const listIosShareChannelsResponseSchema = z.object({
 
 export const createIosShareHandoffRequestSchema = z.object({
   url: z.url({ protocol: /^https?$/ }).max(4096),
+});
+
+export const iosShareShortcutImportJobRequestSchema = z.object({
+  url: z.url({ protocol: /^https?$/ }).max(4096),
+  requestId: z.uuid(),
+});
+
+export const createIosShareImportJobResponseSchema = z.object({
+  kind: z.enum(["created", "existing_active_job"]),
+  job: importJobSummarySchema,
 });
 
 export const iosShareHandoffStatusSchema = z.enum([
@@ -71,6 +82,10 @@ export const revokeIosShareChannelResponseSchema = z.object({
 
 export type IosShareChannel = z.infer<typeof iosShareChannelSchema>;
 export type IosShareHandoffStatus = z.infer<typeof iosShareHandoffStatusSchema>;
+export type IosShareShortcutImportJobRequest = z.infer<
+  typeof iosShareShortcutImportJobRequestSchema
+>;
+export type CreateIosShareImportJobResponse = z.infer<typeof createIosShareImportJobResponseSchema>;
 export type PendingIosShareHandoff = z.infer<typeof pendingIosShareHandoffSchema>;
 export type CreateIosShareChannelResponse = z.infer<typeof createIosShareChannelResponseSchema>;
 export type ListIosShareChannelsResponse = z.infer<typeof listIosShareChannelsResponseSchema>;

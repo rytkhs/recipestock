@@ -15,6 +15,7 @@ export const importErrorCodeSchema = z.enum([
 ]);
 
 export const importJobKindSchema = z.enum(["url"]);
+export const importJobCreatedViaSchema = z.enum(["web", "ios_shortcut"]);
 
 export const importJobStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
 
@@ -27,6 +28,7 @@ export const importUrlRequestSchema = z.object({
 export const importJobSummarySchema = z.object({
   id: z.string().min(1),
   kind: importJobKindSchema,
+  createdVia: importJobCreatedViaSchema,
   status: importJobStatusSchema,
   url: z.string().nullable(),
   recipeId: z.string().nullable(),
@@ -55,6 +57,7 @@ export const dismissImportJobResponseSchema = z.object({
 
 export type ImportErrorCode = z.infer<typeof importErrorCodeSchema>;
 export type ImportJobKind = z.infer<typeof importJobKindSchema>;
+export type ImportJobCreatedVia = z.infer<typeof importJobCreatedViaSchema>;
 export type ImportJobStatus = z.infer<typeof importJobStatusSchema>;
 export type ImportUrlRequest = z.infer<typeof importUrlRequestSchema>;
 export type ImportJobSummary = z.infer<typeof importJobSummarySchema>;
