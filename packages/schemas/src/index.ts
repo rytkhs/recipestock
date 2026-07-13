@@ -4,5 +4,6 @@ export * from "./image";
 export * from "./import";
 export * from "./ios-share";
 export * from "./me";
+export * from "./push-subscription";
 export * from "./recipe";
 export * from "./usage";

@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { IosShareSettingsCard } from "../features/ios-share/settings-card";
+import { PushNotificationSettingsCard } from "../features/push-notifications/settings-card";
 import { ApiClientError, api, parseApiResponse } from "../lib/api";
 import { changeEmail, changePassword, signOut, useAuthSession } from "../lib/auth";
 import { billingStatusQueryKey } from "../lib/billing";
@@ -240,6 +241,8 @@ export const SettingsIndexRoute = () => {
             課金設定
           </Link>
         </div>
+
+        <PushNotificationSettingsCard />
 
         <IosShareSettingsCard />
       </div>

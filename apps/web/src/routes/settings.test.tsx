@@ -19,6 +19,205 @@ describe("Settings routes", () => {
     vi.unstubAllGlobals();
   });
 
+  const installPushBrowser = ({
+    permission = "default",
+    requestPermission = "granted",
+    subscription = null,
+    newSubscription = subscription,
+  }: {
+    permission?: NotificationPermission;
+    requestPermission?: NotificationPermission;
+    subscription?: PushSubscription | null;
+    newSubscription?: PushSubscription | null;
+  } = {}) => {
+    const requestPermissionMock = vi.fn(async () => requestPermission);
+    const subscribe = vi.fn(async () => newSubscription as PushSubscription);
+    const getSubscription = vi.fn(async () => subscription);
+    const registration = {
+      pushManager: { getSubscription, subscribe },
+    };
+
+    vi.stubGlobal("Notification", {
+      permission,
+      requestPermission: requestPermissionMock,
+    });
+    vi.stubGlobal("PushManager", class PushManager {});
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      serviceWorker: { ready: Promise.resolve(registration) },
+    });
+
+    return { getSubscription, registration, requestPermissionMock, subscribe };
+  };
+
+  const createPushSubscription = () =>
+    ({
+      endpoint: "https://push.example.com/subscription/device-1",
+      expirationTime: null,
+      unsubscribe: vi.fn(async () => true),
+      toJSON: () => ({
+        endpoint: "https://push.example.com/subscription/device-1",
+        expirationTime: null,
+        keys: { p256dh: "p256dh-key", auth: "auth-key" },
+      }),
+    }) as unknown as PushSubscription;
+
+  it("ユーザー操作後にだけ通知権限とPush subscriptionを要求する", async () => {
+    const subscription = createPushSubscription();
+    const browser = installPushBrowser({ subscription });
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+        }
+        if (path === "/api/push-subscriptions" && init?.method === "POST") {
+          return jsonResponse({
+            subscription: { endpoint: subscription.endpoint, expirationTime: null },
+          });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+
+    await expect(screen.findByText("この端末では通知が無効です。")).resolves.toBeInTheDocument();
+    expect(browser.requestPermissionMock).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "通知を有効にする" }));
+
+    await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
+    expect(browser.requestPermissionMock).toHaveBeenCalledTimes(1);
+    expect(findFetchCall(fetchMock, "/api/push-subscriptions")).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          getRequestPath(input) === "/api/push-subscriptions" && init?.method === "POST",
+      ),
+    ).toBe(true);
+  });
+
+  it("通知拒否を説明し、Shortcut連携は利用可能なままにする", async () => {
+    const browser = installPushBrowser({ requestPermission: "denied" });
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+
+    await expect(
+      screen.findByText("通知が拒否されています。端末の設定から許可してください。"),
+    ).resolves.toBeInTheDocument();
+    expect(browser.subscribe).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "共有から取り込む" })).toBeInTheDocument();
+  });
+
+  it("通知権限dialogを閉じた場合は拒否扱いにせず再試行できる", async () => {
+    installPushBrowser({ requestPermission: "default" });
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+
+    await expect(
+      screen.findByText("通知の許可が選択されませんでした。もう一度お試しください。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "通知を有効にする" })).toBeEnabled();
+  });
+
+  it("subscription登録失敗を説明し、新しく作ったブラウザ購読を解除する", async () => {
+    const subscription = createPushSubscription();
+    installPushBrowser({ subscription: null, newSubscription: subscription });
+    mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+        }
+        if (path === "/api/push-subscriptions" && init?.method === "POST") {
+          return jsonResponse(
+            { error: { code: "unknown", message: "Unexpected error occurred." } },
+            { status: 500 },
+          );
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+
+    await expect(
+      screen.findByText("通知を登録できませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("未対応環境を説明し、通知権限を要求しない", async () => {
+    vi.stubGlobal("Notification", undefined);
+    vi.stubGlobal("PushManager", undefined);
+    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp("/settings");
+
+    await expect(
+      screen.findByText("この環境はWeb Push通知に対応していません。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "通知を有効にする" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "共有から取り込む" })).toBeInTheDocument();
+  });
+
+  it("有効な通知を設定画面から解除する", async () => {
+    const subscription = createPushSubscription();
+    installPushBrowser({ permission: "granted", subscription });
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({
+            applicationServerKey: "AQID",
+            subscriptions: [{ endpoint: subscription.endpoint, expirationTime: null }],
+          });
+        }
+        if (path === "/api/push-subscriptions" && init?.method === "DELETE") {
+          return jsonResponse({ revoked: true });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を解除する" }));
+
+    await expect(screen.findByText("この端末では通知が無効です。")).resolves.toBeInTheDocument();
+    expect(subscription.unsubscribe).toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          getRequestPath(input) === "/api/push-subscriptions" && init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+
   it("PWAからShortcut連携トークンを発行する", async () => {
     vi.stubGlobal(
       "matchMedia",

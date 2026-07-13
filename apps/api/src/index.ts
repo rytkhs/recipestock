@@ -19,6 +19,7 @@ import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-
 import { type IosShareService } from "./ios-share";
 import { createLogger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
+import { type PushSubscriptionRepository } from "./push-subscriptions";
 import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
 import { createBillingRoutes } from "./routes/billing";
@@ -26,6 +27,7 @@ import { createImageRoutes } from "./routes/images";
 import { createImportRoutes } from "./routes/import";
 import { createIosShareRoutes } from "./routes/ios-share";
 import { createMeRoutes } from "./routes/me";
+import { createPushSubscriptionRoutes } from "./routes/push-subscriptions";
 import { createRecipeRoutes } from "./routes/recipes";
 import { createStripeRoutes } from "./routes/stripe";
 import { createUsageRoutes } from "./routes/usage";
@@ -43,6 +45,7 @@ export type AppDependencies = {
   usageRepository?: UsageRepository;
   billingRepository?: BillingRepository;
   recipeRepository?: RecipeRepository;
+  pushSubscriptionRepository?: PushSubscriptionRepository;
   importJobRepository?: ImportJobRepository;
   iosShareService?: IosShareService;
   importQueue?: Queue<{ jobId: string }>;
@@ -53,6 +56,7 @@ export type AppDependencies = {
   createImportJobId?: () => string;
   createRecipeId?: () => string;
   createImageId?: () => string;
+  createPushSubscriptionId?: () => string;
   getCurrentMonth?: () => string;
   getCurrentDate?: () => Date;
 };
@@ -126,6 +130,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   app.use("/ios-share/handoffs/*", csrfProtection);
   app.use("/recipes", csrfProtection);
   app.use("/recipes/*", csrfProtection);
+  app.use("/push-subscriptions", csrfProtection);
 
   return app
     .route("/auth", createAuthRoutes({ auth }))
@@ -152,6 +157,15 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createIosShareRoutes({
         auth,
         iosShareService: dependencies.iosShareService,
+        getCurrentDate: dependencies.getCurrentDate,
+      }),
+    )
+    .route(
+      "/push-subscriptions",
+      createPushSubscriptionRoutes({
+        auth,
+        pushSubscriptionRepository: dependencies.pushSubscriptionRepository,
+        createId: dependencies.createPushSubscriptionId,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )
