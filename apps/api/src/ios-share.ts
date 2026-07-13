@@ -7,7 +7,7 @@ import {
 } from "@recipestock/schemas";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
-const HANDOFF_TTL_MS = 30 * 60 * 1000;
+const HANDOFF_TTL_MS = 10 * 60 * 1000;
 const PENDING_HANDOFF_UNIQUE_CONSTRAINT = "ios_share_handoffs_user_pending_uidx";
 const TOKEN_PREFIX = "rssc_";
 
