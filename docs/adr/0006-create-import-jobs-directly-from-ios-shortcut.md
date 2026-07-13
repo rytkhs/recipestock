@@ -1,0 +1,9 @@
+# iOS ShortcutからImport Jobを直接作成する
+
+ADR 0004で採用したShare Handoffは、iOS ShortcutからPWAへURLを配送し、ユーザーがPWA上で再度送信した後にImport Jobを作成する。この経路は非公開の`webapp:` URL scheme、PWAの起動と復帰、Share Handoffのdelivery確認、Safari fallbackに依存し、共有時に示された取り込み意思を実行するまでの操作と状態を増やしている。
+
+iOS Shortcutから認証付きendpointへURLを直接POSTし、サーバーでImport Jobを作成してqueueへ投入する。Shortcutによる共有操作をRecipe取り込みの明示的な依頼として扱い、PWAやSafariの起動と追加確認をImport Job作成の前提にしない。この決定はADR 0004を置き換える。
+
+Cookie認証されたPWAのURL取り込みとShortcutのBearer認証は別々のAdapterとして維持する。両Adapterは、URL検証と正規化、期限切れJob処理、plan同期、Recipe上限判定、active Job再利用、Job永続化、queue投入、queue失敗処理を隠す共通のURL Import Job submission Moduleを使用する。認証方式ごとにこれらのImport Job invariantsを実装しない。
+
+Import Jobの終端結果は永続化し、その状態を取り込み結果のsource of truthとする。Web Pushは成功または失敗を知らせるbest-effortの通知であり、通知の失敗、未許可、未対応、または期限切れsubscriptionによってImport Jobの処理や状態を変更しない。保証された通知配送が必要になった場合は、durable outboxやretry方針を別の決定として検討する。

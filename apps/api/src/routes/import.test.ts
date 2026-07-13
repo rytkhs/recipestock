@@ -48,9 +48,9 @@ const createRepository = (overrides: Partial<ImportJobRepository> = {}): ImportJ
 });
 
 describe("Import job routes", () => {
-  it("URL import jobを作成してQueueに送る", async () => {
+  it("期限切れactive jobを処理してURL import jobを作成しQueueに送る", async () => {
     const send = vi.fn(async () => undefined);
-    const expireActiveJobsForUser = vi.fn(async () => 0);
+    const expireActiveJobsForUser = vi.fn(async () => 1);
     const createUrlJob = vi.fn(async () => ({
       status: "created" as const,
       job: createJob(),
@@ -169,6 +169,37 @@ describe("Import job routes", () => {
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "recipe_limit_exceeded" },
+    });
+  });
+
+  it("Queue投入に失敗したjobをfailedにしてエラーを返す", async () => {
+    const markJobFailed = vi.fn(async () => undefined);
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({ markJobFailed }),
+      importQueue: {
+        send: vi.fn(async () => {
+          throw new Error("Queue unavailable");
+        }),
+      } as unknown as Queue<{ jobId: string }>,
+      getCurrentDate: () => new Date("2026-06-01T00:00:00.000Z"),
+    });
+
+    const response = await testApp.request("/api/import/url/jobs", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...sameOriginHeaders },
+      body: JSON.stringify({ url: "https://example.com/recipe" }),
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "unknown" },
+    });
+    expect(markJobFailed).toHaveBeenCalledWith({
+      jobId: "job_123",
+      errorCode: "unknown",
+      errorMessage: "Queue unavailable",
+      now: new Date("2026-06-01T00:00:00.000Z"),
     });
   });
 
