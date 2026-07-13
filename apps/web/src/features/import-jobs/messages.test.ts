@@ -6,6 +6,7 @@ import { getCreateImportUrlJobErrorMessage, getImportJobFailureMessage } from ".
 const createJob = (overrides: Partial<ImportJobSummary> = {}): ImportJobSummary => ({
   id: "job_123",
   kind: "url",
+  createdVia: "web",
   status: "failed",
   url: "https://example.com/recipes/tomato",
   recipeId: null,

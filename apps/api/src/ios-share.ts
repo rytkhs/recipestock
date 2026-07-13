@@ -39,6 +39,10 @@ export type IosShareRepository = {
   createChannel(channel: IosShareChannelRecord): Promise<IosShareChannelRecord>;
   listChannels(userId: string): Promise<IosShareChannelRecord[]>;
   revokeChannel(params: { channelId: string; userId: string; now: Date }): Promise<boolean>;
+  authenticateShortcutToken(params: {
+    tokenHash: string;
+    now: Date;
+  }): Promise<{ integrationId: string; userId: string } | null>;
   submitHandoff(params: {
     id: string;
     tokenHash: string;
@@ -69,6 +73,10 @@ export type IosShareService = {
   }): Promise<{ channel: IosShareChannel; token: string }>;
   listChannels(userId: string): Promise<IosShareChannel[]>;
   revokeChannel(params: { channelId: string; userId: string; now: Date }): Promise<boolean>;
+  authenticateShortcutToken(params: {
+    token: string;
+    now: Date;
+  }): Promise<{ integrationId: string; userId: string } | null>;
   submitHandoff(params: {
     id: string;
     token: string;
@@ -213,6 +221,18 @@ export const createIosShareRepository = (db: DbClient): IosShareRepository => ({
       )
       .returning({ id: iosShareChannels.id });
     return Boolean(row);
+  },
+
+  async authenticateShortcutToken({ tokenHash, now }) {
+    const result = await db.execute<{ integrationId: string; userId: string }>(sql`
+      update ios_share_channels
+      set last_used_at = ${now.toISOString()}::timestamptz
+      where token_hash = ${tokenHash}
+        and revoked_at is null
+      returning id as "integrationId", user_id as "userId"
+    `);
+
+    return result.rows[0] ?? null;
   },
 
   async submitHandoff({ id, tokenHash, url, now, expiresAt }) {
@@ -385,6 +405,13 @@ export const createIosShareService = (repository: IosShareRepository): IosShareS
 
   revokeChannel(params) {
     return repository.revokeChannel(params);
+  },
+
+  async authenticateShortcutToken({ token, now }) {
+    return repository.authenticateShortcutToken({
+      tokenHash: await hashIosShareToken(token),
+      now,
+    });
   },
 
   async submitHandoff({ id, token, url, origin, now }) {

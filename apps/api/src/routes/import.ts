@@ -52,6 +52,7 @@ export const createImportRoutes = ({
         createImportJobId: createJobId,
         getCurrentDate,
       }).submit({
+        entryPoint: "web",
         userId,
         url,
       });
@@ -64,9 +65,13 @@ export const createImportRoutes = ({
         return recipeLimitExceededResponse();
       }
 
+      if (result.status !== "accepted") {
+        return invalidUrlResponse();
+      }
+
       return c.json(
         createImportUrlJobResponseSchema.parse({
-          kind: result.status === "created" ? "created" : "existing_active_job",
+          kind: result.kind,
           job: toImportJobSummary(result.job),
         }),
         202,

@@ -48,6 +48,8 @@ export type AppDependencies = {
   pushSubscriptionRepository?: PushSubscriptionRepository;
   importJobRepository?: ImportJobRepository;
   iosShareService?: IosShareService;
+  urlImportJobSubmission?: import("./lib/import/url-import-job-submission").UrlImportJobSubmission;
+  shortcutRateLimiter?: RateLimit;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
   importAIProvider?: RecipeImportAIProvider;
@@ -157,6 +159,11 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createIosShareRoutes({
         auth,
         iosShareService: dependencies.iosShareService,
+        urlImportJobSubmission: dependencies.urlImportJobSubmission,
+        importJobRepository: dependencies.importJobRepository,
+        importQueue: dependencies.importQueue,
+        createImportJobId: dependencies.createImportJobId,
+        shortcutRateLimiter: dependencies.shortcutRateLimiter,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )

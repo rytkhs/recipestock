@@ -1,5 +1,8 @@
 import { createDb } from "@recipestock/db";
-import { importUrlRequestSchema } from "@recipestock/schemas";
+import {
+  importUrlRequestSchema,
+  iosShareShortcutImportJobRequestSchema,
+} from "@recipestock/schemas";
 import { type Bindings } from "../../env";
 import {
   createImportJobId,
@@ -11,14 +14,31 @@ import {
 } from "../../import-jobs";
 import { normalizeImportableUrl, RecipeImportError } from "../../import-url";
 
+export type SubmitUrlImportJobInput =
+  | {
+      entryPoint: "web";
+      userId: string;
+      url: unknown;
+    }
+  | {
+      entryPoint: "ios_shortcut";
+      userId: string;
+      url: unknown;
+      requestId: string;
+    };
+
 export type SubmitUrlImportJobResult =
-  | { status: "created"; job: ImportJobRecord }
-  | { status: "existingActiveJob"; job: ImportJobRecord }
+  | {
+      status: "accepted";
+      kind: "created" | "existing_active_job";
+      job: ImportJobRecord;
+    }
   | { status: "invalidUrl" }
+  | { status: "invalidRequestId" }
   | { status: "recipeLimitExceeded" };
 
 export type UrlImportJobSubmission = {
-  submit(params: { userId: string; url: unknown }): Promise<SubmitUrlImportJobResult>;
+  submit(input: SubmitUrlImportJobInput): Promise<SubmitUrlImportJobResult>;
 };
 
 type UrlImportJobSubmissionDependencies = {
@@ -36,12 +56,30 @@ export const createUrlImportJobSubmission = ({
   createImportJobId: createJobId,
   getCurrentDate,
 }: UrlImportJobSubmissionDependencies): UrlImportJobSubmission => ({
-  async submit({ userId, url }) {
+  async submit(input) {
+    const userId = input.userId;
+    const url = input.url;
     const request = importUrlRequestSchema.safeParse({ url });
 
     if (!request.success) {
       return { status: "invalidUrl" };
     }
+
+    const requestId = input.entryPoint === "ios_shortcut" ? input.requestId : null;
+    if (requestId !== null) {
+      const shortcutRequest = iosShareShortcutImportJobRequestSchema.safeParse({
+        url: request.data.url,
+        requestId,
+      });
+      if (!shortcutRequest.success) {
+        return shortcutRequest.error.issues.some((issue) => issue.path[0] === "requestId")
+          ? { status: "invalidRequestId" }
+          : { status: "invalidUrl" };
+      }
+    }
+
+    const createdVia = input.entryPoint === "ios_shortcut" ? "ios_shortcut" : "web";
+    const completionNotificationRequested = input.entryPoint === "ios_shortcut";
 
     let normalizedUrl: string;
 
@@ -74,6 +112,9 @@ export const createUrlImportJobSubmission = ({
       userId,
       url: request.data.url,
       normalizedUrl,
+      createdVia,
+      requestId,
+      completionNotificationRequested,
       now,
     });
 
@@ -81,8 +122,20 @@ export const createUrlImportJobSubmission = ({
       return { status: "recipeLimitExceeded" };
     }
 
+    if (result.status === "replayedRequest") {
+      return {
+        status: "accepted",
+        kind: result.responseKind,
+        job: result.job,
+      };
+    }
+
     if (result.status === "existingActiveJob") {
-      return result;
+      return {
+        status: "accepted",
+        kind: "existing_active_job",
+        job: result.job,
+      };
     }
 
     try {
@@ -100,6 +153,10 @@ export const createUrlImportJobSubmission = ({
       throw error;
     }
 
-    return result;
+    return {
+      status: "accepted",
+      kind: "created",
+      job: result.job,
+    };
   },
 });

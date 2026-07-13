@@ -22,6 +22,7 @@ export type Bindings = {
   ASSETS: Fetcher;
   BROWSER: BrowserRunBinding;
   IMPORT_QUEUE: Queue<{ jobId: string }>;
+  SHORTCUT_RATE_LIMITER: RateLimit;
   YTDLP_METADATA_CONTAINER: DurableObjectNamespace<YtDlpMetadataContainer>;
   DATABASE_URL: string;
   BETTER_AUTH_URL: string;

@@ -25,6 +25,9 @@ const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord =>
   errorCode: null,
   errorMessage: null,
   dismissedAt: null,
+  createdVia: "web",
+  completionNotificationRequested: false,
+  completionNotificationSentAt: null,
   createdAt: new Date("2026-06-01T00:00:00.000Z"),
   startedAt: null,
   finishedAt: null,
@@ -75,6 +78,7 @@ describe("Import job routes", () => {
       job: {
         id: "job_123",
         kind: "url",
+        createdVia: "web",
         status: "queued",
         url: "https://example.com/recipe",
         recipeId: null,
@@ -89,6 +93,9 @@ describe("Import job routes", () => {
       userId: "user_123",
       url: "https://example.com:443/recipe?utm_source=x#step",
       normalizedUrl: "https://example.com/recipe",
+      createdVia: "web",
+      requestId: null,
+      completionNotificationRequested: false,
       now: new Date("2026-06-01T00:00:00.000Z"),
     });
     expect(expireActiveJobsForUser).toHaveBeenCalledWith({

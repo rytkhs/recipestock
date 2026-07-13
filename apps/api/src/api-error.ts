@@ -90,6 +90,13 @@ export const aiUsageLimitExceededResponse = () =>
     message: "AI usage limit exceeded.",
   });
 
+export const rateLimitExceededResponse = () =>
+  apiErrorResponse({
+    status: 429,
+    code: "rate_limit_exceeded",
+    message: "Rate limit exceeded.",
+  });
+
 export const aiTimeoutResponse = () =>
   apiErrorResponse({
     status: 504,

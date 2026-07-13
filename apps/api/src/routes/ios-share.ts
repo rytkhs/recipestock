@@ -5,6 +5,7 @@ import {
   createIosShareChannelResponseSchema,
   createIosShareHandoffRequestSchema,
   createIosShareHandoffResponseSchema,
+  createIosShareImportJobResponseSchema,
   deliverIosShareHandoffRequestSchema,
   deliverIosShareHandoffResponseSchema,
   getIosShareHandoffStatusResponseSchema,
@@ -15,20 +16,37 @@ import {
 import { Hono } from "hono";
 import { ulid } from "ulid";
 import { z } from "zod";
-import { notFoundResponse, unauthorizedResponse, validationFailedResponse } from "../api-error";
+import {
+  invalidUrlResponse,
+  notFoundResponse,
+  rateLimitExceededResponse,
+  recipeLimitExceededResponse,
+  unauthorizedResponse,
+  validationFailedResponse,
+} from "../api-error";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
+import { createImportJobId, type ImportJobRepository, toImportJobSummary } from "../import-jobs";
 import {
   createIosShareRepository,
   createIosShareService,
   createIosShareToken,
   type IosShareService,
 } from "../ios-share";
+import {
+  createUrlImportJobSubmission,
+  type UrlImportJobSubmission,
+} from "../lib/import/url-import-job-submission";
 import { requireAuth } from "../middleware/auth";
 
 type IosShareRouteDependencies = {
   auth: AuthService;
   iosShareService?: IosShareService;
+  urlImportJobSubmission?: UrlImportJobSubmission;
+  importJobRepository?: ImportJobRepository;
+  importQueue?: Queue<{ jobId: string }>;
+  createImportJobId?: () => string;
+  shortcutRateLimiter?: RateLimit;
   createId?: () => string;
   createToken?: () => string;
   getCurrentDate?: () => Date;
@@ -42,6 +60,11 @@ const bearerToken = (header: string | undefined) => {
 export const createIosShareRoutes = ({
   auth,
   iosShareService,
+  urlImportJobSubmission,
+  importJobRepository,
+  importQueue,
+  createImportJobId: createJobId,
+  shortcutRateLimiter,
   createId = ulid,
   createToken = createIosShareToken,
   getCurrentDate,
@@ -49,6 +72,15 @@ export const createIosShareRoutes = ({
   const routes = new Hono<ApiEnv>();
   const serviceFor = (env: ApiEnv["Bindings"]) =>
     iosShareService ?? createIosShareService(createIosShareRepository(createDb(env.DATABASE_URL)));
+  const submissionFor = (env: ApiEnv["Bindings"]) =>
+    urlImportJobSubmission ??
+    createUrlImportJobSubmission({
+      env,
+      importJobRepository,
+      importQueue,
+      createImportJobId: createJobId ?? createImportJobId,
+      getCurrentDate,
+    });
   const now = () => getCurrentDate?.() ?? new Date();
 
   return routes
@@ -82,6 +114,60 @@ export const createIosShareRoutes = ({
         return notFoundResponse("iOS share channel was not found.");
       }
       return c.json(revokeIosShareChannelResponseSchema.parse({ revoked: true }));
+    })
+    .post("/shortcut/import-jobs", async (c) => {
+      const token = bearerToken(c.req.header("authorization"));
+      if (!token) {
+        return unauthorizedResponse();
+      }
+
+      const currentDate = now();
+      const identity = await serviceFor(c.env).authenticateShortcutToken({
+        token,
+        now: currentDate,
+      });
+      if (!identity) {
+        return unauthorizedResponse();
+      }
+
+      const limiter = shortcutRateLimiter ?? c.env.SHORTCUT_RATE_LIMITER;
+      const { success } = await limiter.limit({ key: identity.integrationId });
+      if (!success) {
+        return rateLimitExceededResponse();
+      }
+
+      const rawBody = await c.req.json().catch(() => null);
+      const body =
+        typeof rawBody === "object" && rawBody !== null
+          ? (rawBody as Record<string, unknown>)
+          : null;
+      const requestId = typeof body?.requestId === "string" ? body.requestId : "";
+      const result = await submissionFor(c.env).submit({
+        entryPoint: "ios_shortcut",
+        userId: identity.userId,
+        url: body?.url,
+        requestId,
+      });
+
+      if (result.status === "invalidRequestId") {
+        return validationFailedResponse({ requestId: "requestId must be a UUID." });
+      }
+
+      if (result.status === "invalidUrl") {
+        return invalidUrlResponse();
+      }
+
+      if (result.status === "recipeLimitExceeded") {
+        return recipeLimitExceededResponse();
+      }
+
+      return c.json(
+        createIosShareImportJobResponseSchema.parse({
+          kind: result.kind,
+          job: toImportJobSummary(result.job),
+        }),
+        202,
+      );
     })
     .post("/shortcut/handoffs", async (c) => {
       const token = bearerToken(c.req.header("authorization"));

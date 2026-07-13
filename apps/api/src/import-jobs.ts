@@ -1,6 +1,7 @@
 import { type DbClient, importJobs } from "@recipestock/db";
 import {
   type ImportErrorCode,
+  type ImportJobCreatedVia,
   type ImportJobKind,
   type ImportJobStatus,
   type ImportJobSummary,
@@ -46,6 +47,9 @@ export type ImportJobRecord = {
   errorCode: ImportErrorCode | null;
   errorMessage: string | null;
   dismissedAt: Date | null;
+  createdVia: ImportJobCreatedVia;
+  completionNotificationRequested: boolean;
+  completionNotificationSentAt: Date | null;
   createdAt: Date;
   startedAt: Date | null;
   finishedAt: Date | null;
@@ -59,6 +63,11 @@ export type CreateImportUrlJobResult =
     }
   | {
       status: "existingActiveJob";
+      job: ImportJobRecord;
+    }
+  | {
+      status: "replayedRequest";
+      responseKind: "created" | "existing_active_job";
       job: ImportJobRecord;
     }
   | {
@@ -77,6 +86,9 @@ export type ImportJobRepository = {
     userId: string;
     url: string;
     normalizedUrl: string;
+    createdVia: ImportJobCreatedVia;
+    requestId: string | null;
+    completionNotificationRequested: boolean;
     now: Date;
   }): Promise<CreateImportUrlJobResult>;
   listRecentJobs(userId: string): Promise<ImportJobRecord[]>;
@@ -121,6 +133,9 @@ type ImportJobSqlRow = {
   errorCode: string | null;
   errorMessage: string | null;
   dismissedAt: Date | string | null;
+  createdVia: string;
+  completionNotificationRequested: boolean;
+  completionNotificationSentAt: Date | string | null;
   createdAt: Date | string;
   startedAt: Date | string | null;
   finishedAt: Date | string | null;
@@ -146,6 +161,7 @@ const getImportJobDeadline = (job: ImportJobRecord, timeoutMs: number) =>
 export const toImportJobSummary = (job: ImportJobRecord): ImportJobSummary => ({
   id: job.id,
   kind: job.kind,
+  createdVia: job.createdVia,
   status: job.status,
   url: job.url,
   recipeId: job.status === "succeeded" ? job.recipeId : null,
@@ -166,6 +182,9 @@ const mapImportJobRow = (row: typeof importJobs.$inferSelect): ImportJobRecord =
   errorCode: row.errorCode as ImportErrorCode | null,
   errorMessage: row.errorMessage,
   dismissedAt: row.dismissedAt,
+  createdVia: row.createdVia,
+  completionNotificationRequested: row.completionNotificationRequested,
+  completionNotificationSentAt: row.completionNotificationSentAt,
   createdAt: row.createdAt,
   startedAt: row.startedAt,
   finishedAt: row.finishedAt,
@@ -186,6 +205,9 @@ const mapImportJobSqlRow = (row: ImportJobSqlRow): ImportJobRecord => ({
   errorCode: row.errorCode as ImportErrorCode | null,
   errorMessage: row.errorMessage,
   dismissedAt: dateFromSql(row.dismissedAt),
+  createdVia: row.createdVia as ImportJobCreatedVia,
+  completionNotificationRequested: row.completionNotificationRequested,
+  completionNotificationSentAt: dateFromSql(row.completionNotificationSentAt),
   createdAt: dateFromSql(row.createdAt) ?? new Date(),
   startedAt: dateFromSql(row.startedAt),
   finishedAt: dateFromSql(row.finishedAt),
@@ -196,7 +218,16 @@ export const createImportJobRepository = (
   db: DbClient,
   planSyncOptions?: AppUserPlanSyncOptions,
 ): ImportJobRepository => ({
-  async createUrlJob({ id, userId, url, normalizedUrl, now }) {
+  async createUrlJob({
+    id,
+    userId,
+    url,
+    normalizedUrl,
+    createdVia,
+    requestId,
+    completionNotificationRequested,
+    now,
+  }) {
     if (planSyncOptions) {
       await syncAppUserPlanForDb(db, userId, {
         ...planSyncOptions,
@@ -205,23 +236,338 @@ export const createImportJobRepository = (
     }
 
     const nowIso = now.toISOString();
-    const result = await db.execute<ImportJobSqlRow>(sql`
-      with ensured_user as (
-        insert into app_users (user_id)
-        values (${userId})
-        on conflict (user_id) do nothing
-        returning plan
-      ),
-      selected_user as (
-        select ensured_user.plan, 0 as saved_recipe_count
-        from ensured_user
-        union all
-        select app_users.plan, app_users.saved_recipe_count
-        from app_users
-        where app_users.user_id = ${userId}
-        limit 1
-      ),
-      active_job as (
+    const requestIdExpression = requestId ? sql`${requestId}::uuid` : sql`null::uuid`;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const result = await db.execute<
+        ImportJobSqlRow & {
+          cleanupJobId: string | null;
+          responseKind: string | null;
+          resultStatus: string;
+        }
+      >(sql`
+        with ensured_user as (
+          insert into app_users (user_id)
+          values (${userId})
+          on conflict (user_id) do nothing
+          returning plan
+        ),
+        selected_user as (
+          select ensured_user.plan, 0 as saved_recipe_count
+          from ensured_user
+          union all
+          select app_users.plan, app_users.saved_recipe_count
+          from app_users
+          where app_users.user_id = ${userId}
+          limit 1
+        ),
+        existing_request as materialized (
+          select import_job_id, response_kind
+          from shortcut_import_requests
+          where user_id = ${userId}
+            and request_id = ${requestIdExpression}
+        ),
+        replayed_job as (
+          select
+            import_jobs.id,
+            import_jobs.user_id,
+            import_jobs.kind,
+            import_jobs.status,
+            import_jobs.url,
+            import_jobs.normalized_url,
+            import_jobs.recipe_id,
+            import_jobs.error_code,
+            import_jobs.error_message,
+            import_jobs.dismissed_at,
+            import_jobs.created_via,
+            import_jobs.completion_notification_requested,
+            import_jobs.completion_notification_sent_at,
+            import_jobs.created_at,
+            import_jobs.started_at,
+            import_jobs.finished_at,
+            import_jobs.updated_at,
+            existing_request.response_kind
+          from existing_request
+          inner join import_jobs on import_jobs.id = existing_request.import_job_id
+        ),
+        active_candidate as materialized (
+          select import_jobs.*
+          from import_jobs
+          where import_jobs.user_id = ${userId}
+            and import_jobs.normalized_url = ${normalizedUrl}
+            and import_jobs.status in ('queued', 'running')
+            and not exists (select 1 from replayed_job)
+          order by import_jobs.created_at desc, import_jobs.id desc
+          limit 1
+        ),
+        touched_active_job as (
+          update import_jobs
+          set
+            completion_notification_requested =
+              import_jobs.completion_notification_requested or ${completionNotificationRequested},
+            updated_at = ${nowIso}::timestamptz
+          where import_jobs.id = (select active_candidate.id from active_candidate)
+            and import_jobs.status in ('queued', 'running')
+          returning
+            import_jobs.id,
+            import_jobs.user_id,
+            import_jobs.kind,
+            import_jobs.status,
+            import_jobs.url,
+            import_jobs.normalized_url,
+            import_jobs.recipe_id,
+            import_jobs.error_code,
+            import_jobs.error_message,
+            import_jobs.dismissed_at,
+            import_jobs.created_via,
+            import_jobs.completion_notification_requested,
+            import_jobs.completion_notification_sent_at,
+            import_jobs.created_at,
+            import_jobs.started_at,
+            import_jobs.finished_at,
+            import_jobs.updated_at
+        ),
+        active_request as (
+          insert into shortcut_import_requests (
+            user_id,
+            request_id,
+            import_job_id,
+            response_kind,
+            created_at
+          )
+          select
+            ${userId},
+            ${requestIdExpression},
+            touched_active_job.id,
+            'existing_active_job',
+            ${nowIso}::timestamptz
+          from touched_active_job
+          where ${requestIdExpression} is not null
+            and not exists (select 1 from existing_request)
+          on conflict (user_id, request_id) do nothing
+          returning request_id
+        ),
+        recipe_limit as materialized (
+          select
+            selected_user.plan,
+            case
+              when selected_user.plan = 'pro' then false
+              else selected_user.saved_recipe_count >= ${PLAN_LIMITS.free.savedRecipes}
+            end as exceeded
+          from selected_user
+          where not exists (select 1 from replayed_job)
+            and not exists (select 1 from touched_active_job)
+        ),
+        inserted_job as (
+          insert into import_jobs (
+            id,
+            user_id,
+            kind,
+            status,
+            url,
+            normalized_url,
+            created_via,
+            completion_notification_requested,
+            created_at,
+            updated_at
+          )
+          select
+            ${id},
+            ${userId},
+            'url',
+            'queued',
+            ${url},
+            ${normalizedUrl},
+            ${createdVia},
+            ${completionNotificationRequested},
+            ${nowIso}::timestamptz,
+            ${nowIso}::timestamptz
+          from recipe_limit
+          where recipe_limit.exceeded = false
+            and not exists (select 1 from active_candidate)
+            and not exists (select 1 from replayed_job)
+            and not exists (select 1 from touched_active_job)
+          on conflict do nothing
+          returning
+            import_jobs.id,
+            import_jobs.user_id,
+            import_jobs.kind,
+            import_jobs.status,
+            import_jobs.url,
+            import_jobs.normalized_url,
+            import_jobs.recipe_id,
+            import_jobs.error_code,
+            import_jobs.error_message,
+            import_jobs.dismissed_at,
+            import_jobs.created_via,
+            import_jobs.completion_notification_requested,
+            import_jobs.completion_notification_sent_at,
+            import_jobs.created_at,
+            import_jobs.started_at,
+            import_jobs.finished_at,
+            import_jobs.updated_at
+        ),
+        created_request as (
+          insert into shortcut_import_requests (
+            user_id,
+            request_id,
+            import_job_id,
+            response_kind,
+            created_at
+          )
+          select
+            ${userId},
+            ${requestIdExpression},
+            inserted_job.id,
+            'created',
+            ${nowIso}::timestamptz
+          from inserted_job
+          where ${requestIdExpression} is not null
+            and not exists (select 1 from existing_request)
+          on conflict (user_id, request_id) do nothing
+          returning request_id
+        ),
+        write_barrier as (
+          select
+            (select count(*) from active_request)
+            + (select count(*) from created_request) as write_count
+        ),
+        result_candidates as (
+          select
+            replayed_job.id,
+            replayed_job.user_id,
+            replayed_job.kind,
+            replayed_job.status,
+            replayed_job.url,
+            replayed_job.normalized_url,
+            replayed_job.recipe_id,
+            replayed_job.error_code,
+            replayed_job.error_message,
+            replayed_job.dismissed_at,
+            replayed_job.created_via,
+            replayed_job.completion_notification_requested,
+            replayed_job.completion_notification_sent_at,
+            replayed_job.created_at,
+            replayed_job.started_at,
+            replayed_job.finished_at,
+            replayed_job.updated_at,
+            'replayedRequest'::text as result_status,
+            replayed_job.response_kind,
+            null::text as cleanup_job_id
+          from replayed_job
+          union all
+          select
+            touched_active_job.id,
+            touched_active_job.user_id,
+            touched_active_job.kind,
+            touched_active_job.status,
+            touched_active_job.url,
+            touched_active_job.normalized_url,
+            touched_active_job.recipe_id,
+            touched_active_job.error_code,
+            touched_active_job.error_message,
+            touched_active_job.dismissed_at,
+            touched_active_job.created_via,
+            touched_active_job.completion_notification_requested,
+            touched_active_job.completion_notification_sent_at,
+            touched_active_job.created_at,
+            touched_active_job.started_at,
+            touched_active_job.finished_at,
+            touched_active_job.updated_at,
+            'existingActiveJob'::text as result_status,
+            null::text as response_kind,
+            null::text as cleanup_job_id
+          from touched_active_job
+          where ${requestIdExpression} is null
+            or exists (select 1 from active_request)
+          union all
+          select
+            inserted_job.id,
+            inserted_job.user_id,
+            inserted_job.kind,
+            inserted_job.status,
+            inserted_job.url,
+            inserted_job.normalized_url,
+            inserted_job.recipe_id,
+            inserted_job.error_code,
+            inserted_job.error_message,
+            inserted_job.dismissed_at,
+            inserted_job.created_via,
+            inserted_job.completion_notification_requested,
+            inserted_job.completion_notification_sent_at,
+            inserted_job.created_at,
+            inserted_job.started_at,
+            inserted_job.finished_at,
+            inserted_job.updated_at,
+            'created'::text as result_status,
+            null::text as response_kind,
+            null::text as cleanup_job_id
+          from inserted_job
+          where ${requestIdExpression} is null
+            or exists (select 1 from created_request)
+          union all
+          select
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'limitExceeded'::text,
+            null::text,
+            null::text
+          from recipe_limit
+          where recipe_limit.exceeded = true
+            and not exists (select 1 from replayed_job)
+            and not exists (select 1 from touched_active_job)
+            and not exists (select 1 from inserted_job)
+            and not exists (select 1 from active_request)
+            and not exists (select 1 from created_request)
+          union all
+          select
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'retry'::text,
+            null::text,
+            inserted_job.id
+          from recipe_limit
+          left join inserted_job on true
+          where recipe_limit.exceeded = false
+            and not exists (select 1 from replayed_job)
+            and not exists (select 1 from touched_active_job)
+            and not exists (select 1 from active_request)
+            and not exists (select 1 from created_request)
+            and (
+              not exists (select 1 from inserted_job)
+              or ${requestIdExpression} is not null
+            )
+        )
         select
           id,
           user_id as "userId",
@@ -233,131 +579,53 @@ export const createImportJobRepository = (
           error_code as "errorCode",
           error_message as "errorMessage",
           dismissed_at as "dismissedAt",
+          created_via as "createdVia",
+          completion_notification_requested as "completionNotificationRequested",
+          completion_notification_sent_at as "completionNotificationSentAt",
           created_at as "createdAt",
           started_at as "startedAt",
           finished_at as "finishedAt",
           updated_at as "updatedAt",
-          'existingActiveJob'::text as "resultStatus"
-        from import_jobs
-        where user_id = ${userId}
-          and normalized_url = ${normalizedUrl}
-          and status in ('queued', 'running')
-        order by created_at desc
+          result_status as "resultStatus",
+          response_kind as "responseKind",
+          cleanup_job_id as "cleanupJobId"
+        from result_candidates
+        cross join write_barrier
         limit 1
-      ),
-      recipe_limit as (
-        select
-          selected_user.plan,
-          case
-            when selected_user.plan = 'pro' then false
-            else selected_user.saved_recipe_count >= ${PLAN_LIMITS.free.savedRecipes}
-          end as exceeded
-        from selected_user
-      ),
-      inserted_job as (
-        insert into import_jobs (
-          id,
-          user_id,
-          kind,
-          status,
-          url,
-          normalized_url,
-          created_at,
-          updated_at
-        )
-        select
-          ${id},
-          ${userId},
-          'url',
-          'queued',
-          ${url},
-          ${normalizedUrl},
-          ${nowIso}::timestamptz,
-          ${nowIso}::timestamptz
-        from recipe_limit
-        where recipe_limit.exceeded = false
-          and not exists (select 1 from active_job)
-        on conflict do nothing
-        returning
-          id,
-          user_id as "userId",
-          kind,
-          status,
-          url,
-          normalized_url as "normalizedUrl",
-          recipe_id as "recipeId",
-          error_code as "errorCode",
-          error_message as "errorMessage",
-          dismissed_at as "dismissedAt",
-          created_at as "createdAt",
-          started_at as "startedAt",
-          finished_at as "finishedAt",
-          updated_at as "updatedAt",
-          'created'::text as "resultStatus"
-      )
-      select *
-      from inserted_job
-      union all
-      select *
-      from active_job
-      union all
-      select
-        null as id,
-        null as "userId",
-        null as kind,
-        null as status,
-        null as url,
-        null as "normalizedUrl",
-        null as "recipeId",
-        null as "errorCode",
-        null as "errorMessage",
-        null as "dismissedAt",
-        null as "createdAt",
-        null as "startedAt",
-        null as "finishedAt",
-        null as "updatedAt",
-        'limitExceeded'::text as "resultStatus"
-      from recipe_limit
-      where recipe_limit.exceeded = true
-        and not exists (select 1 from active_job)
-        and not exists (select 1 from inserted_job)
-      limit 1
-    `);
+      `);
 
-    const row = result.rows[0] as (ImportJobSqlRow & { resultStatus: string }) | undefined;
+      const row = result.rows[0];
+      if (!row || row.resultStatus === "retry") {
+        if (row?.cleanupJobId) {
+          // The mapping conflict can happen after this unqueued candidate was inserted.
+          await db.delete(importJobs).where(eq(importJobs.id, row.cleanupJobId));
+        }
+        continue;
+      }
 
-    if (!row) {
-      const [activeJob] = await db
-        .select()
-        .from(importJobs)
-        .where(
-          and(
-            eq(importJobs.userId, userId),
-            eq(importJobs.normalizedUrl, normalizedUrl),
-            inArray(importJobs.status, activeStatuses),
-          ),
-        )
-        .orderBy(desc(importJobs.createdAt), desc(importJobs.id))
-        .limit(1);
+      if (row.resultStatus === "limitExceeded") {
+        return { status: "limitExceeded" };
+      }
 
-      if (activeJob) {
+      const job = mapImportJobSqlRow(row);
+      if (row.resultStatus === "replayedRequest") {
+        if (row.responseKind !== "created" && row.responseKind !== "existing_active_job") {
+          throw new Error("Shortcut import request has an invalid response kind.");
+        }
         return {
-          status: "existingActiveJob",
-          job: mapImportJobRow(activeJob),
+          status: "replayedRequest",
+          responseKind: row.responseKind,
+          job,
         };
       }
 
-      return { status: "limitExceeded" };
+      return {
+        status: row.resultStatus === "created" ? "created" : "existingActiveJob",
+        job,
+      };
     }
 
-    if (row.resultStatus === "limitExceeded") {
-      return { status: "limitExceeded" };
-    }
-
-    return {
-      status: row.resultStatus === "created" ? "created" : "existingActiveJob",
-      job: mapImportJobSqlRow(row),
-    };
+    throw new Error("Could not resolve concurrent URL import job submission.");
   },
   async listRecentJobs(userId) {
     const rows = await db

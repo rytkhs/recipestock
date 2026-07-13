@@ -7,3 +7,13 @@ iOS Shortcutから認証付きendpointへURLを直接POSTし、サーバーでIm
 Cookie認証されたPWAのURL取り込みとShortcutのBearer認証は別々のAdapterとして維持する。両Adapterは、URL検証と正規化、期限切れJob処理、plan同期、Recipe上限判定、active Job再利用、Job永続化、queue投入、queue失敗処理を隠す共通のURL Import Job submission Moduleを使用する。認証方式ごとにこれらのImport Job invariantsを実装しない。
 
 Import Jobの終端結果は永続化し、その状態を取り込み結果のsource of truthとする。Web Pushは成功または失敗を知らせるbest-effortの通知であり、通知の失敗、未許可、未対応、または期限切れsubscriptionによってImport Jobの処理や状態を変更しない。保証された通知配送が必要になった場合は、durable outboxやretry方針を別の決定として検討する。
+
+## Shortcut直POSTの冪等性と制限
+
+Shortcutの`requestId`はImport Job自身へ持たせず、`shortcut_import_requests`でユーザーとの対応を永続化する。Shortcut Aが作成したactive JobをShortcut Bが再利用する多対1の関係を表現でき、各`requestId`の最初の応答種別（`created`または`existing_active_job`）も再送時に再現できるためである。Neon HTTPではインタラクティブトランザクションを使わず、単一SQL、主キー/unique index、CTE、`ON CONFLICT`と競合時の再実行でこの保証を構成する。
+
+request mappingの競合後に対応付かず残った、まだQueueへ送っていない候補Jobは削除してから再実行する。これにより同時送信の競合でactiveな孤立Jobを残さない。
+
+ShortcutのBearer tokenは`ios_share_channels`のhashを1回のUPDATEで照合し、成功した`integrationId`をキーにCloudflare Workers Rate Limiting bindingで毎分10回を軽量に制限する。このbindingはロケーション単位かつeventually consistentであるため、誤ループや通常の乱用を抑える安全弁として使い、厳密な利用量会計や請求の根拠には使わない。
+
+NeonのcommitとCloudflare Queue送信をまたぐdistributed transactionやoutboxはこの決定には追加しない。submission moduleは新規作成結果だけをQueueへ送信し、送信失敗時はJobを`failed`へ更新する。同時送信とHTTP再送による重複enqueueを防ぐ範囲を「一度だけ」の保証とする。

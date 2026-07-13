@@ -30,6 +30,14 @@ const createRepository = () => {
       channel.revokedAt = revokedAt;
       return true;
     },
+    async authenticateShortcutToken({ tokenHash, now: usedAt }) {
+      const channel = channels.find(
+        (candidate) => candidate.tokenHash === tokenHash && !candidate.revokedAt,
+      );
+      if (!channel) return null;
+      channel.lastUsedAt = usedAt;
+      return { integrationId: channel.id, userId: channel.userId };
+    },
     async submitHandoff({ id, tokenHash, url, now: createdAt, expiresAt }) {
       const channel = channels.find(
         (candidate) => candidate.tokenHash === tokenHash && !candidate.revokedAt,
@@ -107,6 +115,31 @@ describe("iOS Share module", () => {
     expect(result.token).toBe(`rssc_${"a".repeat(64)}`);
     expect(state.channels[0]?.tokenHash).not.toContain("rssc_");
     expect(state.channels[0]?.tokenSuffix).toBe("aaaaaa");
+  });
+
+  it("Shortcut token認証はintegrationId/userIdを返しlastUsedAtを更新する", async () => {
+    const state = createRepository();
+    const service = createIosShareService(state.repository);
+    const token = `rssc_${"d".repeat(64)}`;
+    await service.provisionChannel({
+      id: "channel_1",
+      userId: "user_1",
+      name: "iPhone",
+      token,
+      now,
+    });
+
+    const usedAt = new Date(now.getTime() + 1000);
+    await expect(service.authenticateShortcutToken({ token, now: usedAt })).resolves.toEqual({
+      integrationId: "channel_1",
+      userId: "user_1",
+    });
+    expect(state.channels[0]?.lastUsedAt).toEqual(usedAt);
+
+    await service.revokeChannel({ channelId: "channel_1", userId: "user_1", now: usedAt });
+    await expect(
+      service.authenticateShortcutToken({ token, now: new Date(usedAt.getTime() + 1) }),
+    ).resolves.toBeNull();
   });
 
   it("新しいhandoffで同じchannelの古いpendingをsupersedeする", async () => {
