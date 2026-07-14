@@ -53,7 +53,8 @@ export const IosShareSettingsCard = () => {
         <h2 className="text-brand-walnut font-bold text-lg">共有から取り込む</h2>
       </div>
       <p className="text-brand-muted text-sm">
-        iPhoneやiPadの共有メニューから、WebページやSNS投稿のURLを取り込めます。
+        iPhoneやiPadの共有メニューからURLを共有すると、Recipe
+        Stockへの取り込みを直接開始します。通知を許可している場合は、完了をお知らせします。
       </p>
 
       {!standalone ? (

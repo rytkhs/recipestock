@@ -218,7 +218,7 @@ describe("Settings routes", () => {
     ).toBe(true);
   });
 
-  it("PWAからShortcut連携トークンを発行する", async () => {
+  it("PWAからShortcut連携トークンを発行して追加導線を表示する", async () => {
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({ matches: true })),
@@ -250,11 +250,17 @@ describe("Settings routes", () => {
     );
 
     await renderApp("/settings");
+    await expect(
+      screen.findByText(
+        "iPhoneやiPadの共有メニューからURLを共有すると、Recipe Stockへの取り込みを直接開始します。通知を許可している場合は、完了をお知らせします。",
+      ),
+    ).resolves.toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "連携トークンを発行" }));
 
     await expect(screen.findByLabelText("連携トークン")).resolves.toHaveValue(
       `rssc_${"a".repeat(64)}`,
     );
+    expect(screen.getByRole("link", { name: "Shortcutを追加" })).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
