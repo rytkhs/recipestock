@@ -57,4 +57,6 @@ export type Bindings = {
   IMPORT_MAX_HTML_BYTES: string;
   IMPORT_AI_TIMEOUT_MS: string;
   VAPID_PUBLIC_KEY: string;
+  VAPID_PRIVATE_KEY: string;
+  VAPID_SUBJECT: string;
 };

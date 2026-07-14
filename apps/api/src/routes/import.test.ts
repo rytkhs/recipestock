@@ -46,6 +46,7 @@ const createRepository = (overrides: Partial<ImportJobRepository> = {}): ImportJ
   completeJobWithRecipe: async () => ({ status: "inactive" }),
   markJobSucceeded: async () => undefined,
   markJobFailed: async () => undefined,
+  markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
   ...overrides,
 });

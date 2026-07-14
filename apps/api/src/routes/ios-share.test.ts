@@ -48,6 +48,7 @@ const createImportJobRepository = (
   completeJobWithRecipe: async () => ({ status: "inactive" }),
   markJobSucceeded: async () => undefined,
   markJobFailed: async () => undefined,
+  markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
   ...overrides,
 });

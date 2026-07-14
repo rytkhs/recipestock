@@ -7,6 +7,11 @@ import { secureHeaders } from "hono/secure-headers";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
 import { type BillingRepository } from "./billing";
+import {
+  createPushSender,
+  notifyImportJobCompletion,
+  type PushSender,
+} from "./completion-notifications";
 import { type ApiEnv } from "./context";
 import { type Bindings } from "./env";
 import { createRecipeImageService, type RecipeImageService } from "./images";
@@ -19,7 +24,10 @@ import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-
 import { type IosShareService } from "./ios-share";
 import { createLogger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
-import { type PushSubscriptionRepository } from "./push-subscriptions";
+import {
+  createPushSubscriptionRepository,
+  type PushSubscriptionRepository,
+} from "./push-subscriptions";
 import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
 import { createBillingRoutes } from "./routes/billing";
@@ -230,15 +238,42 @@ type ImportQueueMessage = Pick<
   "ack" | "attempts" | "body" | "id" | "retry"
 >;
 
+const notifyImportJobCompletionBestEffort = async ({
+  importJobRepository,
+  jobId,
+  logger,
+  now,
+  pushSender,
+}: {
+  importJobRepository: ImportJobRepository;
+  jobId: string;
+  logger: ReturnType<typeof createLogger>;
+  now: Date;
+  pushSender: PushSender;
+}) => {
+  try {
+    await notifyImportJobCompletion({
+      importJobRepository,
+      jobId,
+      now,
+      pushSender,
+    });
+  } catch (error) {
+    logger.error("import_completion_notification_failed", { error });
+  }
+};
+
 export const handleImportQueueMessageError = async ({
   error,
   importJobRepository,
   message,
+  notifyCompletion,
   now = new Date(),
 }: {
   error: unknown;
   importJobRepository: ImportJobRepository;
   message: ImportQueueMessage;
+  notifyCompletion?: () => Promise<void>;
   now?: Date;
 }) => {
   createLogger().error("import_job_queue_error", {
@@ -255,11 +290,51 @@ export const handleImportQueueMessageError = async ({
       errorMessage: error instanceof Error ? error.message : "Unexpected import job error.",
       now,
     });
+    await notifyCompletion?.();
     message.ack();
     return;
   }
 
   message.retry({ delaySeconds: Math.min(30 * 2 ** message.attempts, 600) });
+};
+
+export const handleImportQueueMessage = async ({
+  importJobRepository,
+  message,
+  processJob,
+  pushSender,
+  now,
+  logger = createLogger({ jobId: message.body.jobId, messageId: message.id }),
+}: {
+  importJobRepository: ImportJobRepository;
+  message: ImportQueueMessage;
+  processJob: (jobId: string) => Promise<void>;
+  pushSender: PushSender;
+  now?: Date;
+  logger?: ReturnType<typeof createLogger>;
+}) => {
+  const notifyCompletion = () =>
+    notifyImportJobCompletionBestEffort({
+      importJobRepository,
+      jobId: message.body.jobId,
+      logger,
+      now: now ?? new Date(),
+      pushSender,
+    });
+
+  try {
+    await processJob(message.body.jobId);
+    await notifyCompletion();
+    message.ack();
+  } catch (error) {
+    await handleImportQueueMessageError({
+      error,
+      importJobRepository,
+      message,
+      notifyCompletion,
+      now: now ?? new Date(),
+    });
+  }
 };
 
 const handleImportQueue = async (
@@ -272,6 +347,7 @@ const handleImportQueue = async (
   const recipeRepository = createRecipeRepository(db, planSyncOptions);
   const usageRepository = createUsageRepository(db, planSyncOptions);
   const imageService = createRecipeImageService(env);
+  const pushSubscriptionRepository = createPushSubscriptionRepository(db);
 
   for (const message of batch.messages) {
     const logger = createLogger({
@@ -279,24 +355,31 @@ const handleImportQueue = async (
       messageId: message.id,
     });
 
-    try {
-      await processImportJob({
-        jobId: message.body.jobId,
-        env,
-        importJobRepository,
-        recipeRepository,
-        usageRepository,
-        imageService,
-        logger,
-      });
-      message.ack();
-    } catch (error) {
-      await handleImportQueueMessageError({
-        error,
-        importJobRepository,
-        message,
-      });
-    }
+    const pushSender = createPushSender({
+      repository: pushSubscriptionRepository,
+      logger,
+      vapid: {
+        subject: env.VAPID_SUBJECT,
+        publicKey: env.VAPID_PUBLIC_KEY,
+        privateKey: env.VAPID_PRIVATE_KEY,
+      },
+    });
+    await handleImportQueueMessage({
+      importJobRepository,
+      message,
+      pushSender,
+      logger,
+      processJob: (jobId) =>
+        processImportJob({
+          jobId,
+          env,
+          importJobRepository,
+          recipeRepository,
+          usageRepository,
+          imageService,
+          logger,
+        }),
+    });
   }
 };
 

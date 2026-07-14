@@ -77,6 +77,7 @@ const createImportJobRepository = (
   markJobFailed: async ({ errorCode }) => {
     events.push(`failed:${errorCode}`);
   },
+  markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
   ...overrides,
 });

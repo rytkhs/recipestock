@@ -119,6 +119,7 @@ export type ImportJobRepository = {
     errorMessage: string;
     now: Date;
   }): Promise<void>;
+  markCompletionNotificationSent(params: { jobId: string; now: Date }): Promise<boolean>;
   dismissJob(params: { userId: string; jobId: string; now: Date }): Promise<ImportJobRecord | null>;
 };
 
@@ -879,6 +880,21 @@ export const createImportJobRepository = (
         updatedAt: now,
       })
       .where(and(eq(importJobs.id, jobId), inArray(importJobs.status, activeStatuses)));
+  },
+  async markCompletionNotificationSent({ jobId, now }) {
+    const [row] = await db
+      .update(importJobs)
+      .set({ completionNotificationSentAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(importJobs.id, jobId),
+          inArray(importJobs.status, ["succeeded", "failed"]),
+          eq(importJobs.completionNotificationRequested, true),
+          isNull(importJobs.completionNotificationSentAt),
+        ),
+      )
+      .returning({ id: importJobs.id });
+    return Boolean(row);
   },
   async dismissJob({ userId, jobId, now }) {
     const [row] = await db

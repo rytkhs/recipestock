@@ -33,6 +33,7 @@ const createRepository = (
   overrides: Partial<PushSubscriptionRepository> = {},
 ): PushSubscriptionRepository => ({
   listByUser: async () => [],
+  listDeliveryTargets: async () => [],
   register: async ({ endpoint, expirationTime }) => ({
     endpoint,
     expirationTime: expirationTime === null ? null : new Date(expirationTime).toISOString(),
@@ -52,6 +53,9 @@ const createStatefulRepository = (): PushSubscriptionRepository => {
       return [...subscriptions.values()]
         .filter((item) => item.userId === userId)
         .map(({ endpoint, expirationTime }) => ({ endpoint, expirationTime }));
+    },
+    async listDeliveryTargets() {
+      return [];
     },
     async register(input) {
       const existing = subscriptions.get(input.endpoint);

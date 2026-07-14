@@ -6,6 +6,12 @@ export type PushSubscriptionSummary = {
   expirationTime: string | null;
 };
 
+export type PushDeliveryTarget = {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+};
+
 export type RegisterPushSubscriptionInput = {
   id: string;
   userId: string;
@@ -18,6 +24,7 @@ export type RegisterPushSubscriptionInput = {
 
 export type PushSubscriptionRepository = {
   listByUser(userId: string): Promise<PushSubscriptionSummary[]>;
+  listDeliveryTargets(userId: string): Promise<PushDeliveryTarget[]>;
   register(input: RegisterPushSubscriptionInput): Promise<PushSubscriptionSummary | null>;
   revoke(input: { userId: string; endpoint: string }): Promise<boolean>;
 };
@@ -39,6 +46,18 @@ export const createPushSubscriptionRepository = (db: DbClient): PushSubscription
       .orderBy(desc(pushSubscriptions.createdAt));
 
     return rows.map(toSummary);
+  },
+
+  async listDeliveryTargets(userId) {
+    return db
+      .select({
+        endpoint: pushSubscriptions.endpoint,
+        p256dh: pushSubscriptions.p256dh,
+        auth: pushSubscriptions.auth,
+      })
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, userId))
+      .orderBy(desc(pushSubscriptions.createdAt));
   },
 
   async register({ id, userId, endpoint, expirationTime, p256dh, auth, now }) {
