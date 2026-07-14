@@ -6,4 +6,5 @@ export * from "./ios-share";
 export * from "./me";
 export * from "./push-subscription";
 export * from "./recipe";
+export * from "./shortcut-credential";
 export * from "./usage";

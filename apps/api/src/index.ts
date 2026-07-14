@@ -21,7 +21,6 @@ import {
   processImportJob,
 } from "./import-jobs";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
-import { type IosShareService } from "./ios-share";
 import { createLogger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
 import {
@@ -37,8 +36,10 @@ import { createIosShareRoutes } from "./routes/ios-share";
 import { createMeRoutes } from "./routes/me";
 import { createPushSubscriptionRoutes } from "./routes/push-subscriptions";
 import { createRecipeRoutes } from "./routes/recipes";
+import { createShortcutCredentialRoutes } from "./routes/shortcut-credentials";
 import { createStripeRoutes } from "./routes/stripe";
 import { createUsageRoutes } from "./routes/usage";
+import { type ShortcutCredentials } from "./shortcut-credentials";
 import { type StripeBillingClient } from "./stripe-billing";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
@@ -55,7 +56,7 @@ export type AppDependencies = {
   recipeRepository?: RecipeRepository;
   pushSubscriptionRepository?: PushSubscriptionRepository;
   importJobRepository?: ImportJobRepository;
-  iosShareService?: IosShareService;
+  shortcutCredentials?: ShortcutCredentials;
   urlImportJobSubmission?: import("./lib/import/url-import-job-submission").UrlImportJobSubmission;
   shortcutRateLimiter?: RateLimit;
   importQueue?: Queue<{ jobId: string }>;
@@ -135,9 +136,8 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   app.use("/billing/*", csrfProtection);
   app.use("/images/*", csrfProtection);
   app.use("/import/*", csrfProtection);
-  app.use("/ios-share/channels", csrfProtection);
-  app.use("/ios-share/channels/*", csrfProtection);
-  app.use("/ios-share/handoffs/*", csrfProtection);
+  app.use("/shortcut-credentials", csrfProtection);
+  app.use("/shortcut-credentials/*", csrfProtection);
   app.use("/recipes", csrfProtection);
   app.use("/recipes/*", csrfProtection);
   app.use("/push-subscriptions", csrfProtection);
@@ -165,14 +165,20 @@ export const createApp = (dependencies: AppDependencies = {}) => {
     .route(
       "/ios-share",
       createIosShareRoutes({
-        auth,
-        iosShareService: dependencies.iosShareService,
+        shortcutCredentials: dependencies.shortcutCredentials,
         urlImportJobSubmission: dependencies.urlImportJobSubmission,
         importJobRepository: dependencies.importJobRepository,
         importQueue: dependencies.importQueue,
         createImportJobId: dependencies.createImportJobId,
         shortcutRateLimiter: dependencies.shortcutRateLimiter,
         getCurrentDate: dependencies.getCurrentDate,
+      }),
+    )
+    .route(
+      "/shortcut-credentials",
+      createShortcutCredentialRoutes({
+        auth,
+        shortcutCredentials: dependencies.shortcutCredentials,
       }),
     )
     .route(

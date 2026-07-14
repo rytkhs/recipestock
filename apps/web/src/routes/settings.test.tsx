@@ -226,14 +226,14 @@ describe("Settings routes", () => {
     const fetchMock = mockFetch(
       async (input, init) => {
         const path = getRequestPath(input);
-        if (path === "/api/ios-share/channels" && init?.method === "GET") {
-          return jsonResponse({ channels: [] });
+        if (path === "/api/shortcut-credentials" && init?.method === "GET") {
+          return jsonResponse({ credentials: [] });
         }
-        if (path === "/api/ios-share/channels" && init?.method === "POST") {
+        if (path === "/api/shortcut-credentials" && init?.method === "POST") {
           return jsonResponse(
             {
-              channel: {
-                id: "channel_1",
+              credential: {
+                id: "credential_1",
                 name: "iPhone",
                 tokenSuffix: "aaaaaa",
                 createdAt: "2026-07-11T00:00:00.000Z",
@@ -264,7 +264,7 @@ describe("Settings routes", () => {
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
-          getRequestPath(input) === "/api/ios-share/channels" && init?.method === "POST",
+          getRequestPath(input) === "/api/shortcut-credentials" && init?.method === "POST",
       ),
     ).toBe(true);
   });

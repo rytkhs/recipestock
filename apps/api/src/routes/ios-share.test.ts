@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
-import { type IosShareService } from "../ios-share";
+import { type ShortcutCredentials } from "../shortcut-credentials";
 import { createSilentTestApp } from "../test-helpers";
 
 const env = {
@@ -53,37 +53,14 @@ const createImportJobRepository = (
   ...overrides,
 });
 
-const createService = (): IosShareService => ({
-  provisionChannel: async ({ id, name, token, now }) => ({
-    channel: {
-      id,
-      name,
-      tokenSuffix: token.slice(-6),
-      createdAt: now.toISOString(),
-      lastUsedAt: null,
-    },
-    token,
-  }),
-  listChannels: async () => [],
-  revokeChannel: async () => true,
-  authenticateShortcutToken: async ({ token }) =>
-    token.startsWith("rssc_") ? { integrationId: "channel_1", userId: "user_1" } : null,
-  submitHandoff: async ({ id, token, url, origin, now }) =>
-    token.startsWith("rssc_")
-      ? {
-          handoffId: id,
-          status: "pending",
-          expiresAt: new Date(now.getTime() + 60_000).toISOString(),
-          fallbackUrl: `${origin}/import/url?url=${encodeURIComponent(url)}`,
-        }
-      : null,
-  findPendingHandoff: async () => ({
-    id: "handoff_1",
-    url: "https://example.com/recipe",
-    createdAt: "2026-07-11T00:00:00.000Z",
-  }),
-  deliverHandoff: async () => "delivered_to_pwa",
-  inspectHandoff: async ({ token }) => (token.startsWith("rssc_") ? "delivered_to_pwa" : null),
+const createShortcutCredentialsFake = (): ShortcutCredentials => ({
+  issue: async () => {
+    throw new Error("Not used by this route.");
+  },
+  list: async () => [],
+  revoke: async () => true,
+  authenticate: async ({ token }) =>
+    token.startsWith("rssc_") ? { credentialId: "credential_1", userId: "user_1" } : null,
 });
 
 const shortcutRequest = {
@@ -110,7 +87,7 @@ describe("iOS Share routes", () => {
     const rateLimiter = createRateLimiter();
     const app = createSilentTestApp({
       auth,
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
       importQueue: { send } as unknown as Queue<{ jobId: string }>,
       createImportJobId: () => "job_123",
@@ -145,14 +122,14 @@ describe("iOS Share routes", () => {
     });
     expect(send).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith({ jobId: "job_123" }, { contentType: "json" });
-    expect(rateLimiter.limit).toHaveBeenCalledWith({ key: "channel_1" });
+    expect(rateLimiter.limit).toHaveBeenCalledWith({ key: "credential_1" });
   });
 
   it("Cookie sessionだけではShortcut Import Jobを作成できない", async () => {
     const rateLimiter = createRateLimiter();
     const app = createSilentTestApp({
       auth,
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
       shortcutRateLimiter: rateLimiter as unknown as RateLimit,
     });
 
@@ -176,7 +153,7 @@ describe("iOS Share routes", () => {
   it("Shortcut Bearer tokenをCookie保護されたresourceの認証に使えない", async () => {
     const app = createSilentTestApp({
       auth: { ...auth, getSession: async () => null },
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
     });
 
     const responses = await Promise.all(
@@ -190,9 +167,9 @@ describe("iOS Share routes", () => {
   });
 
   it("Bearerがない、無効、revoke済みの場合は401を返す", async () => {
-    const revokedService = createService();
-    revokedService.authenticateShortcutToken = async () => null;
-    const app = createSilentTestApp({ auth, iosShareService: revokedService });
+    const revokedService = createShortcutCredentialsFake();
+    revokedService.authenticate = async () => null;
+    const app = createSilentTestApp({ auth, shortcutCredentials: revokedService });
 
     const responses = await Promise.all([
       app.request(
@@ -235,7 +212,7 @@ describe("iOS Share routes", () => {
     }));
     const app = createSilentTestApp({
       auth,
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
       shortcutRateLimiter: rateLimiter as unknown as RateLimit,
     });
@@ -266,7 +243,7 @@ describe("iOS Share routes", () => {
     }));
     const app = createSilentTestApp({
       auth,
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
       shortcutRateLimiter: rateLimiter as unknown as RateLimit,
     });
@@ -298,7 +275,7 @@ describe("iOS Share routes", () => {
       });
     const app = createSilentTestApp({
       auth,
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
       importQueue: { send } as unknown as Queue<{ jobId: string }>,
       shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
@@ -335,7 +312,7 @@ describe("iOS Share routes", () => {
     }));
     const app = createSilentTestApp({
       auth,
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
       importQueue: { send } as unknown as Queue<{ jobId: string }>,
       shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
@@ -362,18 +339,18 @@ describe("iOS Share routes", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("1連携あたり10回を超えると429を返す", async () => {
+  it("1 credentialあたり10回を超えると429を返す", async () => {
     let calls = 0;
     const rateLimiter = {
       limit: vi.fn(async ({ key }: { key: string }) => {
-        expect(key).toBe("channel_1");
+        expect(key).toBe("credential_1");
         calls += 1;
         return { success: calls <= 10 };
       }),
     };
     const app = createSilentTestApp({
       auth,
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
       urlImportJobSubmission: {
         submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
       },
@@ -408,7 +385,7 @@ describe("iOS Share routes", () => {
     const markJobFailed = vi.fn(async () => undefined);
     const app = createSilentTestApp({
       auth,
-      iosShareService: createService(),
+      shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ markJobFailed }),
       importQueue: {
         send: vi.fn(async () => {
@@ -437,84 +414,5 @@ describe("iOS Share routes", () => {
       errorMessage: "Queue unavailable",
       now: new Date("2026-07-11T00:00:00.000Z"),
     });
-  });
-
-  it("Shortcut bearer tokenでhandoffを作成する", async () => {
-    const app = createSilentTestApp({ auth, iosShareService: createService() });
-    const response = await app.request(
-      "/api/ios-share/shortcut/handoffs",
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer rssc_${"a".repeat(64)}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ url: "https://example.com/recipe" }),
-      },
-      env,
-    );
-
-    expect(response.status).toBe(201);
-    await expect(response.json()).resolves.toMatchObject({ status: "pending" });
-  });
-
-  it("Shortcut endpointはCookie sessionだけでは認証しない", async () => {
-    const app = createSilentTestApp({ auth, iosShareService: createService() });
-    const response = await app.request(
-      "/api/ios-share/shortcut/handoffs",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: "https://example.com/recipe" }),
-      },
-      env,
-    );
-    expect(response.status).toBe(401);
-  });
-
-  it("malformed URLはvalidation_failedを返す", async () => {
-    const app = createSilentTestApp({ auth, iosShareService: createService() });
-    const response = await app.request(
-      "/api/ios-share/shortcut/handoffs",
-      {
-        method: "POST",
-        headers: {
-          authorization: "Bearer noisy-client-token",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ url: "http://[" }),
-      },
-      env,
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: "validation_failed" },
-    });
-  });
-
-  it("認証ユーザーへpending handoffを返してPWA deliveryを受け付ける", async () => {
-    const app = createSilentTestApp({ auth, iosShareService: createService() });
-    const pending = await app.request("/api/ios-share/handoffs/pending", {}, env);
-    expect(pending.status).toBe(200);
-    await expect(pending.json()).resolves.toMatchObject({
-      handoff: { id: "handoff_1", url: "https://example.com/recipe" },
-    });
-
-    const delivered = await app.request(
-      "/api/ios-share/handoffs/handoff_1/delivery",
-      {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          origin: "https://app.example.com",
-          "sec-fetch-site": "same-origin",
-        },
-        body: JSON.stringify({ target: "pwa" }),
-      },
-      env,
-    );
-    expect(delivered.status).toBe(200);
-    await expect(delivered.json()).resolves.toEqual({ status: "delivered_to_pwa" });
   });
 });
