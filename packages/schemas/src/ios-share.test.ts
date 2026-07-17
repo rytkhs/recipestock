@@ -5,23 +5,27 @@ import {
 } from "./ios-share";
 
 describe("iOS Shortcut import schemas", () => {
-  it("HTTP URLとUUID requestIdを受け付ける", () => {
+  it("HTTP URLだけを受け付け、未知のfieldを除去する", () => {
     expect(
       iosShareShortcutImportJobRequestSchema.parse({
         url: "https://example.com/recipe",
-        requestId: "550e8400-e29b-41d4-a716-446655440000",
+        requestId: "pre-release-client-value",
       }),
     ).toEqual({
       url: "https://example.com/recipe",
-      requestId: "550e8400-e29b-41d4-a716-446655440000",
     });
   });
 
-  it("HTTP以外のURLとUUIDでないrequestIdを拒否する", () => {
+  it("URLの欠落、HTTP以外、4096文字超過を拒否する", () => {
+    expect(iosShareShortcutImportJobRequestSchema.safeParse({}).success).toBe(false);
     expect(
       iosShareShortcutImportJobRequestSchema.safeParse({
         url: "ftp://example.com/recipe",
-        requestId: "not-a-uuid",
+      }).success,
+    ).toBe(false);
+    expect(
+      iosShareShortcutImportJobRequestSchema.safeParse({
+        url: `https://example.com/${"a".repeat(4097)}`,
       }).success,
     ).toBe(false);
   });

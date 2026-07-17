@@ -95,7 +95,6 @@ describe("Import job routes", () => {
       url: "https://example.com:443/recipe?utm_source=x#step",
       normalizedUrl: "https://example.com/recipe",
       createdVia: "web",
-      requestId: null,
       completionNotificationRequested: false,
       now: new Date("2026-06-01T00:00:00.000Z"),
     });

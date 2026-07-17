@@ -66,11 +66,6 @@ export type CreateImportUrlJobResult =
       job: ImportJobRecord;
     }
   | {
-      status: "replayedRequest";
-      responseKind: "created" | "existing_active_job";
-      job: ImportJobRecord;
-    }
-  | {
       status: "limitExceeded";
     };
 
@@ -87,7 +82,6 @@ export type ImportJobRepository = {
     url: string;
     normalizedUrl: string;
     createdVia: ImportJobCreatedVia;
-    requestId: string | null;
     completionNotificationRequested: boolean;
     now: Date;
   }): Promise<CreateImportUrlJobResult>;
@@ -225,7 +219,6 @@ export const createImportJobRepository = (
     url,
     normalizedUrl,
     createdVia,
-    requestId,
     completionNotificationRequested,
     now,
   }) {
@@ -237,13 +230,10 @@ export const createImportJobRepository = (
     }
 
     const nowIso = now.toISOString();
-    const requestIdExpression = requestId ? sql`${requestId}::uuid` : sql`null::uuid`;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const result = await db.execute<
         ImportJobSqlRow & {
-          cleanupJobId: string | null;
-          responseKind: string | null;
           resultStatus: string;
         }
       >(sql`
@@ -262,42 +252,12 @@ export const createImportJobRepository = (
           where app_users.user_id = ${userId}
           limit 1
         ),
-        existing_request as materialized (
-          select import_job_id, response_kind
-          from shortcut_import_requests
-          where user_id = ${userId}
-            and request_id = ${requestIdExpression}
-        ),
-        replayed_job as (
-          select
-            import_jobs.id,
-            import_jobs.user_id,
-            import_jobs.kind,
-            import_jobs.status,
-            import_jobs.url,
-            import_jobs.normalized_url,
-            import_jobs.recipe_id,
-            import_jobs.error_code,
-            import_jobs.error_message,
-            import_jobs.dismissed_at,
-            import_jobs.created_via,
-            import_jobs.completion_notification_requested,
-            import_jobs.completion_notification_sent_at,
-            import_jobs.created_at,
-            import_jobs.started_at,
-            import_jobs.finished_at,
-            import_jobs.updated_at,
-            existing_request.response_kind
-          from existing_request
-          inner join import_jobs on import_jobs.id = existing_request.import_job_id
-        ),
         active_candidate as materialized (
           select import_jobs.*
           from import_jobs
           where import_jobs.user_id = ${userId}
             and import_jobs.normalized_url = ${normalizedUrl}
             and import_jobs.status in ('queued', 'running')
-            and not exists (select 1 from replayed_job)
           order by import_jobs.created_at desc, import_jobs.id desc
           limit 1
         ),
@@ -328,26 +288,6 @@ export const createImportJobRepository = (
             import_jobs.finished_at,
             import_jobs.updated_at
         ),
-        active_request as (
-          insert into shortcut_import_requests (
-            user_id,
-            request_id,
-            import_job_id,
-            response_kind,
-            created_at
-          )
-          select
-            ${userId},
-            ${requestIdExpression},
-            touched_active_job.id,
-            'existing_active_job',
-            ${nowIso}::timestamptz
-          from touched_active_job
-          where ${requestIdExpression} is not null
-            and not exists (select 1 from existing_request)
-          on conflict (user_id, request_id) do nothing
-          returning request_id
-        ),
         recipe_limit as materialized (
           select
             selected_user.plan,
@@ -356,8 +296,7 @@ export const createImportJobRepository = (
               else selected_user.saved_recipe_count >= ${PLAN_LIMITS.free.savedRecipes}
             end as exceeded
           from selected_user
-          where not exists (select 1 from replayed_job)
-            and not exists (select 1 from touched_active_job)
+          where not exists (select 1 from touched_active_job)
         ),
         inserted_job as (
           insert into import_jobs (
@@ -386,7 +325,6 @@ export const createImportJobRepository = (
           from recipe_limit
           where recipe_limit.exceeded = false
             and not exists (select 1 from active_candidate)
-            and not exists (select 1 from replayed_job)
             and not exists (select 1 from touched_active_job)
           on conflict do nothing
           returning
@@ -408,55 +346,7 @@ export const createImportJobRepository = (
             import_jobs.finished_at,
             import_jobs.updated_at
         ),
-        created_request as (
-          insert into shortcut_import_requests (
-            user_id,
-            request_id,
-            import_job_id,
-            response_kind,
-            created_at
-          )
-          select
-            ${userId},
-            ${requestIdExpression},
-            inserted_job.id,
-            'created',
-            ${nowIso}::timestamptz
-          from inserted_job
-          where ${requestIdExpression} is not null
-            and not exists (select 1 from existing_request)
-          on conflict (user_id, request_id) do nothing
-          returning request_id
-        ),
-        write_barrier as (
-          select
-            (select count(*) from active_request)
-            + (select count(*) from created_request) as write_count
-        ),
         result_candidates as (
-          select
-            replayed_job.id,
-            replayed_job.user_id,
-            replayed_job.kind,
-            replayed_job.status,
-            replayed_job.url,
-            replayed_job.normalized_url,
-            replayed_job.recipe_id,
-            replayed_job.error_code,
-            replayed_job.error_message,
-            replayed_job.dismissed_at,
-            replayed_job.created_via,
-            replayed_job.completion_notification_requested,
-            replayed_job.completion_notification_sent_at,
-            replayed_job.created_at,
-            replayed_job.started_at,
-            replayed_job.finished_at,
-            replayed_job.updated_at,
-            'replayedRequest'::text as result_status,
-            replayed_job.response_kind,
-            null::text as cleanup_job_id
-          from replayed_job
-          union all
           select
             touched_active_job.id,
             touched_active_job.user_id,
@@ -475,12 +365,8 @@ export const createImportJobRepository = (
             touched_active_job.started_at,
             touched_active_job.finished_at,
             touched_active_job.updated_at,
-            'existingActiveJob'::text as result_status,
-            null::text as response_kind,
-            null::text as cleanup_job_id
+            'existingActiveJob'::text as result_status
           from touched_active_job
-          where ${requestIdExpression} is null
-            or exists (select 1 from active_request)
           union all
           select
             inserted_job.id,
@@ -500,12 +386,8 @@ export const createImportJobRepository = (
             inserted_job.started_at,
             inserted_job.finished_at,
             inserted_job.updated_at,
-            'created'::text as result_status,
-            null::text as response_kind,
-            null::text as cleanup_job_id
+            'created'::text as result_status
           from inserted_job
-          where ${requestIdExpression} is null
-            or exists (select 1 from created_request)
           union all
           select
             null,
@@ -525,16 +407,11 @@ export const createImportJobRepository = (
             null,
             null,
             null,
-            'limitExceeded'::text,
-            null::text,
-            null::text
+            'limitExceeded'::text
           from recipe_limit
           where recipe_limit.exceeded = true
-            and not exists (select 1 from replayed_job)
             and not exists (select 1 from touched_active_job)
             and not exists (select 1 from inserted_job)
-            and not exists (select 1 from active_request)
-            and not exists (select 1 from created_request)
           union all
           select
             null,
@@ -554,20 +431,11 @@ export const createImportJobRepository = (
             null,
             null,
             null,
-            'retry'::text,
-            null::text,
-            inserted_job.id
+            'retry'::text
           from recipe_limit
-          left join inserted_job on true
           where recipe_limit.exceeded = false
-            and not exists (select 1 from replayed_job)
             and not exists (select 1 from touched_active_job)
-            and not exists (select 1 from active_request)
-            and not exists (select 1 from created_request)
-            and (
-              not exists (select 1 from inserted_job)
-              or ${requestIdExpression} is not null
-            )
+            and not exists (select 1 from inserted_job)
         )
         select
           id,
@@ -587,20 +455,13 @@ export const createImportJobRepository = (
           started_at as "startedAt",
           finished_at as "finishedAt",
           updated_at as "updatedAt",
-          result_status as "resultStatus",
-          response_kind as "responseKind",
-          cleanup_job_id as "cleanupJobId"
+          result_status as "resultStatus"
         from result_candidates
-        cross join write_barrier
         limit 1
       `);
 
       const row = result.rows[0];
       if (!row || row.resultStatus === "retry") {
-        if (row?.cleanupJobId) {
-          // The mapping conflict can happen after this unqueued candidate was inserted.
-          await db.delete(importJobs).where(eq(importJobs.id, row.cleanupJobId));
-        }
         continue;
       }
 
@@ -609,17 +470,6 @@ export const createImportJobRepository = (
       }
 
       const job = mapImportJobSqlRow(row);
-      if (row.resultStatus === "replayedRequest") {
-        if (row.responseKind !== "created" && row.responseKind !== "existing_active_job") {
-          throw new Error("Shortcut import request has an invalid response kind.");
-        }
-        return {
-          status: "replayedRequest",
-          responseKind: row.responseKind,
-          job,
-        };
-      }
-
       return {
         status: row.resultStatus === "created" ? "created" : "existingActiveJob",
         job,

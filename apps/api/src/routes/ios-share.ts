@@ -6,7 +6,6 @@ import {
   rateLimitExceededResponse,
   recipeLimitExceededResponse,
   unauthorizedResponse,
-  validationFailedResponse,
 } from "../api-error";
 import { type ApiEnv } from "../context";
 import { createImportJobId, type ImportJobRepository, toImportJobSummary } from "../import-jobs";
@@ -81,17 +80,11 @@ export const createIosShareRoutes = ({
     const rawBody = await c.req.json().catch(() => null);
     const body =
       typeof rawBody === "object" && rawBody !== null ? (rawBody as Record<string, unknown>) : null;
-    const requestId = typeof body?.requestId === "string" ? body.requestId : "";
     const result = await submissionFor(c.env).submit({
       entryPoint: "ios_shortcut",
       userId: identity.userId,
       url: body?.url,
-      requestId,
     });
-
-    if (result.status === "invalidRequestId") {
-      return validationFailedResponse({ requestId: "requestId must be a UUID." });
-    }
 
     if (result.status === "invalidUrl") {
       return invalidUrlResponse();

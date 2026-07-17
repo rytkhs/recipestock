@@ -1,14 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  index,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const recipes = pgTable(
   "recipes",
@@ -65,21 +56,5 @@ export const importJobs = pgTable(
     uniqueIndex("import_jobs_user_normalized_url_active_idx")
       .on(table.userId, table.normalizedUrl)
       .where(sql`${table.status} in ('queued', 'running') and ${table.normalizedUrl} is not null`),
-  ],
-);
-
-export const shortcutImportRequests = pgTable(
-  "shortcut_import_requests",
-  {
-    userId: text("user_id").notNull(),
-    requestId: uuid("request_id").notNull(),
-    importJobId: text("import_job_id").notNull(),
-    responseKind: text("response_kind", { enum: ["created", "existing_active_job"] }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("shortcut_import_requests_user_request_id_uidx").on(table.userId, table.requestId),
-    index("shortcut_import_requests_user_id_created_at_idx").on(table.userId, table.createdAt),
-    index("shortcut_import_requests_import_job_id_idx").on(table.importJobId),
   ],
 );

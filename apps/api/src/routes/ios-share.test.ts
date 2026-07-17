@@ -65,7 +65,6 @@ const createShortcutCredentialsFake = (): ShortcutCredentials => ({
 
 const shortcutRequest = {
   url: "https://example.com/recipe",
-  requestId: "550e8400-e29b-41d4-a716-446655440000",
 };
 
 const shortcutHeaders = {
@@ -78,7 +77,7 @@ const createRateLimiter = (success = true) => ({
 });
 
 describe("iOS Share routes", () => {
-  it("有効なBearerとURL/UUIDでImport Jobを作成しQueueへ一度送る", async () => {
+  it("有効なBearerとURLでImport Jobを作成しQueueへ一度送る", async () => {
     const send = vi.fn(async () => undefined);
     const createUrlJob = vi.fn(async () => ({
       status: "created" as const,
@@ -116,7 +115,6 @@ describe("iOS Share routes", () => {
       url: shortcutRequest.url,
       normalizedUrl: shortcutRequest.url,
       createdVia: "ios_shortcut",
-      requestId: shortcutRequest.requestId,
       completionNotificationRequested: true,
       now: new Date("2026-07-11T00:00:00.000Z"),
     });
@@ -204,37 +202,6 @@ describe("iOS Share routes", () => {
     expect(responses.map((response) => response.status)).toEqual([401, 401, 401]);
   });
 
-  it("UUIDでないrequestIdはrate limit後にvalidation_failedを返す", async () => {
-    const rateLimiter = createRateLimiter();
-    const createUrlJob = vi.fn(async () => ({
-      status: "created" as const,
-      job: createJob(),
-    }));
-    const app = createSilentTestApp({
-      auth,
-      shortcutCredentials: createShortcutCredentialsFake(),
-      importJobRepository: createImportJobRepository({ createUrlJob }),
-      shortcutRateLimiter: rateLimiter as unknown as RateLimit,
-    });
-
-    const response = await app.request(
-      "/api/ios-share/shortcut/import-jobs",
-      {
-        method: "POST",
-        headers: shortcutHeaders,
-        body: JSON.stringify({ ...shortcutRequest, requestId: "not-a-uuid" }),
-      },
-      env,
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: "validation_failed" },
-    });
-    expect(rateLimiter.limit).toHaveBeenCalledTimes(1);
-    expect(createUrlJob).not.toHaveBeenCalled();
-  });
-
   it("FTP URLはinvalid_urlを返す", async () => {
     const rateLimiter = createRateLimiter();
     const createUrlJob = vi.fn(async () => ({
@@ -263,42 +230,31 @@ describe("iOS Share routes", () => {
     expect(createUrlJob).not.toHaveBeenCalled();
   });
 
-  it("同じrequestIdの再送は同じJobを返しQueueへ追加しない", async () => {
-    const send = vi.fn(async () => undefined);
-    const createUrlJob = vi
-      .fn<ImportJobRepository["createUrlJob"]>()
-      .mockResolvedValueOnce({ status: "created", job: createJob() })
-      .mockResolvedValueOnce({
-        status: "replayedRequest",
-        responseKind: "created",
-        job: createJob(),
-      });
+  it("4096文字を超えるURLはinvalid_urlを返す", async () => {
+    const createUrlJob = vi.fn(async () => ({
+      status: "created" as const,
+      job: createJob(),
+    }));
     const app = createSilentTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
-      importQueue: { send } as unknown as Queue<{ jobId: string }>,
       shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
     });
 
-    const request = () =>
-      app.request(
-        "/api/ios-share/shortcut/import-jobs",
-        {
-          method: "POST",
-          headers: shortcutHeaders,
-          body: JSON.stringify(shortcutRequest),
-        },
-        env,
-      );
+    const response = await app.request(
+      "/api/ios-share/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: shortcutHeaders,
+        body: JSON.stringify({ url: `https://example.com/${"a".repeat(4097)}` }),
+      },
+      env,
+    );
 
-    const first = await request();
-    const second = await request();
-    expect(first.status).toBe(202);
-    expect(second.status).toBe(202);
-    await expect(second.json()).resolves.toMatchObject({ kind: "created" });
-    expect(createUrlJob).toHaveBeenCalledTimes(2);
-    expect(send).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "invalid_url" } });
+    expect(createUrlJob).not.toHaveBeenCalled();
   });
 
   it("active Web Jobを再利用すると通知要求だけを有効にしQueueへ追加しない", async () => {
@@ -339,6 +295,35 @@ describe("iOS Share routes", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("Recipe上限時は403を返しQueueへ追加しない", async () => {
+    const send = vi.fn(async () => undefined);
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({
+        createUrlJob: async () => ({ status: "limitExceeded" }),
+      }),
+      importQueue: { send } as unknown as Queue<{ jobId: string }>,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const response = await app.request(
+      "/api/ios-share/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: shortcutHeaders,
+        body: JSON.stringify(shortcutRequest),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "recipe_limit_exceeded" },
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("1 credentialあたり10回を超えると429を返す", async () => {
     let calls = 0;
     const rateLimiter = {
@@ -358,16 +343,13 @@ describe("iOS Share routes", () => {
     });
 
     const responses = await Promise.all(
-      Array.from({ length: 11 }, (_, index) =>
+      Array.from({ length: 11 }, () =>
         app.request(
           "/api/ios-share/shortcut/import-jobs",
           {
             method: "POST",
             headers: shortcutHeaders,
-            body: JSON.stringify({
-              ...shortcutRequest,
-              requestId: `550e8400-e29b-41d4-a716-4466554400${String(index).padStart(2, "0")}`,
-            }),
+            body: JSON.stringify(shortcutRequest),
           },
           env,
         ),

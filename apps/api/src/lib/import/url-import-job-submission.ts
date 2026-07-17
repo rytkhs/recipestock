@@ -24,7 +24,6 @@ export type SubmitUrlImportJobInput =
       entryPoint: "ios_shortcut";
       userId: string;
       url: unknown;
-      requestId: string;
     };
 
 export type SubmitUrlImportJobResult =
@@ -34,7 +33,6 @@ export type SubmitUrlImportJobResult =
       job: ImportJobRecord;
     }
   | { status: "invalidUrl" }
-  | { status: "invalidRequestId" }
   | { status: "recipeLimitExceeded" };
 
 export type UrlImportJobSubmission = {
@@ -59,23 +57,14 @@ export const createUrlImportJobSubmission = ({
   async submit(input) {
     const userId = input.userId;
     const url = input.url;
-    const request = importUrlRequestSchema.safeParse({ url });
+    const requestSchema =
+      input.entryPoint === "ios_shortcut"
+        ? iosShareShortcutImportJobRequestSchema
+        : importUrlRequestSchema;
+    const request = requestSchema.safeParse({ url });
 
     if (!request.success) {
       return { status: "invalidUrl" };
-    }
-
-    const requestId = input.entryPoint === "ios_shortcut" ? input.requestId : null;
-    if (requestId !== null) {
-      const shortcutRequest = iosShareShortcutImportJobRequestSchema.safeParse({
-        url: request.data.url,
-        requestId,
-      });
-      if (!shortcutRequest.success) {
-        return shortcutRequest.error.issues.some((issue) => issue.path[0] === "requestId")
-          ? { status: "invalidRequestId" }
-          : { status: "invalidUrl" };
-      }
     }
 
     const createdVia = input.entryPoint === "ios_shortcut" ? "ios_shortcut" : "web";
@@ -113,21 +102,12 @@ export const createUrlImportJobSubmission = ({
       url: request.data.url,
       normalizedUrl,
       createdVia,
-      requestId,
       completionNotificationRequested,
       now,
     });
 
     if (result.status === "limitExceeded") {
       return { status: "recipeLimitExceeded" };
-    }
-
-    if (result.status === "replayedRequest") {
-      return {
-        status: "accepted",
-        kind: result.responseKind,
-        job: result.job,
-      };
     }
 
     if (result.status === "existingActiveJob") {
