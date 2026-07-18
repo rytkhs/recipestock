@@ -36,7 +36,6 @@ describe("Import Job repository with Neon Postgres", () => {
       userId: params.userId,
       url: params.normalizedUrl ?? "https://example.com/recipe",
       normalizedUrl: params.normalizedUrl ?? "https://example.com/recipe",
-      createdVia: "ios_shortcut",
       completionNotificationRequested: true,
       now,
     });
@@ -64,7 +63,7 @@ describe("Import Job repository with Neon Postgres", () => {
     expect(storedJobs[0]?.id).toBe(jobs[0]?.id);
   });
 
-  it("Web作成JobをShortcutが再利用すると作成経路を変えず通知要求だけを有効にする", async () => {
+  it("通知なしのJobを通知ありで再利用すると通知要求だけを有効にする", async () => {
     const runId = crypto.randomUUID();
     const userId = `dbtest_notification_user_${runId}`;
     const normalizedUrl = "https://example.com/notification";
@@ -74,7 +73,6 @@ describe("Import Job repository with Neon Postgres", () => {
       userId,
       url: normalizedUrl,
       normalizedUrl,
-      createdVia: "web",
       completionNotificationRequested: false,
       now,
     });
@@ -90,7 +88,6 @@ describe("Import Job repository with Neon Postgres", () => {
     expect(shortcutResult).toMatchObject({
       job: {
         id: `dbtest_notification_web_${runId}`,
-        createdVia: "web",
         completionNotificationRequested: true,
       },
     });

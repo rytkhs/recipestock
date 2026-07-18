@@ -38,7 +38,6 @@ const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord =>
   errorCode: null,
   errorMessage: null,
   dismissedAt: null,
-  createdVia: "web",
   completionNotificationRequested: false,
   completionNotificationSentAt: null,
   createdAt: new Date("2026-06-01T00:00:00.000Z"),

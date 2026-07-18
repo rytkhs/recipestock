@@ -27,12 +27,11 @@ const createRepository = () => {
       record.revokedAt = now;
       return true;
     },
-    async authenticate({ tokenHash, now }) {
+    async authenticate({ tokenHash }) {
       const record = records.find(
         (candidate) => candidate.tokenHash === tokenHash && !candidate.revokedAt,
       );
       if (!record) return null;
-      record.lastUsedAt = now;
       return { credentialId: record.id, userId: record.userId };
     },
   };
@@ -55,7 +54,6 @@ describe("Shortcut credentials Module", () => {
         name: "iPhone",
         tokenSuffix: "aaaaaa",
         createdAt: issuedAt.toISOString(),
-        lastUsedAt: null,
       },
       token: `rssc_${"a".repeat(64)}`,
     });
@@ -63,7 +61,7 @@ describe("Shortcut credentials Module", () => {
     expect(state.records[0]?.tokenSuffix).toBe("aaaaaa");
   });
 
-  it("認証成功時にcredentialId/userIdを返しlastUsedAtを更新する", async () => {
+  it("認証成功時にcredentialId/userIdを返す", async () => {
     const state = createRepository();
     let currentDate = issuedAt;
     const token = `rssc_${"b".repeat(64)}`;
@@ -80,7 +78,6 @@ describe("Shortcut credentials Module", () => {
       credentialId: "credential_1",
       userId: "user_1",
     });
-    expect(state.records[0]?.lastUsedAt).toEqual(usedAt);
   });
 
   it("一覧はactive credentialだけを返し、revoke後のtokenを拒否する", async () => {

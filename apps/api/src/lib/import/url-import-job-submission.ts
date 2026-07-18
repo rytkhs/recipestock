@@ -1,8 +1,5 @@
 import { createDb } from "@recipestock/db";
-import {
-  importUrlRequestSchema,
-  iosShareShortcutImportJobRequestSchema,
-} from "@recipestock/schemas";
+import { importUrlRequestSchema } from "@recipestock/schemas";
 import { type Bindings } from "../../env";
 import {
   createImportJobId,
@@ -14,17 +11,11 @@ import {
 } from "../../import-jobs";
 import { normalizeImportableUrl, RecipeImportError } from "../../import-url";
 
-export type SubmitUrlImportJobInput =
-  | {
-      entryPoint: "web";
-      userId: string;
-      url: unknown;
-    }
-  | {
-      entryPoint: "ios_shortcut";
-      userId: string;
-      url: unknown;
-    };
+export type SubmitUrlImportJobInput = {
+  userId: string;
+  url: unknown;
+  notifyOnCompletion: boolean;
+};
 
 export type SubmitUrlImportJobResult =
   | {
@@ -33,11 +24,14 @@ export type SubmitUrlImportJobResult =
       job: ImportJobRecord;
     }
   | { status: "invalidUrl" }
-  | { status: "recipeLimitExceeded" };
+  | { status: "recipeLimitExceeded" }
+  | { status: "temporarilyUnavailable" };
 
 export type UrlImportJobSubmission = {
   submit(input: SubmitUrlImportJobInput): Promise<SubmitUrlImportJobResult>;
 };
+
+export type UrlImportJobSubmissionFactory = (env: Bindings) => UrlImportJobSubmission;
 
 type UrlImportJobSubmissionDependencies = {
   env: Bindings;
@@ -55,20 +49,11 @@ export const createUrlImportJobSubmission = ({
   getCurrentDate,
 }: UrlImportJobSubmissionDependencies): UrlImportJobSubmission => ({
   async submit(input) {
-    const userId = input.userId;
-    const url = input.url;
-    const requestSchema =
-      input.entryPoint === "ios_shortcut"
-        ? iosShareShortcutImportJobRequestSchema
-        : importUrlRequestSchema;
-    const request = requestSchema.safeParse({ url });
+    const request = importUrlRequestSchema.safeParse({ url: input.url });
 
     if (!request.success) {
       return { status: "invalidUrl" };
     }
-
-    const createdVia = input.entryPoint === "ios_shortcut" ? "ios_shortcut" : "web";
-    const completionNotificationRequested = input.entryPoint === "ios_shortcut";
 
     let normalizedUrl: string;
 
@@ -91,18 +76,17 @@ export const createUrlImportJobSubmission = ({
       });
 
     await repository.expireActiveJobsForUser({
-      userId,
+      userId: input.userId,
       expiresBefore: getImportJobExpiresBefore(now, resolveImportJobTimeoutMs(env)),
       now,
     });
 
     const result = await repository.createUrlJob({
       id: createJobId?.() ?? createImportJobId(),
-      userId,
+      userId: input.userId,
       url: request.data.url,
       normalizedUrl,
-      createdVia,
-      completionNotificationRequested,
+      completionNotificationRequested: input.notifyOnCompletion,
       now,
     });
 
@@ -130,7 +114,7 @@ export const createUrlImportJobSubmission = ({
         errorMessage: error instanceof Error ? error.message : "Import queue send failed.",
         now: getCurrentDate?.() ?? new Date(),
       });
-      throw error;
+      return { status: "temporarilyUnavailable" };
     }
 
     return {

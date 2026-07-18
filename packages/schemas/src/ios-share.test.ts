@@ -37,7 +37,6 @@ describe("iOS Shortcut import schemas", () => {
         job: {
           id: "job_1",
           kind: "url",
-          createdVia: "ios_shortcut",
           status: "queued",
           url: "https://example.com/recipe",
           recipeId: null,

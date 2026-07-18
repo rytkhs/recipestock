@@ -23,7 +23,7 @@ describe("Shortcut credential repository with Neon Postgres", () => {
     repository = createShortcutCredentialRepository(createDb(databaseUrl));
   });
 
-  it("発行、認証時の最終利用日時更新、revokeを永続化する", async () => {
+  it("発行、認証、revokeを永続化する", async () => {
     const runId = crypto.randomUUID();
     const credentialId = `dbtest_credential_${runId}`;
     const userId = `dbtest_user_${runId}`;
@@ -35,23 +35,25 @@ describe("Shortcut credential repository with Neon Postgres", () => {
       tokenHash,
       tokenSuffix: runId.slice(-6),
       createdAt: now,
-      lastUsedAt: null,
       revokedAt: null,
     });
 
-    const usedAt = new Date(now.getTime() + 1000);
-    await expect(repository.authenticate({ tokenHash, now: usedAt })).resolves.toEqual({
+    await expect(repository.authenticate({ tokenHash })).resolves.toEqual({
       credentialId,
       userId,
     });
     await expect(repository.listCredentials(userId)).resolves.toEqual([
-      expect.objectContaining({ id: credentialId, lastUsedAt: usedAt }),
+      expect.objectContaining({ id: credentialId }),
     ]);
 
     await expect(
-      repository.revokeCredential({ credentialId, userId, now: new Date(usedAt.getTime() + 1) }),
+      repository.revokeCredential({
+        credentialId,
+        userId,
+        now: new Date(now.getTime() + 1000),
+      }),
     ).resolves.toBe(true);
-    await expect(repository.authenticate({ tokenHash, now: usedAt })).resolves.toBeNull();
+    await expect(repository.authenticate({ tokenHash })).resolves.toBeNull();
     await expect(repository.listCredentials(userId)).resolves.toEqual([]);
   });
 });

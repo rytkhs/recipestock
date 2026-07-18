@@ -237,7 +237,6 @@ describe("Settings routes", () => {
                 name: "iPhone",
                 tokenSuffix: "aaaaaa",
                 createdAt: "2026-07-11T00:00:00.000Z",
-                lastUsedAt: null,
               },
               token: `rssc_${"a".repeat(64)}`,
             },

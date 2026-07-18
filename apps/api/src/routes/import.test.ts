@@ -25,7 +25,6 @@ const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord =>
   errorCode: null,
   errorMessage: null,
   dismissedAt: null,
-  createdVia: "web",
   completionNotificationRequested: false,
   completionNotificationSentAt: null,
   createdAt: new Date("2026-06-01T00:00:00.000Z"),
@@ -79,7 +78,6 @@ describe("Import job routes", () => {
       job: {
         id: "job_123",
         kind: "url",
-        createdVia: "web",
         status: "queued",
         url: "https://example.com/recipe",
         recipeId: null,
@@ -94,7 +92,6 @@ describe("Import job routes", () => {
       userId: "user_123",
       url: "https://example.com:443/recipe?utm_source=x#step",
       normalizedUrl: "https://example.com/recipe",
-      createdVia: "web",
       completionNotificationRequested: false,
       now: new Date("2026-06-01T00:00:00.000Z"),
     });
@@ -158,6 +155,29 @@ describe("Import job routes", () => {
     });
   });
 
+  it("4096文字を超えるURLはinvalid_urlを返す", async () => {
+    const createUrlJob = vi.fn(async () => ({
+      status: "created" as const,
+      job: createJob(),
+    }));
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({ createUrlJob }),
+    });
+
+    const response = await testApp.request("/api/import/url/jobs", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...sameOriginHeaders },
+      body: JSON.stringify({ url: `https://example.com/${"a".repeat(4097)}` }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "invalid_url" },
+    });
+    expect(createUrlJob).not.toHaveBeenCalled();
+  });
+
   it("レシピ上限到達時はjobを作らずrecipe_limit_exceededを返す", async () => {
     const testApp = createSilentTestApp({
       auth,
@@ -179,7 +199,7 @@ describe("Import job routes", () => {
     });
   });
 
-  it("Queue投入に失敗したjobをfailedにしてエラーを返す", async () => {
+  it("Queue投入に失敗したjobをfailedにして一時利用不可を返す", async () => {
     const markJobFailed = vi.fn(async () => undefined);
     const testApp = createSilentTestApp({
       auth,
@@ -198,9 +218,9 @@ describe("Import job routes", () => {
       body: JSON.stringify({ url: "https://example.com/recipe" }),
     });
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "unknown" },
+      error: { code: "temporarily_unavailable" },
     });
     expect(markJobFailed).toHaveBeenCalledWith({
       jobId: "job_123",

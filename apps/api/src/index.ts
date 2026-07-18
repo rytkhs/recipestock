@@ -21,6 +21,10 @@ import {
   processImportJob,
 } from "./import-jobs";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
+import {
+  createUrlImportJobSubmission,
+  type UrlImportJobSubmission,
+} from "./lib/import/url-import-job-submission";
 import { createLogger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
 import {
@@ -39,7 +43,11 @@ import { createRecipeRoutes } from "./routes/recipes";
 import { createShortcutCredentialRoutes } from "./routes/shortcut-credentials";
 import { createStripeRoutes } from "./routes/stripe";
 import { createUsageRoutes } from "./routes/usage";
-import { type ShortcutCredentials } from "./shortcut-credentials";
+import {
+  createShortcutCredentialRepository,
+  createShortcutCredentials,
+  type ShortcutCredentials,
+} from "./shortcut-credentials";
 import { type StripeBillingClient } from "./stripe-billing";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
@@ -57,7 +65,7 @@ export type AppDependencies = {
   pushSubscriptionRepository?: PushSubscriptionRepository;
   importJobRepository?: ImportJobRepository;
   shortcutCredentials?: ShortcutCredentials;
-  urlImportJobSubmission?: import("./lib/import/url-import-job-submission").UrlImportJobSubmission;
+  urlImportJobSubmission?: UrlImportJobSubmission;
   shortcutRateLimiter?: RateLimit;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
@@ -112,6 +120,23 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   const auth = dependencies.auth ?? authService;
   const loggerFactory = dependencies.loggerFactory ?? createLogger;
   const csrfProtection = csrf();
+  const shortcutCredentialsFor = (env: Bindings) =>
+    dependencies.shortcutCredentials ??
+    createShortcutCredentials({
+      repository: createShortcutCredentialRepository(createDb(env.DATABASE_URL)),
+      getCurrentDate: dependencies.getCurrentDate,
+    });
+  const urlImportJobSubmissionFor = (env: Bindings) =>
+    dependencies.urlImportJobSubmission ??
+    createUrlImportJobSubmission({
+      env,
+      importJobRepository: dependencies.importJobRepository,
+      importQueue: dependencies.importQueue,
+      createImportJobId: dependencies.createImportJobId,
+      getCurrentDate: dependencies.getCurrentDate,
+    });
+  const shortcutRateLimiterFor = (env: Bindings) =>
+    dependencies.shortcutRateLimiter ?? env.SHORTCUT_RATE_LIMITER;
 
   app.onError((error, c) => {
     const response = error instanceof HTTPException ? error.getResponse() : unknownResponse();
@@ -156,29 +181,24 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/import",
       createImportRoutes({
         auth,
+        urlImportJobSubmissionFor,
         importJobRepository: dependencies.importJobRepository,
-        importQueue: dependencies.importQueue,
-        createImportJobId: dependencies.createImportJobId,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )
     .route(
       "/ios-share",
       createIosShareRoutes({
-        shortcutCredentials: dependencies.shortcutCredentials,
-        urlImportJobSubmission: dependencies.urlImportJobSubmission,
-        importJobRepository: dependencies.importJobRepository,
-        importQueue: dependencies.importQueue,
-        createImportJobId: dependencies.createImportJobId,
-        shortcutRateLimiter: dependencies.shortcutRateLimiter,
-        getCurrentDate: dependencies.getCurrentDate,
+        shortcutCredentialsFor,
+        urlImportJobSubmissionFor,
+        shortcutRateLimiterFor,
       }),
     )
     .route(
       "/shortcut-credentials",
       createShortcutCredentialRoutes({
         auth,
-        shortcutCredentials: dependencies.shortcutCredentials,
+        shortcutCredentialsFor,
       }),
     )
     .route(

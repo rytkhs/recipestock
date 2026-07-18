@@ -9,7 +9,6 @@ export const shortcutCredentials = pgTable(
     tokenHash: text("token_hash").notNull(),
     tokenSuffix: text("token_suffix").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (table) => [

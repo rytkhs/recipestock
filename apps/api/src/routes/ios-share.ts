@@ -1,32 +1,21 @@
-import { createDb } from "@recipestock/db";
 import { createIosShareImportJobResponseSchema } from "@recipestock/schemas";
 import { Hono } from "hono";
 import {
   invalidUrlResponse,
   rateLimitExceededResponse,
   recipeLimitExceededResponse,
+  temporarilyUnavailableResponse,
   unauthorizedResponse,
 } from "../api-error";
 import { type ApiEnv } from "../context";
-import { createImportJobId, type ImportJobRepository, toImportJobSummary } from "../import-jobs";
-import {
-  createUrlImportJobSubmission,
-  type UrlImportJobSubmission,
-} from "../lib/import/url-import-job-submission";
-import {
-  createShortcutCredentialRepository,
-  createShortcutCredentials,
-  type ShortcutCredentials,
-} from "../shortcut-credentials";
+import { toImportJobSummary } from "../import-jobs";
+import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
+import { type ShortcutCredentials } from "../shortcut-credentials";
 
 type IosShareRouteDependencies = {
-  shortcutCredentials?: Pick<ShortcutCredentials, "authenticate">;
-  urlImportJobSubmission?: UrlImportJobSubmission;
-  importJobRepository?: ImportJobRepository;
-  importQueue?: Queue<{ jobId: string }>;
-  createImportJobId?: () => string;
-  shortcutRateLimiter?: RateLimit;
-  getCurrentDate?: () => Date;
+  shortcutCredentialsFor: (env: ApiEnv["Bindings"]) => Pick<ShortcutCredentials, "authenticate">;
+  urlImportJobSubmissionFor: UrlImportJobSubmissionFactory;
+  shortcutRateLimiterFor: (env: ApiEnv["Bindings"]) => RateLimit;
 };
 
 const bearerToken = (header: string | undefined) => {
@@ -35,30 +24,11 @@ const bearerToken = (header: string | undefined) => {
 };
 
 export const createIosShareRoutes = ({
-  shortcutCredentials,
-  urlImportJobSubmission,
-  importJobRepository,
-  importQueue,
-  createImportJobId: createJobId,
-  shortcutRateLimiter,
-  getCurrentDate,
+  shortcutCredentialsFor,
+  urlImportJobSubmissionFor,
+  shortcutRateLimiterFor,
 }: IosShareRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
-  const credentialsFor = (env: ApiEnv["Bindings"]) =>
-    shortcutCredentials ??
-    createShortcutCredentials({
-      repository: createShortcutCredentialRepository(createDb(env.DATABASE_URL)),
-      getCurrentDate,
-    });
-  const submissionFor = (env: ApiEnv["Bindings"]) =>
-    urlImportJobSubmission ??
-    createUrlImportJobSubmission({
-      env,
-      importJobRepository,
-      importQueue,
-      createImportJobId: createJobId ?? createImportJobId,
-      getCurrentDate,
-    });
 
   return routes.post("/shortcut/import-jobs", async (c) => {
     const token = bearerToken(c.req.header("authorization"));
@@ -66,12 +36,12 @@ export const createIosShareRoutes = ({
       return unauthorizedResponse();
     }
 
-    const identity = await credentialsFor(c.env).authenticate({ token });
+    const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
     if (!identity) {
       return unauthorizedResponse();
     }
 
-    const limiter = shortcutRateLimiter ?? c.env.SHORTCUT_RATE_LIMITER;
+    const limiter = shortcutRateLimiterFor(c.env);
     const { success } = await limiter.limit({ key: identity.credentialId });
     if (!success) {
       return rateLimitExceededResponse();
@@ -80,10 +50,10 @@ export const createIosShareRoutes = ({
     const rawBody = await c.req.json().catch(() => null);
     const body =
       typeof rawBody === "object" && rawBody !== null ? (rawBody as Record<string, unknown>) : null;
-    const result = await submissionFor(c.env).submit({
-      entryPoint: "ios_shortcut",
+    const result = await urlImportJobSubmissionFor(c.env).submit({
       userId: identity.userId,
       url: body?.url,
+      notifyOnCompletion: true,
     });
 
     if (result.status === "invalidUrl") {
@@ -92,6 +62,10 @@ export const createIosShareRoutes = ({
 
     if (result.status === "recipeLimitExceeded") {
       return recipeLimitExceededResponse();
+    }
+
+    if (result.status === "temporarilyUnavailable") {
+      return temporarilyUnavailableResponse();
     }
 
     return c.json(

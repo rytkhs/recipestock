@@ -17,4 +17,20 @@ describe("API error schemas", () => {
       },
     });
   });
+
+  it("一時利用不可エラーを受け入れる", () => {
+    expect(
+      apiErrorResponseSchema.parse({
+        error: {
+          code: "temporarily_unavailable",
+          message: "Service is temporarily unavailable.",
+        },
+      }),
+    ).toEqual({
+      error: {
+        code: "temporarily_unavailable",
+        message: "Service is temporarily unavailable.",
+      },
+    });
+  });
 });

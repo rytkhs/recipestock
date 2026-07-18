@@ -16,10 +16,7 @@ describe("importJobs schema", () => {
     );
   });
 
-  it("作成経路と完了通知の状態を保持する", () => {
-    expect(importJobs.createdVia.enumValues).toEqual(["web", "ios_shortcut"]);
-    expect(importJobs.createdVia.notNull).toBe(true);
-    expect(importJobs.createdVia.default).toBe("web");
+  it("完了通知の状態を保持する", () => {
     expect(importJobs.completionNotificationRequested.notNull).toBe(true);
     expect(importJobs.completionNotificationRequested.default).toBe(false);
     expect(importJobs.completionNotificationSentAt.notNull).toBe(false);

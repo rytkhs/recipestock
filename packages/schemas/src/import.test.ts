@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { importJobCreatedViaSchema, importJobSummarySchema } from "./import";
+import { importJobSummarySchema, importUrlRequestSchema } from "./import";
 
 describe("import schemas", () => {
-  it("Import Jobの作成経路としてwebとShortcutを受け入れる", () => {
-    expect(importJobCreatedViaSchema.options).toEqual(["web", "ios_shortcut"]);
-    expect(importJobCreatedViaSchema.safeParse("web").success).toBe(true);
-    expect(importJobCreatedViaSchema.safeParse("ios_shortcut").success).toBe(true);
-    expect(importJobCreatedViaSchema.safeParse("shortcut").success).toBe(false);
+  it("URL取り込みはHTTP(S)かつ4096文字以下だけを受け入れる", () => {
+    expect(importUrlRequestSchema.safeParse({ url: "https://example.com/recipe" }).success).toBe(
+      true,
+    );
+    expect(importUrlRequestSchema.safeParse({ url: "ftp://example.com/recipe" }).success).toBe(
+      false,
+    );
+    expect(
+      importUrlRequestSchema.safeParse({
+        url: `https://example.com/${"a".repeat(4097)}`,
+      }).success,
+    ).toBe(false);
   });
 
   it("private/login required import error codeを受け入れる", () => {
@@ -14,7 +21,6 @@ describe("import schemas", () => {
       importJobSummarySchema.parse({
         id: "job_private",
         kind: "url",
-        createdVia: "web",
         status: "failed",
         url: "https://www.instagram.com/p/DYsxvKyAZMg/",
         recipeId: null,
@@ -25,7 +31,6 @@ describe("import schemas", () => {
       }),
     ).toMatchObject({
       errorCode: "private_or_login_required",
-      createdVia: "web",
     });
   });
 });

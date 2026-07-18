@@ -238,7 +238,6 @@ describe("import queue handler", () => {
     errorCode: null,
     errorMessage: null,
     dismissedAt: null,
-    createdVia: "ios_shortcut",
     completionNotificationRequested: true,
     completionNotificationSentAt: null,
     createdAt: new Date("2026-06-01T00:00:00.000Z"),

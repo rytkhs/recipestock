@@ -25,7 +25,6 @@ const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord =>
   errorCode: null,
   errorMessage: null,
   dismissedAt: null,
-  createdVia: "ios_shortcut",
   completionNotificationRequested: true,
   completionNotificationSentAt: null,
   createdAt: new Date("2026-07-11T00:00:00.000Z"),
@@ -114,7 +113,6 @@ describe("iOS Share routes", () => {
       userId: "user_1",
       url: shortcutRequest.url,
       normalizedUrl: shortcutRequest.url,
-      createdVia: "ios_shortcut",
       completionNotificationRequested: true,
       now: new Date("2026-07-11T00:00:00.000Z"),
     });
@@ -257,12 +255,11 @@ describe("iOS Share routes", () => {
     expect(createUrlJob).not.toHaveBeenCalled();
   });
 
-  it("active Web Jobを再利用すると通知要求だけを有効にしQueueへ追加しない", async () => {
+  it("active Jobを再利用すると通知要求だけを有効にしQueueへ追加しない", async () => {
     const send = vi.fn(async () => undefined);
     const createUrlJob = vi.fn(async () => ({
       status: "existingActiveJob" as const,
       job: createJob({
-        createdVia: "web",
         completionNotificationRequested: true,
       }),
     }));
@@ -288,7 +285,6 @@ describe("iOS Share routes", () => {
     await expect(response.json()).resolves.toMatchObject({ kind: "existing_active_job" });
     expect(createUrlJob).toHaveBeenCalledWith(
       expect.objectContaining({
-        createdVia: "ios_shortcut",
         completionNotificationRequested: true,
       }),
     );
@@ -363,7 +359,7 @@ describe("iOS Share routes", () => {
     });
   });
 
-  it("Queue送信失敗時はJobをfailedにして500を返す", async () => {
+  it("Queue送信失敗時はJobをfailedにして503を返す", async () => {
     const markJobFailed = vi.fn(async () => undefined);
     const app = createSilentTestApp({
       auth,
@@ -388,8 +384,10 @@ describe("iOS Share routes", () => {
       env,
     );
 
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toMatchObject({ error: { code: "unknown" } });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "temporarily_unavailable" },
+    });
     expect(markJobFailed).toHaveBeenCalledWith({
       jobId: "job_123",
       errorCode: "unknown",

@@ -6,7 +6,12 @@ import {
   recentImportJobsResponseSchema,
 } from "@recipestock/schemas";
 import { Hono } from "hono";
-import { invalidUrlResponse, notFoundResponse, recipeLimitExceededResponse } from "../api-error";
+import {
+  invalidUrlResponse,
+  notFoundResponse,
+  recipeLimitExceededResponse,
+  temporarilyUnavailableResponse,
+} from "../api-error";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
 import {
@@ -16,22 +21,20 @@ import {
   resolveImportJobTimeoutMs,
   toImportJobSummary,
 } from "../import-jobs";
-import { createUrlImportJobSubmission } from "../lib/import/url-import-job-submission";
+import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
 import { requireAuth } from "../middleware/auth";
 
 type ImportRouteDependencies = {
   auth: AuthService;
+  urlImportJobSubmissionFor: UrlImportJobSubmissionFactory;
   importJobRepository?: ImportJobRepository;
-  importQueue?: Queue<{ jobId: string }>;
-  createImportJobId?: () => string;
   getCurrentDate?: () => Date;
 };
 
 export const createImportRoutes = ({
   auth,
+  urlImportJobSubmissionFor,
   importJobRepository,
-  importQueue,
-  createImportJobId: createJobId,
   getCurrentDate,
 }: ImportRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
@@ -45,16 +48,10 @@ export const createImportRoutes = ({
           ? rawBody.url
           : undefined;
 
-      const result = await createUrlImportJobSubmission({
-        env: c.env,
-        importJobRepository,
-        importQueue,
-        createImportJobId: createJobId,
-        getCurrentDate,
-      }).submit({
-        entryPoint: "web",
+      const result = await urlImportJobSubmissionFor(c.env).submit({
         userId,
         url,
+        notifyOnCompletion: false,
       });
 
       if (result.status === "invalidUrl") {
@@ -65,8 +62,8 @@ export const createImportRoutes = ({
         return recipeLimitExceededResponse();
       }
 
-      if (result.status !== "accepted") {
-        return invalidUrlResponse();
+      if (result.status === "temporarilyUnavailable") {
+        return temporarilyUnavailableResponse();
       }
 
       return c.json(

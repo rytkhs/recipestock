@@ -30,9 +30,6 @@ export const importJobs = pgTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     kind: text("kind", { enum: ["url"] }).notNull(),
-    createdVia: text("created_via", { enum: ["web", "ios_shortcut"] })
-      .notNull()
-      .default("web"),
     status: text("status", { enum: ["queued", "running", "succeeded", "failed"] }).notNull(),
     url: text("url"),
     normalizedUrl: text("normalized_url"),

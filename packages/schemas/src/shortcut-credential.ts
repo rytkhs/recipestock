@@ -12,7 +12,6 @@ export const shortcutCredentialSchema = z.object({
   name: shortcutCredentialNameSchema,
   tokenSuffix: z.string().min(4).max(12),
   createdAt: z.string().min(1),
-  lastUsedAt: z.string().min(1).nullable(),
 });
 
 export const issueShortcutCredentialResponseSchema = z.object({

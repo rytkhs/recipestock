@@ -1,7 +1,6 @@
 import { type DbClient, importJobs } from "@recipestock/db";
 import {
   type ImportErrorCode,
-  type ImportJobCreatedVia,
   type ImportJobKind,
   type ImportJobStatus,
   type ImportJobSummary,
@@ -47,7 +46,6 @@ export type ImportJobRecord = {
   errorCode: ImportErrorCode | null;
   errorMessage: string | null;
   dismissedAt: Date | null;
-  createdVia: ImportJobCreatedVia;
   completionNotificationRequested: boolean;
   completionNotificationSentAt: Date | null;
   createdAt: Date;
@@ -81,7 +79,6 @@ export type ImportJobRepository = {
     userId: string;
     url: string;
     normalizedUrl: string;
-    createdVia: ImportJobCreatedVia;
     completionNotificationRequested: boolean;
     now: Date;
   }): Promise<CreateImportUrlJobResult>;
@@ -128,7 +125,6 @@ type ImportJobSqlRow = {
   errorCode: string | null;
   errorMessage: string | null;
   dismissedAt: Date | string | null;
-  createdVia: string;
   completionNotificationRequested: boolean;
   completionNotificationSentAt: Date | string | null;
   createdAt: Date | string;
@@ -156,7 +152,6 @@ const getImportJobDeadline = (job: ImportJobRecord, timeoutMs: number) =>
 export const toImportJobSummary = (job: ImportJobRecord): ImportJobSummary => ({
   id: job.id,
   kind: job.kind,
-  createdVia: job.createdVia,
   status: job.status,
   url: job.url,
   recipeId: job.status === "succeeded" ? job.recipeId : null,
@@ -177,7 +172,6 @@ const mapImportJobRow = (row: typeof importJobs.$inferSelect): ImportJobRecord =
   errorCode: row.errorCode as ImportErrorCode | null,
   errorMessage: row.errorMessage,
   dismissedAt: row.dismissedAt,
-  createdVia: row.createdVia,
   completionNotificationRequested: row.completionNotificationRequested,
   completionNotificationSentAt: row.completionNotificationSentAt,
   createdAt: row.createdAt,
@@ -200,7 +194,6 @@ const mapImportJobSqlRow = (row: ImportJobSqlRow): ImportJobRecord => ({
   errorCode: row.errorCode as ImportErrorCode | null,
   errorMessage: row.errorMessage,
   dismissedAt: dateFromSql(row.dismissedAt),
-  createdVia: row.createdVia as ImportJobCreatedVia,
   completionNotificationRequested: row.completionNotificationRequested,
   completionNotificationSentAt: dateFromSql(row.completionNotificationSentAt),
   createdAt: dateFromSql(row.createdAt) ?? new Date(),
@@ -213,15 +206,7 @@ export const createImportJobRepository = (
   db: DbClient,
   planSyncOptions?: AppUserPlanSyncOptions,
 ): ImportJobRepository => ({
-  async createUrlJob({
-    id,
-    userId,
-    url,
-    normalizedUrl,
-    createdVia,
-    completionNotificationRequested,
-    now,
-  }) {
+  async createUrlJob({ id, userId, url, normalizedUrl, completionNotificationRequested, now }) {
     if (planSyncOptions) {
       await syncAppUserPlanForDb(db, userId, {
         ...planSyncOptions,
@@ -280,7 +265,6 @@ export const createImportJobRepository = (
             import_jobs.error_code,
             import_jobs.error_message,
             import_jobs.dismissed_at,
-            import_jobs.created_via,
             import_jobs.completion_notification_requested,
             import_jobs.completion_notification_sent_at,
             import_jobs.created_at,
@@ -306,7 +290,6 @@ export const createImportJobRepository = (
             status,
             url,
             normalized_url,
-            created_via,
             completion_notification_requested,
             created_at,
             updated_at
@@ -318,7 +301,6 @@ export const createImportJobRepository = (
             'queued',
             ${url},
             ${normalizedUrl},
-            ${createdVia},
             ${completionNotificationRequested},
             ${nowIso}::timestamptz,
             ${nowIso}::timestamptz
@@ -338,7 +320,6 @@ export const createImportJobRepository = (
             import_jobs.error_code,
             import_jobs.error_message,
             import_jobs.dismissed_at,
-            import_jobs.created_via,
             import_jobs.completion_notification_requested,
             import_jobs.completion_notification_sent_at,
             import_jobs.created_at,
@@ -358,7 +339,6 @@ export const createImportJobRepository = (
             touched_active_job.error_code,
             touched_active_job.error_message,
             touched_active_job.dismissed_at,
-            touched_active_job.created_via,
             touched_active_job.completion_notification_requested,
             touched_active_job.completion_notification_sent_at,
             touched_active_job.created_at,
@@ -379,7 +359,6 @@ export const createImportJobRepository = (
             inserted_job.error_code,
             inserted_job.error_message,
             inserted_job.dismissed_at,
-            inserted_job.created_via,
             inserted_job.completion_notification_requested,
             inserted_job.completion_notification_sent_at,
             inserted_job.created_at,
@@ -390,7 +369,6 @@ export const createImportJobRepository = (
           from inserted_job
           union all
           select
-            null,
             null,
             null,
             null,
@@ -430,7 +408,6 @@ export const createImportJobRepository = (
             null,
             null,
             null,
-            null,
             'retry'::text
           from recipe_limit
           where recipe_limit.exceeded = false
@@ -448,7 +425,6 @@ export const createImportJobRepository = (
           error_code as "errorCode",
           error_message as "errorMessage",
           dismissed_at as "dismissedAt",
-          created_via as "createdVia",
           completion_notification_requested as "completionNotificationRequested",
           completion_notification_sent_at as "completionNotificationSentAt",
           created_at as "createdAt",

@@ -1,14 +1,9 @@
-import { z } from "zod";
-import { importJobSummarySchema } from "./import";
+import { type z } from "zod";
+import { createImportUrlJobResponseSchema, importUrlRequestSchema } from "./import";
 
-export const iosShareShortcutImportJobRequestSchema = z.object({
-  url: z.url({ protocol: /^https?$/ }).max(4096),
-});
+export const iosShareShortcutImportJobRequestSchema = importUrlRequestSchema;
 
-export const createIosShareImportJobResponseSchema = z.object({
-  kind: z.enum(["created", "existing_active_job"]),
-  job: importJobSummarySchema,
-});
+export const createIosShareImportJobResponseSchema = createImportUrlJobResponseSchema;
 export type IosShareShortcutImportJobRequest = z.infer<
   typeof iosShareShortcutImportJobRequestSchema
 >;

@@ -12,7 +12,6 @@ export type ShortcutCredentialRecord = {
   tokenHash: string;
   tokenSuffix: string;
   createdAt: Date;
-  lastUsedAt: Date | null;
   revokedAt: Date | null;
 };
 
@@ -22,7 +21,6 @@ export type ShortcutCredentialRepository = {
   revokeCredential(params: { credentialId: string; userId: string; now: Date }): Promise<boolean>;
   authenticate(params: {
     tokenHash: string;
-    now: Date;
   }): Promise<{ credentialId: string; userId: string } | null>;
 };
 
@@ -41,7 +39,6 @@ const mapCredential = (credential: ShortcutCredentialRecord): ShortcutCredential
   name: credential.name,
   tokenSuffix: credential.tokenSuffix,
   createdAt: credential.createdAt.toISOString(),
-  lastUsedAt: credential.lastUsedAt?.toISOString() ?? null,
 });
 
 export const createShortcutCredentialToken = () =>
@@ -88,13 +85,13 @@ export const createShortcutCredentialRepository = (db: DbClient): ShortcutCreden
     return Boolean(row);
   },
 
-  async authenticate({ tokenHash, now }) {
+  async authenticate({ tokenHash }) {
     const result = await db.execute<{ credentialId: string; userId: string }>(sql`
-      update shortcut_credentials
-      set last_used_at = ${now.toISOString()}::timestamptz
+      select id as "credentialId", user_id as "userId"
+      from shortcut_credentials
       where token_hash = ${tokenHash}
         and revoked_at is null
-      returning id as "credentialId", user_id as "userId"
+      limit 1
     `);
 
     return result.rows[0] ?? null;
@@ -121,7 +118,6 @@ export const createShortcutCredentials = ({
       tokenHash: await hashShortcutCredentialToken(token),
       tokenSuffix: token.slice(-6),
       createdAt: getCurrentDate(),
-      lastUsedAt: null,
       revokedAt: null,
     });
     return { credential: mapCredential(credential), token };
@@ -138,7 +134,6 @@ export const createShortcutCredentials = ({
   async authenticate({ token }) {
     return repository.authenticate({
       tokenHash: await hashShortcutCredentialToken(token),
-      now: getCurrentDate(),
     });
   },
 });
