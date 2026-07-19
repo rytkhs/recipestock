@@ -5,7 +5,7 @@ import { useState } from "react";
 import { issueShortcutCredential, listShortcutCredentials, revokeShortcutCredential } from "./api";
 import { isStandaloneWebApp } from "./display-mode";
 
-const IOS_SHARE_SHORTCUT_URL = "https://www.icloud.com/shortcuts/b7da139e3563470697523b5a0daad14e";
+const IOS_SHARE_SHORTCUT_URL = "";
 const queryKey = ["shortcut-credentials"] as const;
 
 export const IosShareSettingsCard = () => {
