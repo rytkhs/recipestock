@@ -17,6 +17,7 @@ describe("Settings routes", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   const installPushBrowser = ({
@@ -219,6 +220,7 @@ describe("Settings routes", () => {
   });
 
   it("PWAからShortcut連携トークンを発行して追加導線を表示する", async () => {
+    vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", "https://www.icloud.com/shortcuts/recipe-stock-test");
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({ matches: true })),
@@ -259,7 +261,10 @@ describe("Settings routes", () => {
     await expect(screen.findByLabelText("連携トークン")).resolves.toHaveValue(
       `rssc_${"a".repeat(64)}`,
     );
-    expect(screen.getByRole("link", { name: "Shortcutを追加" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Shortcutを追加" })).toHaveAttribute(
+      "href",
+      "https://www.icloud.com/shortcuts/recipe-stock-test",
+    );
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>

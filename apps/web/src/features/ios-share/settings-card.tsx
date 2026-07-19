@@ -5,10 +5,10 @@ import { useState } from "react";
 import { issueShortcutCredential, listShortcutCredentials, revokeShortcutCredential } from "./api";
 import { isStandaloneWebApp } from "./display-mode";
 
-const IOS_SHARE_SHORTCUT_URL = "";
 const queryKey = ["shortcut-credentials"] as const;
 
 export const IosShareSettingsCard = () => {
+  const iosShareShortcutUrl = import.meta.env.VITE_IOS_SHARE_SHORTCUT_URL;
   const queryClient = useQueryClient();
   const standalone = isStandaloneWebApp();
   const [name, setName] = useState("iPhone");
@@ -105,7 +105,7 @@ export const IosShareSettingsCard = () => {
                 </Button>
                 <a
                   className="inline-flex min-h-10 items-center justify-center rounded-full bg-brand-sage px-5 font-semibold text-white text-sm no-underline"
-                  href={IOS_SHARE_SHORTCUT_URL}
+                  href={iosShareShortcutUrl}
                   rel="noreferrer"
                   target="_blank"
                 >
