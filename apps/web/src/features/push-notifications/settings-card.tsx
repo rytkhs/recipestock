@@ -3,19 +3,10 @@ import { Bell } from "@phosphor-icons/react";
 import { type GetPushSubscriptionsResponse } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import {
-  getPushSubscriptions,
-  pushSubscriptionsQueryKey,
-  registerPushSubscription,
-  revokePushSubscription,
-} from "./api";
+import { getPushSubscriptions, pushSubscriptionsQueryKey, registerPushSubscription } from "./api";
+import { deactivatePushSubscription, supportsPushNotifications } from "./browser";
 
 type NotificationState = "loading" | "disabled" | "enabled" | "denied" | "unsupported" | "error";
-
-const supportsPushNotifications = () =>
-  typeof Notification !== "undefined" &&
-  typeof PushManager !== "undefined" &&
-  "serviceWorker" in navigator;
 
 const decodeApplicationServerKey = (value: string) => {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
@@ -129,21 +120,23 @@ export const PushNotificationSettingsCard = () => {
 
       const registration = await navigator.serviceWorker.ready;
       const existingSubscription = await registration.pushManager.getSubscription();
-      const currentSubscription =
-        existingSubscription ??
-        (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: decodeApplicationServerKey(
-            pushSubscriptions.data.applicationServerKey,
-          ),
-        }));
+      if (existingSubscription) {
+        const unsubscribed = await existingSubscription.unsubscribe().catch(() => false);
+        if (!unsubscribed) {
+          throw new Error("Existing push subscription could not be deactivated.");
+        }
+      }
+      const currentSubscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: decodeApplicationServerKey(
+          pushSubscriptions.data.applicationServerKey,
+        ),
+      });
 
       try {
         await registerPushSubscription(serializeSubscription(currentSubscription));
       } catch (error) {
-        if (!existingSubscription) {
-          await currentSubscription.unsubscribe().catch(() => false);
-        }
+        await currentSubscription.unsubscribe().catch(() => false);
         throw error;
       }
 
@@ -181,12 +174,10 @@ export const PushNotificationSettingsCard = () => {
     setIsSubmitting(true);
 
     try {
-      await revokePushSubscription(subscription.endpoint);
-      let browserRevoked = false;
-      try {
-        browserRevoked = await subscription.unsubscribe();
-      } catch {
-        browserRevoked = false;
+      const { browserCleanupSucceeded, serverCleanupSucceeded } =
+        await deactivatePushSubscription(subscription);
+      if (!browserCleanupSucceeded && !serverCleanupSucceeded) {
+        throw new Error("Push subscription could not be deactivated.");
       }
 
       setSubscription(null);
@@ -202,9 +193,11 @@ export const PushNotificationSettingsCard = () => {
           },
       );
       setActionMessage(
-        browserRevoked
+        browserCleanupSucceeded && serverCleanupSucceeded
           ? "通知を解除しました。"
-          : "通知は解除されましたが、この端末の購読解除を確認できませんでした。",
+          : browserCleanupSucceeded
+            ? "通知は解除されましたが、登録情報の削除を確認できませんでした。"
+            : "通知は解除されましたが、この端末の購読解除を確認できませんでした。",
       );
     } catch {
       setActionError("通知を解除できませんでした。時間をおいて再度お試しください。");

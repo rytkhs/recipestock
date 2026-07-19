@@ -33,7 +33,11 @@ describe("Settings routes", () => {
   } = {}) => {
     const requestPermissionMock = vi.fn(async () => requestPermission);
     const subscribe = vi.fn(async () => newSubscription as PushSubscription);
-    const getSubscription = vi.fn(async () => subscription);
+    let getSubscriptionCalls = 0;
+    const getSubscription = vi.fn(async () => {
+      getSubscriptionCalls += 1;
+      return getSubscriptionCalls <= 2 ? subscription : newSubscription;
+    });
     const registration = {
       pushManager: { getSubscription, subscribe },
     };
@@ -51,21 +55,33 @@ describe("Settings routes", () => {
     return { getSubscription, registration, requestPermissionMock, subscribe };
   };
 
-  const createPushSubscription = () =>
+  const createPushSubscription = ({
+    endpoint = "https://push.example.com/subscription/device-1",
+    unsubscribeResult = true,
+  }: {
+    endpoint?: string;
+    unsubscribeResult?: boolean;
+  } = {}) =>
     ({
-      endpoint: "https://push.example.com/subscription/device-1",
+      endpoint,
       expirationTime: null,
-      unsubscribe: vi.fn(async () => true),
+      unsubscribe: vi.fn(async () => unsubscribeResult),
       toJSON: () => ({
-        endpoint: "https://push.example.com/subscription/device-1",
+        endpoint,
         expirationTime: null,
         keys: { p256dh: "p256dh-key", auth: "auth-key" },
       }),
     }) as unknown as PushSubscription;
 
-  it("ユーザー操作後にだけ通知権限とPush subscriptionを要求する", async () => {
-    const subscription = createPushSubscription();
-    const browser = installPushBrowser({ subscription });
+  it("別ユーザーの既存subscriptionを解除してから新しいsubscriptionを登録する", async () => {
+    const existingSubscription = createPushSubscription();
+    const newSubscription = createPushSubscription({
+      endpoint: "https://push.example.com/subscription/device-2",
+    });
+    const browser = installPushBrowser({
+      subscription: existingSubscription,
+      newSubscription,
+    });
     const fetchMock = mockFetch(
       async (input, init) => {
         const path = getRequestPath(input);
@@ -74,7 +90,7 @@ describe("Settings routes", () => {
         }
         if (path === "/api/push-subscriptions" && init?.method === "POST") {
           return jsonResponse({
-            subscription: { endpoint: subscription.endpoint, expirationTime: null },
+            subscription: { endpoint: newSubscription.endpoint, expirationTime: null },
           });
         }
         return new Response(null, { status: 404 });
@@ -91,13 +107,148 @@ describe("Settings routes", () => {
 
     await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
     expect(browser.requestPermissionMock).toHaveBeenCalledTimes(1);
-    expect(findFetchCall(fetchMock, "/api/push-subscriptions")).toBeTruthy();
+    expect(existingSubscription.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(browser.subscribe).toHaveBeenCalledTimes(1);
+    const registerCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/push-subscriptions" && init?.method === "POST",
+    );
+    expect(JSON.parse(String(registerCall?.[1]?.body))).toMatchObject({
+      endpoint: newSubscription.endpoint,
+    });
+  });
+
+  it("既存subscriptionを解除できない場合は新しいsubscriptionを登録しない", async () => {
+    const existingSubscription = createPushSubscription({ unsubscribeResult: false });
+    const newSubscription = createPushSubscription({
+      endpoint: "https://push.example.com/subscription/device-2",
+    });
+    const browser = installPushBrowser({
+      subscription: existingSubscription,
+      newSubscription,
+    });
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+
+    await expect(
+      screen.findByText("通知を登録できませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
+    expect(existingSubscription.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(browser.subscribe).not.toHaveBeenCalled();
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
           getRequestPath(input) === "/api/push-subscriptions" && init?.method === "POST",
       ),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("同じユーザーが再ログインした後に通知を再度有効化できる", async () => {
+    let authenticated = true;
+    let currentSubscription: PushSubscription | null = null;
+    const serverEndpoints = new Set<string>();
+    const firstSubscription = createPushSubscription({
+      endpoint: "https://push.example.com/subscription/device-1",
+    });
+    const secondSubscription = createPushSubscription({
+      endpoint: "https://push.example.com/subscription/device-2",
+    });
+    const pendingSubscriptions = [firstSubscription, secondSubscription];
+    vi.mocked(firstSubscription.unsubscribe).mockImplementation(async () => {
+      currentSubscription = null;
+      return true;
+    });
+    vi.mocked(secondSubscription.unsubscribe).mockImplementation(async () => {
+      currentSubscription = null;
+      return true;
+    });
+    const registration = {
+      pushManager: {
+        getSubscription: vi.fn(async () => currentSubscription),
+        subscribe: vi.fn(async () => {
+          const subscription = pendingSubscriptions.shift();
+          if (!subscription) throw new Error("No push subscription is available.");
+          currentSubscription = subscription;
+          return subscription;
+        }),
+      },
+    };
+    vi.stubGlobal("Notification", {
+      permission: "granted",
+      requestPermission: vi.fn(async () => "granted"),
+    });
+    vi.stubGlobal("PushManager", class PushManager {});
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      serviceWorker: { ready: Promise.resolve(registration) },
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+      if (path === "/api/auth/sign-out" && init?.method === "POST") {
+        authenticated = false;
+        return jsonResponse({ success: true });
+      }
+      if (path === "/api/auth/sign-in/email" && init?.method === "POST") {
+        authenticated = true;
+        return jsonResponse({ token: "session_token" });
+      }
+      if (path === "/api/me" && authenticated) {
+        return jsonResponse(viewerResponse);
+      }
+      if (path === "/api/recipes?limit=20") {
+        return jsonResponse({ items: [], nextCursor: null });
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "GET") {
+        return jsonResponse({
+          applicationServerKey: "AQID",
+          subscriptions: [...serverEndpoints].map((endpoint) => ({
+            endpoint,
+            expirationTime: null,
+          })),
+        });
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "POST") {
+        const request = JSON.parse(String(init.body)) as { endpoint: string };
+        serverEndpoints.add(request.endpoint);
+        return jsonResponse({
+          subscription: { endpoint: request.endpoint, expirationTime: null },
+        });
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "DELETE") {
+        const request = JSON.parse(String(init.body)) as { endpoint: string };
+        serverEndpoints.delete(request.endpoint);
+        return jsonResponse({ revoked: true });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+    await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "ログアウト" }));
+    await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
+    await userEvent.type(screen.getByLabelText("パスワード"), "password123");
+    await userEvent.click(screen.getByRole("button", { name: "ログイン" }));
+    await userEvent.click(await screen.findByRole("link", { name: "アカウント" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+    await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
   });
 
   it("通知拒否を説明し、Shortcut連携は利用可能なままにする", async () => {
@@ -217,6 +368,272 @@ describe("Settings routes", () => {
           getRequestPath(input) === "/api/push-subscriptions" && init?.method === "DELETE",
       ),
     ).toBe(true);
+  });
+
+  it.each([
+    {
+      expectedMessage: "通知は解除されましたが、この端末の購読解除を確認できませんでした。",
+      serverCleanupSucceeds: true,
+      unsubscribeResult: false,
+    },
+    {
+      expectedMessage: "通知は解除されましたが、登録情報の削除を確認できませんでした。",
+      serverCleanupSucceeds: false,
+      unsubscribeResult: true,
+    },
+  ])("通知解除の片側だけが成功した場合は無効状態にする", async ({
+    expectedMessage,
+    serverCleanupSucceeds,
+    unsubscribeResult,
+  }) => {
+    const subscription = createPushSubscription({ unsubscribeResult });
+    installPushBrowser({ permission: "granted", subscription, newSubscription: null });
+    mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({
+            applicationServerKey: "AQID",
+            subscriptions: [{ endpoint: subscription.endpoint, expirationTime: null }],
+          });
+        }
+        if (path === "/api/push-subscriptions" && init?.method === "DELETE") {
+          return serverCleanupSucceeds
+            ? jsonResponse({ revoked: true })
+            : jsonResponse(
+                { error: { code: "unknown", message: "Unexpected error occurred." } },
+                { status: 500 },
+              );
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を解除する" }));
+
+    await expect(screen.findByText(expectedMessage)).resolves.toBeInTheDocument();
+    expect(screen.getByText("この端末では通知が無効です。")).toBeInTheDocument();
+  });
+
+  it("DBとブラウザの通知解除が両方失敗した場合は有効状態を維持する", async () => {
+    const subscription = createPushSubscription({ unsubscribeResult: false });
+    installPushBrowser({ permission: "granted", subscription });
+    mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({
+            applicationServerKey: "AQID",
+            subscriptions: [{ endpoint: subscription.endpoint, expirationTime: null }],
+          });
+        }
+        if (path === "/api/push-subscriptions" && init?.method === "DELETE") {
+          return jsonResponse(
+            { error: { code: "unknown", message: "Unexpected error occurred." } },
+            { status: 500 },
+          );
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を解除する" }));
+
+    await expect(
+      screen.findByText("通知を解除できませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("この端末では通知が有効です。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "通知を解除する" })).toBeEnabled();
+  });
+
+  it("ログアウト前に現在端末のsubscriptionをDBとブラウザから解除する", async () => {
+    const subscription = createPushSubscription();
+    installPushBrowser({ permission: "granted", subscription });
+    let authenticated = true;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+      if (path === "/api/me") {
+        return jsonResponse(viewerResponse);
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "GET") {
+        return jsonResponse({
+          applicationServerKey: "AQID",
+          subscriptions: [{ endpoint: subscription.endpoint, expirationTime: null }],
+        });
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "DELETE") {
+        return jsonResponse({ revoked: true });
+      }
+      if (path === "/api/auth/sign-out" && init?.method === "POST") {
+        authenticated = false;
+        return jsonResponse({ success: true });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+
+    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+    const deleteIndex = fetchMock.mock.calls.findIndex(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/push-subscriptions" && init?.method === "DELETE",
+    );
+    const signOutIndex = fetchMock.mock.calls.findIndex(
+      ([input, init]) => getRequestPath(input) === "/api/auth/sign-out" && init?.method === "POST",
+    );
+    expect(deleteIndex).toBeGreaterThanOrEqual(0);
+    expect(signOutIndex).toBeGreaterThan(deleteIndex);
+  });
+
+  it.each([
+    {
+      name: "DB解除だけが成功",
+      serverCleanupSucceeds: true,
+      unsubscribeResult: false,
+    },
+    {
+      name: "ブラウザ解除だけが成功",
+      serverCleanupSucceeds: false,
+      unsubscribeResult: true,
+    },
+  ])("$nameならログアウトを続ける", async ({ serverCleanupSucceeds, unsubscribeResult }) => {
+    const subscription = createPushSubscription({ unsubscribeResult });
+    installPushBrowser({ permission: "granted", subscription });
+    let authenticated = true;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+      if (path === "/api/me") {
+        return jsonResponse(viewerResponse);
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "GET") {
+        return jsonResponse({
+          applicationServerKey: "AQID",
+          subscriptions: [{ endpoint: subscription.endpoint, expirationTime: null }],
+        });
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "DELETE") {
+        return serverCleanupSucceeds
+          ? jsonResponse({ revoked: true })
+          : jsonResponse(
+              { error: { code: "unknown", message: "Unexpected error occurred." } },
+              { status: 500 },
+            );
+      }
+      if (path === "/api/auth/sign-out" && init?.method === "POST") {
+        authenticated = false;
+        return jsonResponse({ success: true });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+
+    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          getRequestPath(input) === "/api/auth/sign-out" && init?.method === "POST",
+      ),
+    ).toBe(true);
+  });
+
+  it("DBとブラウザのsubscription解除が両方失敗した場合はログアウトを止める", async () => {
+    const subscription = createPushSubscription({ unsubscribeResult: false });
+    installPushBrowser({ permission: "granted", subscription });
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({
+            applicationServerKey: "AQID",
+            subscriptions: [{ endpoint: subscription.endpoint, expirationTime: null }],
+          });
+        }
+        if (path === "/api/push-subscriptions" && init?.method === "DELETE") {
+          return jsonResponse(
+            { error: { code: "unknown", message: "Unexpected error occurred." } },
+            { status: 500 },
+          );
+        }
+        if (path === "/api/auth/sign-out" && init?.method === "POST") {
+          return jsonResponse({ success: true });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+
+    await expect(
+      screen.findByText(
+        "通知を解除できなかったため、ログアウトを中止しました。時間をおいて再度お試しください。",
+      ),
+    ).resolves.toBeInTheDocument();
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          getRequestPath(input) === "/api/auth/sign-out" && init?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("別ユーザーのDB subscriptionが残りブラウザ解除も失敗した場合はログアウトを止める", async () => {
+    const subscription = createPushSubscription({ unsubscribeResult: false });
+    installPushBrowser({ permission: "granted", subscription });
+    let authenticated = true;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+      if (path === "/api/me") {
+        return jsonResponse(viewerResponse);
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "GET") {
+        return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "DELETE") {
+        return jsonResponse({ revoked: true });
+      }
+      if (path === "/api/auth/sign-out" && init?.method === "POST") {
+        authenticated = false;
+        return jsonResponse({ success: true });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+
+    await expect(
+      screen.findByText(
+        "通知を解除できなかったため、ログアウトを中止しました。時間をおいて再度お試しください。",
+      ),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
   });
 
   it("PWAからShortcut連携トークンを発行して追加導線を表示する", async () => {

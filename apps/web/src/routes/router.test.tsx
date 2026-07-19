@@ -207,6 +207,15 @@ describe("AppRouter", () => {
         cancelAt: null,
       },
     });
+    queryClient.setQueryData(["push-subscriptions"], {
+      applicationServerKey: "AQID",
+      subscriptions: [
+        {
+          endpoint: "https://push.example.com/subscription/device-1",
+          expirationTime: null,
+        },
+      ],
+    });
 
     await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
 
@@ -222,5 +231,6 @@ describe("AppRouter", () => {
     expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
     expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
     expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();
+    expect(queryClient.getQueryData(["push-subscriptions"])).toBeUndefined();
   });
 });
