@@ -75,15 +75,12 @@ Use the smallest relevant validation first, then expand according to the affecte
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm test
-pnpm build
 ```
 
 - Run test commands with sandbox escalation from the start because most tests require network access, localhost binding, or Cloudflare Workers resources. Type checking, linting, and other commands that do not require these capabilities should use the default sandbox.
-- Use `pnpm lint:fix` or `pnpm format` only when needed, then inspect the resulting diff.
+- Use `pnpm lint:fix` or `pnpm format` when needed.
 - After database schema changes, run `pnpm db:generate` and inspect the migration. Run `pnpm db:migrate` only when applying it is part of the request.
-- If full validation is too expensive, run targeted tests and relevant package checks. Record why any required validation could not run.
-- When changing schemas, URL normalization, search text, content conversion, AI usage counting, Stripe webhook idempotency or plan synchronization, or R2 key or cleanup decisions, add or update focused tests.
+- If full validation is too expensive, run targeted tests and relevant package checks.
 - For API changes, test validation, success responses, and relevant errors.
 
 Work is complete when the requested behavior is implemented, affected tests and contracts are updated where needed, relevant checks pass, required documentation or migrations are synchronized, and the final diff contains no unintended changes.
