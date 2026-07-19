@@ -21,11 +21,15 @@ describe("Settings routes", () => {
   });
 
   const installPushBrowser = ({
+    hasServiceWorkerRegistration = true,
+    isServiceWorkerReady = true,
     permission = "default",
     requestPermission = "granted",
     subscription = null,
     newSubscription = subscription,
   }: {
+    hasServiceWorkerRegistration?: boolean;
+    isServiceWorkerReady?: boolean;
     permission?: NotificationPermission;
     requestPermission?: NotificationPermission;
     subscription?: PushSubscription | null;
@@ -39,8 +43,18 @@ describe("Settings routes", () => {
       return getSubscriptionCalls <= 2 ? subscription : newSubscription;
     });
     const registration = {
+      active: null,
       pushManager: { getSubscription, subscribe },
     };
+    const getRegistration = vi.fn(async () =>
+      hasServiceWorkerRegistration
+        ? (registration as unknown as ServiceWorkerRegistration)
+        : undefined,
+    );
+    const register = vi.fn(async () => registration as unknown as ServiceWorkerRegistration);
+    const ready = isServiceWorkerReady
+      ? Promise.resolve(registration)
+      : new Promise<ServiceWorkerRegistration>(() => {});
 
     vi.stubGlobal("Notification", {
       permission,
@@ -49,10 +63,21 @@ describe("Settings routes", () => {
     vi.stubGlobal("PushManager", class PushManager {});
     vi.stubGlobal("navigator", {
       ...navigator,
-      serviceWorker: { ready: Promise.resolve(registration) },
+      serviceWorker: {
+        getRegistration,
+        ready,
+        register,
+      },
     });
 
-    return { getSubscription, registration, requestPermissionMock, subscribe };
+    return {
+      getRegistration,
+      getSubscription,
+      register,
+      registration,
+      requestPermissionMock,
+      subscribe,
+    };
   };
 
   const createPushSubscription = ({
@@ -153,6 +178,60 @@ describe("Settings routes", () => {
     ).toBe(false);
   });
 
+  it("Service Workerのreadyを待たずに通知を有効化する", async () => {
+    const subscription = createPushSubscription();
+    installPushBrowser({ subscription: null, newSubscription: subscription });
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      serviceWorker: {
+        ...navigator.serviceWorker,
+        ready: new Promise<ServiceWorkerRegistration>(() => {}),
+      },
+    });
+    mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+        }
+        if (path === "/api/push-subscriptions" && init?.method === "POST") {
+          return jsonResponse({
+            subscription: { endpoint: subscription.endpoint, expirationTime: null },
+          });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+
+    await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
+  });
+
+  it("Service Worker登録に失敗した場合は通知有効化を再試行できる", async () => {
+    const browser = installPushBrowser({ subscription: null });
+    browser.register.mockRejectedValue(new Error("Service Worker registration failed."));
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+
+    await expect(
+      screen.findByText("通知を登録できませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "通知を有効にする" })).toBeEnabled();
+  });
+
   it("同じユーザーが再ログインした後に通知を再度有効化できる", async () => {
     let authenticated = true;
     let currentSubscription: PushSubscription | null = null;
@@ -190,7 +269,11 @@ describe("Settings routes", () => {
     vi.stubGlobal("PushManager", class PushManager {});
     vi.stubGlobal("navigator", {
       ...navigator,
-      serviceWorker: { ready: Promise.resolve(registration) },
+      serviceWorker: {
+        getRegistration: vi.fn(async () => registration as unknown as ServiceWorkerRegistration),
+        ready: Promise.resolve(registration),
+        register: vi.fn(async () => registration as unknown as ServiceWorkerRegistration),
+      },
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const path = getRequestPath(input);
@@ -335,6 +418,26 @@ describe("Settings routes", () => {
     ).resolves.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "通知を有効にする" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "共有から取り込む" })).toBeInTheDocument();
+  });
+
+  it("Service Worker登録がなければ通知無効として表示する", async () => {
+    installPushBrowser({
+      hasServiceWorkerRegistration: false,
+      isServiceWorkerReady: false,
+    });
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/push-subscriptions" && init?.method === "GET") {
+          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+
+    await expect(screen.findByText("この端末では通知が無効です。")).resolves.toBeInTheDocument();
   });
 
   it("有効な通知を設定画面から解除する", async () => {
@@ -494,6 +597,55 @@ describe("Settings routes", () => {
     );
     expect(deleteIndex).toBeGreaterThanOrEqual(0);
     expect(signOutIndex).toBeGreaterThan(deleteIndex);
+  });
+
+  it("Service Worker登録がなくてもログアウトできる", async () => {
+    installPushBrowser({
+      hasServiceWorkerRegistration: false,
+      isServiceWorkerReady: false,
+    });
+    let authenticated = true;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(authenticated);
+      }
+      if (path === "/api/me") {
+        return jsonResponse(viewerResponse);
+      }
+      if (path === "/api/push-subscriptions" && init?.method === "GET") {
+        return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
+      }
+      if (path === "/api/auth/sign-out" && init?.method === "POST") {
+        authenticated = false;
+        return jsonResponse({ success: true });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+
+    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+  });
+
+  it("Service Worker登録を確認できない場合はログアウトを中止して再試行できる", async () => {
+    const browser = installPushBrowser();
+    browser.getRegistration.mockRejectedValue(new Error("Service Worker lookup failed."));
+    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+
+    await expect(
+      screen.findByText(
+        "通知を解除できなかったため、ログアウトを中止しました。時間をおいて再度お試しください。",
+      ),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ログアウト" })).toBeEnabled();
+    expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
   });
 
   it.each([

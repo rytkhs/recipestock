@@ -1,5 +1,8 @@
 import { getPushSubscriptions, revokePushSubscription } from "./api";
 
+const pushServiceWorkerScriptUrl = "/sw.js";
+const pushServiceWorkerScope = "/";
+
 export type PushSubscriptionDeactivationResult = {
   browserCleanupSucceeded: boolean;
   serverCleanupSucceeded: boolean;
@@ -10,9 +13,14 @@ export const supportsPushNotifications = () =>
   typeof PushManager !== "undefined" &&
   "serviceWorker" in navigator;
 
+export const registerPushServiceWorker = () =>
+  navigator.serviceWorker.register(pushServiceWorkerScriptUrl, {
+    scope: pushServiceWorkerScope,
+  });
+
 export const getCurrentPushSubscription = async () => {
-  const registration = await navigator.serviceWorker.ready;
-  return registration.pushManager.getSubscription();
+  const registration = await navigator.serviceWorker.getRegistration(pushServiceWorkerScope);
+  return registration?.pushManager.getSubscription() ?? null;
 };
 
 export const deactivatePushSubscription = async (

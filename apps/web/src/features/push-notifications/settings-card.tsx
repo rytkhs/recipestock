@@ -4,7 +4,12 @@ import { type GetPushSubscriptionsResponse } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { getPushSubscriptions, pushSubscriptionsQueryKey, registerPushSubscription } from "./api";
-import { deactivatePushSubscription, supportsPushNotifications } from "./browser";
+import {
+  deactivatePushSubscription,
+  getCurrentPushSubscription,
+  registerPushServiceWorker,
+  supportsPushNotifications,
+} from "./browser";
 
 type NotificationState = "loading" | "disabled" | "enabled" | "denied" | "unsupported" | "error";
 
@@ -74,8 +79,7 @@ export const PushNotificationSettingsCard = () => {
       if (!pushSubscriptions.data) return;
 
       try {
-        const registration = await navigator.serviceWorker.ready;
-        const currentSubscription = await registration.pushManager.getSubscription();
+        const currentSubscription = await getCurrentPushSubscription();
         if (!active) return;
 
         setSubscription(currentSubscription);
@@ -118,7 +122,7 @@ export const PushNotificationSettingsCard = () => {
         throw new Error("VAPID public key is unavailable.");
       }
 
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await registerPushServiceWorker();
       const existingSubscription = await registration.pushManager.getSubscription();
       if (existingSubscription) {
         const unsubscribed = await existingSubscription.unsubscribe().catch(() => false);
