@@ -15,4 +15,10 @@ describe("importJobs schema", () => {
       "import_jobs_user_active_idx",
     );
   });
+
+  it("完了通知の状態を保持する", () => {
+    expect(importJobs.completionNotificationRequested.notNull).toBe(true);
+    expect(importJobs.completionNotificationRequested.default).toBe(false);
+    expect(importJobs.completionNotificationSentAt.notNull).toBe(false);
+  });
 });

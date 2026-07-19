@@ -2,25 +2,25 @@ import { Button, Input, Label, TextField } from "@heroui/react";
 import { ShareNetwork, Trash } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { createIosShareChannel, listIosShareChannels, revokeIosShareChannel } from "./api";
+import { issueShortcutCredential, listShortcutCredentials, revokeShortcutCredential } from "./api";
 import { isStandaloneWebApp } from "./display-mode";
 
-const IOS_SHARE_SHORTCUT_URL = "https://www.icloud.com/shortcuts/b7da139e3563470697523b5a0daad14e";
-const queryKey = ["ios-share", "channels"] as const;
+const queryKey = ["shortcut-credentials"] as const;
 
 export const IosShareSettingsCard = () => {
+  const iosShareShortcutUrl = import.meta.env.VITE_IOS_SHARE_SHORTCUT_URL;
   const queryClient = useQueryClient();
   const standalone = isStandaloneWebApp();
   const [name, setName] = useState("iPhone");
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const channels = useQuery({
+  const credentials = useQuery({
     queryKey,
-    queryFn: listIosShareChannels,
+    queryFn: listShortcutCredentials,
     enabled: standalone,
   });
   const createMutation = useMutation({
-    mutationFn: () => createIosShareChannel(name),
+    mutationFn: () => issueShortcutCredential(name),
     onSuccess: async (result) => {
       setIssuedToken(result.token);
       setMessage(
@@ -30,7 +30,7 @@ export const IosShareSettingsCard = () => {
     },
   });
   const revokeMutation = useMutation({
-    mutationFn: revokeIosShareChannel,
+    mutationFn: revokeShortcutCredential,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey });
     },
@@ -53,7 +53,8 @@ export const IosShareSettingsCard = () => {
         <h2 className="text-brand-walnut font-bold text-lg">共有から取り込む</h2>
       </div>
       <p className="text-brand-muted text-sm">
-        iPhoneやiPadの共有メニューから、WebページやSNS投稿のURLを取り込めます。
+        iPhoneやiPadの共有メニューからURLを共有すると、Recipe
+        Stockへの取り込みを直接開始します。通知を許可している場合は、完了をお知らせします。
       </p>
 
       {!standalone ? (
@@ -104,7 +105,7 @@ export const IosShareSettingsCard = () => {
                 </Button>
                 <a
                   className="inline-flex min-h-10 items-center justify-center rounded-full bg-brand-sage px-5 font-semibold text-white text-sm no-underline"
-                  href={IOS_SHARE_SHORTCUT_URL}
+                  href={iosShareShortcutUrl}
                   rel="noreferrer"
                   target="_blank"
                 >
@@ -125,24 +126,24 @@ export const IosShareSettingsCard = () => {
             </p>
           ) : null}
 
-          {(channels.data?.channels.length ?? 0) > 0 ? (
+          {(credentials.data?.credentials.length ?? 0) > 0 ? (
             <div className="mt-5 grid gap-2">
               <p className="font-semibold text-brand-walnut text-sm">連携済み端末</p>
-              {channels.data?.channels.map((channel) => (
+              {credentials.data?.credentials.map((credential) => (
                 <div
                   className="flex items-center justify-between gap-3 rounded-[12px] border border-brand-line-soft p-3"
-                  key={channel.id}
+                  key={credential.id}
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-brand-ink text-sm">{channel.name}</p>
-                    <p className="text-brand-muted text-xs">末尾 {channel.tokenSuffix}</p>
+                    <p className="truncate font-medium text-brand-ink text-sm">{credential.name}</p>
+                    <p className="text-brand-muted text-xs">末尾 {credential.tokenSuffix}</p>
                   </div>
                   <Button
-                    aria-label={`${channel.name}の連携を解除`}
+                    aria-label={`${credential.name}の連携を解除`}
                     isIconOnly
                     size="sm"
                     variant="ghost"
-                    onPress={() => revokeMutation.mutate(channel.id)}
+                    onPress={() => revokeMutation.mutate(credential.id)}
                   >
                     <Trash size={16} />
                   </Button>

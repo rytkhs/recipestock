@@ -3,13 +3,8 @@ import { ClipboardText, Link as LinkIcon, X } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
-import { deliverIosShareHandoff } from "../features/ios-share/api";
-import { isStandaloneWebApp } from "../features/ios-share/display-mode";
-import { IosShareInstallGuide } from "../features/ios-share/install-guide";
 
 export type ImportUrlSearch = {
-  handoff?: string;
-  source?: "ios-shortcut";
   text?: string;
   title?: string;
   url?: string;
@@ -77,9 +72,6 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
     try {
       await createImportUrlJob(url);
 
-      if (search.handoff && search.source === "ios-shortcut" && !isStandaloneWebApp()) {
-        await deliverIosShareHandoff(search.handoff, "browser").catch(() => undefined);
-      }
       await navigate({ to: "/recipes" });
     } catch (submitError) {
       setError(getCreateImportUrlJobErrorMessage(submitError));
@@ -102,9 +94,6 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
         </div>
       </div>
       <div className="mt-6 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-        {search.source === "ios-shortcut" && !isStandaloneWebApp() ? (
-          <IosShareInstallGuide />
-        ) : null}
         <form className="grid min-w-0 gap-4" onSubmit={submit}>
           <TextField className="min-w-0" isRequired>
             <div className="mb-1 flex min-w-0 items-center justify-between gap-3">

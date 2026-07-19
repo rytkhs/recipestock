@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "./billing";
-import { type ImportJobRepository } from "./import-jobs";
-import { handleImportQueueMessageError } from "./index";
+import { type PushSender } from "./completion-notifications";
+import { type ImportJobRecord, type ImportJobRepository } from "./import-jobs";
+import { handleImportQueueMessage, handleImportQueueMessageError } from "./index";
 import { createLogger, createMemoryLogSink } from "./logger";
 import { type StripeBillingClient, StripeWebhookSignatureError } from "./stripe-billing";
 import { createSilentTestApp } from "./test-helpers";
@@ -225,6 +226,219 @@ describe("import queue handler", () => {
       },
     };
   };
+
+  const terminalJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord => ({
+    id: "job_123",
+    userId: "user_1",
+    kind: "url",
+    status: "succeeded",
+    url: "https://private.example.com/recipe",
+    normalizedUrl: "https://private.example.com/recipe",
+    recipeId: "recipe_123",
+    errorCode: null,
+    errorMessage: null,
+    dismissedAt: null,
+    completionNotificationRequested: true,
+    completionNotificationSentAt: null,
+    createdAt: new Date("2026-06-01T00:00:00.000Z"),
+    startedAt: new Date("2026-06-01T00:00:01.000Z"),
+    finishedAt: new Date("2026-06-01T00:00:02.000Z"),
+    updatedAt: new Date("2026-06-01T00:00:02.000Z"),
+    ...overrides,
+  });
+
+  it("終端成功を全端末へ通知してaccepted後にtimestampを記録してackする", async () => {
+    const { events, message } = createMessage(1);
+    let job = terminalJob();
+    const sentPayloads: unknown[] = [];
+    const repository = {
+      getJobById: async () => job,
+      markCompletionNotificationSent: async ({ now }: { jobId: string; now: Date }) => {
+        if (job.completionNotificationSentAt) return false;
+        job = { ...job, completionNotificationSentAt: now };
+        return true;
+      },
+    } as unknown as ImportJobRepository;
+    const pushSender: PushSender = {
+      sendToUser: async ({ payload }) => {
+        sentPayloads.push(payload);
+        return { acceptedCount: 2 };
+      },
+    };
+
+    await handleImportQueueMessage({
+      importJobRepository: repository,
+      message,
+      processJob: async () => {},
+      pushSender,
+      now: new Date("2026-06-01T00:00:03.000Z"),
+    });
+
+    expect(sentPayloads).toEqual([{ outcome: "succeeded", recipeId: "recipe_123" }]);
+    expect(job.completionNotificationSentAt).toEqual(new Date("2026-06-01T00:00:03.000Z"));
+    expect(events).toEqual(["ack"]);
+  });
+
+  it.each([
+    ["通常失敗", "unknown"],
+    ["timeout", "job_timeout"],
+    ["Recipe上限", "recipe_limit_exceeded"],
+  ] as const)("%sの終端Jobをgenericな失敗として通知する", async (_label, errorCode) => {
+    const { events, message } = createMessage(1);
+    const payloads: unknown[] = [];
+    const repository = {
+      getJobById: async () =>
+        terminalJob({
+          status: "failed",
+          recipeId: null,
+          errorCode,
+          errorMessage: "private failure detail",
+        }),
+      markCompletionNotificationSent: async () => true,
+    } as unknown as ImportJobRepository;
+
+    await handleImportQueueMessage({
+      importJobRepository: repository,
+      message,
+      processJob: async () => {},
+      pushSender: {
+        sendToUser: async ({ payload }) => {
+          payloads.push(payload);
+          return { acceptedCount: 1 };
+        },
+      },
+    });
+
+    expect(payloads).toEqual([{ outcome: "failed" }]);
+    expect(JSON.stringify(payloads)).not.toMatch(/private|error|url|source|title/i);
+    expect(events).toEqual(["ack"]);
+  });
+
+  it.each([
+    terminalJob({ status: "queued", finishedAt: null }),
+    terminalJob({ status: "running", finishedAt: null }),
+    terminalJob({ completionNotificationRequested: false }),
+    terminalJob({ completionNotificationSentAt: new Date("2026-06-01T00:00:02.500Z") }),
+  ])("通知対象外のJobは送信せずackする", async (job) => {
+    const { events, message } = createMessage(1);
+    const sendToUser = vi.fn<PushSender["sendToUser"]>();
+
+    await handleImportQueueMessage({
+      importJobRepository: {
+        getJobById: async () => job,
+      } as unknown as ImportJobRepository,
+      message,
+      processJob: async () => {},
+      pushSender: { sendToUser },
+    });
+
+    expect(sendToUser).not.toHaveBeenCalled();
+    expect(events).toEqual(["ack"]);
+  });
+
+  it("購読なしまたは全送信失敗ではtimestampを記録せずackする", async () => {
+    const { events, message } = createMessage(1);
+    const markCompletionNotificationSent = vi.fn(async () => true);
+
+    await handleImportQueueMessage({
+      importJobRepository: {
+        getJobById: async () => terminalJob(),
+        markCompletionNotificationSent,
+      } as unknown as ImportJobRepository,
+      message,
+      processJob: async () => {},
+      pushSender: { sendToUser: async () => ({ acceptedCount: 0 }) },
+    });
+
+    expect(markCompletionNotificationSent).not.toHaveBeenCalled();
+    expect(events).toEqual(["ack"]);
+  });
+
+  it("Push sender例外がJobとRecipeの結果を変えずackする", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { events, message } = createMessage(1);
+    const job = terminalJob();
+    const markCompletionNotificationSent = vi.fn(async () => true);
+
+    await handleImportQueueMessage({
+      importJobRepository: {
+        getJobById: async () => job,
+        markCompletionNotificationSent,
+      } as unknown as ImportJobRepository,
+      message,
+      processJob: async () => {},
+      pushSender: {
+        sendToUser: async () => {
+          throw new Error("encryption failed");
+        },
+      },
+    });
+
+    expect(job).toMatchObject({ status: "succeeded", recipeId: "recipe_123" });
+    expect(markCompletionNotificationSent).not.toHaveBeenCalled();
+    expect(events).toEqual(["ack"]);
+  });
+
+  it("通知済みtimestampにより同じJobを通常のqueue処理で重複通知しない", async () => {
+    let job = terminalJob();
+    const sendToUser = vi.fn<PushSender["sendToUser"]>(async () => ({ acceptedCount: 1 }));
+    const repository = {
+      getJobById: async () => job,
+      markCompletionNotificationSent: async ({ now }: { jobId: string; now: Date }) => {
+        if (job.completionNotificationSentAt) return false;
+        job = { ...job, completionNotificationSentAt: now };
+        return true;
+      },
+    } as unknown as ImportJobRepository;
+
+    for (const attempts of [1, 2]) {
+      await handleImportQueueMessage({
+        importJobRepository: repository,
+        message: createMessage(attempts).message,
+        processJob: async () => {},
+        pushSender: { sendToUser },
+      });
+    }
+
+    expect(sendToUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("最大queue試行の例外をfailedへ永続化した後に失敗通知してackする", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { events, message } = createMessage(4);
+    let job = terminalJob({ status: "running", recipeId: null, finishedAt: null });
+    const payloads: unknown[] = [];
+    const repository = {
+      getJobById: async () => job,
+      markJobFailed: async ({
+        errorCode,
+        errorMessage,
+        now,
+      }: Parameters<ImportJobRepository["markJobFailed"]>[0]) => {
+        job = { ...job, status: "failed", errorCode, errorMessage, finishedAt: now };
+      },
+      markCompletionNotificationSent: async () => true,
+    } as unknown as ImportJobRepository;
+
+    await handleImportQueueMessage({
+      importJobRepository: repository,
+      message,
+      processJob: async () => {
+        throw new Error("database failed");
+      },
+      pushSender: {
+        sendToUser: async ({ payload }) => {
+          payloads.push(payload);
+          return { acceptedCount: 1 };
+        },
+      },
+      now: new Date("2026-06-01T00:00:04.000Z"),
+    });
+
+    expect(job.status).toBe("failed");
+    expect(payloads).toEqual([{ outcome: "failed" }]);
+    expect(events).toEqual(["ack"]);
+  });
 
   it("最終リトライ未満の予期しない例外はmessage.retryする", async () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);

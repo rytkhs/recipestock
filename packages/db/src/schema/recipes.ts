@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const recipes = pgTable(
   "recipes",
@@ -37,6 +37,12 @@ export const importJobs = pgTable(
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    completionNotificationRequested: boolean("completion_notification_requested")
+      .notNull()
+      .default(false),
+    completionNotificationSentAt: timestamp("completion_notification_sent_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),

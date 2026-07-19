@@ -17,7 +17,6 @@ import {
   RecipeListSkeleton,
   SettingsSkeleton,
 } from "../components/loading";
-import { IosShareHandoffReceiver } from "../features/ios-share/handoff-receiver";
 import { ApiClientError } from "../lib/api";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { clearUserScopedCache } from "../lib/query-cache";
@@ -133,7 +132,6 @@ const RootLayoutContent = () => {
 
   return (
     <div className="min-h-screen bg-brand-cream text-brand-ink">
-      <IosShareHandoffReceiver />
       <Header />
       <main
         className={
@@ -244,8 +242,6 @@ const importUrlRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import/url",
   validateSearch: (search): ImportUrlSearch => ({
-    handoff: stringSearchParam(search.handoff),
-    source: search.source === "ios-shortcut" ? "ios-shortcut" : undefined,
     text: stringSearchParam(search.text),
     title: stringSearchParam(search.title),
     url: stringSearchParam(search.url),
@@ -255,10 +251,7 @@ const importUrlRoute = createRoute({
 
     return (
       <RequireViewer>
-        <ImportUrlRoute
-          key={JSON.stringify([search.handoff, search.url, search.text])}
-          search={search}
-        />
+        <ImportUrlRoute key={JSON.stringify([search.url, search.text])} search={search} />
       </RequireViewer>
     );
   },

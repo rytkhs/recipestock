@@ -9,6 +9,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { IosShareSettingsCard } from "../features/ios-share/settings-card";
+import {
+  deactivatePushSubscription,
+  getCurrentPushSubscription,
+  supportsPushNotifications,
+} from "../features/push-notifications/browser";
+import { PushNotificationSettingsCard } from "../features/push-notifications/settings-card";
 import { ApiClientError, api, parseApiResponse } from "../lib/api";
 import { changeEmail, changePassword, signOut, useAuthSession } from "../lib/auth";
 import { billingStatusQueryKey } from "../lib/billing";
@@ -72,12 +78,40 @@ export const SettingsIndexRoute = () => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
   const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   const handleSignOut = async () => {
-    await signOut();
-    clearUserScopedCache(queryClient);
-    await session.refetch();
-    await navigate({ to: "/login" });
+    setIsSigningOut(true);
+    setSignOutError(null);
+    let pushCleanupCompleted = false;
+
+    try {
+      if (supportsPushNotifications()) {
+        const subscription = await getCurrentPushSubscription();
+        if (subscription) {
+          const { browserCleanupSucceeded, serverCleanupSucceeded } =
+            await deactivatePushSubscription(subscription);
+          if (!browserCleanupSucceeded && !serverCleanupSucceeded) {
+            throw new Error("push_subscription_cleanup_failed");
+          }
+        }
+      }
+      pushCleanupCompleted = true;
+
+      await signOut();
+      clearUserScopedCache(queryClient);
+      await session.refetch();
+      await navigate({ to: "/login" });
+    } catch {
+      setSignOutError(
+        pushCleanupCompleted
+          ? "ログアウトできませんでした。時間をおいて再度お試しください。"
+          : "通知を解除できなかったため、ログアウトを中止しました。時間をおいて再度お試しください。",
+      );
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const handleEmailChange = async (event: FormEvent<HTMLFormElement>) => {
@@ -241,12 +275,15 @@ export const SettingsIndexRoute = () => {
           </Link>
         </div>
 
+        <PushNotificationSettingsCard />
+
         <IosShareSettingsCard />
       </div>
 
       <div className="mt-8 flex justify-center">
         <Button
           className="rounded-full text-brand-danger border-none bg-transparent hover:bg-brand-danger/5 gap-1.5"
+          isDisabled={isSigningOut}
           variant="ghost"
           onPress={() => void handleSignOut()}
         >
@@ -254,6 +291,11 @@ export const SettingsIndexRoute = () => {
           ログアウト
         </Button>
       </div>
+      {signOutError ? (
+        <p className="mt-3 text-center text-brand-danger text-sm" role="alert">
+          {signOutError}
+        </p>
+      ) : null}
     </section>
   );
 };

@@ -1,5 +1,7 @@
 # iOS ShortcutからPWAへのURL配送にサーバーhandoffを使用する
 
+> この決定はADR 0006「iOS ShortcutからImport Jobを直接作成する」によって置き換えられた。
+
 iOSの非公開`webapp:` URL schemeはHome Screen Web Appを起動できるが、pathとqueryをPWAへ渡さない。また、対象PWAがインストールされていない場合は空のWeb App画面を開く。WebKitはWeb Share Target APIを実装していないため、manifestの`share_target`だけではiOS共有を受け取れない。
 
 iOS Shortcutは共有URLを認証付きAPIへ送信し、サーバーに短命なShare Handoffを作成してから`webapp:`でPWAを起動する。PWAは起動・復帰時に認証ユーザーのpending Share Handoffを取得し、`/import/url`へ遷移してPWA deliveryを記録する。Shortcutはdelivery状態を短時間確認し、PWAが受理しなければHTTPSの`/import/url`をSafariで開く。

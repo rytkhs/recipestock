@@ -29,10 +29,6 @@ _Avoid_: Import task, background import
 A user's request that an active **Import Job** must not produce a **Recipe**. Cancellation does not imply that already-started external processing stops immediately.
 _Avoid_: Dismiss, close, force stop
 
-**Share Handoff**:
-A temporary, user-owned delivery of a shared URL from an iOS Shortcut to the URL import screen in the PWA or browser. Creating a **Share Handoff** does not create an **Import Job**.
-_Avoid_: Share job, import task, draft
-
 ## Example Dialogue
 
 Developer: "Should `sourceName` be part of `RecipeContent`?"

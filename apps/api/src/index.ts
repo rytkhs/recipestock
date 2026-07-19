@@ -7,6 +7,11 @@ import { secureHeaders } from "hono/secure-headers";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
 import { type BillingRepository } from "./billing";
+import {
+  createPushSender,
+  notifyImportJobCompletion,
+  type PushSender,
+} from "./completion-notifications";
 import { type ApiEnv } from "./context";
 import { type Bindings } from "./env";
 import { createRecipeImageService, type RecipeImageService } from "./images";
@@ -16,9 +21,16 @@ import {
   processImportJob,
 } from "./import-jobs";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
-import { type IosShareService } from "./ios-share";
+import {
+  createUrlImportJobSubmission,
+  type UrlImportJobSubmission,
+} from "./lib/import/url-import-job-submission";
 import { createLogger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
+import {
+  createPushSubscriptionRepository,
+  type PushSubscriptionRepository,
+} from "./push-subscriptions";
 import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
 import { createBillingRoutes } from "./routes/billing";
@@ -26,9 +38,16 @@ import { createImageRoutes } from "./routes/images";
 import { createImportRoutes } from "./routes/import";
 import { createIosShareRoutes } from "./routes/ios-share";
 import { createMeRoutes } from "./routes/me";
+import { createPushSubscriptionRoutes } from "./routes/push-subscriptions";
 import { createRecipeRoutes } from "./routes/recipes";
+import { createShortcutCredentialRoutes } from "./routes/shortcut-credentials";
 import { createStripeRoutes } from "./routes/stripe";
 import { createUsageRoutes } from "./routes/usage";
+import {
+  createShortcutCredentialRepository,
+  createShortcutCredentials,
+  type ShortcutCredentials,
+} from "./shortcut-credentials";
 import { type StripeBillingClient } from "./stripe-billing";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
@@ -43,8 +62,11 @@ export type AppDependencies = {
   usageRepository?: UsageRepository;
   billingRepository?: BillingRepository;
   recipeRepository?: RecipeRepository;
+  pushSubscriptionRepository?: PushSubscriptionRepository;
   importJobRepository?: ImportJobRepository;
-  iosShareService?: IosShareService;
+  shortcutCredentials?: ShortcutCredentials;
+  urlImportJobSubmission?: UrlImportJobSubmission;
+  shortcutRateLimiter?: RateLimit;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
   importAIProvider?: RecipeImportAIProvider;
@@ -53,6 +75,7 @@ export type AppDependencies = {
   createImportJobId?: () => string;
   createRecipeId?: () => string;
   createImageId?: () => string;
+  createPushSubscriptionId?: () => string;
   getCurrentMonth?: () => string;
   getCurrentDate?: () => Date;
 };
@@ -97,6 +120,23 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   const auth = dependencies.auth ?? authService;
   const loggerFactory = dependencies.loggerFactory ?? createLogger;
   const csrfProtection = csrf();
+  const shortcutCredentialsFor = (env: Bindings) =>
+    dependencies.shortcutCredentials ??
+    createShortcutCredentials({
+      repository: createShortcutCredentialRepository(createDb(env.DATABASE_URL)),
+      getCurrentDate: dependencies.getCurrentDate,
+    });
+  const urlImportJobSubmissionFor = (env: Bindings) =>
+    dependencies.urlImportJobSubmission ??
+    createUrlImportJobSubmission({
+      env,
+      importJobRepository: dependencies.importJobRepository,
+      importQueue: dependencies.importQueue,
+      createImportJobId: dependencies.createImportJobId,
+      getCurrentDate: dependencies.getCurrentDate,
+    });
+  const shortcutRateLimiterFor = (env: Bindings) =>
+    dependencies.shortcutRateLimiter ?? env.SHORTCUT_RATE_LIMITER;
 
   app.onError((error, c) => {
     const response = error instanceof HTTPException ? error.getResponse() : unknownResponse();
@@ -121,11 +161,11 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   app.use("/billing/*", csrfProtection);
   app.use("/images/*", csrfProtection);
   app.use("/import/*", csrfProtection);
-  app.use("/ios-share/channels", csrfProtection);
-  app.use("/ios-share/channels/*", csrfProtection);
-  app.use("/ios-share/handoffs/*", csrfProtection);
+  app.use("/shortcut-credentials", csrfProtection);
+  app.use("/shortcut-credentials/*", csrfProtection);
   app.use("/recipes", csrfProtection);
   app.use("/recipes/*", csrfProtection);
+  app.use("/push-subscriptions", csrfProtection);
 
   return app
     .route("/auth", createAuthRoutes({ auth }))
@@ -141,17 +181,32 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/import",
       createImportRoutes({
         auth,
+        urlImportJobSubmissionFor,
         importJobRepository: dependencies.importJobRepository,
-        importQueue: dependencies.importQueue,
-        createImportJobId: dependencies.createImportJobId,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )
     .route(
       "/ios-share",
       createIosShareRoutes({
+        shortcutCredentialsFor,
+        urlImportJobSubmissionFor,
+        shortcutRateLimiterFor,
+      }),
+    )
+    .route(
+      "/shortcut-credentials",
+      createShortcutCredentialRoutes({
         auth,
-        iosShareService: dependencies.iosShareService,
+        shortcutCredentialsFor,
+      }),
+    )
+    .route(
+      "/push-subscriptions",
+      createPushSubscriptionRoutes({
+        auth,
+        pushSubscriptionRepository: dependencies.pushSubscriptionRepository,
+        createId: dependencies.createPushSubscriptionId,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )
@@ -209,15 +264,42 @@ type ImportQueueMessage = Pick<
   "ack" | "attempts" | "body" | "id" | "retry"
 >;
 
+const notifyImportJobCompletionBestEffort = async ({
+  importJobRepository,
+  jobId,
+  logger,
+  now,
+  pushSender,
+}: {
+  importJobRepository: ImportJobRepository;
+  jobId: string;
+  logger: ReturnType<typeof createLogger>;
+  now: Date;
+  pushSender: PushSender;
+}) => {
+  try {
+    await notifyImportJobCompletion({
+      importJobRepository,
+      jobId,
+      now,
+      pushSender,
+    });
+  } catch (error) {
+    logger.error("import_completion_notification_failed", { error });
+  }
+};
+
 export const handleImportQueueMessageError = async ({
   error,
   importJobRepository,
   message,
+  notifyCompletion,
   now = new Date(),
 }: {
   error: unknown;
   importJobRepository: ImportJobRepository;
   message: ImportQueueMessage;
+  notifyCompletion?: () => Promise<void>;
   now?: Date;
 }) => {
   createLogger().error("import_job_queue_error", {
@@ -234,11 +316,51 @@ export const handleImportQueueMessageError = async ({
       errorMessage: error instanceof Error ? error.message : "Unexpected import job error.",
       now,
     });
+    await notifyCompletion?.();
     message.ack();
     return;
   }
 
   message.retry({ delaySeconds: Math.min(30 * 2 ** message.attempts, 600) });
+};
+
+export const handleImportQueueMessage = async ({
+  importJobRepository,
+  message,
+  processJob,
+  pushSender,
+  now,
+  logger = createLogger({ jobId: message.body.jobId, messageId: message.id }),
+}: {
+  importJobRepository: ImportJobRepository;
+  message: ImportQueueMessage;
+  processJob: (jobId: string) => Promise<void>;
+  pushSender: PushSender;
+  now?: Date;
+  logger?: ReturnType<typeof createLogger>;
+}) => {
+  const notifyCompletion = () =>
+    notifyImportJobCompletionBestEffort({
+      importJobRepository,
+      jobId: message.body.jobId,
+      logger,
+      now: now ?? new Date(),
+      pushSender,
+    });
+
+  try {
+    await processJob(message.body.jobId);
+    await notifyCompletion();
+    message.ack();
+  } catch (error) {
+    await handleImportQueueMessageError({
+      error,
+      importJobRepository,
+      message,
+      notifyCompletion,
+      now: now ?? new Date(),
+    });
+  }
 };
 
 const handleImportQueue = async (
@@ -251,6 +373,7 @@ const handleImportQueue = async (
   const recipeRepository = createRecipeRepository(db, planSyncOptions);
   const usageRepository = createUsageRepository(db, planSyncOptions);
   const imageService = createRecipeImageService(env);
+  const pushSubscriptionRepository = createPushSubscriptionRepository(db);
 
   for (const message of batch.messages) {
     const logger = createLogger({
@@ -258,24 +381,31 @@ const handleImportQueue = async (
       messageId: message.id,
     });
 
-    try {
-      await processImportJob({
-        jobId: message.body.jobId,
-        env,
-        importJobRepository,
-        recipeRepository,
-        usageRepository,
-        imageService,
-        logger,
-      });
-      message.ack();
-    } catch (error) {
-      await handleImportQueueMessageError({
-        error,
-        importJobRepository,
-        message,
-      });
-    }
+    const pushSender = createPushSender({
+      repository: pushSubscriptionRepository,
+      logger,
+      vapid: {
+        subject: env.VAPID_SUBJECT,
+        publicKey: env.VAPID_PUBLIC_KEY,
+        privateKey: env.VAPID_PRIVATE_KEY,
+      },
+    });
+    await handleImportQueueMessage({
+      importJobRepository,
+      message,
+      pushSender,
+      logger,
+      processJob: (jobId) =>
+        processImportJob({
+          jobId,
+          env,
+          importJobRepository,
+          recipeRepository,
+          usageRepository,
+          imageService,
+          logger,
+        }),
+    });
   }
 };
 

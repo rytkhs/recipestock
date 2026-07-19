@@ -90,6 +90,20 @@ export const aiUsageLimitExceededResponse = () =>
     message: "AI usage limit exceeded.",
   });
 
+export const rateLimitExceededResponse = () =>
+  apiErrorResponse({
+    status: 429,
+    code: "rate_limit_exceeded",
+    message: "Rate limit exceeded.",
+  });
+
+export const temporarilyUnavailableResponse = () =>
+  apiErrorResponse({
+    status: 503,
+    code: "temporarily_unavailable",
+    message: "Service is temporarily unavailable.",
+  });
+
 export const aiTimeoutResponse = () =>
   apiErrorResponse({
     status: 504,

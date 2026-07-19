@@ -3,37 +3,38 @@ import {
   createImportUrlJobResponseSchema,
   dismissImportJobResponseSchema,
   getImportJobResponseSchema,
-  importUrlRequestSchema,
   recentImportJobsResponseSchema,
 } from "@recipestock/schemas";
 import { Hono } from "hono";
-import { invalidUrlResponse, notFoundResponse, recipeLimitExceededResponse } from "../api-error";
+import {
+  invalidUrlResponse,
+  notFoundResponse,
+  recipeLimitExceededResponse,
+  temporarilyUnavailableResponse,
+} from "../api-error";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
 import {
-  createImportJobId,
   createImportJobRepository,
   getImportJobExpiresBefore,
   type ImportJobRepository,
   resolveImportJobTimeoutMs,
   toImportJobSummary,
 } from "../import-jobs";
-import { normalizeImportableUrl, RecipeImportError } from "../import-url";
+import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
 import { requireAuth } from "../middleware/auth";
 
 type ImportRouteDependencies = {
   auth: AuthService;
+  urlImportJobSubmissionFor: UrlImportJobSubmissionFactory;
   importJobRepository?: ImportJobRepository;
-  importQueue?: Queue<{ jobId: string }>;
-  createImportJobId?: () => string;
   getCurrentDate?: () => Date;
 };
 
 export const createImportRoutes = ({
   auth,
+  urlImportJobSubmissionFor,
   importJobRepository,
-  importQueue,
-  createImportJobId: createJobId,
   getCurrentDate,
 }: ImportRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
@@ -42,68 +43,32 @@ export const createImportRoutes = ({
     .post("/url/jobs", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
       const rawBody = await c.req.json().catch(() => null);
-      const request = importUrlRequestSchema.safeParse(rawBody);
+      const url =
+        typeof rawBody === "object" && rawBody !== null && "url" in rawBody
+          ? rawBody.url
+          : undefined;
 
-      if (!request.success) {
+      const result = await urlImportJobSubmissionFor(c.env).submit({
+        userId,
+        url,
+        notifyOnCompletion: false,
+      });
+
+      if (result.status === "invalidUrl") {
         return invalidUrlResponse();
       }
 
-      let normalizedUrl: string;
-
-      try {
-        normalizedUrl = normalizeImportableUrl(request.data.url);
-      } catch (error) {
-        if (error instanceof RecipeImportError && error.code === "invalid_url") {
-          return invalidUrlResponse();
-        }
-
-        throw error;
-      }
-
-      const now = getCurrentDate?.() ?? new Date();
-      const repository =
-        importJobRepository ??
-        createImportJobRepository(createDb(c.env.DATABASE_URL), {
-          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          now,
-        });
-      await repository.expireActiveJobsForUser({
-        userId,
-        expiresBefore: getImportJobExpiresBefore(now, resolveImportJobTimeoutMs(c.env)),
-        now,
-      });
-      const result = await repository.createUrlJob({
-        id: createJobId?.() ?? createImportJobId(),
-        userId,
-        url: request.data.url,
-        normalizedUrl,
-        now,
-      });
-
-      if (result.status === "limitExceeded") {
+      if (result.status === "recipeLimitExceeded") {
         return recipeLimitExceededResponse();
       }
 
-      if (result.status === "created") {
-        try {
-          await (importQueue ?? c.env.IMPORT_QUEUE).send(
-            { jobId: result.job.id },
-            { contentType: "json" },
-          );
-        } catch (error) {
-          await repository.markJobFailed({
-            jobId: result.job.id,
-            errorCode: "unknown",
-            errorMessage: error instanceof Error ? error.message : "Import queue send failed.",
-            now: getCurrentDate?.() ?? new Date(),
-          });
-          throw error;
-        }
+      if (result.status === "temporarilyUnavailable") {
+        return temporarilyUnavailableResponse();
       }
 
       return c.json(
         createImportUrlJobResponseSchema.parse({
-          kind: result.status === "created" ? "created" : "existing_active_job",
+          kind: result.kind,
           job: toImportJobSummary(result.job),
         }),
         202,

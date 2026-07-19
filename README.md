@@ -83,6 +83,8 @@ cp apps/api/.dev.vars.example apps/api/.dev.vars
 ```
 
 `DATABASE_URL` には Neon の接続文字列を設定してください。
+`VITE_IOS_SHARE_SHORTCUT_URL` には、設定画面から追加する公開済みの iOS Shortcut URL
+を設定してください。この値は Web アプリのビルド時にブラウザ向けコードへ埋め込まれます。
 
 Cloudflare にログインし、開発用 R2 bucket を作成します。
 
@@ -163,6 +165,7 @@ pnpm --filter @recipestock/api exec wrangler deploy --dry-run
 主な値:
 
 - `DATABASE_URL`
+- `VITE_IOS_SHARE_SHORTCUT_URL`（Web ビルド時に公開される iOS Shortcut URL）
 - `BETTER_AUTH_SECRET`
 - `RESEND_API_KEY`
 - `STRIPE_SECRET_KEY`

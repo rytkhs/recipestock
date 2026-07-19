@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { importJobSummarySchema } from "./import";
+import { importJobSummarySchema, importUrlRequestSchema } from "./import";
 
 describe("import schemas", () => {
+  it("URL取り込みはHTTP(S)かつ4096文字以下だけを受け入れる", () => {
+    expect(importUrlRequestSchema.safeParse({ url: "https://example.com/recipe" }).success).toBe(
+      true,
+    );
+    expect(importUrlRequestSchema.safeParse({ url: "ftp://example.com/recipe" }).success).toBe(
+      false,
+    );
+    expect(
+      importUrlRequestSchema.safeParse({
+        url: `https://example.com/${"a".repeat(4097)}`,
+      }).success,
+    ).toBe(false);
+  });
+
   it("private/login required import error codeを受け入れる", () => {
     expect(
       importJobSummarySchema.parse({

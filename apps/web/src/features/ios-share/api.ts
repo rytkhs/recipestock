@@ -1,39 +1,23 @@
 import {
-  type CreateIosShareChannelResponse,
-  type DeliverIosShareHandoffResponse,
-  type GetPendingIosShareHandoffResponse,
-  type ListIosShareChannelsResponse,
+  type IssueShortcutCredentialResponse,
+  type ListShortcutCredentialsResponse,
 } from "@recipestock/schemas";
 import { api, parseApiResponse } from "../../lib/api";
 
-export const createIosShareChannel = (name: string): Promise<CreateIosShareChannelResponse> =>
+export const issueShortcutCredential = (name: string): Promise<IssueShortcutCredentialResponse> =>
   parseApiResponse(
-    api.api["ios-share"].channels.$post({
+    api.api["shortcut-credentials"].$post({
       json: { name },
     }),
   );
 
-export const listIosShareChannels = (): Promise<ListIosShareChannelsResponse> =>
-  parseApiResponse(api.api["ios-share"].channels.$get());
+export const listShortcutCredentials = (): Promise<ListShortcutCredentialsResponse> =>
+  parseApiResponse(api.api["shortcut-credentials"].$get());
 
-export const revokeIosShareChannel = async (channelId: string): Promise<void> => {
+export const revokeShortcutCredential = async (credentialId: string): Promise<void> => {
   await parseApiResponse(
-    api.api["ios-share"].channels[":channelId"].$delete({
-      param: { channelId },
+    api.api["shortcut-credentials"][":credentialId"].$delete({
+      param: { credentialId },
     }),
   );
 };
-
-export const fetchPendingIosShareHandoff = (): Promise<GetPendingIosShareHandoffResponse> =>
-  parseApiResponse(api.api["ios-share"].handoffs.pending.$get());
-
-export const deliverIosShareHandoff = (
-  handoffId: string,
-  target: "pwa" | "browser",
-): Promise<DeliverIosShareHandoffResponse> =>
-  parseApiResponse(
-    api.api["ios-share"].handoffs[":handoffId"].delivery.$patch({
-      param: { handoffId },
-      json: { target },
-    }),
-  );

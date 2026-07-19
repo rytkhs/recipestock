@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { type IosShareService } from "../ios-share";
+import { describe, expect, it, vi } from "vitest";
+import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
+import { type ShortcutCredentials } from "../shortcut-credentials";
 import { createSilentTestApp } from "../test-helpers";
 
 const env = {
@@ -13,114 +14,385 @@ const auth = {
   handleAuthRequest: async () => new Response(null, { status: 404 }),
 };
 
-const createService = (): IosShareService => ({
-  provisionChannel: async ({ id, name, token, now }) => ({
-    channel: {
-      id,
-      name,
-      tokenSuffix: token.slice(-6),
-      createdAt: now.toISOString(),
-      lastUsedAt: null,
-    },
-    token,
-  }),
-  listChannels: async () => [],
-  revokeChannel: async () => true,
-  submitHandoff: async ({ id, token, url, origin, now }) =>
-    token.startsWith("rssc_")
-      ? {
-          handoffId: id,
-          status: "pending",
-          expiresAt: new Date(now.getTime() + 60_000).toISOString(),
-          fallbackUrl: `${origin}/import/url?url=${encodeURIComponent(url)}`,
-        }
-      : null,
-  findPendingHandoff: async () => ({
-    id: "handoff_1",
-    url: "https://example.com/recipe",
-    createdAt: "2026-07-11T00:00:00.000Z",
-  }),
-  deliverHandoff: async () => "delivered_to_pwa",
-  inspectHandoff: async ({ token }) => (token.startsWith("rssc_") ? "delivered_to_pwa" : null),
+const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord => ({
+  id: "job_123",
+  userId: "user_1",
+  kind: "url",
+  status: "queued",
+  url: "https://example.com/recipe",
+  normalizedUrl: "https://example.com/recipe",
+  recipeId: null,
+  errorCode: null,
+  errorMessage: null,
+  dismissedAt: null,
+  completionNotificationRequested: true,
+  completionNotificationSentAt: null,
+  createdAt: new Date("2026-07-11T00:00:00.000Z"),
+  startedAt: null,
+  finishedAt: null,
+  updatedAt: new Date("2026-07-11T00:00:00.000Z"),
+  ...overrides,
+});
+
+const createImportJobRepository = (
+  overrides: Partial<ImportJobRepository> = {},
+): ImportJobRepository => ({
+  createUrlJob: async () => ({ status: "created", job: createJob() }),
+  listRecentJobs: async () => [],
+  getJob: async () => null,
+  getJobById: async () => null,
+  expireActiveJobsForUser: async () => 0,
+  expireJob: async () => false,
+  claimQueuedJob: async () => null,
+  completeJobWithRecipe: async () => ({ status: "inactive" }),
+  markJobSucceeded: async () => undefined,
+  markJobFailed: async () => undefined,
+  markCompletionNotificationSent: async () => false,
+  dismissJob: async () => null,
+  ...overrides,
+});
+
+const createShortcutCredentialsFake = (): ShortcutCredentials => ({
+  issue: async () => {
+    throw new Error("Not used by this route.");
+  },
+  list: async () => [],
+  revoke: async () => true,
+  authenticate: async ({ token }) =>
+    token.startsWith("rssc_") ? { credentialId: "credential_1", userId: "user_1" } : null,
+});
+
+const shortcutRequest = {
+  url: "https://example.com/recipe",
+};
+
+const shortcutHeaders = {
+  authorization: `Bearer rssc_${"a".repeat(64)}`,
+  "content-type": "application/json",
+};
+
+const createRateLimiter = (success = true) => ({
+  limit: vi.fn(async () => ({ success })),
 });
 
 describe("iOS Share routes", () => {
-  it("Shortcut bearer tokenでhandoffを作成する", async () => {
-    const app = createSilentTestApp({ auth, iosShareService: createService() });
+  it("有効なBearerとURLでImport Jobを作成しQueueへ一度送る", async () => {
+    const send = vi.fn(async () => undefined);
+    const createUrlJob = vi.fn(async () => ({
+      status: "created" as const,
+      job: createJob(),
+    }));
+    const rateLimiter = createRateLimiter();
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({ createUrlJob }),
+      importQueue: { send } as unknown as Queue<{ jobId: string }>,
+      createImportJobId: () => "job_123",
+      shortcutRateLimiter: rateLimiter as unknown as RateLimit,
+      getCurrentDate: () => new Date("2026-07-11T00:00:00.000Z"),
+    });
+
     const response = await app.request(
-      "/api/ios-share/shortcut/handoffs",
+      "/api/ios-share/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: shortcutHeaders,
+        body: JSON.stringify(shortcutRequest),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      kind: "created",
+      job: { id: "job_123", status: "queued" },
+    });
+    expect(createUrlJob).toHaveBeenCalledWith({
+      id: "job_123",
+      userId: "user_1",
+      url: shortcutRequest.url,
+      normalizedUrl: shortcutRequest.url,
+      completionNotificationRequested: true,
+      now: new Date("2026-07-11T00:00:00.000Z"),
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith({ jobId: "job_123" }, { contentType: "json" });
+    expect(rateLimiter.limit).toHaveBeenCalledWith({ key: "credential_1" });
+  });
+
+  it("Cookie sessionだけではShortcut Import Jobを作成できない", async () => {
+    const rateLimiter = createRateLimiter();
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      shortcutRateLimiter: rateLimiter as unknown as RateLimit,
+    });
+
+    const response = await app.request(
+      "/api/ios-share/shortcut/import-jobs",
       {
         method: "POST",
         headers: {
-          authorization: `Bearer rssc_${"a".repeat(64)}`,
+          cookie: "better-auth.session_token=session",
           "content-type": "application/json",
         },
-        body: JSON.stringify({ url: "https://example.com/recipe" }),
+        body: JSON.stringify(shortcutRequest),
       },
       env,
     );
 
-    expect(response.status).toBe(201);
-    await expect(response.json()).resolves.toMatchObject({ status: "pending" });
-  });
-
-  it("Shortcut endpointはCookie sessionだけでは認証しない", async () => {
-    const app = createSilentTestApp({ auth, iosShareService: createService() });
-    const response = await app.request(
-      "/api/ios-share/shortcut/handoffs",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: "https://example.com/recipe" }),
-      },
-      env,
-    );
     expect(response.status).toBe(401);
+    expect(rateLimiter.limit).not.toHaveBeenCalled();
   });
 
-  it("malformed URLはvalidation_failedを返す", async () => {
-    const app = createSilentTestApp({ auth, iosShareService: createService() });
+  it("Shortcut Bearer tokenをCookie保護されたresourceの認証に使えない", async () => {
+    const app = createSilentTestApp({
+      auth: { ...auth, getSession: async () => null },
+      shortcutCredentials: createShortcutCredentialsFake(),
+    });
+
+    const responses = await Promise.all(
+      ["/api/recipes", "/api/import/jobs/recent", "/api/me", "/api/push-subscriptions"].map(
+        (path) =>
+          app.request(path, { headers: { authorization: shortcutHeaders.authorization } }, env),
+      ),
+    );
+
+    expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401]);
+  });
+
+  it("Bearerがない、無効、revoke済みの場合は401を返す", async () => {
+    const revokedService = createShortcutCredentialsFake();
+    revokedService.authenticate = async () => null;
+    const app = createSilentTestApp({ auth, shortcutCredentials: revokedService });
+
+    const responses = await Promise.all([
+      app.request(
+        "/api/ios-share/shortcut/import-jobs",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(shortcutRequest),
+        },
+        env,
+      ),
+      app.request(
+        "/api/ios-share/shortcut/import-jobs",
+        {
+          method: "POST",
+          headers: { ...shortcutHeaders, authorization: "Bearer invalid" },
+          body: JSON.stringify(shortcutRequest),
+        },
+        env,
+      ),
+      app.request(
+        "/api/ios-share/shortcut/import-jobs",
+        {
+          method: "POST",
+          headers: shortcutHeaders,
+          body: JSON.stringify(shortcutRequest),
+        },
+        env,
+      ),
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([401, 401, 401]);
+  });
+
+  it("FTP URLはinvalid_urlを返す", async () => {
+    const rateLimiter = createRateLimiter();
+    const createUrlJob = vi.fn(async () => ({
+      status: "created" as const,
+      job: createJob(),
+    }));
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({ createUrlJob }),
+      shortcutRateLimiter: rateLimiter as unknown as RateLimit,
+    });
+
     const response = await app.request(
-      "/api/ios-share/shortcut/handoffs",
+      "/api/ios-share/shortcut/import-jobs",
       {
         method: "POST",
-        headers: {
-          authorization: "Bearer noisy-client-token",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ url: "http://[" }),
+        headers: shortcutHeaders,
+        body: JSON.stringify({ ...shortcutRequest, url: "ftp://example.com/recipe" }),
       },
       env,
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: "validation_failed" },
-    });
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "invalid_url" } });
+    expect(createUrlJob).not.toHaveBeenCalled();
   });
 
-  it("認証ユーザーへpending handoffを返してPWA deliveryを受け付ける", async () => {
-    const app = createSilentTestApp({ auth, iosShareService: createService() });
-    const pending = await app.request("/api/ios-share/handoffs/pending", {}, env);
-    expect(pending.status).toBe(200);
-    await expect(pending.json()).resolves.toMatchObject({
-      handoff: { id: "handoff_1", url: "https://example.com/recipe" },
+  it("4096文字を超えるURLはinvalid_urlを返す", async () => {
+    const createUrlJob = vi.fn(async () => ({
+      status: "created" as const,
+      job: createJob(),
+    }));
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({ createUrlJob }),
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
     });
 
-    const delivered = await app.request(
-      "/api/ios-share/handoffs/handoff_1/delivery",
+    const response = await app.request(
+      "/api/ios-share/shortcut/import-jobs",
       {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          origin: "https://app.example.com",
-          "sec-fetch-site": "same-origin",
-        },
-        body: JSON.stringify({ target: "pwa" }),
+        method: "POST",
+        headers: shortcutHeaders,
+        body: JSON.stringify({ url: `https://example.com/${"a".repeat(4097)}` }),
       },
       env,
     );
-    expect(delivered.status).toBe(200);
-    await expect(delivered.json()).resolves.toEqual({ status: "delivered_to_pwa" });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "invalid_url" } });
+    expect(createUrlJob).not.toHaveBeenCalled();
+  });
+
+  it("active Jobを再利用すると通知要求だけを有効にしQueueへ追加しない", async () => {
+    const send = vi.fn(async () => undefined);
+    const createUrlJob = vi.fn(async () => ({
+      status: "existingActiveJob" as const,
+      job: createJob({
+        completionNotificationRequested: true,
+      }),
+    }));
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({ createUrlJob }),
+      importQueue: { send } as unknown as Queue<{ jobId: string }>,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const response = await app.request(
+      "/api/ios-share/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: shortcutHeaders,
+        body: JSON.stringify(shortcutRequest),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ kind: "existing_active_job" });
+    expect(createUrlJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completionNotificationRequested: true,
+      }),
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("Recipe上限時は403を返しQueueへ追加しない", async () => {
+    const send = vi.fn(async () => undefined);
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({
+        createUrlJob: async () => ({ status: "limitExceeded" }),
+      }),
+      importQueue: { send } as unknown as Queue<{ jobId: string }>,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const response = await app.request(
+      "/api/ios-share/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: shortcutHeaders,
+        body: JSON.stringify(shortcutRequest),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "recipe_limit_exceeded" },
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("1 credentialあたり10回を超えると429を返す", async () => {
+    let calls = 0;
+    const rateLimiter = {
+      limit: vi.fn(async ({ key }: { key: string }) => {
+        expect(key).toBe("credential_1");
+        calls += 1;
+        return { success: calls <= 10 };
+      }),
+    };
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      urlImportJobSubmission: {
+        submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
+      },
+      shortcutRateLimiter: rateLimiter as unknown as RateLimit,
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 11 }, () =>
+        app.request(
+          "/api/ios-share/shortcut/import-jobs",
+          {
+            method: "POST",
+            headers: shortcutHeaders,
+            body: JSON.stringify(shortcutRequest),
+          },
+          env,
+        ),
+      ),
+    );
+
+    expect(responses.filter((response) => response.status === 202)).toHaveLength(10);
+    expect(responses.filter((response) => response.status === 429)).toHaveLength(1);
+    await expect(responses.at(-1)?.json()).resolves.toMatchObject({
+      error: { code: "rate_limit_exceeded" },
+    });
+  });
+
+  it("Queue送信失敗時はJobをfailedにして503を返す", async () => {
+    const markJobFailed = vi.fn(async () => undefined);
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({ markJobFailed }),
+      importQueue: {
+        send: vi.fn(async () => {
+          throw new Error("Queue unavailable");
+        }),
+      } as unknown as Queue<{ jobId: string }>,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+      getCurrentDate: () => new Date("2026-07-11T00:00:00.000Z"),
+    });
+
+    const response = await app.request(
+      "/api/ios-share/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: shortcutHeaders,
+        body: JSON.stringify(shortcutRequest),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "temporarily_unavailable" },
+    });
+    expect(markJobFailed).toHaveBeenCalledWith({
+      jobId: "job_123",
+      errorCode: "unknown",
+      errorMessage: "Queue unavailable",
+      now: new Date("2026-07-11T00:00:00.000Z"),
+    });
   });
 });

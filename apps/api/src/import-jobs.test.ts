@@ -38,6 +38,8 @@ const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord =>
   errorCode: null,
   errorMessage: null,
   dismissedAt: null,
+  completionNotificationRequested: false,
+  completionNotificationSentAt: null,
   createdAt: new Date("2026-06-01T00:00:00.000Z"),
   startedAt: new Date("2026-06-01T00:00:00.000Z"),
   finishedAt: null,
@@ -74,6 +76,7 @@ const createImportJobRepository = (
   markJobFailed: async ({ errorCode }) => {
     events.push(`failed:${errorCode}`);
   },
+  markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
   ...overrides,
 });
