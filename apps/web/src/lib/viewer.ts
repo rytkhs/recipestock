@@ -12,4 +12,6 @@ export const useViewer = ({ enabled }: { enabled: boolean }) =>
     queryFn: fetchViewer,
     enabled,
     retry: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   });

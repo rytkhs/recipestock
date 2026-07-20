@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -165,6 +165,211 @@ describe("AppRouter", () => {
     await renderApp("/");
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
+  });
+
+  it("初回session通信に失敗した保護ルートはURLを維持してbrand chromeだけを表示する", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (getRequestPath(input).endsWith("/get-session")) {
+        throw new TypeError("Failed to fetch");
+      }
+      return new Response(null, { status: 404 });
+    });
+    const importPath = "/import/url?url=https%3A%2F%2Fexample.com%2Frecipes%2Ftomato";
+    const { appRouter } = await renderApp(importPath);
+
+    await expect(
+      screen.findByRole("heading", { name: "接続を確認できません" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.href).toBe(importPath);
+    expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Mobile navigation" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "アカウント" })).toBeNull();
+  });
+
+  it("取得済みviewerがあればbackground refetchの5xx後もprivate画面を維持する", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+      if (path.endsWith("/get-session")) return createSessionResponse(true);
+      if (path === "/api/me") {
+        return jsonResponse(
+          {
+            error: {
+              code: "temporarily_unavailable",
+              message: "Please retry later.",
+            },
+          },
+          { status: 503 },
+        );
+      }
+      if (path === "/api/recipes?limit=20") {
+        return jsonResponse({ items: [], nextCursor: null });
+      }
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/recipes", (queryClient) => {
+      queryClient.setQueryData(["viewer"], viewerResponse);
+    });
+
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "アカウント" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "接続を確認できません" })).toBeNull();
+  });
+
+  it("viewer取得失敗を同じURLで再試行して回復する", async () => {
+    let viewerAvailable = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+      if (path.endsWith("/get-session")) return createSessionResponse(true);
+      if (path === "/api/me") {
+        return viewerAvailable
+          ? jsonResponse(viewerResponse)
+          : jsonResponse(
+              {
+                error: {
+                  code: "temporarily_unavailable",
+                  message: "Please retry later.",
+                },
+              },
+              { status: 503 },
+            );
+      }
+      return new Response(null, { status: 404 });
+    });
+    const importPath = "/import/url?url=https%3A%2F%2Fexample.com%2Frecipes%2Ftomato";
+    const { appRouter } = await renderApp(importPath);
+
+    await expect(
+      screen.findByRole("heading", { name: "接続を確認できません" }),
+    ).resolves.toBeInTheDocument();
+    viewerAvailable = true;
+    await userEvent.click(screen.getByRole("button", { name: "再試行" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "URLから取り込む" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.href).toBe(importPath);
+  });
+
+  it("viewer再試行の401はfresh session確認後にviewerを再取得する", async () => {
+    let sessionChecks = 0;
+    let viewerChecks = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+      if (path.endsWith("/get-session")) {
+        sessionChecks += 1;
+        return createSessionResponse(true);
+      }
+      if (path === "/api/me") {
+        viewerChecks += 1;
+        if (viewerChecks === 1) {
+          return jsonResponse(
+            {
+              error: {
+                code: "temporarily_unavailable",
+                message: "Please retry later.",
+              },
+            },
+            { status: 503 },
+          );
+        }
+        if (viewerChecks === 2) {
+          return jsonResponse(
+            {
+              error: {
+                code: "unauthorized",
+                message: "Authentication is required.",
+              },
+            },
+            { status: 401 },
+          );
+        }
+        return jsonResponse(viewerResponse);
+      }
+      if (path === "/api/recipes?limit=20") {
+        return jsonResponse({ items: [], nextCursor: null });
+      }
+      return new Response(null, { status: 404 });
+    });
+    const { appRouter } = await renderApp("/recipes");
+
+    await expect(
+      screen.findByRole("heading", { name: "接続を確認できません" }),
+    ).resolves.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "再試行" }));
+
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.pathname).toBe("/recipes");
+    expect(sessionChecks).toBe(2);
+    expect(viewerChecks).toBe(3);
+  });
+
+  it("viewer 401後のfresh session通信失敗はloginへ送らずsession unavailableにする", async () => {
+    let sessionChecks = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+      if (path.endsWith("/get-session")) {
+        sessionChecks += 1;
+        if (sessionChecks === 1) return createSessionResponse(true);
+        throw new TypeError("Failed to fetch");
+      }
+      if (path === "/api/me") {
+        return jsonResponse(
+          {
+            error: {
+              code: "unauthorized",
+              message: "Authentication is required.",
+            },
+          },
+          { status: 401 },
+        );
+      }
+      return new Response(null, { status: 404 });
+    });
+    const { appRouter } = await renderApp("/recipes");
+
+    await expect(
+      screen.findByRole("heading", { name: "接続を確認できません" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.pathname).toBe("/recipes");
+    expect(screen.queryByRole("heading", { name: "ログイン" })).toBeNull();
+    expect(findFetchCall(fetchMock, "/api/me")).toBeDefined();
+    expect(sessionChecks).toBe(2);
+  });
+
+  it("viewer 401の回復後に再度401ならviewer unavailableで止める", async () => {
+    let sessionChecks = 0;
+    let viewerChecks = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+      if (path.endsWith("/get-session")) {
+        sessionChecks += 1;
+        return createSessionResponse(true);
+      }
+      if (path === "/api/me") {
+        viewerChecks += 1;
+        return jsonResponse(
+          {
+            error: {
+              code: "unauthorized",
+              message: "Authentication is required.",
+            },
+          },
+          { status: 401 },
+        );
+      }
+      return new Response(null, { status: 404 });
+    });
+    const { appRouter } = await renderApp("/recipes");
+
+    await expect(
+      screen.findByRole("heading", { name: "接続を確認できません" }),
+    ).resolves.toBeInTheDocument();
+    await waitFor(() => {
+      expect(sessionChecks).toBe(2);
+      expect(viewerChecks).toBe(2);
+    });
+    expect(appRouter.state.location.pathname).toBe("/recipes");
   });
 
   it("ログアウトするとユーザー依存キャッシュを消してログインへ遷移する", async () => {

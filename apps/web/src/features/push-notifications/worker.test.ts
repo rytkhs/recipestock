@@ -1,34 +1,32 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import vm from "node:vm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { registerPushNotificationHandlers } from "./worker";
 
-const serviceWorkerSource = readFileSync(resolve(process.cwd(), "public/sw.js"), "utf8");
+type WorkerListener = (event: {
+  data?: { json: () => unknown };
+  notification?: { close: () => void; data: unknown };
+  waitUntil: (promise: Promise<unknown>) => void;
+}) => void;
 
-const loadServiceWorker = ({ windows = [] } = {}) => {
-  const listeners = new Map();
+const createWorkerScope = ({ windows = [] }: { windows?: WindowClient[] } = {}) => {
+  const listeners = new Map<string, WorkerListener>();
   const showNotification = vi.fn(async () => undefined);
-  const openWindow = vi.fn(async () => undefined);
+  const openWindow = vi.fn(async () => null);
   const matchAll = vi.fn(async () => windows);
-  const context = {
-    URL,
-    self: {
-      location: { origin: "https://app.example.com" },
-      registration: { showNotification },
-      clients: {
-        claim: vi.fn(async () => undefined),
-        matchAll,
-        openWindow,
-      },
-      addEventListener: (name, listener) => listeners.set(name, listener),
-      skipWaiting: vi.fn(),
-    },
+  const scope = {
+    location: { origin: "https://app.example.com" },
+    registration: { showNotification },
+    clients: { matchAll, openWindow },
+    addEventListener: (name: string, listener: WorkerListener) => listeners.set(name, listener),
   };
-  vm.runInNewContext(serviceWorkerSource, context);
 
-  const dispatch = async (name, event) => {
-    let pending;
-    listeners.get(name)({
+  registerPushNotificationHandlers(scope as unknown as ServiceWorkerGlobalScope);
+
+  const dispatch = async (
+    name: string,
+    event: Omit<Parameters<WorkerListener>[0], "waitUntil">,
+  ) => {
+    let pending: Promise<unknown> | undefined;
+    listeners.get(name)?.({
       ...event,
       waitUntil: (promise) => {
         pending = promise;
@@ -44,9 +42,9 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("public Service Worker push events", () => {
+describe("Push notification worker", () => {
   it("成功payloadをgenericな通知として表示しprivate fieldを引き継がない", async () => {
-    const worker = loadServiceWorker();
+    const worker = createWorkerScope();
 
     await worker.dispatch("push", {
       data: {
@@ -73,7 +71,7 @@ describe("public Service Worker push events", () => {
 
   it("失敗または不正なpayloadをgenericな失敗通知として表示する", async () => {
     for (const payload of [{ outcome: "failed" }, { outcome: "succeeded", recipeId: "" }]) {
-      const worker = loadServiceWorker();
+      const worker = createWorkerScope();
       await worker.dispatch("push", { data: { json: () => payload } });
 
       expect(worker.showNotification).toHaveBeenCalledWith("レシピを取り込めませんでした", {
@@ -83,15 +81,13 @@ describe("public Service Worker push events", () => {
       });
     }
   });
-});
 
-describe("Service Worker notification activation", () => {
   it("既存windowをsame-originのRecipeへ遷移してfocusする", async () => {
     const windowClient = {
-      navigate: vi.fn(async () => undefined),
-      focus: vi.fn(async () => undefined),
-    };
-    const worker = loadServiceWorker({ windows: [windowClient] });
+      navigate: vi.fn(async () => null),
+      focus: vi.fn(async () => windowClient),
+    } as unknown as WindowClient;
+    const worker = createWorkerScope({ windows: [windowClient] });
     const close = vi.fn();
 
     await worker.dispatch("notificationclick", {
@@ -114,7 +110,7 @@ describe("Service Worker notification activation", () => {
   });
 
   it("windowがなければ失敗通知からRecipe一覧を開く", async () => {
-    const worker = loadServiceWorker();
+    const worker = createWorkerScope();
 
     await worker.dispatch("notificationclick", {
       notification: {
@@ -123,7 +119,10 @@ describe("Service Worker notification activation", () => {
       },
     });
 
-    expect(worker.matchAll).toHaveBeenCalledWith({ includeUncontrolled: true, type: "window" });
+    expect(worker.matchAll).toHaveBeenCalledWith({
+      includeUncontrolled: true,
+      type: "window",
+    });
     expect(worker.openWindow).toHaveBeenCalledWith("https://app.example.com/recipes");
   });
 });

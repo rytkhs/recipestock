@@ -38,7 +38,7 @@ Browser / PWA
 | Email | Resend |
 | Billing | Stripe |
 | AI | Vercel AI SDK + workers-ai-provider + Cloudflare Workers AI + Cloudflare AI Gateway |
-| PWA | Web App Manifest + Service Worker |
+| PWA | Web App Manifest + Workbox via `vite-plugin-pwa` `injectManifest` |
 | Monorepo | pnpm workspace + Turborepo |
 | Lint / Format | Biome |
 | Unit / Component / Request tests | Vitest + Testing Library |

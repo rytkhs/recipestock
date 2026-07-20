@@ -89,6 +89,8 @@ export const changePassword = async (currentPassword: string, newPassword: strin
 
 export const useAuthSession = () => authClient.useSession();
 
+export const getFreshAuthSession = () => authClient.getSession();
+
 export const signUpWithEmailPassword = async (
   email: string,
   password: string,
