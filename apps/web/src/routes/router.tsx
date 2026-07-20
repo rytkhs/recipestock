@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import {
   createRootRoute,
   createRoute,
@@ -9,6 +8,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
+import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { Header, MobileBottomNav } from "../components/header";
 import {
   ImportUrlSkeleton,
@@ -17,11 +17,9 @@ import {
   RecipeListSkeleton,
   SettingsSkeleton,
 } from "../components/loading";
-import { ApiClientError } from "../lib/api";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
-import { clearUserScopedCache } from "../lib/query-cache";
+import { useProtectedAccess } from "../lib/protected-access";
 import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
-import { useViewer } from "../lib/viewer";
 import { ImportUrlRoute, type ImportUrlSearch } from "./import";
 import { LoginRoute } from "./login";
 import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
@@ -53,52 +51,37 @@ const ProtectedRouteSkeleton = () => {
   return <RecipeListSkeleton />;
 };
 
-const RequireViewer = ({ children }: { children: ReactNode }) => {
-  const queryClient = useQueryClient();
-  const { session, status } = useAuthState();
-  const viewer = useViewer({ enabled: status === "authenticated" });
+const ProtectedLayout = () => {
+  const access = useProtectedAccess();
   const navigate = useNavigate();
   const currentHref = useRouterState({ select: (state) => state.location.href });
   const currentPathname = useRouterState({ select: (state) => state.location.pathname });
 
   useEffect(() => {
-    if (status === "unauthenticated" && isProtectedAppPath(currentPathname)) {
+    if (access.status === "unauthenticated" && isProtectedAppPath(currentPathname)) {
       void navigate({
         to: "/login",
         search: { redirect: currentHref },
         replace: true,
       });
     }
-  }, [currentHref, currentPathname, navigate, status]);
+  }, [access.status, currentHref, currentPathname, navigate]);
 
-  useEffect(() => {
-    if (
-      !(viewer.error instanceof ApiClientError) ||
-      viewer.error.code !== "unauthorized" ||
-      !isProtectedAppPath(currentPathname)
-    ) {
-      return;
-    }
+  const isReady = access.status === "ready";
 
-    clearUserScopedCache(queryClient);
-    void session.refetch().finally(() => {
-      void navigate({
-        to: "/login",
-        search: { redirect: currentHref },
-        replace: true,
-      });
-    });
-  }, [currentHref, currentPathname, navigate, queryClient, session, viewer.error]);
-
-  if (status === "pending" || (status === "authenticated" && viewer.isPending)) {
-    return <ProtectedRouteSkeleton />;
-  }
-
-  if (status !== "authenticated" || !viewer.data) {
-    return null;
-  }
-
-  return children;
+  return (
+    <>
+      <Header variant={isReady ? "private" : "brand"} />
+      <main className={isReady ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"}>
+        {access.status === "pending" ? <ProtectedRouteSkeleton /> : null}
+        {access.status === "ready" ? <Outlet /> : null}
+        {access.status === "unavailable" ? (
+          <ConnectionUnavailable isRetrying={access.isRetrying} onRetry={access.retry} />
+        ) : null}
+      </main>
+      {isReady ? <MobileBottomNav /> : null}
+    </>
+  );
 };
 
 const RedirectAuthenticated = ({
@@ -124,32 +107,24 @@ const RedirectAuthenticated = ({
   return children;
 };
 
-const RootLayoutContent = () => {
+const PublicLayout = () => {
   const { status } = useAuthState();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const shouldReservePrivateChrome =
-    status === "authenticated" || (status === "pending" && isProtectedAppPath(pathname));
 
   return (
-    <div className="min-h-screen bg-brand-cream text-brand-ink">
-      <Header />
-      <main
-        className={
-          shouldReservePrivateChrome
-            ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-8"
-            : "pb-8"
-        }
-      >
+    <>
+      <Header variant={status === "unauthenticated" ? "public" : "brand"} />
+      <main className="pb-8">
         <Outlet />
       </main>
-      <MobileBottomNav />
-    </div>
+    </>
   );
 };
 
 const RootLayout = () => (
   <AuthStateProvider>
-    <RootLayoutContent />
+    <div className="min-h-screen bg-brand-cream text-brand-ink">
+      <Outlet />
+    </div>
   </AuthStateProvider>
 );
 
@@ -157,8 +132,20 @@ const rootRoute = createRootRoute({
   component: RootLayout,
 });
 
-const indexRoute = createRoute({
+const publicLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
+  id: "_public",
+  component: PublicLayout,
+});
+
+const protectedLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "_protected",
+  component: ProtectedLayout,
+});
+
+const indexRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
   path: "/",
   component: () => (
     <RedirectAuthenticated>
@@ -175,43 +162,27 @@ const indexRoute = createRoute({
 });
 
 const recipesRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => protectedLayoutRoute,
   path: "/recipes",
-  component: () => (
-    <RequireViewer>
-      <RecipesIndexRoute />
-    </RequireViewer>
-  ),
+  component: RecipesIndexRoute,
 });
 
 const newRecipeRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => protectedLayoutRoute,
   path: "/recipes/new",
-  component: () => (
-    <RequireViewer>
-      <NewRecipeRoute />
-    </RequireViewer>
-  ),
+  component: NewRecipeRoute,
 });
 
 const recipeDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => protectedLayoutRoute,
   path: "/recipes/$recipeId",
-  component: () => (
-    <RequireViewer>
-      <RecipeDetailRoute />
-    </RequireViewer>
-  ),
+  component: RecipeDetailRoute,
 });
 
 const editRecipeRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => protectedLayoutRoute,
   path: "/recipes/$recipeId/edit",
-  component: () => (
-    <RequireViewer>
-      <EditRecipeRoute />
-    </RequireViewer>
-  ),
+  component: EditRecipeRoute,
 });
 
 type LoginSearch = {
@@ -219,7 +190,7 @@ type LoginSearch = {
 };
 
 const loginRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => publicLayoutRoute,
   path: "/login",
   validateSearch: (search): LoginSearch => ({
     redirect: stringSearchParam(search.redirect),
@@ -239,7 +210,7 @@ const loginRoute = createRoute({
 const stringSearchParam = (value: unknown) => (typeof value === "string" ? value : undefined);
 
 const importUrlRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => protectedLayoutRoute,
   path: "/import/url",
   validateSearch: (search): ImportUrlSearch => ({
     text: stringSearchParam(search.text),
@@ -249,44 +220,33 @@ const importUrlRoute = createRoute({
   component: () => {
     const search = importUrlRoute.useSearch();
 
-    return (
-      <RequireViewer>
-        <ImportUrlRoute key={JSON.stringify([search.url, search.text])} search={search} />
-      </RequireViewer>
-    );
+    return <ImportUrlRoute key={JSON.stringify([search.url, search.text])} search={search} />;
   },
 });
 
 const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => protectedLayoutRoute,
   path: "/settings",
-  component: () => (
-    <RequireViewer>
-      <SettingsIndexRoute />
-    </RequireViewer>
-  ),
+  component: SettingsIndexRoute,
 });
 
 const settingsBillingRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => protectedLayoutRoute,
   path: "/settings/billing",
-  component: () => (
-    <RequireViewer>
-      <SettingsBillingRoute />
-    </RequireViewer>
-  ),
+  component: SettingsBillingRoute,
 });
 
 const routeTree = rootRoute.addChildren([
-  indexRoute,
-  loginRoute,
-  recipesRoute,
-  newRecipeRoute,
-  recipeDetailRoute,
-  editRecipeRoute,
-  importUrlRoute,
-  settingsRoute,
-  settingsBillingRoute,
+  publicLayoutRoute.addChildren([indexRoute, loginRoute]),
+  protectedLayoutRoute.addChildren([
+    recipesRoute,
+    newRecipeRoute,
+    recipeDetailRoute,
+    editRecipeRoute,
+    importUrlRoute,
+    settingsRoute,
+    settingsBillingRoute,
+  ]),
 ]);
 
 type AppRouterOptions = Omit<Parameters<typeof createRouter>[0], "routeTree">;

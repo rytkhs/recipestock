@@ -1,10 +1,43 @@
 {
+  "id": "/",
+  "scope": "/",
+  "lang": "ja",
   "name": "Recipe Stock",
   "short_name": "Recipe Stock",
+  "description": "Webサイトや動画、画像からレシピを保存し、材料や作り方をまとめて検索・閲覧できるレシピ管理アプリです。",
+  "categories": ["food", "lifestyle"],
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FBF3E9",
   "theme_color": "#768055",
+  "shortcuts": [
+    {
+      "name": "URLから取り込む",
+      "short_name": "URL取り込み",
+      "description": "WebサイトのURLからレシピを取り込みます",
+      "url": "/import/url",
+      "icons": [
+        {
+          "src": "/icons/shortcuts/import-url-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "手入力で追加",
+      "short_name": "手入力",
+      "description": "レシピを手入力で追加します",
+      "url": "/recipes/new",
+      "icons": [
+        {
+          "src": "/icons/shortcuts/manual-entry-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
   "share_target": {
     "action": "/import/url",
     "method": "GET",
@@ -26,6 +59,22 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/recipes-narrow.png",
+      "sizes": "391x735",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "スマートフォンで表示したレシピの一覧"
+    },
+    {
+      "src": "/screenshots/recipes-wide.png",
+      "sizes": "1711x922",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "保存したレシピの一覧"
     }
   ]
 }

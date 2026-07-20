@@ -1203,7 +1203,7 @@ export const NewRecipeRoute = () => {
 };
 
 export const RecipeDetailRoute = () => {
-  const { recipeId } = useParams({ from: "/recipes/$recipeId" });
+  const { recipeId } = useParams({ from: "/_protected/recipes/$recipeId" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -1623,7 +1623,7 @@ export const RecipeDetailRoute = () => {
 };
 
 export const EditRecipeRoute = () => {
-  const { recipeId } = useParams({ from: "/recipes/$recipeId/edit" });
+  const { recipeId } = useParams({ from: "/_protected/recipes/$recipeId/edit" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | null>(null);

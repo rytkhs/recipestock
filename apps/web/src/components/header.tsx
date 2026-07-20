@@ -8,8 +8,6 @@ import {
 } from "@phosphor-icons/react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { type ReactNode } from "react";
-import { useAuthState } from "../lib/auth-state";
-import { isProtectedAppPath } from "../lib/route-access";
 
 const PublicNav = () => (
   <nav aria-label="Main navigation" className="flex items-center gap-2">
@@ -143,12 +141,7 @@ const MobileBottomNavLink = ({
 );
 
 export const MobileBottomNav = () => {
-  const { status } = useAuthState();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-
-  if (status !== "authenticated") {
-    return null;
-  }
 
   return (
     <nav
@@ -181,25 +174,18 @@ export const MobileBottomNav = () => {
   );
 };
 
-export const Header = () => {
-  const { status } = useAuthState();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const isProtectedPath = isProtectedAppPath(pathname);
-  const shouldUsePrivateChrome =
-    status === "authenticated" || (status === "pending" && isProtectedPath);
-  const shouldShowPublicNav = status === "unauthenticated" && !isProtectedPath;
-
+export const Header = ({ variant }: { variant: "brand" | "public" | "private" }) => {
   return (
     <header
       className={`sticky top-0 z-40 flex-col gap-4 border-b border-brand-line bg-brand-cream/95 backdrop-blur-md px-4 py-3 sm:px-6 lg:px-10 sm:flex-row sm:items-center sm:justify-between ${
-        shouldUsePrivateChrome ? "hidden sm:flex" : "flex"
+        variant === "private" ? "hidden sm:flex" : "flex"
       }`}
     >
       <Link className="font-bold text-lg text-brand-walnut no-underline tracking-tight" to="/">
         Recipe Stock
       </Link>
-      {status === "authenticated" ? <AppNav /> : null}
-      {shouldShowPublicNav ? <PublicNav /> : null}
+      {variant === "private" ? <AppNav /> : null}
+      {variant === "public" ? <PublicNav /> : null}
     </header>
   );
 };

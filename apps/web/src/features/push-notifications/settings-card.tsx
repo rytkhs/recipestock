@@ -3,11 +3,11 @@ import { Bell } from "@phosphor-icons/react";
 import { type GetPushSubscriptionsResponse } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { registerAppServiceWorker } from "../../pwa/browser";
 import { getPushSubscriptions, pushSubscriptionsQueryKey, registerPushSubscription } from "./api";
 import {
   deactivatePushSubscription,
   getCurrentPushSubscription,
-  registerPushServiceWorker,
   supportsPushNotifications,
 } from "./browser";
 
@@ -122,7 +122,7 @@ export const PushNotificationSettingsCard = () => {
         throw new Error("VAPID public key is unavailable.");
       }
 
-      const registration = await registerPushServiceWorker();
+      const registration = await registerAppServiceWorker();
       const existingSubscription = await registration.pushManager.getSubscription();
       if (existingSubscription) {
         const unsubscribed = await existingSubscription.unsubscribe().catch(() => false);
