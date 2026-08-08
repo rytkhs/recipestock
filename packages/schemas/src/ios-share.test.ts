@@ -1,52 +1,59 @@
 import { describe, expect, it } from "vitest";
 import {
-  createIosShareImportJobResponseSchema,
-  iosShareShortcutImportJobRequestSchema,
+  IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH,
+  iosShareShortcutImportRequestSchema,
+  iosShareShortcutImportResponseSchema,
 } from "./ios-share";
 
 describe("iOS Shortcut import schemas", () => {
-  it("HTTP URLだけを受け付け、未知のfieldを除去する", () => {
+  it("生の共有入力だけを受け付け、未知のfieldを除去する", () => {
     expect(
-      iosShareShortcutImportJobRequestSchema.parse({
-        url: "https://example.com/recipe",
-        requestId: "pre-release-client-value",
+      iosShareShortcutImportRequestSchema.parse({
+        input: "この唐揚げ美味しそう https://example.com/recipe #レシピ",
+        url: "https://example.com/other",
       }),
     ).toEqual({
-      url: "https://example.com/recipe",
+      input: "この唐揚げ美味しそう https://example.com/recipe #レシピ",
     });
   });
 
-  it("URLの欠落、HTTP以外、4096文字超過を拒否する", () => {
-    expect(iosShareShortcutImportJobRequestSchema.safeParse({}).success).toBe(false);
+  it("入力の欠落、空文字、上限超過を拒否する", () => {
+    expect(iosShareShortcutImportRequestSchema.safeParse({}).success).toBe(false);
+    expect(iosShareShortcutImportRequestSchema.safeParse({ input: "" }).success).toBe(false);
     expect(
-      iosShareShortcutImportJobRequestSchema.safeParse({
-        url: "ftp://example.com/recipe",
-      }).success,
-    ).toBe(false);
-    expect(
-      iosShareShortcutImportJobRequestSchema.safeParse({
-        url: `https://example.com/${"a".repeat(4097)}`,
+      iosShareShortcutImportRequestSchema.safeParse({
+        input: "a".repeat(IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH + 1),
       }).success,
     ).toBe(false);
   });
 
-  it("Import Job受付responseを検証する", () => {
+  it("noticeを含むresponseを検証する", () => {
     expect(
-      createIosShareImportJobResponseSchema.safeParse({
-        kind: "created",
-        job: {
-          id: "job_1",
-          kind: "url",
-          status: "queued",
-          url: "https://example.com/recipe",
-          recipeId: null,
-          errorCode: null,
-          errorMessage: null,
-          createdAt: "2026-07-11T00:00:00.000Z",
-          startedAt: null,
-          finishedAt: null,
+      iosShareShortcutImportResponseSchema.safeParse({
+        outcome: "accepted",
+        reason: "created",
+        notice: {
+          title: "取り込みを開始しました",
+          body: "完了したらお知らせします。",
+          openUrl: null,
         },
       }).success,
     ).toBe(true);
+  });
+
+  it("noticeのない、または未知のreasonを持つresponseを拒否する", () => {
+    expect(
+      iosShareShortcutImportResponseSchema.safeParse({
+        outcome: "accepted",
+        reason: "created",
+      }).success,
+    ).toBe(false);
+    expect(
+      iosShareShortcutImportResponseSchema.safeParse({
+        outcome: "rejected",
+        reason: "outdated_shortcut",
+        notice: { title: "更新してください", body: "更新してください。", openUrl: null },
+      }).success,
+    ).toBe(false);
   });
 });

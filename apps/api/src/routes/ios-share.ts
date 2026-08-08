@@ -1,14 +1,12 @@
-import { createIosShareImportJobResponseSchema } from "@recipestock/schemas";
-import { Hono } from "hono";
 import {
-  invalidUrlResponse,
-  rateLimitExceededResponse,
-  recipeLimitExceededResponse,
-  temporarilyUnavailableResponse,
-  unauthorizedResponse,
-} from "../api-error";
+  type IosShareShortcutImportReason,
+  iosShareShortcutImportRequestSchema,
+  iosShareShortcutImportResponseSchema,
+} from "@recipestock/schemas";
+import { extractFirstUrl } from "@recipestock/shared";
+import { type Context, Hono } from "hono";
 import { type ApiEnv } from "../context";
-import { toImportJobSummary } from "../import-jobs";
+import { buildIosShareShortcutImportResult } from "../ios-share-notices";
 import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
 import { type ShortcutCredentials } from "../shortcut-credentials";
 
@@ -18,9 +16,53 @@ type IosShareRouteDependencies = {
   shortcutRateLimiterFor: (env: ApiEnv["Bindings"]) => RateLimit;
 };
 
+type ShortcutImportLogFields = {
+  credentialId?: string;
+  sourceHost?: string;
+  userId?: string;
+};
+
 const bearerToken = (header: string | undefined) => {
   const match = header?.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
+};
+
+const sourceHostOf = (url: string) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Shortcutの`URLの内容を取得`は非2xxで実行ごと停止し、こちらの文言を一切表示できない。
+ * 想定内の結果はすべて200 + noticeで返し、`reason`をHTTPステータスに代わる監視の軸にする。
+ */
+const respondWithNotice = (
+  c: Context<ApiEnv>,
+  reason: IosShareShortcutImportReason,
+  logFields: ShortcutImportLogFields = {},
+) => {
+  const result = buildIosShareShortcutImportResult({
+    reason,
+    appOrigin: c.env.BETTER_AUTH_URL,
+  });
+  const logger = c.get("logger");
+  const fields = {
+    ...logFields,
+    outcome: result.outcome,
+    reason,
+    shortcutVersion: c.req.header("x-shortcut-version"),
+  };
+
+  if (reason === "temporarily_unavailable") {
+    logger.warn("ios_share_shortcut_import_submitted", fields);
+  } else {
+    logger.info("ios_share_shortcut_import_submitted", fields);
+  }
+
+  return c.json(iosShareShortcutImportResponseSchema.parse(result), 200);
 };
 
 export const createIosShareRoutes = ({
@@ -33,47 +75,60 @@ export const createIosShareRoutes = ({
   return routes.post("/shortcut/import-jobs", async (c) => {
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
-      return unauthorizedResponse();
+      return respondWithNotice(c, "unauthorized");
     }
 
     const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
     if (!identity) {
-      return unauthorizedResponse();
+      return respondWithNotice(c, "unauthorized");
     }
+
+    const logFields: ShortcutImportLogFields = {
+      credentialId: identity.credentialId,
+      userId: identity.userId,
+    };
 
     const limiter = shortcutRateLimiterFor(c.env);
     const { success } = await limiter.limit({ key: identity.credentialId });
     if (!success) {
-      return rateLimitExceededResponse();
+      return respondWithNotice(c, "rate_limit_exceeded", logFields);
     }
 
-    const rawBody = await c.req.json().catch(() => null);
-    const body =
-      typeof rawBody === "object" && rawBody !== null ? (rawBody as Record<string, unknown>) : null;
+    const request = iosShareShortcutImportRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!request.success) {
+      return respondWithNotice(c, "no_url_in_input", logFields);
+    }
+
+    const url = extractFirstUrl(request.data.input);
+    if (!url) {
+      return respondWithNotice(c, "no_url_in_input", logFields);
+    }
+
     const result = await urlImportJobSubmissionFor(c.env).submit({
       userId: identity.userId,
-      url: body?.url,
+      url,
       notifyOnCompletion: true,
     });
+    const submissionLogFields = { ...logFields, sourceHost: sourceHostOf(url) };
 
     if (result.status === "invalidUrl") {
-      return invalidUrlResponse();
+      return respondWithNotice(c, "invalid_url", submissionLogFields);
     }
 
     if (result.status === "recipeLimitExceeded") {
-      return recipeLimitExceededResponse();
+      return respondWithNotice(c, "recipe_limit_exceeded", submissionLogFields);
     }
 
     if (result.status === "temporarilyUnavailable") {
-      return temporarilyUnavailableResponse();
+      return respondWithNotice(c, "temporarily_unavailable", submissionLogFields);
     }
 
-    return c.json(
-      createIosShareImportJobResponseSchema.parse({
-        kind: result.kind,
-        job: toImportJobSummary(result.job),
-      }),
-      202,
+    return respondWithNotice(
+      c,
+      result.kind === "created" ? "created" : "existing_active_job",
+      submissionLogFields,
     );
   });
 };
