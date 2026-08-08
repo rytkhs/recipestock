@@ -83,7 +83,7 @@ export const createIosShareRoutes = ({
 }: IosShareRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
 
-  return routes.post("/shortcut/import-jobs", async (c) => {
+  return routes.post("/import-jobs", async (c) => {
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
       return respondWithNotice(c, "unauthorized");
