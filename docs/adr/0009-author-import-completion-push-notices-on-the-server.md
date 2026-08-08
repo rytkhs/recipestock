@@ -1,0 +1,23 @@
+# 取り込み完了通知の文言をサーバーが生成する
+
+ADR 0008はiOS Shortcutについて「表示文字列はサーバーが確定し、クライアントは受け取った文字列をそのまま表示する」を採用した。しかし同じ取り込み機能のもう一方のチャネルであるWeb Pushでは、通知のtitleとbodyがService Worker内にハードコードされたままで、payloadは`outcome`と`recipeId`だけを運んでいた。同一機能の2つのチャネルで、片方はサーバーが文言を決め、片方はクライアントが組み立てている状態になっていた。
+
+Service Workerを更新の遅いクライアントとして扱う。ADR 0007の決定により`skipWaiting()`は使用せず、新しいworkerは古いclientが全て閉じるまでactivateしない。登録処理にも`registration.update()`や更新プロンプトはない。インストール済みPWAを開いたままにしているユーザーでは、古いService Workerが長期間push eventを処理し続ける。Shortcutほど極端ではないが性質は同じであり、文言をService Workerに置く限り、文言の変更はこちらが制御できない時点まで届かない。したがってADR 0008の原則をWeb Pushにも適用する。
+
+## payloadにユーザー固有の情報を載せない
+
+payloadは`outcome`、succeeded時の`recipeId`、そして`notice`の`title`と`body`で構成する。`notice`はサーバーが確定した表示文字列であり、Service Workerは文言を組み立てない。
+
+文言のカタログは`outcome`だけで引く。レシピタイトルや`errorCode`別の失敗理由は載せない。通知はロック画面に表示されるため、payloadに載せた情報は端末を開かなくても読める。取り込み元や失敗理由が読めることの利益より、それが露出しない性質を維持する利益を取る。この判断により`notifyImportJobCompletion`はJobだけを参照すればよく、Recipeの取得もapp originの配線も不要である。
+
+## 契約は`packages/shared`に置く
+
+payloadの型とparserは`packages/shared`に1つだけ定義し、APIとService Workerの両方が参照する。従来はAPIとService Workerが同じ形を手書きで二重定義していた。
+
+wire contractは`packages/schemas`にzod schemaとして置くのが本repositoryの慣例だが、`packages/schemas`はzodに依存しており、Service Worker bundleはADR 0007でApp Shellとしてprecacheされる。precache対象にzodを持ち込まないため、実行時依存を持たない`packages/shared`に平のTypeScriptとして置く。parserは契約に合わない値に`null`を返す。
+
+## 遷移先はService Workerが導出する
+
+`notice`に`openUrl`は含めない。Shortcutと違いService Workerは自身のoriginを知っているため、遷移先をサーバーから渡す必要がない。payload由来のURLへは遷移せず、`outcome`と`recipeId`から常に自身のscope配下のpathを組み立てる。`outcome`と`recipeId`をpayloadに残すのは表示のためではなく、この導出のためである。
+
+payloadが契約に合わない場合に表示する最終手段の文言だけはService Worker内に残る。`userVisibleOnly`の制約によりpushを受け取った以上は必ず通知を表示しなければならず、payloadが壊れているときに表示できる文字列が他にないためである。

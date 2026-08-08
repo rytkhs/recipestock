@@ -274,7 +274,13 @@ describe("import queue handler", () => {
       now: new Date("2026-06-01T00:00:03.000Z"),
     });
 
-    expect(sentPayloads).toEqual([{ outcome: "succeeded", recipeId: "recipe_123" }]);
+    expect(sentPayloads).toEqual([
+      {
+        outcome: "succeeded",
+        recipeId: "recipe_123",
+        notice: { title: expect.any(String), body: expect.any(String) },
+      },
+    ]);
     expect(job.completionNotificationSentAt).toEqual(new Date("2026-06-01T00:00:03.000Z"));
     expect(events).toEqual(["ack"]);
   });
@@ -309,8 +315,11 @@ describe("import queue handler", () => {
       },
     });
 
-    expect(payloads).toEqual([{ outcome: "failed" }]);
-    expect(JSON.stringify(payloads)).not.toMatch(/private|error|url|source|title/i);
+    expect(payloads).toEqual([
+      { outcome: "failed", notice: { title: expect.any(String), body: expect.any(String) } },
+    ]);
+    expect(JSON.stringify(payloads)).not.toMatch(/private\.example|private failure detail/);
+    expect(JSON.stringify(payloads)).not.toContain(errorCode);
     expect(events).toEqual(["ack"]);
   });
 
@@ -436,7 +445,9 @@ describe("import queue handler", () => {
     });
 
     expect(job.status).toBe("failed");
-    expect(payloads).toEqual([{ outcome: "failed" }]);
+    expect(payloads).toEqual([
+      { outcome: "failed", notice: { title: expect.any(String), body: expect.any(String) } },
+    ]);
     expect(events).toEqual(["ack"]);
   });
 
