@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -365,10 +365,15 @@ describe("AppRouter", () => {
     await expect(
       screen.findByRole("heading", { name: "接続を確認できません" }),
     ).resolves.toBeInTheDocument();
-    await waitFor(() => {
-      expect(sessionChecks).toBe(2);
-      expect(viewerChecks).toBe(2);
+    expect(sessionChecks).toBe(2);
+    expect(viewerChecks).toBe(2);
+
+    // 自動リトライ(最短2s)より手前で、回復ループが追撃しないことを確認する
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
     });
+    expect(sessionChecks).toBe(2);
+    expect(viewerChecks).toBe(2);
     expect(appRouter.state.location.pathname).toBe("/recipes");
   });
 
