@@ -1,5 +1,7 @@
 # iOS ShortcutからImport Jobを直接作成する
 
+> Shortcut向けendpointのrequest bodyとresponseに関する決定は、ADR 0008「iOS Shortcutへサーバー生成のnoticeを返す」によって置き換えられた。認証、rate limit、重複抑制、queue失敗処理、Web Pushの位置づけについての決定は有効である。
+
 ADR 0004で採用したShare Handoffは、iOS ShortcutからPWAへURLを配送し、ユーザーがPWA上で再度送信した後にImport Jobを作成する。この経路は非公開の`webapp:` URL scheme、PWAの起動と復帰、Share Handoffのdelivery確認、Safari fallbackに依存し、共有時に示された取り込み意思を実行するまでの操作と状態を増やしている。
 
 iOS Shortcutから認証付きendpointへURLを直接POSTし、サーバーでImport Jobを作成してqueueへ投入する。Shortcutによる共有操作をRecipe取り込みの明示的な依頼として扱い、PWAやSafariの起動と追加確認をImport Job作成の前提にしない。この決定はADR 0004を置き換える。

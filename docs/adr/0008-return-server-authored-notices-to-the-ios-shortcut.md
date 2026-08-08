@@ -1,0 +1,31 @@
+# iOS Shortcutへサーバー生成のnoticeを返す
+
+ADR 0006はiOS ShortcutからImport Jobを直接作成する経路を採用したが、Shortcut向けendpointをWeb向けAPIと同じ形で設計した。request bodyは共有されたURLだけとし、結果はHTTPステータスとエラーコードで返している。この設計は、Shortcutが2つの責務を持ち続けることを前提にしている。共有入力からURLを取り出す判断と、エラーコードをユーザー向けの日本語へ翻訳する判断である。
+
+iCloudリンクから配布されたShortcutは、インストールされた時点でスナップショットとして固定される。強制アップデートもテレメトリも存在しないため、Shortcutに置いた判断は事実上永久に修正できない。したがってShortcutに残してよいのは、iOS側でしか実行できず、かつ将来変わらないものだけである。URL抽出の改善もエラー文言の追加も将来必ず発生するため、どちらもShortcutに置いてはならない。
+
+Shortcut向けendpointのInterfaceの小ささは、フィールド数ではなく、更新不能な場所に置いた意思決定の数で測る。この基準により、ADR 0006の「request bodyは共有されたHTTPまたはHTTPS URLだけとする」を置き換える。
+
+## request bodyは生の共有入力
+
+Shortcutは共有入力をテキスト化した`input`をそのまま送る。長さは8192文字で切る。URL抽出は`@recipestock/shared`の`extractFirstUrl`がサーバー側で行い、`apps/web`のshare target着地画面と同じ実装を共用する。抽出規則の改善は、Shortcutを再配布せずに既存ユーザー全員へ即日適用される。
+
+Shortcut credentialのBearer認証、`credentialId`単位のrate limit、同一ユーザーと正規化URLに対するactive Jobの一件収束、queue送信失敗時の`failed`更新は、ADR 0006の決定のまま維持する。抽出したURLはADR 0006と同じURL Import Job submission Moduleへ渡し、認証方式ごとにImport Job invariantsを実装しない。
+
+## 想定内の結果はすべて200 + notice
+
+Shortcutの`URLの内容を取得`は非2xxで実行そのものを停止し、Apple製のエラーダイアログを表示する。この状態ではこちらが用意した文言を一切表示できない。ユーザーがFree上限に達した瞬間、つまり最もアップグレード意欲が高い瞬間に、英語のエラーコードか無反応だけが残る。
+
+Shortcut向けendpointは汎用のREST APIではなく、更新不能なクライアント向けのRPC endpointとして扱う。routeが把握しているすべての結果は200で返し、非2xxはrouteが把握していない例外だけとする。認証失敗も200に含める。トークン無効が最も多く発生するのは設定時の貼り間違えであり、そこでApple製のダイアログを出すことに利点がない。
+
+responseは`outcome`、`reason`、`notice`を必ず含む。`notice`の`title`と`body`はサーバーが確定した表示文字列であり、Shortcutは文言を組み立てず、受け取った文字列をそのまま通知に表示する。`openUrl`はユーザーの操作が必要なときだけ設定し、Shortcutはその有無だけを分岐する。未知の結果が増えてもShortcutは無改修で正しい文言を表示できる。
+
+HTTPステータスが失う監視情報は`reason`が引き受ける。`api_request_completed`はHTTPステータスからlevelを決めるため、200で返す以上この経路の異常検知は`ios_share_shortcut_import_submitted`だけに依存する。従来4xxまたは5xxとしてwarnになっていた結果は、このログでもwarnとする。すなわち`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`をwarn、それ以外をinfoとする。
+
+request bodyが契約に合わない場合は`malformed_request`とし、共有入力にURLが含まれない`no_url_in_input`と区別する。前者はクライアントの契約違反であり、後者はユーザーの通常の操作結果である。両者を同じ`reason`へ潰すと、Shortcutの再配布に失敗しても通常のユーザーエラーに埋もれて検知できない。`malformed_request`のnoticeはShortcutの再設定へ誘導する。
+
+## 一度公開したShortcutの契約は破らない
+
+Shortcutは`X-Shortcut-Version`を送る。現時点では分岐に使わずログへ記録するだけとし、契約を変更せざるを得なくなった場合に、古い版に対して更新を促す`notice`を返すための入口として確保する。
+
+Shortcutのアクション列は`docs/shortcut/ios-share.md`に記録する。iCloudリンクの実体はレビューもdiffも取れないため、API契約を変更するときはこの文書と必ず突き合わせる。
