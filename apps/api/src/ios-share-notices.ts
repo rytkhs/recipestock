@@ -36,6 +36,12 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     title: "このリンクは取り込めません",
     body: "Webページのリンクを共有してください。",
   },
+  malformed_request: {
+    outcome: "rejected",
+    title: "共有できませんでした",
+    body: "設定画面からShortcutを追加し直してください。",
+    path: "/settings",
+  },
   recipe_limit_exceeded: {
     outcome: "rejected",
     title: "保存できる上限に達しました",

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
+import { createApp } from "../index";
+import { createLogger, type LogEntry } from "../logger";
 import { type ShortcutCredentials } from "../shortcut-credentials";
 import { createSilentTestApp } from "../test-helpers";
 
@@ -166,15 +168,9 @@ describe("iOS Share routes", () => {
         shareRequest("ftp://example.com/recipe"),
         env,
       ),
-      app.request("/api/ios-share/shortcut/import-jobs", shareRequest("a".repeat(8193)), env),
-      app.request(
-        "/api/ios-share/shortcut/import-jobs",
-        { method: "POST", headers: shortcutHeaders, body: "not json" },
-        env,
-      ),
     ]);
 
-    expect(responses.map((response) => response.status)).toEqual([200, 200, 200, 200]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
     for (const response of responses) {
       await expect(response.json()).resolves.toMatchObject({
         outcome: "rejected",
@@ -182,6 +178,78 @@ describe("iOS Share routes", () => {
       });
     }
     expect(createUrlJob).not.toHaveBeenCalled();
+  });
+
+  it("契約に合わないrequestはmalformed_requestとして再設定を促す", async () => {
+    const createUrlJob = vi.fn(async () => ({
+      status: "created" as const,
+      job: createJob(),
+    }));
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({ createUrlJob }),
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const responses = await Promise.all([
+      app.request(
+        "/api/ios-share/shortcut/import-jobs",
+        { method: "POST", headers: shortcutHeaders, body: "not json" },
+        env,
+      ),
+      app.request(
+        "/api/ios-share/shortcut/import-jobs",
+        {
+          method: "POST",
+          headers: shortcutHeaders,
+          body: JSON.stringify({ url: "https://example.com/recipe" }),
+        },
+        env,
+      ),
+      app.request("/api/ios-share/shortcut/import-jobs", shareRequest("a".repeat(8193)), env),
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([200, 200, 200]);
+    for (const response of responses) {
+      await expect(response.json()).resolves.toMatchObject({
+        outcome: "rejected",
+        reason: "malformed_request",
+        notice: { openUrl: "https://app.example.com/settings" },
+      });
+    }
+    expect(createUrlJob).not.toHaveBeenCalled();
+  });
+
+  it("4xx相当だった結果をwarnで記録し、通常のユーザーエラーと分ける", async () => {
+    const entries: { event: string; level: string; reason?: unknown }[] = [];
+    const sink = { write: (entry: LogEntry) => entries.push(entry) };
+    const app = createApp({
+      auth,
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository(),
+      importQueue: { send: async () => undefined } as unknown as Queue<{ jobId: string }>,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    await app.request(
+      "/api/ios-share/shortcut/import-jobs",
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+      env,
+    );
+    await app.request("/api/ios-share/shortcut/import-jobs", shareRequest("URLはありません"), env);
+    await app.request("/api/ios-share/shortcut/import-jobs", shareRequest(), env);
+
+    const submitted = entries.filter(
+      (entry) => entry.event === "ios_share_shortcut_import_submitted",
+    );
+
+    expect(submitted.map((entry) => [entry.reason, entry.level])).toEqual([
+      ["unauthorized", "warn"],
+      ["no_url_in_input", "info"],
+      ["created", "info"],
+    ]);
   });
 
   it("取り込めないURLはinvalid_urlを返す", async () => {

@@ -36,6 +36,17 @@ const sourceHostOf = (url: string) => {
 };
 
 /**
+ * 200で返す以上、HTTPステータスからlevelを決める`api_request_completed`では拾えない。
+ * 従来4xx/5xxとしてwarnになっていた結果は、このlevelで引き続きアラートできるようにする。
+ */
+const warnedReasons = new Set<IosShareShortcutImportReason>([
+  "malformed_request",
+  "unauthorized",
+  "rate_limit_exceeded",
+  "temporarily_unavailable",
+]);
+
+/**
  * Shortcutの`URLの内容を取得`は非2xxで実行ごと停止し、こちらの文言を一切表示できない。
  * 想定内の結果はすべて200 + noticeで返し、`reason`をHTTPステータスに代わる監視の軸にする。
  */
@@ -56,7 +67,7 @@ const respondWithNotice = (
     shortcutVersion: c.req.header("x-shortcut-version"),
   };
 
-  if (reason === "temporarily_unavailable") {
+  if (warnedReasons.has(reason)) {
     logger.warn("ios_share_shortcut_import_submitted", fields);
   } else {
     logger.info("ios_share_shortcut_import_submitted", fields);
@@ -98,7 +109,7 @@ export const createIosShareRoutes = ({
       await c.req.json().catch(() => null),
     );
     if (!request.success) {
-      return respondWithNotice(c, "no_url_in_input", logFields);
+      return respondWithNotice(c, "malformed_request", logFields);
     }
 
     const url = extractFirstUrl(request.data.input);

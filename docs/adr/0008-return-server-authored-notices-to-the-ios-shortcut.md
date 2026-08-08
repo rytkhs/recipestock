@@ -20,7 +20,9 @@ Shortcut向けendpointは汎用のREST APIではなく、更新不能なクラ�
 
 responseは`outcome`、`reason`、`notice`を必ず含む。`notice`の`title`と`body`はサーバーが確定した表示文字列であり、Shortcutは文言を組み立てず、受け取った文字列をそのまま通知に表示する。`openUrl`はユーザーの操作が必要なときだけ設定し、Shortcutはその有無だけを分岐する。未知の結果が増えてもShortcutは無改修で正しい文言を表示できる。
 
-HTTPステータスが失う監視情報は`reason`が引き受ける。routeは結果ごとに`ios_share_shortcut_import_submitted`を出力し、`temporarily_unavailable`だけ`warn`とする。`api_request_completed`はHTTPステータスからlevelを決めるため、この経路の障害検知はこのログに依存する。
+HTTPステータスが失う監視情報は`reason`が引き受ける。`api_request_completed`はHTTPステータスからlevelを決めるため、200で返す以上この経路の異常検知は`ios_share_shortcut_import_submitted`だけに依存する。従来4xxまたは5xxとしてwarnになっていた結果は、このログでもwarnとする。すなわち`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`をwarn、それ以外をinfoとする。
+
+request bodyが契約に合わない場合は`malformed_request`とし、共有入力にURLが含まれない`no_url_in_input`と区別する。前者はクライアントの契約違反であり、後者はユーザーの通常の操作結果である。両者を同じ`reason`へ潰すと、Shortcutの再配布に失敗しても通常のユーザーエラーに埋もれて検知できない。`malformed_request`のnoticeはShortcutの再設定へ誘導する。
 
 ## 一度公開したShortcutの契約は破らない
 

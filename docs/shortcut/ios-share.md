@@ -59,12 +59,23 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
 | `existing_active_job` | `accepted` | なし |
 | `no_url_in_input` | `rejected` | なし |
 | `invalid_url` | `rejected` | なし |
+| `malformed_request` | `rejected` | `/settings` |
 | `recipe_limit_exceeded` | `rejected` | `/settings/billing?upsell=recipe_limit&from=shortcut` |
 | `rate_limit_exceeded` | `rejected` | なし |
 | `temporarily_unavailable` | `rejected` | なし |
 | `unauthorized` | `rejected` | `/settings` |
 
-表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。
+表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`はwarn、それ以外はinfo。
+
+`malformed_request`はrequest bodyが契約に合わない場合、`no_url_in_input`は`input`にURLが含まれない場合であり、両者を混ぜない。前者はクライアントの契約違反、後者はユーザーの通常の操作結果である。
+
+## 共有入力の実機確認
+
+`受け取るもの`を`すべて`にした状態で、Safari（記事・通常ページ）、Instagram、YouTube、LINE、X、レシピアプリから共有したとき、`input`の先頭に現れる`https://`は常に共有対象のURLと一致した。記事本文が`input`へ入る事象は観測されていない。したがってサーバー側の抽出は先頭のURLを採用し、`input`の上限は8192文字とする。
+
+画像・スクリーンショットを共有した場合、`input`にはファイル名が入る。URLを含まないため`no_url_in_input`となる。画像の共有取り込みは未対応である。
+
+受け取る型やこの前提を変える場合は、同じ確認をやり直してから契約を決める。
 
 ## 変更時の手順
 

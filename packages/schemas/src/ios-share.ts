@@ -13,6 +13,7 @@ export const iosShareShortcutImportReasonSchema = z.enum([
   "existing_active_job",
   "no_url_in_input",
   "invalid_url",
+  "malformed_request",
   "recipe_limit_exceeded",
   "rate_limit_exceeded",
   "temporarily_unavailable",
