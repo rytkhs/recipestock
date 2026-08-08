@@ -98,7 +98,7 @@ describe("iOS Share routes", () => {
       getCurrentDate: () => new Date("2026-07-11T00:00:00.000Z"),
     });
 
-    const response = await app.request("/api/ios-share/shortcut/import-jobs", shareRequest(), env);
+    const response = await app.request("/api/shortcut/import-jobs", shareRequest(), env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -137,7 +137,7 @@ describe("iOS Share routes", () => {
     });
 
     const response = await app.request(
-      "/api/ios-share/shortcut/import-jobs",
+      "/api/shortcut/import-jobs",
       shareRequest("この唐揚げ美味しそう https://example.com/recipe。 #レシピ"),
       env,
     );
@@ -162,12 +162,8 @@ describe("iOS Share routes", () => {
     });
 
     const responses = await Promise.all([
-      app.request("/api/ios-share/shortcut/import-jobs", shareRequest("レシピのスクショです"), env),
-      app.request(
-        "/api/ios-share/shortcut/import-jobs",
-        shareRequest("ftp://example.com/recipe"),
-        env,
-      ),
+      app.request("/api/shortcut/import-jobs", shareRequest("レシピのスクショです"), env),
+      app.request("/api/shortcut/import-jobs", shareRequest("ftp://example.com/recipe"), env),
     ]);
 
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
@@ -194,12 +190,12 @@ describe("iOS Share routes", () => {
 
     const responses = await Promise.all([
       app.request(
-        "/api/ios-share/shortcut/import-jobs",
+        "/api/shortcut/import-jobs",
         { method: "POST", headers: shortcutHeaders, body: "not json" },
         env,
       ),
       app.request(
-        "/api/ios-share/shortcut/import-jobs",
+        "/api/shortcut/import-jobs",
         {
           method: "POST",
           headers: shortcutHeaders,
@@ -207,7 +203,7 @@ describe("iOS Share routes", () => {
         },
         env,
       ),
-      app.request("/api/ios-share/shortcut/import-jobs", shareRequest("a".repeat(8193)), env),
+      app.request("/api/shortcut/import-jobs", shareRequest("a".repeat(8193)), env),
     ]);
 
     expect(responses.map((response) => response.status)).toEqual([200, 200, 200]);
@@ -234,12 +230,12 @@ describe("iOS Share routes", () => {
     });
 
     await app.request(
-      "/api/ios-share/shortcut/import-jobs",
+      "/api/shortcut/import-jobs",
       { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
       env,
     );
-    await app.request("/api/ios-share/shortcut/import-jobs", shareRequest("URLはありません"), env);
-    await app.request("/api/ios-share/shortcut/import-jobs", shareRequest(), env);
+    await app.request("/api/shortcut/import-jobs", shareRequest("URLはありません"), env);
+    await app.request("/api/shortcut/import-jobs", shareRequest(), env);
 
     const submitted = entries.filter(
       (entry) => entry.event === "ios_share_shortcut_import_submitted",
@@ -265,7 +261,7 @@ describe("iOS Share routes", () => {
     });
 
     const response = await app.request(
-      "/api/ios-share/shortcut/import-jobs",
+      "/api/shortcut/import-jobs",
       shareRequest(`https://example.com/${"a".repeat(4097)}`),
       env,
     );
@@ -287,7 +283,7 @@ describe("iOS Share routes", () => {
     });
 
     const response = await app.request(
-      "/api/ios-share/shortcut/import-jobs",
+      "/api/shortcut/import-jobs",
       {
         method: "POST",
         headers: {
@@ -327,7 +323,7 @@ describe("iOS Share routes", () => {
 
     const responses = await Promise.all([
       app.request(
-        "/api/ios-share/shortcut/import-jobs",
+        "/api/shortcut/import-jobs",
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -336,7 +332,7 @@ describe("iOS Share routes", () => {
         env,
       ),
       app.request(
-        "/api/ios-share/shortcut/import-jobs",
+        "/api/shortcut/import-jobs",
         {
           method: "POST",
           headers: { ...shortcutHeaders, authorization: "Bearer invalid" },
@@ -344,7 +340,7 @@ describe("iOS Share routes", () => {
         },
         env,
       ),
-      app.request("/api/ios-share/shortcut/import-jobs", shareRequest(), env),
+      app.request("/api/shortcut/import-jobs", shareRequest(), env),
     ]);
 
     expect(responses.map((response) => response.status)).toEqual([200, 200, 200]);
@@ -373,7 +369,7 @@ describe("iOS Share routes", () => {
       shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
     });
 
-    const response = await app.request("/api/ios-share/shortcut/import-jobs", shareRequest(), env);
+    const response = await app.request("/api/shortcut/import-jobs", shareRequest(), env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -400,7 +396,7 @@ describe("iOS Share routes", () => {
       shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
     });
 
-    const response = await app.request("/api/ios-share/shortcut/import-jobs", shareRequest(), env);
+    const response = await app.request("/api/shortcut/import-jobs", shareRequest(), env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -433,7 +429,7 @@ describe("iOS Share routes", () => {
 
     const responses = await Promise.all(
       Array.from({ length: 11 }, () =>
-        app.request("/api/ios-share/shortcut/import-jobs", shareRequest(), env),
+        app.request("/api/shortcut/import-jobs", shareRequest(), env),
       ),
     );
     const reasons = await Promise.all(
@@ -462,7 +458,7 @@ describe("iOS Share routes", () => {
       getCurrentDate: () => new Date("2026-07-11T00:00:00.000Z"),
     });
 
-    const response = await app.request("/api/ios-share/shortcut/import-jobs", shareRequest(), env);
+    const response = await app.request("/api/shortcut/import-jobs", shareRequest(), env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({

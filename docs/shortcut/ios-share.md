@@ -13,7 +13,7 @@
 1. **共有シートから受け取る** — 受け付ける型はURL、テキスト、Safari Webページ、記事
 2. **テキスト** — 手順1の入力をテキストへ変換する
 3. **URLの内容を取得**
-   - URL: `https://<app-host>/api/ios-share/shortcut/import-jobs`
+   - URL: `https://<app-host>/api/shortcut/import-jobs`
    - メソッド: `POST`
    - ヘッダ: `Authorization: Bearer <連携トークン>` / `X-Shortcut-Version: 1`
    - 本文: JSON、`input` = 手順2の結果
@@ -27,7 +27,7 @@
 ### Request
 
 ```http
-POST /api/ios-share/shortcut/import-jobs
+POST /api/shortcut/import-jobs
 Authorization: Bearer rssc_...
 X-Shortcut-Version: 1
 Content-Type: application/json

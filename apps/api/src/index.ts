@@ -187,7 +187,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       }),
     )
     .route(
-      "/ios-share",
+      "/shortcut",
       createIosShareRoutes({
         shortcutCredentialsFor,
         urlImportJobSubmissionFor,
