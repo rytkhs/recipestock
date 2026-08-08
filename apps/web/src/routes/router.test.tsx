@@ -252,15 +252,16 @@ describe("AppRouter", () => {
   });
 
   it("viewer再試行の401はfresh session確認後にviewerを再取得する", async () => {
-    let sessionChecks = 0;
+    const authRequests: string[] = [];
     let viewerChecks = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
       if (path.endsWith("/get-session")) {
-        sessionChecks += 1;
+        authRequests.push("session");
         return createSessionResponse(true);
       }
       if (path === "/api/me") {
+        authRequests.push("viewer");
         viewerChecks += 1;
         if (viewerChecks === 1) {
           return jsonResponse(
@@ -300,8 +301,7 @@ describe("AppRouter", () => {
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(appRouter.state.location.pathname).toBe("/recipes");
-    expect(sessionChecks).toBe(2);
-    expect(viewerChecks).toBe(3);
+    expect(authRequests).toEqual(["session", "viewer", "viewer", "session", "viewer"]);
   });
 
   it("viewer 401後のfresh session通信失敗はloginへ送らずsession unavailableにする", async () => {

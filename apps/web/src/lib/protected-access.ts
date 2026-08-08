@@ -27,9 +27,7 @@ export const useProtectedAccess = (): ProtectedAccess => {
   const auth = useAuthState();
   const queryClient = useQueryClient();
   const [unauthorizedRecovery, setUnauthorizedRecovery] = useState<UnauthorizedRecovery>("idle");
-  const viewer = useViewer({
-    enabled: auth.status === "authenticated" && unauthorizedRecovery !== "checking",
-  });
+  const viewer = useViewer({ enabled: auth.status === "authenticated" });
 
   const fetchFreshViewer = useCallback(async (): Promise<FreshViewerResult> => {
     try {
@@ -46,10 +44,12 @@ export const useProtectedAccess = (): ProtectedAccess => {
   const recoverUnauthorizedViewer = useCallback(async () => {
     setUnauthorizedRecovery("checking");
     await queryClient.cancelQueries({ queryKey: viewerQueryKey });
-    clearUserScopedCache(queryClient);
+    // viewerは直後に取り直すためcacheに残す。ここで消すとenabledなobserverがsession確認前に再取得してしまう。
+    clearUserScopedCache(queryClient, { keepViewer: true });
 
     const sessionResult = await auth.recheck();
     if (sessionResult === "unauthenticated") {
+      queryClient.removeQueries({ queryKey: viewerQueryKey });
       setUnauthorizedRecovery("idle");
       return true;
     }
