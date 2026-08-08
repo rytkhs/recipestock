@@ -281,6 +281,7 @@ describe("import queue handler", () => {
         notice: { title: expect.any(String), body: expect.any(String) },
       },
     ]);
+    expect(JSON.stringify(sentPayloads)).not.toMatch(/private\.example|https?:\/\//);
     expect(job.completionNotificationSentAt).toEqual(new Date("2026-06-01T00:00:03.000Z"));
     expect(events).toEqual(["ack"]);
   });
@@ -319,6 +320,7 @@ describe("import queue handler", () => {
       { outcome: "failed", notice: { title: expect.any(String), body: expect.any(String) } },
     ]);
     expect(JSON.stringify(payloads)).not.toMatch(/private\.example|private failure detail/);
+    expect(JSON.stringify(payloads)).not.toMatch(/https?:\/\//);
     expect(JSON.stringify(payloads)).not.toContain(errorCode);
     expect(events).toEqual(["ack"]);
   });

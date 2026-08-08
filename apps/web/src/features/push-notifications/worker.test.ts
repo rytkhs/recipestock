@@ -93,9 +93,8 @@ describe("Push notification worker", () => {
 
   it("契約に合わないpayloadでは最終手段の通知を表示する", async () => {
     const payloads: unknown[] = [
-      { outcome: "succeeded", recipeId: "recipe_1" },
-      { outcome: "succeeded", recipeId: "", notice },
       { outcome: "failed", notice: { title: "", body: "" } },
+      { outcome: "failed" },
       null,
     ];
 
@@ -109,6 +108,34 @@ describe("Push notification worker", () => {
         icon: "/icons/icon-192.png",
       });
     }
+  });
+
+  it("noticeが読めなくてもRecipeへの遷移先を失わない", async () => {
+    const worker = createWorkerScope();
+
+    await worker.dispatch("push", {
+      data: { json: () => ({ outcome: "succeeded", recipeId: "recipe_1" }) },
+    });
+
+    expect(worker.showNotification).toHaveBeenCalledWith("レシピの取り込み結果があります", {
+      body: "Recipe Stockを開いて確認してください。",
+      data: { outcome: "succeeded", recipeId: "recipe_1" },
+      icon: "/icons/icon-192.png",
+    });
+  });
+
+  it("遷移先が読めなくてもサーバーのnoticeを表示する", async () => {
+    const worker = createWorkerScope();
+
+    await worker.dispatch("push", {
+      data: { json: () => ({ outcome: "succeeded", recipeId: "", notice }) },
+    });
+
+    expect(worker.showNotification).toHaveBeenCalledWith(notice.title, {
+      body: notice.body,
+      data: { outcome: "failed" },
+      icon: "/icons/icon-192.png",
+    });
   });
 
   it("payloadを読めないときも最終手段の通知を表示する", async () => {

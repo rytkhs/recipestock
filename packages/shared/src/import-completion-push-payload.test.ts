@@ -1,58 +1,76 @@
 import { describe, expect, it } from "vitest";
-import { parseImportCompletionPushPayload } from "./import-completion-push-payload";
+import {
+  parseImportCompletionNotice,
+  parseImportCompletionRoute,
+} from "./import-completion-push-payload";
 
 const notice = { title: "レシピの取り込みが完了しました", body: "Recipe Stockで確認できます。" };
 
-describe("取り込み完了push payloadの解釈", () => {
-  it("成功payloadから遷移先とnoticeを取り出す", () => {
+describe("取り込み完了push payloadの遷移先", () => {
+  it("成功payloadからrecipeIdを取り出す", () => {
     expect(
-      parseImportCompletionPushPayload({ outcome: "succeeded", recipeId: "recipe_1", notice }),
-    ).toEqual({ outcome: "succeeded", recipeId: "recipe_1", notice });
+      parseImportCompletionRoute({ outcome: "succeeded", recipeId: "recipe_1", notice }),
+    ).toEqual({ outcome: "succeeded", recipeId: "recipe_1" });
   });
 
-  it("失敗payloadはrecipeIdを持たない", () => {
-    expect(parseImportCompletionPushPayload({ outcome: "failed", notice })).toEqual({
-      outcome: "failed",
-      notice,
+  it("noticeが読めなくても遷移先を失わない", () => {
+    expect(parseImportCompletionRoute({ outcome: "succeeded", recipeId: "recipe_1" })).toEqual({
+      outcome: "succeeded",
+      recipeId: "recipe_1",
     });
+    expect(
+      parseImportCompletionRoute({ outcome: "succeeded", recipeId: "recipe_1", notice: null }),
+    ).toEqual({ outcome: "succeeded", recipeId: "recipe_1" });
   });
 
-  it("未知のfieldを除去する", () => {
+  it("解釈できない値はRecipe一覧へ着地するfailedとして扱う", () => {
+    expect(parseImportCompletionRoute({ outcome: "failed", notice })).toEqual({
+      outcome: "failed",
+    });
+    expect(parseImportCompletionRoute({ outcome: "succeeded", notice })).toEqual({
+      outcome: "failed",
+    });
+    expect(parseImportCompletionRoute({ outcome: "succeeded", recipeId: "" })).toEqual({
+      outcome: "failed",
+    });
+    expect(parseImportCompletionRoute({ outcome: "expired" })).toEqual({ outcome: "failed" });
+    expect(parseImportCompletionRoute(null)).toEqual({ outcome: "failed" });
+    expect(parseImportCompletionRoute("succeeded")).toEqual({ outcome: "failed" });
+  });
+
+  it("payload由来のURLを遷移先へ持ち出さない", () => {
     expect(
-      parseImportCompletionPushPayload({
+      parseImportCompletionRoute({
+        outcome: "succeeded",
+        recipeId: "recipe_1",
+        url: "https://evil.example.com/steal",
+      }),
+    ).toEqual({ outcome: "succeeded", recipeId: "recipe_1" });
+  });
+});
+
+describe("取り込み完了push payloadのnotice", () => {
+  it("サーバーが確定した表示文字列だけを取り出す", () => {
+    expect(
+      parseImportCompletionNotice({
         outcome: "failed",
         notice: { ...notice, openUrl: "https://evil.example.com/steal" },
-        url: "https://private.example.com/recipe",
         errorCode: "private_or_login_required",
       }),
-    ).toEqual({ outcome: "failed", notice });
+    ).toEqual(notice);
   });
 
-  it("noticeを欠くpayloadを拒否する", () => {
-    expect(parseImportCompletionPushPayload({ outcome: "succeeded", recipeId: "recipe_1" })).toBe(
+  it("契約に合わないnoticeを拒否する", () => {
+    expect(parseImportCompletionNotice({ outcome: "succeeded", recipeId: "recipe_1" })).toBe(null);
+    expect(parseImportCompletionNotice({ outcome: "failed", notice: { title: "完了" } })).toBe(
       null,
     );
     expect(
-      parseImportCompletionPushPayload({
+      parseImportCompletionNotice({
         outcome: "failed",
-        notice: { title: "", body: "Recipe Stockで確認できます。" },
+        notice: { title: "", body: "確認できます。" },
       }),
     ).toBe(null);
-    expect(parseImportCompletionPushPayload({ outcome: "failed", notice: { title: "完了" } })).toBe(
-      null,
-    );
-  });
-
-  it("成功payloadにrecipeIdがなければ拒否する", () => {
-    expect(parseImportCompletionPushPayload({ outcome: "succeeded", notice })).toBe(null);
-    expect(parseImportCompletionPushPayload({ outcome: "succeeded", recipeId: "", notice })).toBe(
-      null,
-    );
-  });
-
-  it("未知のoutcomeやオブジェクト以外を拒否する", () => {
-    expect(parseImportCompletionPushPayload({ outcome: "running", notice })).toBe(null);
-    expect(parseImportCompletionPushPayload(null)).toBe(null);
-    expect(parseImportCompletionPushPayload("succeeded")).toBe(null);
+    expect(parseImportCompletionNotice(null)).toBe(null);
   });
 });

@@ -10,46 +10,43 @@ export type ImportCompletionNotice = {
   body: string;
 };
 
-export type ImportCompletionPushPayload =
-  | { outcome: "succeeded"; recipeId: string; notice: ImportCompletionNotice }
-  | { outcome: "failed"; notice: ImportCompletionNotice };
+export type ImportCompletionRoute =
+  | { outcome: "succeeded"; recipeId: string }
+  | { outcome: "failed" };
 
-const parseNotice = (value: unknown): ImportCompletionNotice | null => {
-  if (!value || typeof value !== "object") return null;
+export type ImportCompletionPushPayload = ImportCompletionRoute & {
+  notice: ImportCompletionNotice;
+};
 
-  const { title, body } = value as { title?: unknown; body?: unknown };
-  if (typeof title !== "string" || !title) return null;
-  if (typeof body !== "string" || !body) return null;
+const asRecord = (value: unknown) =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 
-  return { title, body };
+/**
+ * 遷移先の導出は表示文言と独立させる。`notice`が読めないときでも
+ * 保存されたRecipeへ遷移できるようにし、表示側の失敗を遷移まで波及させない。
+ * 解釈できない値はRecipe一覧へ着地する`failed`として扱う。
+ */
+export const parseImportCompletionRoute = (value: unknown): ImportCompletionRoute => {
+  const payload = asRecord(value);
+  if (payload?.outcome !== "succeeded") return { outcome: "failed" };
+
+  const { recipeId } = payload;
+  return typeof recipeId === "string" && recipeId
+    ? { outcome: "succeeded", recipeId }
+    : { outcome: "failed" };
 };
 
 /**
  * 契約に合わない値はnullを返す。呼び出し側は表示できる文字列を持たないため、
  * Service Workerはそこで最終手段の通知に切り替える。
  */
-export const parseImportCompletionPushPayload = (
-  value: unknown,
-): ImportCompletionPushPayload | null => {
-  if (!value || typeof value !== "object") return null;
+export const parseImportCompletionNotice = (value: unknown): ImportCompletionNotice | null => {
+  const notice = asRecord(asRecord(value)?.notice);
+  if (!notice) return null;
 
-  const { outcome, recipeId, notice } = value as {
-    outcome?: unknown;
-    recipeId?: unknown;
-    notice?: unknown;
-  };
-  const parsedNotice = parseNotice(notice);
-  if (!parsedNotice) return null;
+  const { title, body } = notice;
+  if (typeof title !== "string" || !title) return null;
+  if (typeof body !== "string" || !body) return null;
 
-  if (outcome === "succeeded") {
-    return typeof recipeId === "string" && recipeId
-      ? { outcome, recipeId, notice: parsedNotice }
-      : null;
-  }
-
-  if (outcome === "failed") {
-    return { outcome, notice: parsedNotice };
-  }
-
-  return null;
+  return { title, body };
 };

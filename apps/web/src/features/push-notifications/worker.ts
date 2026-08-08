@@ -1,9 +1,6 @@
 /// <reference lib="webworker" />
 
-import {
-  type ImportCompletionPushPayload,
-  parseImportCompletionPushPayload,
-} from "@recipestock/shared";
+import { parseImportCompletionNotice, parseImportCompletionRoute } from "@recipestock/shared";
 
 /**
  * payloadが契約に合わないときに表示する最終手段。`userVisibleOnly`のため
@@ -18,26 +15,17 @@ const lastResortNotification = {
 const notificationIcon = "/icons/icon-192.png";
 
 /** 遷移先はpayload由来のURLではなく、常にこのScope配下でoutcomeから導出する。 */
-type NotificationRoute = Pick<ImportCompletionPushPayload, "outcome"> & { recipeId?: string };
-
-const routeOf = (payload: ImportCompletionPushPayload): NotificationRoute =>
-  payload.outcome === "succeeded"
-    ? { outcome: "succeeded", recipeId: payload.recipeId }
-    : { outcome: "failed" };
-
 const destinationFor = (scope: ServiceWorkerGlobalScope, value: unknown) => {
-  const route = value as NotificationRoute | undefined;
+  const route = parseImportCompletionRoute(value);
   const path =
-    route?.outcome === "succeeded" && typeof route.recipeId === "string" && route.recipeId
-      ? `/recipes/${encodeURIComponent(route.recipeId)}`
-      : "/recipes";
+    route.outcome === "succeeded" ? `/recipes/${encodeURIComponent(route.recipeId)}` : "/recipes";
 
   return new URL(path, scope.location.origin).href;
 };
 
-const readPushPayload = (event: PushEvent): ImportCompletionPushPayload | null => {
+const readPushPayload = (event: PushEvent): unknown => {
   try {
-    return parseImportCompletionPushPayload(event.data?.json());
+    return event.data?.json();
   } catch {
     return null;
   }
@@ -46,12 +34,12 @@ const readPushPayload = (event: PushEvent): ImportCompletionPushPayload | null =
 export const registerPushNotificationHandlers = (scope: ServiceWorkerGlobalScope): void => {
   scope.addEventListener("push", (event) => {
     const payload = readPushPayload(event);
-    const notice = payload ? payload.notice : lastResortNotification;
+    const notice = parseImportCompletionNotice(payload) ?? lastResortNotification;
 
     event.waitUntil(
       scope.registration.showNotification(notice.title, {
         body: notice.body,
-        data: payload ? routeOf(payload) : { outcome: "failed" },
+        data: parseImportCompletionRoute(payload),
         icon: notificationIcon,
       }),
     );

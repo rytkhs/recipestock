@@ -20,4 +20,6 @@ wire contractは`packages/schemas`にzod schemaとして置くのが本repositor
 
 `notice`に`openUrl`は含めない。Shortcutと違いService Workerは自身のoriginを知っているため、遷移先をサーバーから渡す必要がない。payload由来のURLへは遷移せず、`outcome`と`recipeId`から常に自身のscope配下のpathを組み立てる。`outcome`と`recipeId`をpayloadに残すのは表示のためではなく、この導出のためである。
 
+遷移先の導出と`notice`の解釈は独立させる。`notice`が読めない場合でも`outcome`と`recipeId`が読めるならRecipeへ遷移する。表示側の失敗を遷移まで波及させる理由がなく、APIのrollbackなどでpayloadの形が食い違う間も、深いリンクだけは維持される。解釈できない値はRecipe一覧へ着地する`failed`として扱う。
+
 payloadが契約に合わない場合に表示する最終手段の文言だけはService Worker内に残る。`userVisibleOnly`の制約によりpushを受け取った以上は必ず通知を表示しなければならず、payloadが壊れているときに表示できる文字列が他にないためである。
