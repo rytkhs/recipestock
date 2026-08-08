@@ -1,11 +1,9 @@
+import { type ImportCompletionPushPayload } from "@recipestock/shared";
 import * as webPush from "web-push";
+import { buildImportCompletionPushPayload } from "./import-completion-notices";
 import { type ImportJobRepository } from "./import-jobs";
 import { type Logger } from "./logger";
 import { type PushDeliveryTarget, type PushSubscriptionRepository } from "./push-subscriptions";
-
-export type ImportCompletionNotificationPayload =
-  | { outcome: "succeeded"; recipeId: string }
-  | { outcome: "failed" };
 
 type WebPushSubscription = {
   endpoint: string;
@@ -33,7 +31,7 @@ export type SendWebPush = (
 export type PushSender = {
   sendToUser(input: {
     userId: string;
-    payload: ImportCompletionNotificationPayload;
+    payload: ImportCompletionPushPayload;
   }): Promise<{ acceptedCount: number }>;
 };
 
@@ -60,10 +58,11 @@ export const notifyImportJobCompletion = async ({
 
   if (job.status === "succeeded" && !job.recipeId) return false;
 
-  const payload: ImportCompletionNotificationPayload =
+  const payload = buildImportCompletionPushPayload(
     job.status === "succeeded"
       ? { outcome: "succeeded", recipeId: job.recipeId as string }
-      : { outcome: "failed" };
+      : { outcome: "failed" },
+  );
   const { acceptedCount } = await pushSender.sendToUser({ userId: job.userId, payload });
   if (acceptedCount === 0) return false;
 

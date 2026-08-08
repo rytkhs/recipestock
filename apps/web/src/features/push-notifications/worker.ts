@@ -1,63 +1,48 @@
 /// <reference lib="webworker" />
 
-type PushNotificationPayload = { outcome: "succeeded"; recipeId: string } | { outcome: "failed" };
+import { parseImportCompletionNotice, parseImportCompletionRoute } from "@recipestock/shared";
 
-const failedNotificationPayload = { outcome: "failed" } as const;
-
-const validateNotificationPayload = (value: unknown): PushNotificationPayload => {
-  if (!value || typeof value !== "object") return failedNotificationPayload;
-
-  const payload = value as { outcome?: unknown; recipeId?: unknown };
-  if (payload.outcome === "succeeded" && typeof payload.recipeId === "string" && payload.recipeId) {
-    return { outcome: "succeeded", recipeId: payload.recipeId };
-  }
-
-  return failedNotificationPayload;
+/**
+ * payloadが契約に合わないときに表示する最終手段。`userVisibleOnly`のため
+ * pushを受け取った以上は必ず何か表示しなければならず、他に出せる文字列がない。
+ * 通常運用では到達しない。表示文言はサーバーが決める（ADR 0009）。
+ */
+const lastResortNotification = {
+  title: "レシピの取り込み結果があります",
+  body: "Recipe Stockを開いて確認してください。",
 };
 
-const readPushPayload = (event: PushEvent): PushNotificationPayload => {
-  try {
-    return validateNotificationPayload(event.data?.json());
-  } catch {
-    return failedNotificationPayload;
-  }
-};
+const notificationIcon = "/icons/icon-192.png";
 
-const notificationFor = (
-  payload: PushNotificationPayload,
-): { title: string; options: NotificationOptions } =>
-  payload.outcome === "succeeded"
-    ? {
-        title: "レシピの取り込みが完了しました",
-        options: {
-          body: "Recipe Stockで確認できます。",
-          data: payload,
-          icon: "/icons/icon-192.png",
-        },
-      }
-    : {
-        title: "レシピを取り込めませんでした",
-        options: {
-          body: "Recipe Stockを開いて結果を確認してください。",
-          data: failedNotificationPayload,
-          icon: "/icons/icon-192.png",
-        },
-      };
-
+/** 遷移先はpayload由来のURLではなく、常にこのScope配下でoutcomeから導出する。 */
 const destinationFor = (scope: ServiceWorkerGlobalScope, value: unknown) => {
-  const payload = validateNotificationPayload(value);
+  const route = parseImportCompletionRoute(value);
   const path =
-    payload.outcome === "succeeded"
-      ? `/recipes/${encodeURIComponent(payload.recipeId)}`
-      : "/recipes";
+    route.outcome === "succeeded" ? `/recipes/${encodeURIComponent(route.recipeId)}` : "/recipes";
 
   return new URL(path, scope.location.origin).href;
 };
 
+const readPushPayload = (event: PushEvent): unknown => {
+  try {
+    return event.data?.json();
+  } catch {
+    return null;
+  }
+};
+
 export const registerPushNotificationHandlers = (scope: ServiceWorkerGlobalScope): void => {
   scope.addEventListener("push", (event) => {
-    const notification = notificationFor(readPushPayload(event));
-    event.waitUntil(scope.registration.showNotification(notification.title, notification.options));
+    const payload = readPushPayload(event);
+    const notice = parseImportCompletionNotice(payload) ?? lastResortNotification;
+
+    event.waitUntil(
+      scope.registration.showNotification(notice.title, {
+        body: notice.body,
+        data: parseImportCompletionRoute(payload),
+        icon: notificationIcon,
+      }),
+    );
   });
 
   scope.addEventListener("notificationclick", (event) => {
