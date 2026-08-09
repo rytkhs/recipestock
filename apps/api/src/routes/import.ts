@@ -7,6 +7,7 @@ import {
 } from "@recipestock/schemas";
 import { Hono } from "hono";
 import {
+  aiUsageLimitExceededResponse,
   invalidUrlResponse,
   notFoundResponse,
   recipeLimitExceededResponse,
@@ -60,6 +61,10 @@ export const createImportRoutes = ({
 
       if (result.status === "recipeLimitExceeded") {
         return recipeLimitExceededResponse();
+      }
+
+      if (result.status === "aiUsageLimitExceeded") {
+        return aiUsageLimitExceededResponse();
       }
 
       if (result.status === "temporarilyUnavailable") {

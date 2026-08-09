@@ -31,6 +31,8 @@ const vapid = {
   privateKey: "private-key",
 };
 
+const notice = { title: "レシピの取り込みが完了しました", body: "Recipe Stockで確認できます。" };
+
 describe("Push sender", () => {
   it("購読中の全端末へprivacy-safeな完了payloadを送信する", async () => {
     const sendNotification = vi.fn<SendWebPush>(async () => ({ statusCode: 201 }));
@@ -43,7 +45,7 @@ describe("Push sender", () => {
     await expect(
       sender.sendToUser({
         userId: "user_1",
-        payload: { outcome: "succeeded", recipeId: "recipe_1" },
+        payload: { outcome: "succeeded", recipeId: "recipe_1", notice },
       }),
     ).resolves.toEqual({ acceptedCount: 2 });
 
@@ -53,8 +55,8 @@ describe("Push sender", () => {
       targets[1]?.endpoint,
     ]);
     for (const [, payload, options] of sendNotification.mock.calls) {
-      expect(JSON.parse(payload)).toEqual({ outcome: "succeeded", recipeId: "recipe_1" });
-      expect(payload).not.toMatch(/url|title|source|error/i);
+      expect(JSON.parse(payload)).toEqual({ outcome: "succeeded", recipeId: "recipe_1", notice });
+      expect(payload).not.toMatch(/https?:\/\//);
       expect(options).toEqual({ contentEncoding: "aes128gcm", vapidDetails: vapid });
     }
   });
@@ -87,7 +89,7 @@ describe("Push sender", () => {
     });
 
     await expect(
-      sender.sendToUser({ userId: "user_1", payload: { outcome: "failed" } }),
+      sender.sendToUser({ userId: "user_1", payload: { outcome: "failed", notice } }),
     ).resolves.toEqual({ acceptedCount: 1 });
 
     expect(sendNotification).toHaveBeenCalledTimes(4);
@@ -107,7 +109,7 @@ describe("Push sender", () => {
     });
 
     await expect(
-      sender.sendToUser({ userId: "user_1", payload: { outcome: "failed" } }),
+      sender.sendToUser({ userId: "user_1", payload: { outcome: "failed", notice } }),
     ).resolves.toEqual({ acceptedCount: 0 });
     expect(sendNotification).not.toHaveBeenCalled();
   });
@@ -130,7 +132,7 @@ describe("Push sender", () => {
     });
 
     await expect(
-      sender.sendToUser({ userId: "user_1", payload: { outcome: "failed" } }),
+      sender.sendToUser({ userId: "user_1", payload: { outcome: "failed", notice } }),
     ).resolves.toEqual({ acceptedCount: 1 });
     expect(sink.entries.map((entry) => entry.event)).toEqual([
       "push_subscription_retirement_failed",

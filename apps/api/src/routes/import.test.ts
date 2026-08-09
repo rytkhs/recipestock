@@ -14,6 +14,12 @@ const sameOriginHeaders = {
   "sec-fetch-site": "same-origin",
 };
 
+const env = {
+  APP_ENV: "development",
+  BETTER_AUTH_URL: "https://app.example.com",
+  DATABASE_URL: "postgresql://example",
+};
+
 const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord => ({
   id: "job_123",
   userId: "user_123",
@@ -66,11 +72,15 @@ describe("Import job routes", () => {
       getCurrentDate: () => new Date("2026-06-01T00:00:00.000Z"),
     });
 
-    const response = await testApp.request("/api/import/url/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json", ...sameOriginHeaders },
-      body: JSON.stringify({ url: "https://example.com:443/recipe?utm_source=x#step" }),
-    });
+    const response = await testApp.request(
+      "/api/import/url/jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...sameOriginHeaders },
+        body: JSON.stringify({ url: "https://example.com:443/recipe?utm_source=x#step" }),
+      },
+      env,
+    );
 
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
@@ -93,6 +103,7 @@ describe("Import job routes", () => {
       url: "https://example.com:443/recipe?utm_source=x#step",
       normalizedUrl: "https://example.com/recipe",
       completionNotificationRequested: false,
+      aiUsage: { month: "2026-06", freeLimit: 10, proLimit: 300 },
       now: new Date("2026-06-01T00:00:00.000Z"),
     });
     expect(expireActiveJobsForUser).toHaveBeenCalledWith({
@@ -119,11 +130,15 @@ describe("Import job routes", () => {
       importQueue: { send } as unknown as Queue<{ jobId: string }>,
     });
 
-    const response = await testApp.request("/api/import/url/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json", ...sameOriginHeaders },
-      body: JSON.stringify({ url: "https://example.com/recipe" }),
-    });
+    const response = await testApp.request(
+      "/api/import/url/jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...sameOriginHeaders },
+        body: JSON.stringify({ url: "https://example.com/recipe" }),
+      },
+      env,
+    );
 
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toMatchObject({
@@ -143,11 +158,15 @@ describe("Import job routes", () => {
       importQueue: { send: vi.fn(async () => undefined) } as unknown as Queue<{ jobId: string }>,
     });
 
-    const response = await testApp.request("/api/import/url/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json", ...sameOriginHeaders },
-      body: JSON.stringify({ url: "ftp://example.com/recipe" }),
-    });
+    const response = await testApp.request(
+      "/api/import/url/jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...sameOriginHeaders },
+        body: JSON.stringify({ url: "ftp://example.com/recipe" }),
+      },
+      env,
+    );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
@@ -165,11 +184,15 @@ describe("Import job routes", () => {
       importJobRepository: createRepository({ createUrlJob }),
     });
 
-    const response = await testApp.request("/api/import/url/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json", ...sameOriginHeaders },
-      body: JSON.stringify({ url: `https://example.com/${"a".repeat(4097)}` }),
-    });
+    const response = await testApp.request(
+      "/api/import/url/jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...sameOriginHeaders },
+        body: JSON.stringify({ url: `https://example.com/${"a".repeat(4097)}` }),
+      },
+      env,
+    );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
@@ -182,21 +205,88 @@ describe("Import job routes", () => {
     const testApp = createSilentTestApp({
       auth,
       importJobRepository: createRepository({
-        createUrlJob: async () => ({ status: "limitExceeded" }),
+        createUrlJob: async () => ({ status: "recipeLimitExceeded" }),
       }),
       importQueue: { send: vi.fn(async () => undefined) } as unknown as Queue<{ jobId: string }>,
     });
 
-    const response = await testApp.request("/api/import/url/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json", ...sameOriginHeaders },
-      body: JSON.stringify({ url: "https://example.com/recipe" }),
-    });
+    const response = await testApp.request(
+      "/api/import/url/jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...sameOriginHeaders },
+        body: JSON.stringify({ url: "https://example.com/recipe" }),
+      },
+      env,
+    );
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "recipe_limit_exceeded" },
     });
+  });
+
+  /**
+   * Shortcutはプランで別のnoticeを返すが、Webは同じ判定を既存の429へ写す。
+   * 画面側にはプラン情報があり、reasonを分けても伝えられる文言は増えない。
+   */
+  it.each([
+    "free",
+    "pro",
+  ] as const)("AI月次上限に達した%sの投稿はjobを作らず429を返す", async (plan) => {
+    const send = vi.fn(async () => undefined);
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({
+        createUrlJob: async () => ({ status: "aiUsageLimitExceeded", plan }),
+      }),
+      importQueue: { send } as unknown as Queue<{ jobId: string }>,
+    });
+
+    const response = await testApp.request(
+      "/api/import/url/jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...sameOriginHeaders },
+        body: JSON.stringify({ url: "https://example.com/recipe" }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "ai_usage_limit_exceeded" },
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("上限値を環境変数から解決して判定へ渡す", async () => {
+    const createUrlJob = vi.fn(async () => ({
+      status: "created" as const,
+      job: createJob(),
+    }));
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({ createUrlJob }),
+      importQueue: { send: vi.fn(async () => undefined) } as unknown as Queue<{ jobId: string }>,
+      getCurrentDate: () => new Date("2026-06-01T00:00:00.000Z"),
+    });
+
+    await testApp.request(
+      "/api/import/url/jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...sameOriginHeaders },
+        body: JSON.stringify({ url: "https://example.com/recipe" }),
+      },
+      { ...env, FREE_AI_MONTHLY_LIMIT: "3", PRO_AI_MONTHLY_LIMIT: "1000" },
+    );
+
+    expect(createUrlJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiUsage: { month: "2026-06", freeLimit: 3, proLimit: 1000 },
+      }),
+    );
   });
 
   it("Queue投入に失敗したjobをfailedにして一時利用不可を返す", async () => {
@@ -212,11 +302,15 @@ describe("Import job routes", () => {
       getCurrentDate: () => new Date("2026-06-01T00:00:00.000Z"),
     });
 
-    const response = await testApp.request("/api/import/url/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json", ...sameOriginHeaders },
-      body: JSON.stringify({ url: "https://example.com/recipe" }),
-    });
+    const response = await testApp.request(
+      "/api/import/url/jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...sameOriginHeaders },
+        body: JSON.stringify({ url: "https://example.com/recipe" }),
+      },
+      env,
+    );
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({

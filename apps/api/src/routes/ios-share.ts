@@ -44,6 +44,11 @@ const warnedReasons = new Set<IosShareShortcutImportReason>([
   "unauthorized",
   "rate_limit_exceeded",
   "temporarily_unavailable",
+  /**
+   * freeのAI上限到達はコンバージョン機会であり通常の利用結果だが、proの枠切れは
+   * 容量または濫用の兆候である。到達人口が異なるため、監視上も別の事象として扱う。
+   */
+  "ai_usage_quota_exhausted",
 ]);
 
 /**
@@ -130,6 +135,14 @@ export const createIosShareRoutes = ({
 
     if (result.status === "recipeLimitExceeded") {
       return respondWithNotice(c, "recipe_limit_exceeded", submissionLogFields);
+    }
+
+    if (result.status === "aiUsageLimitExceeded") {
+      return respondWithNotice(
+        c,
+        result.plan === "pro" ? "ai_usage_quota_exhausted" : "ai_usage_limit_exceeded",
+        submissionLogFields,
+      );
     }
 
     if (result.status === "temporarilyUnavailable") {

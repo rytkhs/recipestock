@@ -22,6 +22,8 @@
 
 連携トークンは、Shortcut追加時のインポート質問でユーザーが貼り付ける。判断ロジックはゼロ、分岐は手順5の1つだけである。
 
+`notice.body`は常に存在し、2行目を出さないreasonでは空文字になる。手順4はbodyの有無を分岐せず、空文字のときはタイトルだけの1行通知になる。
+
 ## API契約
 
 ### Request
@@ -47,25 +49,33 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
   "reason": "created",
   "notice": {
     "title": "取り込みを開始しました",
-    "body": "完了したらお知らせします。",
+    "body": "",
     "openUrl": null
   }
 }
 ```
 
-| `reason` | `outcome` | `openUrl` |
-| --- | --- | --- |
-| `created` | `accepted` | なし |
-| `existing_active_job` | `accepted` | なし |
-| `no_url_in_input` | `rejected` | なし |
-| `invalid_url` | `rejected` | なし |
-| `malformed_request` | `rejected` | `/settings` |
-| `recipe_limit_exceeded` | `rejected` | `/settings/billing?upsell=recipe_limit&from=shortcut` |
-| `rate_limit_exceeded` | `rejected` | なし |
-| `temporarily_unavailable` | `rejected` | なし |
-| `unauthorized` | `rejected` | `/settings` |
+| `reason` | `outcome` | `body` | `openUrl` |
+| --- | --- | --- | --- |
+| `created` | `accepted` | 空文字 | なし |
+| `existing_active_job` | `accepted` | 空文字 | なし |
+| `no_url_in_input` | `rejected` | 空文字 | なし |
+| `invalid_url` | `rejected` | あり | なし |
+| `malformed_request` | `rejected` | あり | `/settings` |
+| `recipe_limit_exceeded` | `rejected` | あり | `/settings/billing?upsell=recipe_limit&from=shortcut` |
+| `ai_usage_limit_exceeded` | `rejected` | あり | `/settings/billing?upsell=ai_usage_limit&from=shortcut` |
+| `ai_usage_quota_exhausted` | `rejected` | あり | なし |
+| `rate_limit_exceeded` | `rejected` | 空文字 | なし |
+| `temporarily_unavailable` | `rejected` | あり | なし |
+| `unauthorized` | `rejected` | あり | `/settings` |
 
-表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`はwarn、それ以外はinfo。
+バナーは一瞥されるだけの表示であり、`body`は次に取るべき行動があるreasonにだけ置く。`title`の言い換えにしかならない2行目は持たせない。
+
+AI月次上限はプランでreasonを分ける。保存上限がfreeの投稿を先に止めAIを消費させないため、freeが`ai_usage_limit_exceeded`に達するのは例外的であり、実際に到達するのは主にProである。すでに払っているProへ「Proにすると」と案内しても意味がないので、`ai_usage_quota_exhausted`はopenUrlを持たせずリセット時期だけを伝える。リセットはJST月初固定なので「毎月1日」は常に真であり、日付を補間する必要はない。
+
+AI上限は濫用防止の安全弁であり、プランが売る枠ではない。上限値は運用中にenvで変えられるため、`body`に具体的な回数を書かない。数字を書けばそれ自体が仕様として読まれ、上限の調整がユーザーの期待を裏切ることになる。
+
+表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`、`ai_usage_quota_exhausted`はwarn、それ以外はinfo。freeのAI上限到達はコンバージョン機会であり通常の利用結果だが、proの枠切れは容量または濫用の兆候であるため別のlevelで扱う。
 
 `malformed_request`はrequest bodyが契約に合わない場合、`no_url_in_input`は`input`にURLが含まれない場合であり、両者を混ぜない。前者はクライアントの契約違反、後者はユーザーの通常の操作結果である。
 

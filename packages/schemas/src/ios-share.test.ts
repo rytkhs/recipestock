@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH,
+  iosShareShortcutImportReasonSchema,
   iosShareShortcutImportRequestSchema,
   iosShareShortcutImportResponseSchema,
 } from "./ios-share";
@@ -30,15 +31,52 @@ describe("iOS Shortcut import schemas", () => {
   it("noticeを含むresponseを検証する", () => {
     expect(
       iosShareShortcutImportResponseSchema.safeParse({
-        outcome: "accepted",
-        reason: "created",
+        outcome: "rejected",
+        reason: "invalid_url",
         notice: {
-          title: "取り込みを開始しました",
-          body: "完了したらお知らせします。",
+          title: "このリンクは取り込めません",
+          body: "Webページのリンクを共有してください。",
           openUrl: null,
         },
       }).success,
     ).toBe(true);
+  });
+
+  /**
+   * bodyは2行目を出す理由があるreasonにだけ載せる。空文字はShortcutのアクション列を
+   * 分岐させずに1行通知を出すためのワイヤ表現であり、fieldごと欠落させることとは区別する。
+   */
+  it("空bodyのnoticeは受理し、body欠落のnoticeは拒否する", () => {
+    expect(
+      iosShareShortcutImportResponseSchema.safeParse({
+        outcome: "accepted",
+        reason: "created",
+        notice: { title: "取り込みを開始しました", body: "", openUrl: null },
+      }).success,
+    ).toBe(true);
+    expect(
+      iosShareShortcutImportResponseSchema.safeParse({
+        outcome: "accepted",
+        reason: "created",
+        notice: { title: "取り込みを開始しました", openUrl: null },
+      }).success,
+    ).toBe(false);
+    expect(
+      iosShareShortcutImportResponseSchema.safeParse({
+        outcome: "accepted",
+        reason: "created",
+        notice: { title: "", body: "", openUrl: null },
+      }).success,
+    ).toBe(false);
+  });
+
+  /**
+   * AI上限はプランで別のreasonに分ける。文言と遷移先だけでなく、reasonはHTTPステータスに
+   * 代わる監視の軸でもあり、free到達とpro到達は運用上も別の事象である。
+   */
+  it("AI上限のreasonをプランごとに持つ", () => {
+    expect(iosShareShortcutImportReasonSchema.options).toContain("ai_usage_limit_exceeded");
+    expect(iosShareShortcutImportReasonSchema.options).toContain("ai_usage_quota_exhausted");
   });
 
   it("noticeのない、または未知のreasonを持つresponseを拒否する", () => {

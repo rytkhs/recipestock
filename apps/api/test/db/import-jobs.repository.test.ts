@@ -1,9 +1,13 @@
 import { neonConfig } from "@neondatabase/serverless";
-import { appUsers, createDb, importJobs } from "@recipestock/db";
+import { aiUsageMonthly, appUsers, createDb, importJobs } from "@recipestock/db";
 import { PLAN_LIMITS } from "@recipestock/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { createImportJobRepository, type ImportJobRepository } from "../../src/import-jobs";
+import {
+  createImportJobRepository,
+  type ImportJobAiUsageLimits,
+  type ImportJobRepository,
+} from "../../src/import-jobs";
 
 vi.mock("@cloudflare/containers", () => ({
   Container: class {},
@@ -30,13 +34,21 @@ describe("Import Job repository with Neon Postgres", () => {
     repository = createImportJobRepository(db);
   });
 
-  const createShortcutJob = (params: { id: string; userId: string; normalizedUrl?: string }) =>
+  const aiUsage = { month: "2026-07", freeLimit: 10, proLimit: 300 };
+
+  const createShortcutJob = (params: {
+    id: string;
+    userId: string;
+    normalizedUrl?: string;
+    aiUsage?: ImportJobAiUsageLimits;
+  }) =>
     repository.createUrlJob({
       id: params.id,
       userId: params.userId,
       url: params.normalizedUrl ?? "https://example.com/recipe",
       normalizedUrl: params.normalizedUrl ?? "https://example.com/recipe",
       completionNotificationRequested: true,
+      aiUsage: params.aiUsage ?? aiUsage,
       now,
     });
 
@@ -74,6 +86,7 @@ describe("Import Job repository with Neon Postgres", () => {
       url: normalizedUrl,
       normalizedUrl,
       completionNotificationRequested: false,
+      aiUsage,
       now,
     });
     expect(webResult.status).toBe("created");
@@ -106,9 +119,89 @@ describe("Import Job repository with Neon Postgres", () => {
         id: `dbtest_limit_job_${runId}`,
         userId,
       }),
-    ).resolves.toEqual({ status: "limitExceeded" });
+    ).resolves.toEqual({ status: "recipeLimitExceeded" });
 
     const jobs = await db.select().from(importJobs).where(eq(importJobs.userId, userId));
     expect(jobs).toHaveLength(0);
+  });
+
+  /**
+   * 上限に達しているユーザーが共有した瞬間に理由を返すため、判定はキュー処理中ではなく
+   * ここで行う。プランごとに返すnoticeが違うので、拒否結果はplanを運ぶ。
+   */
+  it.each([
+    { plan: "free" as const, used: 10 },
+    { plan: "pro" as const, used: 300 },
+  ])("AI月次上限に達した$planのImport Jobは残さない", async ({ plan, used }) => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_ai_limit_${plan}_user_${runId}`;
+    await db.insert(appUsers).values({ userId, plan });
+    await db.insert(aiUsageMonthly).values({ userId, month: aiUsage.month, count: used });
+
+    await expect(
+      createShortcutJob({
+        id: `dbtest_ai_limit_${plan}_job_${runId}`,
+        userId,
+      }),
+    ).resolves.toEqual({ status: "aiUsageLimitExceeded", plan });
+
+    const jobs = await db.select().from(importJobs).where(eq(importJobs.userId, userId));
+    expect(jobs).toHaveLength(0);
+  });
+
+  it("AI月次上限に達していなければImport Jobを作成する", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_ai_under_limit_user_${runId}`;
+    await db.insert(appUsers).values({ userId });
+    await db.insert(aiUsageMonthly).values({
+      userId,
+      month: aiUsage.month,
+      count: aiUsage.freeLimit - 1,
+    });
+
+    const result = await createShortcutJob({
+      id: `dbtest_ai_under_limit_job_${runId}`,
+      userId,
+    });
+
+    expect(result.status).toBe("created");
+  });
+
+  /**
+   * 当月の利用回数だけを見る。前月の記録が残っていても、月初のリセット後は投稿できる。
+   */
+  it("前月の利用回数は当月の判定に影響しない", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_ai_prev_month_user_${runId}`;
+    await db.insert(appUsers).values({ userId });
+    await db.insert(aiUsageMonthly).values({
+      userId,
+      month: "2026-06",
+      count: aiUsage.freeLimit,
+    });
+
+    const result = await createShortcutJob({
+      id: `dbtest_ai_prev_month_job_${runId}`,
+      userId,
+    });
+
+    expect(result.status).toBe("created");
+  });
+
+  /**
+   * 上限0はプランごとにAIを無効化する設定値であり、記録がなくても上限到達として扱う。
+   */
+  it("上限0のプランは利用記録がなくても拒否する", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_ai_zero_limit_user_${runId}`;
+    await db.insert(appUsers).values({ userId });
+
+    await expect(
+      createShortcutJob({
+        id: `dbtest_ai_zero_limit_job_${runId}`,
+        userId,
+        aiUsage: { ...aiUsage, freeLimit: 0 },
+      }),
+    ).resolves.toEqual({ status: "aiUsageLimitExceeded", plan: "free" });
   });
 });

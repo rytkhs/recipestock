@@ -15,6 +15,8 @@ export const iosShareShortcutImportReasonSchema = z.enum([
   "invalid_url",
   "malformed_request",
   "recipe_limit_exceeded",
+  "ai_usage_limit_exceeded",
+  "ai_usage_quota_exhausted",
   "rate_limit_exceeded",
   "temporarily_unavailable",
   "unauthorized",
@@ -22,7 +24,7 @@ export const iosShareShortcutImportReasonSchema = z.enum([
 
 export const iosShareNoticeSchema = z.object({
   title: z.string().min(1),
-  body: z.string().min(1),
+  body: z.string(),
   openUrl: z.url().nullable(),
 });
 

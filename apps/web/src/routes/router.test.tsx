@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -252,15 +252,16 @@ describe("AppRouter", () => {
   });
 
   it("viewer再試行の401はfresh session確認後にviewerを再取得する", async () => {
-    let sessionChecks = 0;
+    const authRequests: string[] = [];
     let viewerChecks = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
       if (path.endsWith("/get-session")) {
-        sessionChecks += 1;
+        authRequests.push("session");
         return createSessionResponse(true);
       }
       if (path === "/api/me") {
+        authRequests.push("viewer");
         viewerChecks += 1;
         if (viewerChecks === 1) {
           return jsonResponse(
@@ -300,8 +301,7 @@ describe("AppRouter", () => {
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(appRouter.state.location.pathname).toBe("/recipes");
-    expect(sessionChecks).toBe(2);
-    expect(viewerChecks).toBe(3);
+    expect(authRequests).toEqual(["session", "viewer", "viewer", "session", "viewer"]);
   });
 
   it("viewer 401後のfresh session通信失敗はloginへ送らずsession unavailableにする", async () => {
@@ -365,10 +365,15 @@ describe("AppRouter", () => {
     await expect(
       screen.findByRole("heading", { name: "接続を確認できません" }),
     ).resolves.toBeInTheDocument();
-    await waitFor(() => {
-      expect(sessionChecks).toBe(2);
-      expect(viewerChecks).toBe(2);
+    expect(sessionChecks).toBe(2);
+    expect(viewerChecks).toBe(2);
+
+    // 自動リトライ(最短2s)より手前で、回復ループが追撃しないことを確認する
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
     });
+    expect(sessionChecks).toBe(2);
+    expect(viewerChecks).toBe(2);
     expect(appRouter.state.location.pathname).toBe("/recipes");
   });
 
