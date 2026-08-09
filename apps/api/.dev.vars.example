@@ -1,7 +1,7 @@
 DATABASE_URL="postgresql://user:password@host.neon.tech/dbname?sslmode=require"
 APP_ENV="development"
 BETTER_AUTH_SECRET="replace-me"
-BETTER_AUTH_URL="http://localhost:8787"
+APP_ORIGIN="http://localhost:8787"
 AUTH_EMAIL_FROM="Recipe Stock <login@example.com>"
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""

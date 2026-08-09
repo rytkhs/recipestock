@@ -4,7 +4,7 @@ import { createSilentTestApp } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
-  BETTER_AUTH_URL: "https://app.example.com",
+  APP_ORIGIN: "https://app.example.com",
   DATABASE_URL: "postgresql://example",
   VAPID_PUBLIC_KEY: "BNc-public-key",
 };

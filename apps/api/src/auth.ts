@@ -68,7 +68,7 @@ const createAuth = (env: Bindings) => {
 
   return betterAuth({
     basePath: "/api/auth",
-    baseURL: env.BETTER_AUTH_URL,
+    baseURL: env.APP_ORIGIN,
     secret: env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(db, {
       provider: "pg",

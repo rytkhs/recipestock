@@ -71,7 +71,7 @@ const respondWithNotice = (
 ) => {
   const result = buildIosShareShortcutImportResult({
     reason,
-    appOrigin: c.env.BETTER_AUTH_URL,
+    appOrigin: c.env.APP_ORIGIN,
   });
   const logger = c.get("logger");
   const fields = {

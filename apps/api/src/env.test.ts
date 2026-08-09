@@ -4,7 +4,7 @@ import { createLogger, createMemoryLogSink } from "./logger";
 
 const validEnv = {
   DATABASE_URL: "postgresql://example",
-  BETTER_AUTH_URL: "https://app.example.com",
+  APP_ORIGIN: "https://app.example.com",
   BETTER_AUTH_SECRET: "secret",
   AUTH_EMAIL_FROM: "Recipe Stock <login@example.com>",
   RESEND_API_KEY: "re_test",
@@ -40,24 +40,22 @@ describe("環境bindingの検証", () => {
     expect(bindingsOf(envWith({ DATABASE_URL: "   " }))).toEqual(["DATABASE_URL"]);
   });
 
-  it("空文字のBETTER_AUTH_URLを未設定として報告する", () => {
-    expect(collectBindingIssues(envWith({ BETTER_AUTH_URL: "" }))).toEqual([
-      { binding: "BETTER_AUTH_URL", message: "must be set to a non-empty value" },
+  it("空文字のAPP_ORIGINを未設定として報告する", () => {
+    expect(collectBindingIssues(envWith({ APP_ORIGIN: "" }))).toEqual([
+      { binding: "APP_ORIGIN", message: "must be set to a non-empty value" },
     ]);
   });
 
-  it("絶対http(s) URLでないBETTER_AUTH_URLを不正として報告する", () => {
+  it("絶対http(s) URLでないAPP_ORIGINを不正として報告する", () => {
     for (const value of ["app.example.com", "/settings", "ftp://app.example.com"]) {
-      expect(collectBindingIssues(envWith({ BETTER_AUTH_URL: value }))).toEqual([
-        { binding: "BETTER_AUTH_URL", message: "must be an absolute http(s) URL" },
+      expect(collectBindingIssues(envWith({ APP_ORIGIN: value }))).toEqual([
+        { binding: "APP_ORIGIN", message: "must be an absolute http(s) URL" },
       ]);
     }
   });
 
-  it("パスを含むBETTER_AUTH_URLは許容する", () => {
-    expect(collectBindingIssues(envWith({ BETTER_AUTH_URL: "http://localhost:8787/" }))).toEqual(
-      [],
-    );
+  it("パスを含むAPP_ORIGINは許容する", () => {
+    expect(collectBindingIssues(envWith({ APP_ORIGIN: "http://localhost:8787/" }))).toEqual([]);
   });
 
   it("VAPID_SUBJECTはmailto:と絶対http(s) URLだけを許容する", () => {
@@ -77,9 +75,10 @@ describe("環境bindingの検証", () => {
   });
 
   it("違反を最初の1件で打ち切らずすべて返す", () => {
-    expect(
-      bindingsOf(envWith({ BETTER_AUTH_URL: "app.example.com", STRIPE_SECRET_KEY: "" })),
-    ).toEqual(["BETTER_AUTH_URL", "STRIPE_SECRET_KEY"]);
+    expect(bindingsOf(envWith({ APP_ORIGIN: "app.example.com", STRIPE_SECRET_KEY: "" }))).toEqual([
+      "APP_ORIGIN",
+      "STRIPE_SECRET_KEY",
+    ]);
   });
 });
 
@@ -87,8 +86,8 @@ describe("起動時のbinding検証", () => {
   it("不正なbindingがあれば、どのbindingがなぜ不正かを示して失敗する", () => {
     const guard = createBindingValidationGuard();
 
-    expect(() => guard(envWith({ BETTER_AUTH_URL: "app.example.com" }) as Bindings)).toThrowError(
-      "Invalid environment bindings: BETTER_AUTH_URL must be an absolute http(s) URL",
+    expect(() => guard(envWith({ APP_ORIGIN: "app.example.com" }) as Bindings)).toThrowError(
+      "Invalid environment bindings: APP_ORIGIN must be an absolute http(s) URL",
     );
   });
 
