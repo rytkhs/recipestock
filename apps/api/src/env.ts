@@ -180,9 +180,7 @@ export const createBindingValidationGuard = ({
     const issues = collectBindingIssues(env);
 
     if (issues.length > 0) {
-      loggerFactory().error("binding_validation_failed", {
-        bindings: issues.map((issue) => issue.binding),
-      });
+      loggerFactory().error("binding_validation_failed", { issues });
 
       throw new Error(
         `Invalid environment bindings: ${issues

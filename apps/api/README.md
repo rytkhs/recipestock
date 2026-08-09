@@ -99,18 +99,31 @@ pnpm --filter @recipestock/api exec wrangler deploy --dry-run
 
 ## Production secrets
 
-Set production secrets with `wrangler secret put`:
+`wrangler.jsonc` declares no `vars`, so every string binding comes from a secret. The first group
+below is the same set as the validated bindings above: if any of them is missing on a new
+environment, the Worker fails every request instead of degrading.
 
 ```bash
 pnpm --filter @recipestock/api exec wrangler secret put DATABASE_URL
+pnpm --filter @recipestock/api exec wrangler secret put BETTER_AUTH_URL
 pnpm --filter @recipestock/api exec wrangler secret put BETTER_AUTH_SECRET
+pnpm --filter @recipestock/api exec wrangler secret put AUTH_EMAIL_FROM
 pnpm --filter @recipestock/api exec wrangler secret put RESEND_API_KEY
 pnpm --filter @recipestock/api exec wrangler secret put STRIPE_SECRET_KEY
 pnpm --filter @recipestock/api exec wrangler secret put STRIPE_WEBHOOK_SECRET
 pnpm --filter @recipestock/api exec wrangler secret put STRIPE_PRO_PRICE_ID
 pnpm --filter @recipestock/api exec wrangler secret put CLOUDFLARE_ACCOUNT_ID
+pnpm --filter @recipestock/api exec wrangler secret put R2_BUCKET_NAME
 pnpm --filter @recipestock/api exec wrangler secret put R2_ACCESS_KEY_ID
 pnpm --filter @recipestock/api exec wrangler secret put R2_SECRET_ACCESS_KEY
+pnpm --filter @recipestock/api exec wrangler secret put VAPID_PUBLIC_KEY
+pnpm --filter @recipestock/api exec wrangler secret put VAPID_PRIVATE_KEY
+pnpm --filter @recipestock/api exec wrangler secret put VAPID_SUBJECT
+```
+
+Optional secrets, required only by the features that read them:
+
+```bash
 pnpm --filter @recipestock/api exec wrangler secret put GROQ_API_KEY
 pnpm --filter @recipestock/api exec wrangler secret put OPENROUTER_API_KEY
 pnpm --filter @recipestock/api exec wrangler secret put YOUTUBE_DATA_API_KEY
