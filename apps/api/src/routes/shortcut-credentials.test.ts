@@ -24,16 +24,16 @@ const createCredentials = (): ShortcutCredentials => ({
     credential: {
       id: "credential_1",
       name,
-      tokenSuffix: "aaaaaa",
+      tokenSuffix: "aaaa",
       createdAt: "2026-07-11T00:00:00.000Z",
     },
-    token: `rssc_${"a".repeat(64)}`,
+    token: `rssc_${"a".repeat(25)}`,
   }),
   list: async () => [
     {
       id: "credential_1",
       name: "iPhone",
-      tokenSuffix: "aaaaaa",
+      tokenSuffix: "aaaa",
       createdAt: "2026-07-11T00:00:00.000Z",
     },
   ],
@@ -59,7 +59,7 @@ describe("Shortcut credential routes", () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({
       credential: { id: "credential_1", name: "iPhone" },
-      token: `rssc_${"a".repeat(64)}`,
+      token: `rssc_${"a".repeat(25)}`,
     });
     expect(issue).toHaveBeenCalledWith({ userId: "user_1", name: "iPhone" });
   });

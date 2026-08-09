@@ -65,7 +65,7 @@ const createShortcutCredentialsFake = (): ShortcutCredentials => ({
 });
 
 const shortcutHeaders = {
-  authorization: `Bearer rssc_${"a".repeat(64)}`,
+  authorization: `Bearer rssc_${"a".repeat(25)}`,
   "content-type": "application/json",
   "x-shortcut-version": "1",
 };

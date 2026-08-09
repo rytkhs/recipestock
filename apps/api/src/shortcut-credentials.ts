@@ -4,6 +4,9 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { ulid } from "ulid";
 
 const TOKEN_PREFIX = "rssc_";
+const TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const TOKEN_RANDOM_LENGTH = 25;
+const TOKEN_SUFFIX_LENGTH = 4;
 
 export type ShortcutCredentialRecord = {
   id: string;
@@ -42,9 +45,10 @@ const mapCredential = (credential: ShortcutCredentialRecord): ShortcutCredential
 });
 
 export const createShortcutCredentialToken = () =>
-  `${TOKEN_PREFIX}${crypto.randomUUID().replaceAll("-", "")}${crypto
-    .randomUUID()
-    .replaceAll("-", "")}`;
+  `${TOKEN_PREFIX}${Array.from(
+    crypto.getRandomValues(new Uint8Array(TOKEN_RANDOM_LENGTH)),
+    (value) => TOKEN_ALPHABET.charAt(value % TOKEN_ALPHABET.length),
+  ).join("")}`;
 
 export const hashShortcutCredentialToken = async (token: string) => {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
@@ -116,7 +120,7 @@ export const createShortcutCredentials = ({
       userId,
       name,
       tokenHash: await hashShortcutCredentialToken(token),
-      tokenSuffix: token.slice(-6),
+      tokenSuffix: token.slice(-TOKEN_SUFFIX_LENGTH),
       createdAt: getCurrentDate(),
       revokedAt: null,
     });

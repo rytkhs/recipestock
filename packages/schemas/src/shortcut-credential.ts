@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const shortcutCredentialNameSchema = z.string().trim().min(1).max(60);
-export const shortcutCredentialTokenSchema = z.string().startsWith("rssc_").min(32).max(160);
+export const shortcutCredentialTokenSchema = z.string().regex(/^rssc_[A-Za-z0-9_-]{25}$/);
 
 export const issueShortcutCredentialRequestSchema = z.object({
   name: shortcutCredentialNameSchema,

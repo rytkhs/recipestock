@@ -806,10 +806,10 @@ describe("Settings routes", () => {
               credential: {
                 id: "credential_1",
                 name: "iPhone",
-                tokenSuffix: "aaaaaa",
+                tokenSuffix: "aaaa",
                 createdAt: "2026-07-11T00:00:00.000Z",
               },
-              token: `rssc_${"a".repeat(64)}`,
+              token: `rssc_${"a".repeat(25)}`,
             },
             { status: 201 },
           );
@@ -828,7 +828,7 @@ describe("Settings routes", () => {
     await userEvent.click(await screen.findByRole("button", { name: "連携トークンを発行" }));
 
     await expect(screen.findByLabelText("連携トークン")).resolves.toHaveValue(
-      `rssc_${"a".repeat(64)}`,
+      `rssc_${"a".repeat(25)}`,
     );
     expect(screen.getByRole("link", { name: "Shortcutを追加" })).toHaveAttribute(
       "href",
