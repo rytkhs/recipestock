@@ -1,5 +1,6 @@
 import { createDb } from "@recipestock/db";
 import { importUrlRequestSchema } from "@recipestock/schemas";
+import { type Plan } from "@recipestock/shared";
 import { type Bindings } from "../../env";
 import {
   createImportJobId,
@@ -10,6 +11,7 @@ import {
   resolveImportJobTimeoutMs,
 } from "../../import-jobs";
 import { normalizeImportableUrl, RecipeImportError } from "../../import-url";
+import { getCurrentJstMonth, resolveAiMonthlyLimit } from "../../usage";
 
 export type SubmitUrlImportJobInput = {
   userId: string;
@@ -25,6 +27,7 @@ export type SubmitUrlImportJobResult =
     }
   | { status: "invalidUrl" }
   | { status: "recipeLimitExceeded" }
+  | { status: "aiUsageLimitExceeded"; plan: Plan }
   | { status: "temporarilyUnavailable" };
 
 export type UrlImportJobSubmission = {
@@ -87,11 +90,20 @@ export const createUrlImportJobSubmission = ({
       url: request.data.url,
       normalizedUrl,
       completionNotificationRequested: input.notifyOnCompletion,
+      aiUsage: {
+        month: getCurrentJstMonth(now),
+        freeLimit: resolveAiMonthlyLimit("free", env),
+        proLimit: resolveAiMonthlyLimit("pro", env),
+      },
       now,
     });
 
-    if (result.status === "limitExceeded") {
+    if (result.status === "recipeLimitExceeded") {
       return { status: "recipeLimitExceeded" };
+    }
+
+    if (result.status === "aiUsageLimitExceeded") {
+      return { status: "aiUsageLimitExceeded", plan: result.plan };
     }
 
     if (result.status === "existingActiveJob") {

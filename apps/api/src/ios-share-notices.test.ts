@@ -24,6 +24,7 @@ const openUrlByReason: Partial<Record<IosShareShortcutImportReason, string>> = {
   malformed_request: `${APP_ORIGIN}/settings`,
   unauthorized: `${APP_ORIGIN}/settings`,
   recipe_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=recipe_limit&from=shortcut`,
+  ai_usage_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=ai_usage_limit&from=shortcut`,
 };
 
 describe("iOS Shortcut noticeのカタログ", () => {
@@ -55,6 +56,8 @@ describe("iOS Shortcut noticeのカタログ", () => {
       "invalid_url",
       "malformed_request",
       "recipe_limit_exceeded",
+      "ai_usage_limit_exceeded",
+      "ai_usage_quota_exhausted",
       "temporarily_unavailable",
       "unauthorized",
     ]);
@@ -65,7 +68,9 @@ describe("iOS Shortcut noticeのカタログ", () => {
 
   /**
    * Shortcutはopen URLの有無だけを分岐する（ADR 0008）。
-   * とくにrecipe_limit_exceededのopenUrlは、Shortcut面から課金へ繋げる唯一の導線である。
+   * 上限到達のopenUrlは、Shortcut面から課金へ繋げる唯一の導線である。
+   * proのai_usage_quota_exhaustedにopenUrlが付いていたら、すでに払っている相手を
+   * 課金画面へ送ることになるため、このテストで落とす。
    */
   it("openUrlはユーザーの操作が必要なreasonにだけ付く", () => {
     for (const reason of allReasons) {

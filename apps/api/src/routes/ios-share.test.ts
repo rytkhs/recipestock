@@ -116,6 +116,8 @@ describe("iOS Share routes", () => {
       url: "https://example.com/recipe",
       normalizedUrl: "https://example.com/recipe",
       completionNotificationRequested: true,
+      // 上限のenvが未設定のときはプラン定数へフォールバックする。
+      aiUsage: { month: "2026-07", freeLimit: 10, proLimit: 300 },
       now: new Date("2026-07-11T00:00:00.000Z"),
     });
     expect(send).toHaveBeenCalledTimes(1);
@@ -390,7 +392,7 @@ describe("iOS Share routes", () => {
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({
-        createUrlJob: async () => ({ status: "limitExceeded" }),
+        createUrlJob: async () => ({ status: "recipeLimitExceeded" }),
       }),
       importQueue: { send } as unknown as Queue<{ jobId: string }>,
       shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
@@ -407,6 +409,96 @@ describe("iOS Share routes", () => {
       },
     });
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("freeのAI上限時はアップセル先を含むnoticeを返しQueueへ追加しない", async () => {
+    const send = vi.fn(async () => undefined);
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({
+        createUrlJob: async () => ({ status: "aiUsageLimitExceeded", plan: "free" }),
+      }),
+      importQueue: { send } as unknown as Queue<{ jobId: string }>,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const response = await app.request("/api/shortcut/import-jobs", shareRequest(), env);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      outcome: "rejected",
+      reason: "ai_usage_limit_exceeded",
+      notice: {
+        title: "今月のAI取り込み上限に達しました",
+        body: "Proにすると月300回まで取り込めます。",
+        openUrl: "https://app.example.com/settings/billing?upsell=ai_usage_limit&from=shortcut",
+      },
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  /**
+   * すでに払っているProへ「Proにすると」と案内しても意味がない。
+   * Proに残された行動は待つことだけなので、遷移先を持たせずリセット時期だけを伝える。
+   */
+  it("proのAI枠切れはopenUrlなしでリセット時期を伝える", async () => {
+    const send = vi.fn(async () => undefined);
+    const app = createSilentTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({
+        createUrlJob: async () => ({ status: "aiUsageLimitExceeded", plan: "pro" }),
+      }),
+      importQueue: { send } as unknown as Queue<{ jobId: string }>,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const response = await app.request("/api/shortcut/import-jobs", shareRequest(), env);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      outcome: "rejected",
+      reason: "ai_usage_quota_exhausted",
+      notice: {
+        title: "今月のAI取り込み上限に達しました",
+        body: "毎月1日にリセットされます。",
+        openUrl: null,
+      },
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  /**
+   * freeの到達はコンバージョン機会、proの枠切れは容量または濫用の兆候であり、
+   * 運用上は別の事象である。reasonがHTTPステータスに代わる監視の軸なので、levelも分ける。
+   */
+  it("proのAI枠切れはwarn、freeのAI上限はinfoで記録する", async () => {
+    const entries: { event: string; level: string; reason?: unknown }[] = [];
+    const sink = { write: (entry: LogEntry) => entries.push(entry) };
+    const appFor = (plan: "free" | "pro") =>
+      createApp({
+        auth,
+        loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+        shortcutCredentials: createShortcutCredentialsFake(),
+        importJobRepository: createImportJobRepository({
+          createUrlJob: async () => ({ status: "aiUsageLimitExceeded", plan }),
+        }),
+        importQueue: { send: async () => undefined } as unknown as Queue<{ jobId: string }>,
+        shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+      });
+
+    await appFor("free").request("/api/shortcut/import-jobs", shareRequest(), env);
+    await appFor("pro").request("/api/shortcut/import-jobs", shareRequest(), env);
+
+    const submitted = entries.filter(
+      (entry) => entry.event === "ios_share_shortcut_import_submitted",
+    );
+
+    expect(submitted.map((entry) => [entry.reason, entry.level])).toEqual([
+      ["ai_usage_limit_exceeded", "info"],
+      ["ai_usage_quota_exhausted", "warn"],
+    ]);
   });
 
   it("1 credentialあたり10回を超えるとrate_limit_exceededを返す", async () => {

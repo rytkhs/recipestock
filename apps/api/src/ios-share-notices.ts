@@ -49,6 +49,26 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     body: "Proにすると上限なく保存できます。",
     path: "/settings/billing?upsell=recipe_limit&from=shortcut",
   },
+  /**
+   * AI上限へ到達する人口はプランで非対称である。保存上限がfreeの投稿を先に止めるため、
+   * freeがAI枠へ到達するのは例外的で、実際に到達するのは主にProである。
+   * Proへ「Proにすると」と案内しても意味がないため、プランでreasonを分ける。
+   */
+  ai_usage_limit_exceeded: {
+    outcome: "rejected",
+    title: "今月のAI取り込み上限に達しました",
+    body: "Proにすると月300回まで取り込めます。",
+    path: "/settings/billing?upsell=ai_usage_limit&from=shortcut",
+  },
+  /**
+   * リセットはJST月初固定であり「毎月1日」は常に真である。日付を補間する必要はなく、
+   * このカタログは静的なまま保てる。Proに残された行動は待つことだけなのでopenUrlは持たせない。
+   */
+  ai_usage_quota_exhausted: {
+    outcome: "rejected",
+    title: "今月のAI取り込み上限に達しました",
+    body: "毎月1日にリセットされます。",
+  },
   rate_limit_exceeded: {
     outcome: "rejected",
     title: "少し時間をおいてください",

@@ -5,7 +5,7 @@ import {
   type ImportJobStatus,
   type ImportJobSummary,
 } from "@recipestock/schemas";
-import { PLAN_LIMITS } from "@recipestock/shared";
+import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
 import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
@@ -64,8 +64,23 @@ export type CreateImportUrlJobResult =
       job: ImportJobRecord;
     }
   | {
-      status: "limitExceeded";
+      status: "recipeLimitExceeded";
+    }
+  | {
+      status: "aiUsageLimitExceeded";
+      plan: Plan;
     };
+
+/**
+ * AI月次上限の投稿時判定に必要な値。上限はenv由来であり、repositoryはenvを知らないため
+ * 呼び出し側が解決して渡す。ここで見るのは当月の利用回数だけで、原子的な消費は
+ * キュー処理中の`consumeAiUsage`に残る。
+ */
+export type ImportJobAiUsageLimits = {
+  month: string;
+  freeLimit: number;
+  proLimit: number;
+};
 
 export type CompleteImportJobResult =
   | { status: "succeeded" }
@@ -80,6 +95,7 @@ export type ImportJobRepository = {
     url: string;
     normalizedUrl: string;
     completionNotificationRequested: boolean;
+    aiUsage: ImportJobAiUsageLimits;
     now: Date;
   }): Promise<CreateImportUrlJobResult>;
   listRecentJobs(userId: string): Promise<ImportJobRecord[]>;
@@ -206,7 +222,15 @@ export const createImportJobRepository = (
   db: DbClient,
   planSyncOptions?: AppUserPlanSyncOptions,
 ): ImportJobRepository => ({
-  async createUrlJob({ id, userId, url, normalizedUrl, completionNotificationRequested, now }) {
+  async createUrlJob({
+    id,
+    userId,
+    url,
+    normalizedUrl,
+    completionNotificationRequested,
+    aiUsage,
+    now,
+  }) {
     if (planSyncOptions) {
       await syncAppUserPlanForDb(db, userId, {
         ...planSyncOptions,
@@ -220,6 +244,8 @@ export const createImportJobRepository = (
       const result = await db.execute<
         ImportJobSqlRow & {
           resultStatus: string;
+          blockReason: string | null;
+          plan: string | null;
         }
       >(sql`
         with ensured_user as (
@@ -272,14 +298,21 @@ export const createImportJobRepository = (
             import_jobs.finished_at,
             import_jobs.updated_at
         ),
-        recipe_limit as materialized (
+        submission_limits as materialized (
           select
             selected_user.plan,
             case
               when selected_user.plan = 'pro' then false
               else selected_user.saved_recipe_count >= ${PLAN_LIMITS.free.savedRecipes}
-            end as exceeded
+            end as recipe_exceeded,
+            coalesce(ai_usage.count, 0) >= case
+              when selected_user.plan = 'pro' then ${aiUsage.proLimit}::int
+              else ${aiUsage.freeLimit}::int
+            end as ai_exceeded
           from selected_user
+          left join ai_usage_monthly as ai_usage
+            on ai_usage.user_id = ${userId}
+            and ai_usage.month = ${aiUsage.month}
           where not exists (select 1 from touched_active_job)
         ),
         inserted_job as (
@@ -304,8 +337,9 @@ export const createImportJobRepository = (
             ${completionNotificationRequested},
             ${nowIso}::timestamptz,
             ${nowIso}::timestamptz
-          from recipe_limit
-          where recipe_limit.exceeded = false
+          from submission_limits
+          where submission_limits.recipe_exceeded = false
+            and submission_limits.ai_exceeded = false
             and not exists (select 1 from active_candidate)
             and not exists (select 1 from touched_active_job)
           on conflict do nothing
@@ -345,7 +379,9 @@ export const createImportJobRepository = (
             touched_active_job.started_at,
             touched_active_job.finished_at,
             touched_active_job.updated_at,
-            'existingActiveJob'::text as result_status
+            'existingActiveJob'::text as result_status,
+            null::text as block_reason,
+            null::text as plan
           from touched_active_job
           union all
           select
@@ -365,7 +401,9 @@ export const createImportJobRepository = (
             inserted_job.started_at,
             inserted_job.finished_at,
             inserted_job.updated_at,
-            'created'::text as result_status
+            'created'::text as result_status,
+            null::text as block_reason,
+            null::text as plan
           from inserted_job
           union all
           select
@@ -385,9 +423,14 @@ export const createImportJobRepository = (
             null,
             null,
             null,
-            'limitExceeded'::text
-          from recipe_limit
-          where recipe_limit.exceeded = true
+            'limitExceeded'::text,
+            case
+              when submission_limits.recipe_exceeded then 'recipe'
+              else 'ai_usage'
+            end,
+            submission_limits.plan
+          from submission_limits
+          where (submission_limits.recipe_exceeded or submission_limits.ai_exceeded)
             and not exists (select 1 from touched_active_job)
             and not exists (select 1 from inserted_job)
           union all
@@ -408,9 +451,12 @@ export const createImportJobRepository = (
             null,
             null,
             null,
-            'retry'::text
-          from recipe_limit
-          where recipe_limit.exceeded = false
+            'retry'::text,
+            null::text,
+            null::text
+          from submission_limits
+          where submission_limits.recipe_exceeded = false
+            and submission_limits.ai_exceeded = false
             and not exists (select 1 from touched_active_job)
             and not exists (select 1 from inserted_job)
         )
@@ -431,7 +477,9 @@ export const createImportJobRepository = (
           started_at as "startedAt",
           finished_at as "finishedAt",
           updated_at as "updatedAt",
-          result_status as "resultStatus"
+          result_status as "resultStatus",
+          block_reason as "blockReason",
+          plan
         from result_candidates
         limit 1
       `);
@@ -442,7 +490,9 @@ export const createImportJobRepository = (
       }
 
       if (row.resultStatus === "limitExceeded") {
-        return { status: "limitExceeded" };
+        return row.blockReason === "ai_usage"
+          ? { status: "aiUsageLimitExceeded", plan: row.plan as Plan }
+          : { status: "recipeLimitExceeded" };
       }
 
       const job = mapImportJobSqlRow(row);
