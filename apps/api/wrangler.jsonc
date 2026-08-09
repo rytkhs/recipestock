@@ -46,6 +46,16 @@
         "limit": 10,
         "period": 60
       }
+    },
+    {
+      // 認証前に引く安全弁。正常利用は1 credentialあたり最大10/minなので、
+      // NAT配下に重いユーザーが数人いても収まり、単一送信元のtoken照合は頭打ちになる。
+      "name": "SHORTCUT_CLIENT_RATE_LIMITER",
+      "namespace_id": "80",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
     }
   ],
   "containers": [

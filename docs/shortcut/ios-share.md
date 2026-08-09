@@ -79,6 +79,8 @@ AI上限は濫用防止の安全弁であり、プランが売る枠ではない
 
 `malformed_request`はrequest bodyが契約に合わない場合、`no_url_in_input`は`input`にURLが含まれない場合であり、両者を混ぜない。前者はクライアントの契約違反、後者はユーザーの通常の操作結果である。
 
+`rate_limit_exceeded`は2つの安全弁から返る。`credentialId`単位の毎分10回（ADR 0006）と、認証へ到達する前にclient IP単位で引く毎分60回である。後者は、無効なtokenを送り続けるrequestがtoken hash照合のDBアクセスを無制限に起こすのを防ぐ。keyは`cf-connecting-ip`とし、Cloudflareの背後では常に付与されるため、欠落するlocal devやtestでは共通のkeyで数える。IPは監視ログへ残さない。responseはどちらの安全弁でも同じ`reason`と同じnoticeであり、切り分けはログの`rateLimitScope`（`client`または`credential`）で行う。
+
 ## 共有入力の実機確認
 
 `受け取るもの`を`すべて`にした状態で、Safari（記事・通常ページ）、Instagram、YouTube、LINE、X、レシピアプリから共有したとき、`input`の先頭に現れる`https://`は常に共有対象のURLと一致した。記事本文が`input`へ入る事象は観測されていない。したがってサーバー側の抽出は先頭のURLを採用し、`input`の上限は8192文字とする。

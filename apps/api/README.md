@@ -33,6 +33,27 @@ Groq requires `GROQ_API_KEY` and `GROQ_TEXT_MODEL`.
 YouTube URL import uses YouTube Data API v3. Set `YOUTUBE_DATA_API_KEY` to enable
 YouTube source extraction.
 
+## Startup binding validation
+
+The Worker entry point validates required bindings once per isolate, before the first request or
+queue message is handled. A misconfigured binding fails every `/api/*` request with an uncaught
+exception and a `binding_validation_failed` log entry that names the bindings and the rules they
+violate. Binding values are never logged.
+
+Validated bindings:
+
+- Must be set to a non-empty value: `DATABASE_URL`, `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
+  `AUTH_EMAIL_FROM`, `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+  `STRIPE_PRO_PRICE_ID`, `CLOUDFLARE_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`,
+  `R2_SECRET_ACCESS_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
+- `BETTER_AUTH_URL` must be an absolute `http(s)` URL. Auth, billing return URLs, and iOS Shortcut
+  notice links all resolve paths against it.
+- `VAPID_SUBJECT` must be a `mailto:` address or an absolute `http(s)` URL, as web-push requires.
+
+Object bindings such as `RECIPE_IMAGES` and `IMPORT_QUEUE` are declared in `wrangler.jsonc` and are
+not revalidated here. AI provider variables are not required at startup either, because the required
+set depends on `IMPORT_AI_PROVIDER` and a missing value fails the import job rather than the API.
+
 ## R2 setup
 
 Create the development R2 bucket after Cloudflare login:

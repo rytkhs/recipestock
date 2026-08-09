@@ -13,11 +13,13 @@ import { type ShortcutCredentials } from "../shortcut-credentials";
 type IosShareRouteDependencies = {
   shortcutCredentialsFor: (env: ApiEnv["Bindings"]) => Pick<ShortcutCredentials, "authenticate">;
   urlImportJobSubmissionFor: UrlImportJobSubmissionFactory;
+  shortcutClientRateLimiterFor: (env: ApiEnv["Bindings"]) => RateLimit;
   shortcutRateLimiterFor: (env: ApiEnv["Bindings"]) => RateLimit;
 };
 
 type ShortcutImportLogFields = {
   credentialId?: string;
+  rateLimitScope?: "client" | "credential";
   sourceHost?: string;
   userId?: string;
 };
@@ -26,6 +28,13 @@ const bearerToken = (header: string | undefined) => {
   const match = header?.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
 };
+
+/**
+ * Cloudflareの背後では常に付与される。欠落するのはlocal devとtestだけであり、
+ * そこで制限を素通りさせると迂回路になるため、単一のbucketへまとめる。
+ * IPは監視ログへ残さない。発信元の追跡はCloudflare側の分析に委ねる。
+ */
+const clientRateLimitKey = (c: Context<ApiEnv>) => c.req.header("cf-connecting-ip") ?? "unknown";
 
 const sourceHostOf = (url: string) => {
   try {
@@ -84,11 +93,22 @@ const respondWithNotice = (
 export const createIosShareRoutes = ({
   shortcutCredentialsFor,
   urlImportJobSubmissionFor,
+  shortcutClientRateLimiterFor,
   shortcutRateLimiterFor,
 }: IosShareRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
 
   return routes.post("/import-jobs", async (c) => {
+    /**
+     * `credentialId`単位の制限は認証を通過したrequestにしか効かない。無効なtokenは
+     * 1requestごとにhash照合のDBアクセスを起こすため、認証へ到達する前にも上限を置く。
+     */
+    const clientLimiter = shortcutClientRateLimiterFor(c.env);
+    const clientLimit = await clientLimiter.limit({ key: clientRateLimitKey(c) });
+    if (!clientLimit.success) {
+      return respondWithNotice(c, "rate_limit_exceeded", { rateLimitScope: "client" });
+    }
+
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
       return respondWithNotice(c, "unauthorized");
@@ -107,7 +127,10 @@ export const createIosShareRoutes = ({
     const limiter = shortcutRateLimiterFor(c.env);
     const { success } = await limiter.limit({ key: identity.credentialId });
     if (!success) {
-      return respondWithNotice(c, "rate_limit_exceeded", logFields);
+      return respondWithNotice(c, "rate_limit_exceeded", {
+        ...logFields,
+        rateLimitScope: "credential",
+      });
     }
 
     const request = iosShareShortcutImportRequestSchema.safeParse(

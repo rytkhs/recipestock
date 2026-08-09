@@ -13,7 +13,7 @@ import {
   type PushSender,
 } from "./completion-notifications";
 import { type ApiEnv } from "./context";
-import { type Bindings } from "./env";
+import { type Bindings, createBindingValidationGuard } from "./env";
 import { createRecipeImageService, type RecipeImageService } from "./images";
 import {
   createImportJobRepository,
@@ -66,6 +66,7 @@ export type AppDependencies = {
   importJobRepository?: ImportJobRepository;
   shortcutCredentials?: ShortcutCredentials;
   urlImportJobSubmission?: UrlImportJobSubmission;
+  shortcutClientRateLimiter?: RateLimit;
   shortcutRateLimiter?: RateLimit;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
@@ -137,6 +138,8 @@ export const createApp = (dependencies: AppDependencies = {}) => {
     });
   const shortcutRateLimiterFor = (env: Bindings) =>
     dependencies.shortcutRateLimiter ?? env.SHORTCUT_RATE_LIMITER;
+  const shortcutClientRateLimiterFor = (env: Bindings) =>
+    dependencies.shortcutClientRateLimiter ?? env.SHORTCUT_CLIENT_RATE_LIMITER;
 
   app.onError((error, c) => {
     const response = error instanceof HTTPException ? error.getResponse() : unknownResponse();
@@ -191,6 +194,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createIosShareRoutes({
         shortcutCredentialsFor,
         urlImportJobSubmissionFor,
+        shortcutClientRateLimiterFor,
         shortcutRateLimiterFor,
       }),
     )
@@ -409,7 +413,19 @@ const handleImportQueue = async (
   }
 };
 
+/**
+ * bindingの検証はここだけで行う。routeとqueueの各処理は、検証済みの前提で
+ * 形式を再確認しない。
+ */
+const validateBindings = createBindingValidationGuard();
+
 export default {
-  fetch: app.fetch,
-  queue: handleImportQueue,
+  fetch: (request, env, ctx) => {
+    validateBindings(env);
+    return app.fetch(request, env, ctx);
+  },
+  queue: (batch, env) => {
+    validateBindings(env);
+    return handleImportQueue(batch, env);
+  },
 } satisfies ExportedHandler<Bindings, { jobId: string }>;
