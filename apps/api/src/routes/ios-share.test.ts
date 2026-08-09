@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
-import { createApp } from "../index";
+import { type AppDependencies } from "../index";
 import { createLogger, type LogEntry } from "../logger";
 import { type ShortcutCredentials } from "../shortcut-credentials";
 import { createSilentTestApp } from "../test-helpers";
@@ -74,6 +74,16 @@ const createRateLimiter = (success = true) => ({
   limit: vi.fn(async () => ({ success })),
 });
 
+/**
+ * client単位のrate limitは全requestが通る。個別に指定しないテストでも常に成功する
+ * fakeを入れ、bindingの実挙動やテスト間の残カウントに結果を左右させない。
+ */
+const createShortcutTestApp = (dependencies: AppDependencies = {}) =>
+  createSilentTestApp({
+    shortcutClientRateLimiter: createRateLimiter() as unknown as RateLimit,
+    ...dependencies,
+  });
+
 const shareRequest = (input = "https://example.com/recipe") => ({
   method: "POST",
   headers: shortcutHeaders,
@@ -88,7 +98,7 @@ describe("iOS Share routes", () => {
       job: createJob(),
     }));
     const rateLimiter = createRateLimiter();
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
@@ -130,7 +140,7 @@ describe("iOS Share routes", () => {
       status: "created" as const,
       job: createJob(),
     }));
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
@@ -156,7 +166,7 @@ describe("iOS Share routes", () => {
       status: "created" as const,
       job: createJob(),
     }));
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
@@ -183,7 +193,7 @@ describe("iOS Share routes", () => {
       status: "created" as const,
       job: createJob(),
     }));
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
@@ -222,7 +232,7 @@ describe("iOS Share routes", () => {
   it("4xx相当だった結果をwarnで記録し、通常のユーザーエラーと分ける", async () => {
     const entries: { event: string; level: string; reason?: unknown }[] = [];
     const sink = { write: (entry: LogEntry) => entries.push(entry) };
-    const app = createApp({
+    const app = createShortcutTestApp({
       auth,
       loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
       shortcutCredentials: createShortcutCredentialsFake(),
@@ -255,7 +265,7 @@ describe("iOS Share routes", () => {
       status: "created" as const,
       job: createJob(),
     }));
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
@@ -278,7 +288,7 @@ describe("iOS Share routes", () => {
 
   it("Cookie sessionだけではShortcut Import Jobを作成できない", async () => {
     const rateLimiter = createRateLimiter();
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       shortcutRateLimiter: rateLimiter as unknown as RateLimit,
@@ -303,7 +313,7 @@ describe("iOS Share routes", () => {
   });
 
   it("Shortcut Bearer tokenをCookie保護されたresourceの認証に使えない", async () => {
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth: { ...auth, getSession: async () => null },
       shortcutCredentials: createShortcutCredentialsFake(),
     });
@@ -321,7 +331,7 @@ describe("iOS Share routes", () => {
   it("Bearerがない、無効、revoke済みの場合は再連携を促すnoticeを返す", async () => {
     const revokedService = createShortcutCredentialsFake();
     revokedService.authenticate = async () => null;
-    const app = createSilentTestApp({ auth, shortcutCredentials: revokedService });
+    const app = createShortcutTestApp({ auth, shortcutCredentials: revokedService });
 
     const responses = await Promise.all([
       app.request(
@@ -363,7 +373,7 @@ describe("iOS Share routes", () => {
         completionNotificationRequested: true,
       }),
     }));
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
@@ -388,7 +398,7 @@ describe("iOS Share routes", () => {
 
   it("Recipe上限時はアップセル先を含むnoticeを返しQueueへ追加しない", async () => {
     const send = vi.fn(async () => undefined);
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({
@@ -413,7 +423,7 @@ describe("iOS Share routes", () => {
 
   it("freeのAI上限時はアップセル先を含むnoticeを返しQueueへ追加しない", async () => {
     const send = vi.fn(async () => undefined);
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({
@@ -444,7 +454,7 @@ describe("iOS Share routes", () => {
    */
   it("proのAI枠切れはopenUrlなしでリセット時期を伝える", async () => {
     const send = vi.fn(async () => undefined);
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({
@@ -477,7 +487,7 @@ describe("iOS Share routes", () => {
     const entries: { event: string; level: string; reason?: unknown }[] = [];
     const sink = { write: (entry: LogEntry) => entries.push(entry) };
     const appFor = (plan: "free" | "pro") =>
-      createApp({
+      createShortcutTestApp({
         auth,
         loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
         shortcutCredentials: createShortcutCredentialsFake(),
@@ -510,7 +520,7 @@ describe("iOS Share routes", () => {
         return { success: calls <= 10 };
       }),
     };
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       urlImportJobSubmission: {
@@ -535,9 +545,145 @@ describe("iOS Share routes", () => {
     expect(reasons.filter((reason) => reason === "rate_limit_exceeded")).toHaveLength(1);
   });
 
+  /**
+   * `credentialId`単位の制限は認証を通過したrequestにしか効かない。無効なtokenは
+   * 1requestごとにhash照合のDBアクセスを起こすため、認証前にも上限を置く。
+   */
+  it("認証に失敗するrequestを認証へ到達する前にrate limitする", async () => {
+    const authenticate = vi.fn(async () => null);
+    const clientRateLimiter = createRateLimiter(false);
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: { ...createShortcutCredentialsFake(), authenticate },
+      shortcutClientRateLimiter: clientRateLimiter as unknown as RateLimit,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const response = await app.request(
+      "/api/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: {
+          ...shortcutHeaders,
+          authorization: "Bearer rssc_invalid",
+          "cf-connecting-ip": "203.0.113.10",
+        },
+        body: JSON.stringify({ input: "https://example.com/recipe" }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      outcome: "rejected",
+      reason: "rate_limit_exceeded",
+      notice: {
+        title: "少し時間をおいてください",
+        body: "",
+        openUrl: null,
+      },
+    });
+    expect(clientRateLimiter.limit).toHaveBeenCalledWith({ key: "203.0.113.10" });
+    expect(authenticate).not.toHaveBeenCalled();
+  });
+
+  it("正常なrequestはclient単位の枠を1回だけ使い結果を変えない", async () => {
+    const clientRateLimiter = createRateLimiter();
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      urlImportJobSubmission: {
+        submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
+      },
+      shortcutClientRateLimiter: clientRateLimiter as unknown as RateLimit,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        app.request(
+          "/api/shortcut/import-jobs",
+          {
+            method: "POST",
+            headers: { ...shortcutHeaders, "cf-connecting-ip": "203.0.113.10" },
+            body: JSON.stringify({ input: "https://example.com/recipe" }),
+          },
+          env,
+        ),
+      ),
+    );
+
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ reason: "created" });
+    }
+    expect(clientRateLimiter.limit).toHaveBeenCalledTimes(3);
+    expect(clientRateLimiter.limit).toHaveBeenCalledWith({ key: "203.0.113.10" });
+  });
+
+  /**
+   * Cloudflareの背後では常に付与される。欠落するlocal devやtestで素通りさせると
+   * 迂回路になるため、単一のbucketへまとめる。
+   */
+  it("cf-connecting-ipがないrequestも共通のkeyで制限する", async () => {
+    const clientRateLimiter = createRateLimiter();
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      urlImportJobSubmission: {
+        submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
+      },
+      shortcutClientRateLimiter: clientRateLimiter as unknown as RateLimit,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    await app.request("/api/shortcut/import-jobs", shareRequest(), env);
+
+    expect(clientRateLimiter.limit).toHaveBeenCalledWith({ key: "unknown" });
+  });
+
+  /**
+   * 200で返す以上、rate limitの到達は`ios_share_shortcut_import_submitted`でしか見えない。
+   * 正規ユーザーの連打と認証前の乱用は運用上別の事象なので、同じreasonの中で切り分ける。
+   */
+  it("rate limitの到達をwarnで記録し、認証前とcredential単位を区別する", async () => {
+    const entries: { event: string; level: string; reason?: unknown }[] = [];
+    const sink = { write: (entry: LogEntry) => entries.push(entry) };
+    const appFor = (scope: "client" | "credential") =>
+      createShortcutTestApp({
+        auth,
+        loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+        shortcutCredentials: createShortcutCredentialsFake(),
+        urlImportJobSubmission: {
+          submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
+        },
+        shortcutClientRateLimiter: createRateLimiter(
+          scope === "credential",
+        ) as unknown as RateLimit,
+        shortcutRateLimiter: createRateLimiter(false) as unknown as RateLimit,
+      });
+
+    await appFor("client").request("/api/shortcut/import-jobs", shareRequest(), env);
+    await appFor("credential").request("/api/shortcut/import-jobs", shareRequest(), env);
+
+    const submitted = entries.filter(
+      (entry) => entry.event === "ios_share_shortcut_import_submitted",
+    );
+
+    expect(submitted).toMatchObject([
+      { reason: "rate_limit_exceeded", level: "warn", rateLimitScope: "client" },
+      {
+        reason: "rate_limit_exceeded",
+        level: "warn",
+        rateLimitScope: "credential",
+        credentialId: "credential_1",
+      },
+    ]);
+  });
+
   it("Queue送信失敗時はJobをfailedにしてtemporarily_unavailableを返す", async () => {
     const markJobFailed = vi.fn(async () => undefined);
-    const app = createSilentTestApp({
+    const app = createShortcutTestApp({
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ markJobFailed }),

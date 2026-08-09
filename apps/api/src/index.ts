@@ -66,6 +66,7 @@ export type AppDependencies = {
   importJobRepository?: ImportJobRepository;
   shortcutCredentials?: ShortcutCredentials;
   urlImportJobSubmission?: UrlImportJobSubmission;
+  shortcutClientRateLimiter?: RateLimit;
   shortcutRateLimiter?: RateLimit;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
@@ -137,6 +138,8 @@ export const createApp = (dependencies: AppDependencies = {}) => {
     });
   const shortcutRateLimiterFor = (env: Bindings) =>
     dependencies.shortcutRateLimiter ?? env.SHORTCUT_RATE_LIMITER;
+  const shortcutClientRateLimiterFor = (env: Bindings) =>
+    dependencies.shortcutClientRateLimiter ?? env.SHORTCUT_CLIENT_RATE_LIMITER;
 
   app.onError((error, c) => {
     const response = error instanceof HTTPException ? error.getResponse() : unknownResponse();
@@ -191,6 +194,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createIosShareRoutes({
         shortcutCredentialsFor,
         urlImportJobSubmissionFor,
+        shortcutClientRateLimiterFor,
         shortcutRateLimiterFor,
       }),
     )
