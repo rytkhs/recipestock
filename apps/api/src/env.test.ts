@@ -92,7 +92,7 @@ describe("起動時のbinding検証", () => {
     );
   });
 
-  it("設定値ではなくbinding名だけをログに残す", () => {
+  it("設定値ではなくbinding名と違反したルールだけをログに残す", () => {
     const sink = createMemoryLogSink();
     const guard = createBindingValidationGuard({
       loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
@@ -101,8 +101,8 @@ describe("起動時のbinding検証", () => {
     expect(() => guard(envWith({ RESEND_API_KEY: "" }) as Bindings)).toThrowError();
     expect(sink.entries).toEqual([
       expect.objectContaining({
-        bindings: ["RESEND_API_KEY"],
         event: "binding_validation_failed",
+        issues: [{ binding: "RESEND_API_KEY", message: "must be set to a non-empty value" }],
         level: "error",
       }),
     ]);
