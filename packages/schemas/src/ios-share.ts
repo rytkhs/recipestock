@@ -22,7 +22,7 @@ export const iosShareShortcutImportReasonSchema = z.enum([
 
 export const iosShareNoticeSchema = z.object({
   title: z.string().min(1),
-  body: z.string().min(1),
+  body: z.string(),
   openUrl: z.url().nullable(),
 });
 

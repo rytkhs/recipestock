@@ -106,7 +106,7 @@ describe("iOS Share routes", () => {
       reason: "created",
       notice: {
         title: "取り込みを開始しました",
-        body: "完了したらお知らせします。",
+        body: "",
         openUrl: null,
       },
     });

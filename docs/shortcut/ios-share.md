@@ -22,6 +22,8 @@
 
 連携トークンは、Shortcut追加時のインポート質問でユーザーが貼り付ける。判断ロジックはゼロ、分岐は手順5の1つだけである。
 
+`notice.body`は常に存在し、2行目を出さないreasonでは空文字になる。手順4はbodyの有無を分岐せず、空文字のときはタイトルだけの1行通知になる。
+
 ## API契約
 
 ### Request
@@ -47,23 +49,25 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
   "reason": "created",
   "notice": {
     "title": "取り込みを開始しました",
-    "body": "完了したらお知らせします。",
+    "body": "",
     "openUrl": null
   }
 }
 ```
 
-| `reason` | `outcome` | `openUrl` |
-| --- | --- | --- |
-| `created` | `accepted` | なし |
-| `existing_active_job` | `accepted` | なし |
-| `no_url_in_input` | `rejected` | なし |
-| `invalid_url` | `rejected` | なし |
-| `malformed_request` | `rejected` | `/settings` |
-| `recipe_limit_exceeded` | `rejected` | `/settings/billing?upsell=recipe_limit&from=shortcut` |
-| `rate_limit_exceeded` | `rejected` | なし |
-| `temporarily_unavailable` | `rejected` | なし |
-| `unauthorized` | `rejected` | `/settings` |
+| `reason` | `outcome` | `body` | `openUrl` |
+| --- | --- | --- | --- |
+| `created` | `accepted` | 空文字 | なし |
+| `existing_active_job` | `accepted` | 空文字 | なし |
+| `no_url_in_input` | `rejected` | 空文字 | なし |
+| `invalid_url` | `rejected` | あり | なし |
+| `malformed_request` | `rejected` | あり | `/settings` |
+| `recipe_limit_exceeded` | `rejected` | あり | `/settings/billing?upsell=recipe_limit&from=shortcut` |
+| `rate_limit_exceeded` | `rejected` | 空文字 | なし |
+| `temporarily_unavailable` | `rejected` | あり | なし |
+| `unauthorized` | `rejected` | あり | `/settings` |
+
+バナーは一瞥されるだけの表示であり、`body`は次に取るべき行動があるreasonにだけ置く。`title`の言い換えにしかならない2行目は持たせない。
 
 表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`はwarn、それ以外はinfo。
 
