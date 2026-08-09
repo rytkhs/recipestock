@@ -53,11 +53,15 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
    * AI上限へ到達する人口はプランで非対称である。保存上限がfreeの投稿を先に止めるため、
    * freeがAI枠へ到達するのは例外的で、実際に到達するのは主にProである。
    * Proへ「Proにすると」と案内しても意味がないため、プランでreasonを分ける。
+   *
+   * AI上限は濫用防止の安全弁であり、プランが売る枠ではない。上限値は運用中にenvで
+   * 変えられるため、bodyに具体的な回数を書かない。数字を書けばそれ自体が仕様として
+   * 読まれ、上限の調整がユーザーの期待を裏切ることになる。
    */
   ai_usage_limit_exceeded: {
     outcome: "rejected",
     title: "今月のAI取り込み上限に達しました",
-    body: "Proにすると月300回まで取り込めます。",
+    body: "Proにするともっと取り込めます。",
     path: "/settings/billing?upsell=ai_usage_limit&from=shortcut",
   },
   /**

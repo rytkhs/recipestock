@@ -431,7 +431,7 @@ describe("iOS Share routes", () => {
       reason: "ai_usage_limit_exceeded",
       notice: {
         title: "今月のAI取り込み上限に達しました",
-        body: "Proにすると月300回まで取り込めます。",
+        body: "Proにするともっと取り込めます。",
         openUrl: "https://app.example.com/settings/billing?upsell=ai_usage_limit&from=shortcut",
       },
     });
