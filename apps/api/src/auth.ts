@@ -20,6 +20,15 @@ export type AuthService = {
   handleAuthRequest(request: Request, env: Bindings): Promise<Response>;
 };
 
+type AuthInstance = {
+  api: {
+    getSession(input: { headers: Headers }): Promise<AuthSession | null>;
+  };
+  handler(request: Request): Promise<Response>;
+};
+
+type AuthFactory = (env: Bindings) => AuthInstance;
+
 type StripeCustomerEmailSyncLogger = {
   error(...data: unknown[]): void;
 };
@@ -156,17 +165,20 @@ const createAuth = (env: Bindings) => {
 // betterAuthの構築はplugin初期化とroute table生成を伴い、Resendとstripe clientも作り直す。
 // isolate内で使い回せる。保持するのは設定とfetchベースのclientだけで、
 // request scopeのI/OやExecutionContextを掴まない。
-let cachedAuth: ReturnType<typeof createAuth> | null = null;
+export const createAuthService = (authFactory: AuthFactory): AuthService => {
+  let cachedAuth: AuthInstance | null = null;
+  const getAuth = (env: Bindings) => (cachedAuth ??= authFactory(env));
 
-const getAuth = (env: Bindings) => (cachedAuth ??= createAuth(env));
-
-export const authService: AuthService = {
-  async getSession(request, env) {
-    return getAuth(env).api.getSession({
-      headers: request.headers,
-    }) as Promise<AuthSession | null>;
-  },
-  async handleAuthRequest(request, env) {
-    return getAuth(env).handler(request);
-  },
+  return {
+    async getSession(request, env) {
+      return getAuth(env).api.getSession({
+        headers: request.headers,
+      });
+    },
+    async handleAuthRequest(request, env) {
+      return getAuth(env).handler(request);
+    },
+  };
 };
+
+export const authService = createAuthService((env) => createAuth(env) as AuthInstance);

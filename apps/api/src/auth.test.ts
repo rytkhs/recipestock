@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { authService, syncStripeCustomerEmailForUser } from "./auth";
+import { createAuthService, syncStripeCustomerEmailForUser } from "./auth";
 import { type Bindings } from "./env";
 
 describe("syncStripeCustomerEmailForUser", () => {
@@ -77,10 +77,31 @@ describe("syncStripeCustomerEmailForUser", () => {
   });
 });
 
-describe("authService", () => {
+describe("createAuthService", () => {
   // betterAuth instanceはisolate内で使い回す。Workersは別requestのI/Oを跨いだ利用を
   // 拒否するため、2request目が同じinstanceで通ることを固定する。
   it("同一isolateの複数requestで同じauth instanceを使い回せる", async () => {
+    let nextInstanceId = 1;
+    const authService = createAuthService(() => {
+      const instanceId = `instance-${nextInstanceId}`;
+      nextInstanceId += 1;
+
+      return {
+        api: {
+          async getSession() {
+            return {
+              user: {
+                email: `${instanceId}@example.com`,
+                id: instanceId,
+              },
+            };
+          },
+        },
+        async handler() {
+          return new Response(null, { status: 204 });
+        },
+      };
+    });
     const env = {
       DATABASE_URL: "postgresql://user:password@db.example/recipestock",
       APP_ORIGIN: "https://recipestock.example",
@@ -92,8 +113,9 @@ describe("authService", () => {
     } as Bindings;
     const request = () => new Request("https://recipestock.example/api/me");
 
-    // session cookieが無いのでDBへは問い合わせず、nullが返る。
-    await expect(authService.getSession(request(), env)).resolves.toBeNull();
-    await expect(authService.getSession(request(), env)).resolves.toBeNull();
+    const firstSession = await authService.getSession(request(), env);
+    const secondSession = await authService.getSession(request(), env);
+
+    expect([firstSession?.user.id, secondSession?.user.id]).toEqual(["instance-1", "instance-1"]);
   });
 });
