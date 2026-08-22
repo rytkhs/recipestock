@@ -1,0 +1,29 @@
+# 認証済み画面の描画をsessionだけに依存させる
+
+ADR 0007は、protected routeがsessionとviewerを別々のdependencyとして扱い、viewerを信頼できる場合だけprivate navigationと画面本体を表示する設計を採用した。この決定はApp Shellがofflineで起動できるようになった後の「起動はできるがprivate dataは取得できていない」状態を正しく扱うためのものだった。
+
+しかしこの設計は、起動時のnetwork往復を直列化する。PWAの起動では`GET /api/auth/get-session`が完了するまでviewerが発火せず、`GET /api/me`が完了するまで画面本体のqueryが発火しない。Neonは`ap-southeast-1`にあり東京からの1往復は80〜120msかかるため、この直列は体感できる待ち時間になる。
+
+viewerを描画のgateに置く根拠も失われている。`useProtectedAccess`が返すviewerのpayloadはどこからも読まれておらず、`/api/me`の実際の消費者は設定画面だけである。viewerはgateではなく、401の検知とsettings用の表示dataとして機能していた。
+
+protected routeの描画dependencyはsessionだけとする。sessionが確定した時点でprivate navigationと画面本体を表示し、viewerの取得はそれと並行させる。これによりviewerと画面本体のqueryが同じ波で発火する。
+
+## viewer取得失敗をローカルなdegradeにする
+
+viewerの取得失敗で全画面のavailability画面へ倒すことはしない。`get-session`はviewerより早く、同じoriginへの同じくらい鋭敏な疎通確認である。端末がofflineであるかWorkerが落ちていれば`get-session`が先に失敗し、sessionのavailability画面が出る。viewerだけが失敗するのはAPIが部分的に劣化した場合であり、そこで動いている画面をavailability画面に置き換えるのは過剰である。
+
+viewerのpayloadを実際に必要とする画面だけが、自分の描画をviewerに依存させる。課金設定はplanと利用状況がすべてviewer由来なので、viewerが確定するまでskeletonを出し、取得に失敗したらその画面の中でavailability画面を出す。未確定のplanを既定値で「Free」と描いてはならない。
+
+## 401の扱い
+
+`/api/me`の401は、sessionは通ったのにAPIが認証を拒否した合図として引き続き扱う。user-scoped Query cacheを消してfresh sessionを確認し、sessionがまだ有効ならviewerを取り直す。回復は1周だけ試し、それでも401なら打ち切る。打ち切った後も画面は描画したままにする。
+
+回復中に描画中のcontentをunmountしない。unmountするとrouteのstateが失われ、mount時に全queryが再発火する。
+
+user-scoped cacheを消すのはsessionの判定がunauthenticatedに定まった後に限る。判定より前に消すと、enabledなobserverがsessionの確認を待たずに再取得してしまう。
+
+## ADR 0007から引き継ぐこと
+
+ADR 0007のうち、precache対象、navigation fallback、更新とbuild contractに関する決定は有効である。Google Fontsをキャッシュしない決定も有効である。
+
+availabilityの回復をmanual retry、online、window focus、visibleへの復帰と、2秒・5秒・15秒の有限回retryで行う点も引き継ぐ。ただし対象はsessionだけとする。TanStack Queryのviewer retryとfocus/reconnect refetchを無効にして回復経路を重複させない点も引き継ぐ。

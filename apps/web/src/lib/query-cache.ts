@@ -11,15 +11,8 @@ const userScopedQueryKeys = new Set<string>([
   ...recipesUserScopedQueryRoots,
 ]);
 
-export const clearUserScopedCache = (
-  queryClient: QueryClient,
-  { keepViewer = false }: { keepViewer?: boolean } = {},
-) => {
+export const clearUserScopedCache = (queryClient: QueryClient) => {
   queryClient.removeQueries({
-    predicate: (query) => {
-      const root = String(query.queryKey[0]);
-      if (keepViewer && root === viewerQueryKey[0]) return false;
-      return userScopedQueryKeys.has(root);
-    },
+    predicate: (query) => userScopedQueryKeys.has(String(query.queryKey[0])),
   });
 };
