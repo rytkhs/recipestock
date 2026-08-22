@@ -153,15 +153,20 @@ const createAuth = (env: Bindings) => {
   });
 };
 
+// betterAuthの構築はplugin初期化とroute table生成を伴い、Resendとstripe clientも作り直す。
+// isolate内で使い回せる。保持するのは設定とfetchベースのclientだけで、
+// request scopeのI/OやExecutionContextを掴まない。
+let cachedAuth: ReturnType<typeof createAuth> | null = null;
+
+const getAuth = (env: Bindings) => (cachedAuth ??= createAuth(env));
+
 export const authService: AuthService = {
   async getSession(request, env) {
-    const auth = createAuth(env);
-    return auth.api.getSession({
+    return getAuth(env).api.getSession({
       headers: request.headers,
     }) as Promise<AuthSession | null>;
   },
   async handleAuthRequest(request, env) {
-    const auth = createAuth(env);
-    return auth.handler(request);
+    return getAuth(env).handler(request);
   },
 };
