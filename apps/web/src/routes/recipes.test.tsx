@@ -74,8 +74,11 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes");
 
-    await expect(screen.findByText("レシピ一覧を読み込み中")).resolves.toBeInTheDocument();
-    await expect(screen.findAllByTestId("recipe-card-skeleton")).resolves.toHaveLength(8);
+    // layoutのskeletonも同じlabelを持つので、routeがmountされてから
+    // route自身の初回ローディングを見る。
+    await screen.findByRole("button", { name: "検索" });
+    expect(screen.getByText("レシピ一覧を読み込み中")).toBeInTheDocument();
+    expect(screen.getAllByTestId("recipe-card-skeleton")).toHaveLength(8);
   });
 
   it("既存のレシピ一覧がある再取得中はカードを消さない", async () => {

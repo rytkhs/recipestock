@@ -1,5 +1,7 @@
 # App Shellをprecacheしてオフライン起動を可能にする
 
+> 認証済み画面のavailabilityに関する決定は、ADR 0011「認証済み画面の描画をsessionだけに依存させる」によって置き換えられた。precache対象、navigation fallback、Google Fontsをキャッシュしない判断、更新とbuild contractについての決定は有効である。
+
 Recipe StockのService WorkerはWeb Pushだけを扱っており、アプリ起動に必要なHTML、JavaScript、CSSを保存していない。このため、Service Workerが導入済みでも通信できない状態ではPWAを起動できない。
 
 `vite-plugin-pwa`のWorkbox `injectManifest`を使用し、既存のPush handlerを維持したTypeScript Service Workerへbuild時のprecache manifestを注入する。precache対象は公開App Shellを構成する次のファイルだけとする。
