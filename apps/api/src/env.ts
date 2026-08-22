@@ -27,7 +27,7 @@ export type Bindings = {
   SHORTCUT_RATE_LIMITER: RateLimit;
   YTDLP_METADATA_CONTAINER: DurableObjectNamespace<YtDlpMetadataContainer>;
   DATABASE_URL: string;
-  BETTER_AUTH_URL: string;
+  APP_ORIGIN: string;
   RECIPE_IMAGES: R2Bucket;
   BETTER_AUTH_SECRET: string;
   AUTH_EMAIL_FROM: string;
@@ -110,7 +110,7 @@ const requiredBindings: readonly RequiredBinding[] = [
    * 空文字と絶対URLの両方を見ないと、この非対称な壊れ方を捕まえられない。
    */
   {
-    name: "BETTER_AUTH_URL",
+    name: "APP_ORIGIN",
     format: {
       isValid: isAbsoluteHttpUrl,
       requirement: "must be an absolute http(s) URL",

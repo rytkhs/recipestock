@@ -7,7 +7,7 @@ import { createSilentTestApp } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
-  BETTER_AUTH_URL: "https://app.example.com",
+  APP_ORIGIN: "https://app.example.com",
   DATABASE_URL: "postgresql://example",
 };
 
@@ -65,7 +65,7 @@ const createShortcutCredentialsFake = (): ShortcutCredentials => ({
 });
 
 const shortcutHeaders = {
-  authorization: `Bearer rssc_${"a".repeat(64)}`,
+  authorization: `Bearer rssc_${"a".repeat(25)}`,
   "content-type": "application/json",
   "x-shortcut-version": "1",
 };

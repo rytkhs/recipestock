@@ -1,6 +1,8 @@
+import { shortcutCredentialTokenSchema } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
 import {
   createShortcutCredentials,
+  createShortcutCredentialToken,
   type ShortcutCredentialRecord,
   type ShortcutCredentialRepository,
 } from "./shortcut-credentials";
@@ -39,12 +41,20 @@ const createRepository = () => {
 };
 
 describe("Shortcut credentials Module", () => {
+  it("発行するtokenはschemaが受け付ける形で、毎回異なる", () => {
+    const token = createShortcutCredentialToken();
+
+    expect(shortcutCredentialTokenSchema.safeParse(token).success).toBe(true);
+    expect(token).toHaveLength(30);
+    expect(createShortcutCredentialToken()).not.toBe(token);
+  });
+
   it("平文tokenを発行時だけ返し、repositoryにはhashとsuffixを保存する", async () => {
     const state = createRepository();
     const credentials = createShortcutCredentials({
       repository: state.repository,
       createId: () => "credential_1",
-      createToken: () => `rssc_${"a".repeat(64)}`,
+      createToken: () => `rssc_${"a".repeat(25)}`,
       getCurrentDate: () => issuedAt,
     });
 
@@ -52,19 +62,19 @@ describe("Shortcut credentials Module", () => {
       credential: {
         id: "credential_1",
         name: "iPhone",
-        tokenSuffix: "aaaaaa",
+        tokenSuffix: "aaaa",
         createdAt: issuedAt.toISOString(),
       },
-      token: `rssc_${"a".repeat(64)}`,
+      token: `rssc_${"a".repeat(25)}`,
     });
     expect(state.records[0]?.tokenHash).not.toContain("rssc_");
-    expect(state.records[0]?.tokenSuffix).toBe("aaaaaa");
+    expect(state.records[0]?.tokenSuffix).toBe("aaaa");
   });
 
   it("認証成功時にcredentialId/userIdを返す", async () => {
     const state = createRepository();
     let currentDate = issuedAt;
-    const token = `rssc_${"b".repeat(64)}`;
+    const token = `rssc_${"b".repeat(25)}`;
     const credentials = createShortcutCredentials({
       repository: state.repository,
       createId: () => "credential_1",
@@ -83,7 +93,7 @@ describe("Shortcut credentials Module", () => {
   it("一覧はactive credentialだけを返し、revoke後のtokenを拒否する", async () => {
     const state = createRepository();
     let currentDate = issuedAt;
-    const token = `rssc_${"c".repeat(64)}`;
+    const token = `rssc_${"c".repeat(25)}`;
     const credentials = createShortcutCredentials({
       repository: state.repository,
       createId: () => "credential_1",

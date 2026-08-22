@@ -18,11 +18,13 @@
    - ヘッダ: `Authorization: Bearer <連携トークン>` / `X-Shortcut-Version: 1`
    - 本文: JSON、`input` = 手順2の結果
 4. **通知を表示** — タイトル `notice.title`、本文 `notice.body`
-5. **もし** `notice.openUrl` に値がある **なら** — **URLを開く** `notice.openUrl`
+5. **もし** `notice.openUrl` が `https://` を含む **なら** — **URLを開く** `notice.openUrl`
 
 連携トークンは、Shortcut追加時のインポート質問でユーザーが貼り付ける。判断ロジックはゼロ、分岐は手順5の1つだけである。
 
 `notice.body`は常に存在し、2行目を出さないreasonでは空文字になる。手順4はbodyの有無を分岐せず、空文字のときはタイトルだけの1行通知になる。
+
+手順5に「値がある」を使わない。Shortcutsの「値がある」は空でないことの判定ではなく、辞書から取り出した値は空でも「値がある」側へ流れる。JSONの`null`が「値なし」「空文字」「文字列`null`」のどれになるかはAppleが仕様として公開しておらず、iOSの版で変わりうる。配布後のShortcutは更新できないため、この未定義の挙動に分岐を賭けない。`openUrl`は必ず絶対URLなので、`https://`を含むかどうかで判定すれば`null`がどう化けても必ず偽になる。
 
 ## API契約
 
@@ -38,6 +40,8 @@ Content-Type: application/json
 ```
 
 `input`は共有入力をテキスト化したもので、1〜8192文字。URLの抽出はサーバーが行う。
+
+連携トークンは`rssc_`と乱数25文字（`[A-Za-z0-9_-]`）の計30文字で、150bitである。DBにはSHA-256のhashだけを保存し、末尾4文字を`tokenSuffix`として平文で持ち、設定画面の連携済み端末一覧に出す。suffixは平文で公開する分だけ実効エントロピーを削るため、長くしない。認証はhash照合だけで行い長さや文字種を検査しないので、旧形式の発行済みトークンもそのまま有効である。
 
 ### Response
 
@@ -69,6 +73,8 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
 | `temporarily_unavailable` | `rejected` | あり | なし |
 | `unauthorized` | `rejected` | あり | `/settings` |
 
+`openUrl`のキーは常に存在し、遷移先がないreasonでは`null`になる。`body`と違い空文字は返さない。
+
 バナーは一瞥されるだけの表示であり、`body`は次に取るべき行動があるreasonにだけ置く。`title`の言い換えにしかならない2行目は持たせない。
 
 AI月次上限はプランでreasonを分ける。保存上限がfreeの投稿を先に止めAIを消費させないため、freeが`ai_usage_limit_exceeded`に達するのは例外的であり、実際に到達するのは主にProである。すでに払っているProへ「Proにすると」と案内しても意味がないので、`ai_usage_quota_exhausted`はopenUrlを持たせずリセット時期だけを伝える。リセットはJST月初固定なので「毎月1日」は常に真であり、日付を補間する必要はない。
@@ -89,8 +95,12 @@ AI上限は濫用防止の安全弁であり、プランが売る枠ではない
 
 受け取る型やこの前提を変える場合は、同じ確認をやり直してから契約を決める。
 
+## 分岐の実機確認
+
+配布前に、`openUrl`が`null`のreason（`created`）と`openUrl`を持つreason（`unauthorized`）の両方を実機で通し、前者で遷移も失敗も起きないこと、後者で遷移することを確認する。手順5はShortcut唯一の分岐であり、配布後は修正できない。
+
 ## 変更時の手順
 
 1. `apps/api/src/routes/ios-share.ts`と`apps/api/src/ios-share-notices.ts`を変更する
 2. 文言や遷移先だけの変更であれば、Shortcutの再配布は不要
-3. アクション列やrequestの形が変わる場合は`X-Shortcut-Version`を上げ、この文書を更新し、古い版へ更新を促す`notice`を返す経路を用意してから配布する
+3. アクション列やrequestの形が変わる場合は`X-Shortcut-Version`を上げ、この文書を更新し、古い版へ更新を促す`notice`を返す経路を用意し、「分岐の実機確認」を行ってから配布する

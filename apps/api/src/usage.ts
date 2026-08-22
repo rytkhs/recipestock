@@ -1,4 +1,4 @@
-import { aiUsageMonthly, appUsers, type DbClient } from "@recipestock/db";
+import { aiUsageMonthly, type DbClient } from "@recipestock/db";
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, eq, sql } from "drizzle-orm";
 import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
@@ -61,16 +61,7 @@ export const createUsageRepository = (
   async getOrCreateAppUser(userId) {
     const plan = await syncAppUserPlanForDb(db, userId, planSyncOptions);
 
-    const [appUser] = await db.select().from(appUsers).where(eq(appUsers.userId, userId)).limit(1);
-
-    if (!appUser) {
-      throw new Error(`App user was not created for ${userId}`);
-    }
-
-    return {
-      userId: appUser.userId,
-      plan,
-    };
+    return { userId, plan };
   },
   async getAiUsage(userId, month) {
     const [row] = await db

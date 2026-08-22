@@ -42,11 +42,11 @@ violate. Binding values are never logged.
 
 Validated bindings:
 
-- Must be set to a non-empty value: `DATABASE_URL`, `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
+- Must be set to a non-empty value: `DATABASE_URL`, `APP_ORIGIN`, `BETTER_AUTH_SECRET`,
   `AUTH_EMAIL_FROM`, `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
   `STRIPE_PRO_PRICE_ID`, `CLOUDFLARE_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`,
   `R2_SECRET_ACCESS_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
-- `BETTER_AUTH_URL` must be an absolute `http(s)` URL. Auth, billing return URLs, and iOS Shortcut
+- `APP_ORIGIN` must be an absolute `http(s)` URL. Auth, billing return URLs, and iOS Shortcut
   notice links all resolve paths against it.
 - `VAPID_SUBJECT` must be a `mailto:` address or an absolute `http(s)` URL, as web-push requires.
 
@@ -105,7 +105,7 @@ environment, the Worker fails every request instead of degrading.
 
 ```bash
 pnpm --filter @recipestock/api exec wrangler secret put DATABASE_URL
-pnpm --filter @recipestock/api exec wrangler secret put BETTER_AUTH_URL
+pnpm --filter @recipestock/api exec wrangler secret put APP_ORIGIN
 pnpm --filter @recipestock/api exec wrangler secret put BETTER_AUTH_SECRET
 pnpm --filter @recipestock/api exec wrangler secret put AUTH_EMAIL_FROM
 pnpm --filter @recipestock/api exec wrangler secret put RESEND_API_KEY

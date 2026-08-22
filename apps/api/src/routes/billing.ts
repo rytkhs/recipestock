@@ -99,8 +99,8 @@ export const createBillingRoutes = ({
         userId,
         stripeCustomerId,
         proPriceId,
-        successUrl: buildUrl(c.env.BETTER_AUTH_URL, "/settings/billing?checkout=success"),
-        cancelUrl: buildUrl(c.env.BETTER_AUTH_URL, "/settings/billing?checkout=cancel"),
+        successUrl: buildUrl(c.env.APP_ORIGIN, "/settings/billing?checkout=success"),
+        cancelUrl: buildUrl(c.env.APP_ORIGIN, "/settings/billing?checkout=cancel"),
       });
 
       return c.json(createCheckoutResponseSchema.parse(session));
@@ -121,7 +121,7 @@ export const createBillingRoutes = ({
 
       const session = await stripeClient.createPortalSession({
         stripeCustomerId,
-        returnUrl: buildUrl(c.env.BETTER_AUTH_URL, "/settings/billing"),
+        returnUrl: buildUrl(c.env.APP_ORIGIN, "/settings/billing"),
       });
 
       return c.json(createBillingPortalResponseSchema.parse(session));

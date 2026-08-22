@@ -18,7 +18,7 @@ describe("Shortcut credential schemas", () => {
           tokenSuffix: "abcdef",
           createdAt: "2026-07-11T00:00:00.000Z",
         },
-        token: `rssc_${"a".repeat(64)}`,
+        token: `rssc_${"a".repeat(25)}`,
       }).success,
     ).toBe(true);
   });

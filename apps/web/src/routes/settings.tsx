@@ -8,6 +8,8 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
+import { ConnectionUnavailable } from "../components/connection-unavailable";
+import { SettingsSkeleton, SkeletonBlock } from "../components/loading";
 import { IosShareSettingsCard } from "../features/ios-share/settings-card";
 import {
   deactivatePushSubscription,
@@ -165,7 +167,7 @@ export const SettingsIndexRoute = () => {
             <h2 className="text-brand-walnut font-bold text-lg">アカウント</h2>
           </div>
           <p className="break-all text-brand-muted text-sm">
-            現在のメールアドレス: {viewer.data?.email ?? ""}
+            現在のメールアドレス: {session.data?.user.email ?? ""}
           </p>
           <div className="mt-5 grid min-w-0 gap-6 md:grid-cols-2">
             <form className="grid min-w-0 content-start gap-4" onSubmit={handleEmailChange}>
@@ -263,9 +265,13 @@ export const SettingsIndexRoute = () => {
           </div>
           <p className="text-brand-muted text-sm">
             現在のプラン:{" "}
-            <span className="font-semibold text-brand-ink">
-              {viewer.data?.plan === "pro" ? "Pro" : "Free"}
-            </span>
+            {viewer.data ? (
+              <span className="font-semibold text-brand-ink">
+                {viewer.data.plan === "pro" ? "Pro" : "Free"}
+              </span>
+            ) : (
+              <SkeletonBlock className="inline-block h-4 w-10 align-middle" />
+            )}
           </p>
           <Link
             className="mt-4 inline-flex min-h-10 items-center justify-center rounded-full bg-brand-sage px-5 font-semibold text-white text-sm hover:bg-brand-sage-dark transition-colors"
@@ -314,8 +320,6 @@ export const SettingsBillingRoute = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPortalSubmitting, setIsPortalSubmitting] = useState(false);
   const message = checkoutMessage((search as { checkout?: unknown }).checkout);
-  const plan = billingStatus.data?.plan ?? viewer.data?.plan;
-  const isPro = plan === "pro";
   const subscription = billingStatus.data?.subscription;
   const cancellationMessage =
     subscription?.cancelAtPeriodEnd && subscription.currentPeriodEnd
@@ -357,6 +361,22 @@ export const SettingsBillingRoute = () => {
     }
   };
 
+  // planと利用状況がすべてviewer由来なので、この画面だけはviewerを待つ。
+  if (!viewer.data) {
+    return viewer.isError ? (
+      <ConnectionUnavailable
+        isRetrying={viewer.isFetching}
+        onRetry={async () => {
+          await viewer.refetch();
+        }}
+      />
+    ) : (
+      <SettingsSkeleton />
+    );
+  }
+
+  const isPro = (billingStatus.data?.plan ?? viewer.data.plan) === "pro";
+
   return (
     <section className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10">
       <div className="mb-6 flex min-w-0 items-center gap-3">
@@ -383,14 +403,12 @@ export const SettingsBillingRoute = () => {
           ) : null}
           <p className="mt-3 text-brand-muted text-sm">
             保存件数:{" "}
-            <span className="font-semibold text-brand-ink">{viewer.data?.recipeCount ?? 0}</span>
-            {viewer.data?.recipeLimit === null ? "" : ` / ${viewer.data?.recipeLimit ?? 5}`}
+            <span className="font-semibold text-brand-ink">{viewer.data.recipeCount}</span>
+            {viewer.data.recipeLimit === null ? "" : ` / ${viewer.data.recipeLimit}`}
           </p>
           <p className="mt-1 text-brand-muted text-sm">
             AI月次上限:{" "}
-            <span className="font-semibold text-brand-ink">
-              {viewer.data?.aiUsage.limit ?? 0} 回
-            </span>
+            <span className="font-semibold text-brand-ink">{viewer.data.aiUsage.limit} 回</span>
           </p>
         </div>
 
