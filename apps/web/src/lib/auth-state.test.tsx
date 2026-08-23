@@ -44,6 +44,14 @@ const AuthStateProbe = () => {
       >
         recheck
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          void Promise.all([auth.recheck("fresh"), auth.recheck("fresh")]);
+        }}
+      >
+        fresh recheck
+      </button>
     </>
   );
 };
@@ -80,15 +88,15 @@ describe("AuthStateProvider", () => {
     expect(screen.getByText("unavailable")).toBeInTheDocument();
   });
 
-  it("fresh recheckの失敗を古いsessionで上書きせず並行確認をdeduplicateする", async () => {
+  it("cache-aware recheckの失敗を古いsessionで上書きせず並行確認をdeduplicateする", async () => {
     setSessionStore({ data: authenticatedSession, error: null });
     let resolveResult: ((value: unknown) => void) | undefined;
-    const freshResult = new Promise((resolve) => {
+    const sessionResult = new Promise((resolve) => {
       resolveResult = resolve;
     });
     const getSession = vi
-      .spyOn(authModule, "getFreshAuthSession")
-      .mockReturnValue(freshResult as ReturnType<typeof authClient.getSession>);
+      .spyOn(authModule, "getAuthSession")
+      .mockReturnValue(sessionResult as ReturnType<typeof authClient.getSession>);
 
     render(
       <AuthStateProvider>
@@ -104,7 +112,7 @@ describe("AuthStateProvider", () => {
         data: null,
         error: { status: 0, statusText: "", message: "network unavailable" },
       } satisfies { data: null; error: unknown });
-      await freshResult;
+      await sessionResult;
     });
 
     expect(screen.getByText("unavailable")).toBeInTheDocument();
@@ -113,9 +121,9 @@ describe("AuthStateProvider", () => {
   it.each([
     [{ data: authenticatedSession, error: null }, "authenticated"],
     [{ data: null, error: null }, "unauthenticated"],
-  ] as const)("fresh recheck結果を%sへ分類する", async (result, expected) => {
+  ] as const)("cache-aware recheck結果を%sへ分類する", async (result, expected) => {
     setSessionStore({ data: null, error: new Error("network unavailable") });
-    vi.spyOn(authModule, "getFreshAuthSession").mockResolvedValue(
+    vi.spyOn(authModule, "getAuthSession").mockResolvedValue(
       result as Awaited<ReturnType<typeof authClient.getSession>>,
     );
 
@@ -129,5 +137,26 @@ describe("AuthStateProvider", () => {
     await expect(
       screen.findByText(expected satisfies AuthCheckResult),
     ).resolves.toBeInTheDocument();
+  });
+
+  it("modeごとにsession取得を分け、同じmodeの並行確認をdeduplicateする", async () => {
+    setSessionStore({ data: authenticatedSession, error: null });
+    const result = { data: authenticatedSession, error: null } as Awaited<
+      ReturnType<typeof authClient.getSession>
+    >;
+    const getSession = vi.spyOn(authModule, "getAuthSession").mockResolvedValue(result);
+    const getFreshSession = vi.spyOn(authModule, "getFreshAuthSession").mockResolvedValue(result);
+
+    render(
+      <AuthStateProvider>
+        <AuthStateProbe />
+      </AuthStateProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^recheck$/ }));
+    await userEvent.click(screen.getByRole("button", { name: "fresh recheck" }));
+
+    expect(getSession).toHaveBeenCalledTimes(1);
+    expect(getFreshSession).toHaveBeenCalledTimes(1);
   });
 });

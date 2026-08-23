@@ -29,7 +29,7 @@ export const useProtectedAccess = (): ProtectedAccess => {
     // settingsが張る2つ目のviewer observerと競合しうるので、取り直す前に止める。
     await queryClient.cancelQueries({ queryKey: viewerQueryKey });
 
-    const sessionResult = await auth.recheck();
+    const sessionResult = await auth.recheck("fresh");
     if (sessionResult !== "authenticated") {
       // 直後にProtectedLayoutがloginへ送る。unmount前に前ユーザーのcacheを落とす。
       if (sessionResult === "unauthenticated") {

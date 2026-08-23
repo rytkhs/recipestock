@@ -8,16 +8,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { getFreshAuthSession, useAuthSession } from "./auth";
+import { getAuthSession, getFreshAuthSession, useAuthSession } from "./auth";
 
 export type AuthCheckResult = "authenticated" | "unauthenticated" | "unavailable";
 export type AuthStatus = "pending" | AuthCheckResult;
+export type AuthRecheckMode = "cache-aware" | "fresh";
 
 type AuthSession = ReturnType<typeof useAuthSession>;
 
 export type AuthState = {
   status: AuthStatus;
-  recheck: () => Promise<AuthCheckResult>;
+  recheck: (mode?: AuthRecheckMode) => Promise<AuthCheckResult>;
   isRechecking: boolean;
 };
 
@@ -42,8 +43,8 @@ export const AuthStateProvider = ({ children }: { children: ReactNode }) => {
   const [status, setStatus] = useState<AuthStatus>(() =>
     statusForSession(session.data, session.error, hasCompletedInitialCheck),
   );
-  const [isRechecking, setIsRechecking] = useState(false);
-  const recheckPromise = useRef<Promise<AuthCheckResult> | null>(null);
+  const [activeRecheckCount, setActiveRecheckCount] = useState(0);
+  const recheckPromises = useRef<Partial<Record<AuthRecheckMode, Promise<AuthCheckResult>>>>({});
 
   useEffect(() => {
     if (!session.isPending || session.data || session.error) {
@@ -55,13 +56,14 @@ export const AuthStateProvider = ({ children }: { children: ReactNode }) => {
     setStatus(statusForSession(session.data, session.error, hasCompletedInitialCheck));
   }, [hasCompletedInitialCheck, session.data, session.error]);
 
-  const recheck = useCallback(() => {
-    if (recheckPromise.current) return recheckPromise.current;
+  const recheck = useCallback((mode: AuthRecheckMode = "cache-aware") => {
+    const inFlight = recheckPromises.current[mode];
+    if (inFlight) return inFlight;
 
-    setIsRechecking(true);
+    setActiveRecheckCount((count) => count + 1);
     const request = (async (): Promise<AuthCheckResult> => {
       try {
-        const result = await getFreshAuthSession();
+        const result = await (mode === "fresh" ? getFreshAuthSession() : getAuthSession());
         const nextStatus: AuthCheckResult = result.error
           ? "unavailable"
           : result.data
@@ -75,16 +77,19 @@ export const AuthStateProvider = ({ children }: { children: ReactNode }) => {
         setStatus("unavailable");
         return "unavailable";
       } finally {
-        recheckPromise.current = null;
-        setIsRechecking(false);
+        delete recheckPromises.current[mode];
+        setActiveRecheckCount((count) => Math.max(0, count - 1));
       }
     })();
 
-    recheckPromise.current = request;
+    recheckPromises.current[mode] = request;
     return request;
   }, []);
 
-  const value = useMemo(() => ({ status, recheck, isRechecking }), [isRechecking, recheck, status]);
+  const value = useMemo(
+    () => ({ status, recheck, isRechecking: activeRecheckCount > 0 }),
+    [activeRecheckCount, recheck, status],
+  );
 
   return <AuthStateContext.Provider value={value}>{children}</AuthStateContext.Provider>;
 };

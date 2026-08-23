@@ -14,7 +14,7 @@ describe("Recipe create routes", () => {
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },
       meRepository: {
-        getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
+        getAppUserPlan: async () => "free",
         countRecipes: async () => 0,
         getAiUsage: async () => null,
       },
@@ -141,7 +141,7 @@ describe("Recipe create routes", () => {
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },
       meRepository: {
-        getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
+        getAppUserPlan: async () => "free",
         countRecipes: async () => 0,
         getAiUsage: async () => null,
       },
