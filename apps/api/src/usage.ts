@@ -1,7 +1,11 @@
 import { aiUsageMonthly, type DbClient } from "@recipestock/db";
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { type AppUserPlanSyncOptions, readAppUserPlanForDb, syncAppUserPlanForDb } from "./billing";
+import {
+  type AppUserPlanSyncOptions,
+  deriveAppUserPlanForDb,
+  syncAppUserPlanForDb,
+} from "./billing";
 import { type Bindings } from "./env";
 
 export type AiUsageSummary = {
@@ -31,6 +35,11 @@ export type UsageRepository = {
   }): Promise<ConsumeAiUsageResult>;
 };
 
+export type AiUsageConsumptionRepository = Pick<
+  UsageRepository,
+  "getOrCreateAppUser" | "consumeAiUsage"
+>;
+
 export const consumeAiUsage = async ({
   userId,
   env,
@@ -39,7 +48,7 @@ export const consumeAiUsage = async ({
 }: {
   userId: string;
   env: Partial<Bindings>;
-  repository: UsageRepository;
+  repository: AiUsageConsumptionRepository;
   now?: Date;
 }): Promise<ConsumeAiUsageResult> => {
   const appUser = await repository.getOrCreateAppUser(userId);
@@ -67,7 +76,7 @@ export const createUsageRepository = (
     return { userId, plan };
   },
   async getAppUserPlan(userId) {
-    return readAppUserPlanForDb(db, userId, planSyncOptions);
+    return deriveAppUserPlanForDb(db, userId, planSyncOptions);
   },
   async getAiUsage(userId, month) {
     const [row] = await db

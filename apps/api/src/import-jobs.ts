@@ -32,7 +32,7 @@ import {
   normalizeRecipeSource,
   type RecipeRepository,
 } from "./recipes";
-import { type UsageRepository } from "./usage";
+import { type AiUsageConsumptionRepository } from "./usage";
 import { createYtDlpMetadataClient, type YtDlpMetadataClient } from "./ytdlp-metadata";
 
 export type ImportJobRecord = {
@@ -796,7 +796,7 @@ export type ProcessImportJobDependencies = {
   env: Bindings;
   importJobRepository: ImportJobRepository;
   recipeRepository: RecipeRepository;
-  usageRepository: UsageRepository;
+  usageRepository: AiUsageConsumptionRepository;
   imageService?: RecipeImageService;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;

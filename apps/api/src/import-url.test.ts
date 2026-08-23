@@ -14,7 +14,7 @@ import {
 } from "./import-url";
 import { type DeterministicImporter } from "./lib/import/deterministic";
 import { type SourceExtractor } from "./lib/import/source-extraction";
-import { type UsageRepository } from "./usage";
+import { type AiUsageConsumptionRepository } from "./usage";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -1170,15 +1170,9 @@ describe("URL import flow", () => {
       status: "consumed" as const,
       usage: { month, used: 1 },
     }));
-    const usageRepository: UsageRepository = {
+    const usageRepository: AiUsageConsumptionRepository = {
       async getOrCreateAppUser(userId) {
         return { userId, plan: "free" };
-      },
-      async getAppUserPlan() {
-        return "free";
-      },
-      async getAiUsage(_userId, month) {
-        return { month, used: 0 };
       },
       consumeAiUsage,
     };
@@ -1519,15 +1513,9 @@ describe("URL import flow", () => {
   });
 });
 
-const createUsageRepositoryStub = (): UsageRepository => ({
+const createUsageRepositoryStub = (): AiUsageConsumptionRepository => ({
   async getOrCreateAppUser(userId) {
     return { userId, plan: "free" };
-  },
-  async getAppUserPlan() {
-    return "free";
-  },
-  async getAiUsage(_userId, month) {
-    return { month, used: 0 };
   },
   async consumeAiUsage({ month }) {
     return { status: "consumed", usage: { month, used: 1 } };

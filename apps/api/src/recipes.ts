@@ -11,7 +11,11 @@ import {
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
-import { type AppUserPlanSyncOptions, readAppUserPlanForDb, syncAppUserPlanForDb } from "./billing";
+import {
+  type AppUserPlanSyncOptions,
+  deriveAppUserPlanForDb,
+  syncAppUserPlanForDb,
+} from "./billing";
 
 export type RecipeRecord = {
   id: string;
@@ -294,7 +298,7 @@ export const createRecipeRepository = (
         .from(recipes)
         .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
         .limit(1),
-      readAppUserPlanForDb(db, userId, planSyncOptions),
+      deriveAppUserPlanForDb(db, userId, planSyncOptions),
     ]);
     const [row] = rows;
 
@@ -330,7 +334,7 @@ export const createRecipeRepository = (
 
     // 一覧本体はplanに依存しないので同じ波で引く。unlocked判定はfreeのときだけ足す。
     const [plan, rows] = await Promise.all([
-      readAppUserPlanForDb(db, userId, planSyncOptions),
+      deriveAppUserPlanForDb(db, userId, planSyncOptions),
       db
         .select({
           id: recipes.id,

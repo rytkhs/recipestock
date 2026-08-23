@@ -1,9 +1,9 @@
 import { type DbClient } from "@recipestock/db";
 import { describe, expect, it, vi } from "vitest";
 import {
+  deriveAppUserPlanForDb,
   derivePlanFromSubscriptions,
   isProSubscription,
-  readAppUserPlanForDb,
   type SubscriptionPlanInput,
   selectBillingSubscriptionSummary,
   syncAppUserPlanFromSubscriptions,
@@ -249,7 +249,7 @@ describe("syncAppUserPlanFromSubscriptions", () => {
   });
 });
 
-describe("readAppUserPlanForDb", () => {
+describe("deriveAppUserPlanForDb", () => {
   // subscriptionsを1回引くだけでplanを導出する。app_usersは読まないし書き戻さない。
   const createDbStub = (rows: SubscriptionPlanInput[]) => {
     const where = vi.fn(async () => rows);
@@ -263,14 +263,14 @@ describe("readAppUserPlanForDb", () => {
   it("subscriptionsだけを1往復で引いてplanを導出する", async () => {
     const { db, select } = createDbStub([subscription({ status: "trialing" })]);
 
-    await expect(readAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("pro");
+    await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("pro");
     expect(select).toHaveBeenCalledTimes(1);
   });
 
   it("該当するsubscriptionが無ければfreeを返す", async () => {
     const { db } = createDbStub([]);
 
-    await expect(readAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("free");
+    await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("free");
   });
 
   // 導出がnowに依存する唯一のケース。ここが同期版と一致することがwrite-backを外す根拠になる。
@@ -282,24 +282,13 @@ describe("readAppUserPlanForDb", () => {
       }),
     ]);
 
-    await expect(readAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("free");
-  });
-
-  it("syncAppUserPlanの注入があればDBを引かずそちらに委ねる", async () => {
-    const { db, select } = createDbStub([subscription()]);
-    const syncAppUserPlan = vi.fn(async () => "free" as const);
-
-    await expect(
-      readAppUserPlanForDb(db, "user_123", { proPriceId, now, syncAppUserPlan }),
-    ).resolves.toBe("free");
-    expect(syncAppUserPlan).toHaveBeenCalledWith("user_123", { now });
-    expect(select).not.toHaveBeenCalled();
+    await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("free");
   });
 
   it("Pro price IDが無い設定では実行前に落とす", async () => {
     const { db } = createDbStub([]);
 
-    await expect(readAppUserPlanForDb(db, "user_123", { now })).rejects.toThrow(
+    await expect(deriveAppUserPlanForDb(db, "user_123", { now })).rejects.toThrow(
       "Plan read requires a Stripe Pro price ID.",
     );
   });

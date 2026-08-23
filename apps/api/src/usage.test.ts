@@ -40,8 +40,6 @@ describe("AI usage", () => {
         },
         repository: {
           getOrCreateAppUser: async (userId) => ({ userId, plan: "pro" }),
-          getAppUserPlan: async () => "pro",
-          getAiUsage: async () => null,
           consumeAiUsage: consume,
         },
         now: new Date("2026-05-15T00:00:00.000Z"),
@@ -72,8 +70,6 @@ describe("AI usage", () => {
         },
         repository: {
           getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
-          getAppUserPlan: async () => "free",
-          getAiUsage: async () => null,
           consumeAiUsage: consume,
         },
         now: new Date("2026-05-15T00:00:00.000Z"),
@@ -94,8 +90,6 @@ describe("AI usage", () => {
         env: { FREE_AI_MONTHLY_LIMIT: "10" },
         repository: {
           getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
-          getAppUserPlan: async () => "free",
-          getAiUsage: async () => null,
           consumeAiUsage: async ({ month, limit }) => {
             if (used >= limit) {
               return { status: "limitExceeded" };
@@ -111,8 +105,6 @@ describe("AI usage", () => {
         env: { FREE_AI_MONTHLY_LIMIT: "10" },
         repository: {
           getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
-          getAppUserPlan: async () => "free",
-          getAiUsage: async () => null,
           consumeAiUsage: async ({ month, limit }) => {
             if (used >= limit) {
               return { status: "limitExceeded" };

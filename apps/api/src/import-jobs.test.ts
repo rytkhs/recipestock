@@ -10,7 +10,7 @@ import {
 } from "./import-jobs";
 import { type RecipeImportAIProvider, RecipeImportError } from "./import-url";
 import { type RecipeRepository } from "./recipes";
-import { type UsageRepository } from "./usage";
+import { type AiUsageConsumptionRepository } from "./usage";
 
 const htmlPage = `<!doctype html>
 <html>
@@ -90,10 +90,10 @@ const createRecipeRepository = (overrides: Partial<RecipeRepository> = {}): Reci
   ...overrides,
 });
 
-const createUsageRepository = (overrides: Partial<UsageRepository> = {}): UsageRepository => ({
+const createUsageRepository = (
+  overrides: Partial<AiUsageConsumptionRepository> = {},
+): AiUsageConsumptionRepository => ({
   getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
-  getAppUserPlan: async () => "free",
-  getAiUsage: async () => null,
   consumeAiUsage: async () => ({
     status: "consumed",
     usage: { month: "2026-06", used: 1 },

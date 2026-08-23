@@ -4,7 +4,7 @@
 
 しかしこの再導出は、読み取り経路にフレッシュさを足していない。`listSubscriptionPlans`が読むのはローカルの`subscriptions`テーブルであり、Stripeには問い合わせない。そして`subscriptions`を書くのはStripe webhookであり、webhookは同じ処理の中で`app_users.plan`も更新する。つまり読み取り経路が再導出しているのは、webhookがすでに材料と結論の両方を書き終えた同じ行である。
 
-読み取り経路は導出だけを行う。`readAppUserPlanForDb`は`subscriptions`を1回引き、`derivePlanFromSubscriptions`に渡して終わる。`app_users`は読まないし書き戻さない。`/api/me`と`/api/usage/ai`と`/api/recipes`の一覧・詳細がこれを使う。
+読み取り経路は導出だけを行う。`deriveAppUserPlanForDb`は`subscriptions`を1回引き、`derivePlanFromSubscriptions`に渡して終わる。`app_users`は読まないし書き戻さない。`syncAppUserPlan`の注入も受け取らない。`/api/me`と`/api/usage/ai`と`/api/recipes`の一覧・詳細がこれを使う。
 
 ## 書き戻しが必要な経路は残す
 
@@ -22,4 +22,4 @@
 
 ## app_users行の作成は読み取りが担わない
 
-`readAppUserPlanForDb`は`ensureAppUser`を呼ばない。導出は`subscriptions`だけで決まるため行の存在を必要としないうえ、行を実際に必要とするのは`app_users`を更新する書き込み経路であり、そこはすべて`syncAppUserPlanForDb`を通る。行そのものはsignup時にBetter Authの`databaseHooks.user.create.after`が作る。読み取り経路のensureは、作成を保証すべき地点から離れた場所に置かれた重複であり、外す。
+`deriveAppUserPlanForDb`は`ensureAppUser`を呼ばない。導出は`subscriptions`だけで決まるため行の存在を必要としないうえ、行を実際に必要とするのは`app_users`を更新する書き込み経路であり、そこはすべて`syncAppUserPlanForDb`を通る。行そのものはsignup時にBetter Authの`databaseHooks.user.create.after`が作る。読み取り経路のensureは、作成を保証すべき地点から離れた場所に置かれた重複であり、外す。

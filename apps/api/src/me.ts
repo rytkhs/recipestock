@@ -1,7 +1,7 @@
 import { aiUsageMonthly, type DbClient, recipes } from "@recipestock/db";
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, count, eq } from "drizzle-orm";
-import { type AppUserPlanSyncOptions, readAppUserPlanForDb } from "./billing";
+import { type AppUserPlanReadOptions, deriveAppUserPlanForDb } from "./billing";
 import { getNextJstMonthResetAtForMonth } from "./usage";
 
 export type AiUsageSummary = {
@@ -17,10 +17,10 @@ export type MeRepository = {
 
 export const createMeRepository = (
   db: DbClient,
-  planSyncOptions: AppUserPlanSyncOptions = {},
+  planReadOptions: AppUserPlanReadOptions = {},
 ): MeRepository => ({
   async getAppUserPlan(userId) {
-    return readAppUserPlanForDb(db, userId, planSyncOptions);
+    return deriveAppUserPlanForDb(db, userId, planReadOptions);
   },
   async countRecipes(userId) {
     const [row] = await db

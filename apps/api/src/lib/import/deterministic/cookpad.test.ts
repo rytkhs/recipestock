@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { importRecipeFromUrl, type RecipeImportError } from "../../../import-url";
-import { type UsageRepository } from "../../../usage";
+import { type AiUsageConsumptionRepository } from "../../../usage";
 import { cookpadImportAdapter } from "./cookpad";
 
 const RECIPE_ID = "25844291";
@@ -559,15 +559,9 @@ const createUsageRepositoryStub = (
     status: "consumed" as const,
     usage: { month, used: 1 },
   })),
-): UsageRepository => ({
+): AiUsageConsumptionRepository => ({
   async getOrCreateAppUser(userId) {
     return { userId, plan: "free" };
-  },
-  async getAppUserPlan() {
-    return "free";
-  },
-  async getAiUsage(_userId, month) {
-    return { month, used: 0 };
   },
   consumeAiUsage,
 });

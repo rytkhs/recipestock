@@ -4,7 +4,7 @@ import {
   type RecipeImportAIProvider,
   type RecipeImportError,
 } from "../../../import-url";
-import { type UsageRepository } from "../../../usage";
+import { type AiUsageConsumptionRepository } from "../../../usage";
 import { kurashiruImportAdapter } from "./kurashiru";
 
 const RECIPE_ID = "ea9e1038-d78a-468b-b08e-7456fc3fd038";
@@ -290,7 +290,7 @@ const importKurashiru = ({
   html?: string;
   finalUrl?: string;
   aiNormalize?: RecipeImportAIProvider["normalize"];
-  consumeAiUsage?: UsageRepository["consumeAiUsage"];
+  consumeAiUsage?: AiUsageConsumptionRepository["consumeAiUsage"];
 } = {}) =>
   importRecipeFromUrl({
     rawUrl: RECIPE_URL,
@@ -466,21 +466,15 @@ const createKurashiruHtml = ({
 };
 
 const createUsageRepositoryStub = (
-  consumeAiUsage: UsageRepository["consumeAiUsage"] = vi.fn(
+  consumeAiUsage: AiUsageConsumptionRepository["consumeAiUsage"] = vi.fn(
     async ({ month }: { month: string }) => ({
       status: "consumed" as const,
       usage: { month, used: 1 },
     }),
   ),
-): UsageRepository => ({
+): AiUsageConsumptionRepository => ({
   async getOrCreateAppUser(userId) {
     return { userId, plan: "free" };
-  },
-  async getAppUserPlan() {
-    return "free";
-  },
-  async getAiUsage(_userId, month) {
-    return { month, used: 0 };
   },
   consumeAiUsage,
 });
