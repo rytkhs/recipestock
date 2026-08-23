@@ -38,7 +38,7 @@ import {
   type RecipeImportResult,
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
-import { consumeAiUsage, type UsageRepository } from "./usage";
+import { type AiUsageConsumptionRepository, consumeAiUsage } from "./usage";
 import { type YtDlpMetadataClient } from "./ytdlp-metadata";
 
 export { assertImportUrlAllowed } from "./lib/import/policy";
@@ -324,7 +324,7 @@ export const importRecipeFromUrl = async ({
   rawUrl: string;
   userId: string;
   env: Partial<Bindings>;
-  usageRepository: UsageRepository;
+  usageRepository: AiUsageConsumptionRepository;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
   ytdlpMetadataClient?: YtDlpMetadataClient;

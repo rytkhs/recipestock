@@ -5,6 +5,7 @@ import {
   createSessionResponse,
   findFetchCall,
   getRequestPath,
+  isGetSessionRequest,
   jsonResponse,
   mockFetch,
   renderApp,
@@ -28,7 +29,7 @@ describe("AppRouter", () => {
 
   it("認証確認中は未ログインナビと共通ローディングを出さず保護ルートskeletonを表示する", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (getRequestPath(input).endsWith("/get-session")) {
+      if (isGetSessionRequest(input)) {
         return new Promise<Response>(() => {});
       }
 
@@ -106,7 +107,7 @@ describe("AppRouter", () => {
   it("viewerが未解決でもルートを描画して画面データの取得を始める", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
-      if (path.endsWith("/get-session")) return createSessionResponse(true);
+      if (isGetSessionRequest(input)) return createSessionResponse(true);
       // viewerは永遠に解決しない。それでもルートは描画され、画面データを取りに行く。
       if (path === "/api/me") return new Promise<Response>(() => {});
       if (path === "/api/recipes?limit=20") {
@@ -127,7 +128,7 @@ describe("AppRouter", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
 
-      if (path.endsWith("/get-session")) {
+      if (isGetSessionRequest(input)) {
         return createSessionResponse(authenticated);
       }
 
@@ -189,7 +190,7 @@ describe("AppRouter", () => {
 
   it("初回session通信に失敗した保護ルートはURLを維持してbrand chromeだけを表示する", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (getRequestPath(input).endsWith("/get-session")) {
+      if (isGetSessionRequest(input)) {
         throw new TypeError("Failed to fetch");
       }
       return new Response(null, { status: 404 });
@@ -209,7 +210,7 @@ describe("AppRouter", () => {
   it("viewerの5xxはルートの描画を妨げない", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
-      if (path.endsWith("/get-session")) return createSessionResponse(true);
+      if (isGetSessionRequest(input)) return createSessionResponse(true);
       if (path === "/api/me") {
         return jsonResponse(
           {
@@ -236,9 +237,9 @@ describe("AppRouter", () => {
 
   it("session取得失敗を同じURLで再試行して回復する", async () => {
     let sessionAvailable = false;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
-      if (path.endsWith("/get-session")) {
+      if (isGetSessionRequest(input)) {
         if (!sessionAvailable) throw new TypeError("Failed to fetch");
         return createSessionResponse(true);
       }
@@ -258,6 +259,11 @@ describe("AppRouter", () => {
       screen.findByRole("heading", { name: "URLから取り込む" }),
     ).resolves.toBeInTheDocument();
     expect(appRouter.state.location.href).toBe(importPath);
+    expect(
+      fetchMock.mock.calls
+        .map(([input]) => getRequestPath(input))
+        .filter((path) => path.startsWith("/api/auth/get-session")),
+    ).toEqual(["/api/auth/get-session", "/api/auth/get-session"]);
   });
 
   it("viewerの401はfresh session確認後に取り直し、ルートを描画し続ける", async () => {
@@ -265,8 +271,8 @@ describe("AppRouter", () => {
     let viewerChecks = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
-      if (path.endsWith("/get-session")) {
-        authRequests.push("session");
+      if (isGetSessionRequest(input)) {
+        authRequests.push(path);
         return createSessionResponse(true);
       }
       if (path === "/api/me") {
@@ -294,7 +300,12 @@ describe("AppRouter", () => {
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     await vi.waitFor(() => {
-      expect(authRequests).toEqual(["session", "viewer", "session", "viewer"]);
+      expect(authRequests).toEqual([
+        "/api/auth/get-session",
+        "viewer",
+        "/api/auth/get-session?disableCookieCache=true",
+        "viewer",
+      ]);
     });
     expect(appRouter.state.location.pathname).toBe("/recipes");
     expect(screen.queryByRole("heading", { name: "接続を確認できません" })).toBeNull();
@@ -304,7 +315,7 @@ describe("AppRouter", () => {
     let sessionChecks = 0;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
-      if (path.endsWith("/get-session")) {
+      if (isGetSessionRequest(input)) {
         sessionChecks += 1;
         if (sessionChecks === 1) return createSessionResponse(true);
         throw new TypeError("Failed to fetch");
@@ -338,7 +349,7 @@ describe("AppRouter", () => {
     let viewerChecks = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
-      if (path.endsWith("/get-session")) {
+      if (isGetSessionRequest(input)) {
         sessionChecks += 1;
         return createSessionResponse(true);
       }
@@ -379,7 +390,7 @@ describe("AppRouter", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const path = getRequestPath(input);
 
-      if (path.endsWith("/get-session")) {
+      if (isGetSessionRequest(input)) {
         return createSessionResponse(authenticated);
       }
 

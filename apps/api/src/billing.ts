@@ -34,9 +34,12 @@ export type SyncAppUserPlanParams = {
 
 export type AppUserPlanSyncer = (userId: string, params?: { now?: Date }) => Promise<Plan>;
 
-export type AppUserPlanSyncOptions = {
+export type AppUserPlanReadOptions = {
   proPriceId?: string;
   now?: Date;
+};
+
+export type AppUserPlanSyncOptions = AppUserPlanReadOptions & {
   syncAppUserPlan?: AppUserPlanSyncer;
 };
 
@@ -148,18 +151,33 @@ export const syncAppUserPlanForDb = async (
     now,
     repository: {
       ensureAppUser: async (targetUserId) => storageEnsureAppUser(db, targetUserId),
-      getAppUserPlan: async (targetUserId) => getAppUserPlan(db, targetUserId),
+      getAppUserPlan: async (targetUserId) => readStoredAppUserPlan(db, targetUserId),
       listSubscriptionsByUserId: async (targetUserId) => listSubscriptionPlans(db, targetUserId),
       updateAppUserPlan: async (targetUserId, plan) => updateAppUserPlan(db, targetUserId, plan),
     },
   });
 };
 
+// 読み取り経路向け。planはsubscriptionsだけで決まり、app_users.planは書き戻しの
+// 差分判定にしか使われていない。書き戻しはwebhookとplanを強制する書き込み経路が担うので、
+// ここは導出だけを1往復で行う。app_users行の存在も前提にしない。
+export const deriveAppUserPlanForDb = async (
+  db: DbClient,
+  userId: string,
+  { proPriceId, now = new Date() }: AppUserPlanReadOptions,
+): Promise<Plan> => {
+  if (!proPriceId) {
+    throw new Error("Plan read requires a Stripe Pro price ID.");
+  }
+
+  return derivePlanFromSubscriptions(await listSubscriptionPlans(db, userId), { proPriceId, now });
+};
+
 const storageEnsureAppUser = async (db: DbClient, userId: string) => {
   await db.insert(appUsers).values({ userId }).onConflictDoNothing();
 };
 
-const getAppUserPlan = async (db: DbClient, userId: string): Promise<Plan> => {
+const readStoredAppUserPlan = async (db: DbClient, userId: string): Promise<Plan> => {
   const [appUser] = await db
     .select({ plan: appUsers.plan })
     .from(appUsers)
@@ -237,7 +255,7 @@ export const createBillingRepository = (db: DbClient): BillingRepository => {
       await storageEnsureAppUser(db, userId);
     },
     async getAppUserPlan(userId) {
-      return getAppUserPlan(db, userId);
+      return readStoredAppUserPlan(db, userId);
     },
     async listSubscriptionsByUserId(userId) {
       return listSubscriptionPlans(db, userId);

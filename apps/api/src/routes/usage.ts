@@ -36,9 +36,12 @@ export const createUsageRoutes = ({
         now: currentDate,
       });
     const month = getCurrentJstMonth(currentDate);
-    const appUser = await repository.getOrCreateAppUser(userId);
-    const usage = (await repository.getAiUsage(userId, month)) ?? { month, used: 0 };
-    const limit = resolveAiMonthlyLimit(appUser.plan, c.env);
+    const [plan, storedUsage] = await Promise.all([
+      repository.getAppUserPlan(userId),
+      repository.getAiUsage(userId, month),
+    ]);
+    const usage = storedUsage ?? { month, used: 0 };
+    const limit = resolveAiMonthlyLimit(plan, c.env);
 
     return c.json(
       getAiUsageResponseSchema.parse(

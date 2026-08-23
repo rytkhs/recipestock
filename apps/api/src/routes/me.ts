@@ -32,8 +32,9 @@ export const createMeRoutes = ({
         now,
       });
     const month = getCurrentMonth?.() ?? getCurrentJstMonth(now);
-    const appUser = await repository.getOrCreateAppUser(userId);
-    const [recipeCount, storedAiUsage] = await Promise.all([
+    // planはcountともusageとも独立なので、同じ波で引く。
+    const [plan, recipeCount, storedAiUsage] = await Promise.all([
+      repository.getAppUserPlan(userId),
       repository.countRecipes(userId),
       repository.getAiUsage(userId, month),
     ]);
@@ -43,10 +44,10 @@ export const createMeRoutes = ({
         buildMeResponse({
           userId,
           email: c.get("authSession").user.email,
-          plan: appUser.plan,
+          plan,
           recipeCount,
           aiUsage: storedAiUsage ?? { month, used: 0 },
-          aiUsageLimit: resolveAiMonthlyLimit(appUser.plan, c.env),
+          aiUsageLimit: resolveAiMonthlyLimit(plan, c.env),
         }),
       ),
     );

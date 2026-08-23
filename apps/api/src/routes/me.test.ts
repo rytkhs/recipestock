@@ -9,8 +9,8 @@ describe("Me routes", () => {
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },
       meRepository: {
-        getOrCreateAppUser: async () => {
-          throw new Error("should not create app users without a session");
+        getAppUserPlan: async () => {
+          throw new Error("should not read plans without a session");
         },
         countRecipes: async () => 0,
         getAiUsage: async () => null,
@@ -41,9 +41,9 @@ describe("Me routes", () => {
         handleAuthRequest: async () => new Response(null, { status: 404 }),
       },
       meRepository: {
-        getOrCreateAppUser: async (userId) => {
-          calls.push(`ensure:${userId}`);
-          return { userId, plan: "free" };
+        getAppUserPlan: async (userId) => {
+          calls.push(`plan:${userId}`);
+          return "free";
         },
         countRecipes: async (userId) => {
           calls.push(`recipes:${userId}`);
@@ -77,6 +77,6 @@ describe("Me routes", () => {
         resetAt: "2026-05-31T15:00:00.000Z",
       },
     });
-    expect(calls).toEqual(["ensure:user_123", "recipes:user_123", "ai:user_123:2026-05"]);
+    expect(calls).toEqual(["plan:user_123", "recipes:user_123", "ai:user_123:2026-05"]);
   });
 });
