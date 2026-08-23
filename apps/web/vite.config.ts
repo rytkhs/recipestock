@@ -26,6 +26,9 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    manifest: true,
+  },
   server: {
     allowedHosts: [".trycloudflare.com"],
     proxy: {

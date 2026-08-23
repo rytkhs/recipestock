@@ -1,11 +1,20 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
+import { gzipSync } from "node:zlib";
 
 const distDirectory = resolve(process.cwd(), "dist");
 const serviceWorkerPath = join(distDirectory, "sw.js");
 
 const fail = (message) => {
   throw new Error(`PWA build verification failed: ${message}`);
+};
+
+const readJson = (path) => {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    fail(`${relative(distDirectory, path)} is missing or invalid JSON.`);
+  }
 };
 
 if (!existsSync(serviceWorkerPath)) {
@@ -53,5 +62,72 @@ const apiEntry = [...precacheUrls].find((url) => url === "api" || url.startsWith
 if (apiEntry) {
   fail(`${apiEntry} must not be precached.`);
 }
+
+const viteManifestPath = join(distDirectory, ".vite", "manifest.json");
+if (!existsSync(viteManifestPath)) {
+  fail(".vite/manifest.json does not exist.");
+}
+
+const viteManifest = readJson(viteManifestPath);
+const entry = Object.values(viteManifest).find(
+  (manifestEntry) => manifestEntry.isEntry && manifestEntry.src === "index.html",
+);
+if (!entry) {
+  fail("index.html is not present as the build entry in .vite/manifest.json.");
+}
+
+const entryPath = join(distDirectory, entry.file);
+if (!existsSync(entryPath)) {
+  fail(`${entry.file} from .vite/manifest.json does not exist.`);
+}
+
+const lazyRouteSources = [
+  "src/routes/login.tsx",
+  "src/routes/import.tsx",
+  "src/routes/recipes-index.tsx",
+  "src/routes/recipe-detail.tsx",
+  "src/routes/recipe-editor.tsx",
+  "src/routes/settings-index.tsx",
+  "src/routes/settings-billing.tsx",
+];
+const staticSources = new Set();
+const visitStaticImports = (manifestEntry) => {
+  if (!manifestEntry || staticSources.has(manifestEntry.src)) {
+    return;
+  }
+
+  staticSources.add(manifestEntry.src);
+  for (const importedFile of manifestEntry.imports ?? []) {
+    const importedEntry = Object.values(viteManifest).find(
+      (candidate) => candidate.file === importedFile,
+    );
+    visitStaticImports(importedEntry);
+  }
+};
+visitStaticImports(entry);
+
+const eagerlyLoadedRoutes = lazyRouteSources.filter((source) => staticSources.has(source));
+if (eagerlyLoadedRoutes.length > 0) {
+  fail(
+    `lazy route modules are statically imported by the HTML entry: ${eagerlyLoadedRoutes.join(", ")}.`,
+  );
+}
+
+const dynamicallyLoadedRoutes = new Set(entry.dynamicImports ?? []);
+const missingDynamicRoutes = lazyRouteSources.filter(
+  (source) => !dynamicallyLoadedRoutes.has(source),
+);
+if (missingDynamicRoutes.length > 0) {
+  fail(
+    `lazy route modules are not dynamic imports of the HTML entry: ${missingDynamicRoutes.join(", ")}.`,
+  );
+}
+
+const entryBytes = readFileSync(entryPath).byteLength;
+const entryGzipBytes = gzipSync(readFileSync(entryPath)).byteLength;
+console.log(
+  `Initial entry ${entry.file}: ${entryBytes} bytes (${entryGzipBytes} bytes gzip); ` +
+    `precache: ${precacheUrls.size} entries.`,
+);
 
 console.log(`Verified ${precacheUrls.size} App Shell precache entries in dist/sw.js.`);
