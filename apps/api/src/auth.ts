@@ -83,6 +83,12 @@ const createAuth = (env: Bindings) => {
       provider: "pg",
       schema,
     }),
+    // requireAuthは毎requestでsessionを引き、サムネイル画像1枚ごとにもNeonを往復していた。
+    // get-sessionがDBを引いたときに署名付きcookieを配り、以降のrequestはそれを検証して返す。
+    // 引き換えに他端末のsession遮断とuser情報の反映が最大maxAge分遅れる。
+    session: {
+      cookieCache: { enabled: true, maxAge: 60 },
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,

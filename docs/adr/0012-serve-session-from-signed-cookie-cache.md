@@ -1,0 +1,25 @@
+# sessionを署名付きcookie cacheから返す
+
+ADR 0011は、protected routeの描画をsessionだけに依存させ、viewerと画面本体のqueryを同じ波で発火させた。波が畳まれた結果、起動の所要はその波に並ぶendpointが個別に抱えるNeon往復で決まるようになった。
+
+そこに`requireAuth`が乗っている。`requireAuth`は毎requestでBetter Authの`getSession`を呼び、Neonへ1往復する。Neonは`ap-southeast-1`にあり東京からの1往復は80〜120msかかる。しかもレシピ画像は`/api/images/object/*`として`requireAuth`を通るため、一覧に並ぶサムネイル1枚ごとにsessionの照会が走る。20件の一覧を開けば、認証のためだけに20回Neonを往復することになる。sessionの照会は本来この画面が必要とする情報を何も運んでいない。
+
+Better Authの`session.cookieCache`を有効にする。`/api/auth/get-session`がDBを引いた応答の最後で、sessionとuserを載せた署名付きcookieが配られる。以降のrequestでは`getSession`がそのcookieをHMAC検証して返し、DBを引かない。起動の並びは、波1の`/api/auth/get-session`がcookieを配り、波2の`/api/me`と`/api/recipes`、波3の画像がそれを読む、という形になる。
+
+`database`を設定している構成では、Better Authはcache hit時のcookie再発行を強制的に無効にする。`requireAuth`はBetter Authが組み立てたResponseを使わず自前のhandlerで応答を返すため、cache hit経路でSet-Cookieが書かれないことはむしろ都合がよい。cookieの更新は、起動時と、focus・online復帰時にclientが投げる`/api/auth/get-session`が担う。この経路だけはBetter Authのhandlerが返したResponseをそのまま返しているため、Set-Cookieが通る。
+
+## maxAgeは60秒とする
+
+cookieの寿命はsessionが遮断されてからそれが効くまでの遅延に直結する。一方でこの最適化が狙っているのは起動時のバーストであり、波1から画像の読み込みまでは数秒で終わる。60秒あれば起動は丸ごとcacheの内側に収まり、遅延は1分に留まる。長くしても得られるのはスクロールで遅延読み込みされる画像の一部だけで、遮断遅延の増加に見合わない。
+
+## 401の回復経路だけはcacheを迂回する
+
+ADR 0011は、viewerの401を「sessionは通ったのにAPIが認証を拒否した」合図として扱い、user-scoped Query cacheを消してfresh sessionを確認する回復を定めた。この確認はsessionがまだ生きているかをDBに問うことに意味がある。cookie cacheから答えれば必ずauthenticatedが返り、回復はviewerを取り直して同じ401を受け、1周で打ち切られる。回復経路が静かに無効化されることになる。
+
+したがって`getFreshAuthSession`は`disableCookieCache`を指定し、必ずDBを引く。cacheを迂回するのはこの経路だけとする。起動時のsession確認はcacheを使ってよい。そこで古いsessionを信じても、直後に投げるuser-scopedなrequestが401を返し、回復経路が本物の確認を行うためである。
+
+## 受容する遅延
+
+他端末のsession遮断は最大60秒遅れて効く。パスワードリセット時の`revokeSessionsOnPasswordReset`と、パスワード変更時の`revokeOtherSessions`が該当する。設定画面のメールアドレス表示はADR 0011以降sessionのuser由来になっているため、メールアドレス変更の反映も同じだけ遅れる。
+
+自端末のログアウトは即時である。Better Authの`deleteSessionCookie`はsession tokenと同時にこのcacheのcookieもexpireさせる。共有端末での取り違えは、この最適化によって新しく生まれない。

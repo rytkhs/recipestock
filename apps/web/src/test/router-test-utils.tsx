@@ -67,6 +67,11 @@ export const jsonResponse = (body: unknown, init?: ResponseInit) =>
 export const createSessionResponse = (authenticated: boolean) =>
   jsonResponse(authenticated ? authenticatedSession : null);
 
+// get-sessionはfresh確認のときだけ`disableCookieCache`を付ける。
+// mockはqueryに依存せず判定する。
+export const isGetSessionRequest = (input: RequestInfo | URL) =>
+  getRequestPath(input).split("?")[0].endsWith("/get-session");
+
 export const mockFetch = (
   handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> | Response,
   { authenticated = false }: { authenticated?: boolean } = {},
@@ -74,7 +79,7 @@ export const mockFetch = (
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const path = getRequestPath(input);
 
-    if (path.endsWith("/get-session")) {
+    if (isGetSessionRequest(input)) {
       return createSessionResponse(authenticated);
     }
 
