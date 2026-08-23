@@ -237,7 +237,7 @@ describe("AppRouter", () => {
 
   it("session取得失敗を同じURLで再試行して回復する", async () => {
     let sessionAvailable = false;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
       if (isGetSessionRequest(input)) {
         if (!sessionAvailable) throw new TypeError("Failed to fetch");
@@ -259,6 +259,11 @@ describe("AppRouter", () => {
       screen.findByRole("heading", { name: "URLから取り込む" }),
     ).resolves.toBeInTheDocument();
     expect(appRouter.state.location.href).toBe(importPath);
+    expect(
+      fetchMock.mock.calls
+        .map(([input]) => getRequestPath(input))
+        .filter((path) => path.startsWith("/api/auth/get-session")),
+    ).toEqual(["/api/auth/get-session", "/api/auth/get-session"]);
   });
 
   it("viewerの401はfresh session確認後に取り直し、ルートを描画し続ける", async () => {
@@ -267,7 +272,7 @@ describe("AppRouter", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
       if (isGetSessionRequest(input)) {
-        authRequests.push("session");
+        authRequests.push(path);
         return createSessionResponse(true);
       }
       if (path === "/api/me") {
@@ -295,7 +300,12 @@ describe("AppRouter", () => {
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     await vi.waitFor(() => {
-      expect(authRequests).toEqual(["session", "viewer", "session", "viewer"]);
+      expect(authRequests).toEqual([
+        "/api/auth/get-session",
+        "viewer",
+        "/api/auth/get-session?disableCookieCache=true",
+        "viewer",
+      ]);
     });
     expect(appRouter.state.location.pathname).toBe("/recipes");
     expect(screen.queryByRole("heading", { name: "接続を確認できません" })).toBeNull();

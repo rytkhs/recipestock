@@ -89,6 +89,8 @@ export const changePassword = async (currentPassword: string, newPassword: strin
 
 export const useAuthSession = () => authClient.useSession();
 
+export const getAuthSession = () => authClient.getSession();
+
 // 401回復は「sessionがまだ生きているか」をDBに問う経路。cookie cacheから答えると
 // 必ずauthenticatedが返り、回復が空回りしてexhaustedに落ちる。
 export const getFreshAuthSession = () =>

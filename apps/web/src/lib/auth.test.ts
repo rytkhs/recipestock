@@ -12,7 +12,15 @@ vi.mock("better-auth/client/plugins", () => ({
   emailOTPClient: () => ({}),
 }));
 
-describe("getFreshAuthSession", () => {
+describe("session checks", () => {
+  it("availability回復ではcookie cacheを使ってsessionを確認する", async () => {
+    const { getAuthSession } = await import("./auth");
+
+    await getAuthSession();
+
+    expect(getSession).toHaveBeenCalledWith();
+  });
+
   // 401回復はsessionがまだ生きているかをDBに問う経路。server側のcookie cacheから
   // 答えると必ずauthenticatedが返り、回復が空回りしてexhaustedに落ちる。
   it("cookie cacheを迂回してsessionを確認する", async () => {
