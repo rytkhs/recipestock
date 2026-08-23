@@ -1174,6 +1174,9 @@ describe("URL import flow", () => {
       async getOrCreateAppUser(userId) {
         return { userId, plan: "free" };
       },
+      async getAppUserPlan() {
+        return "free";
+      },
       async getAiUsage(_userId, month) {
         return { month, used: 0 };
       },
@@ -1519,6 +1522,9 @@ describe("URL import flow", () => {
 const createUsageRepositoryStub = (): UsageRepository => ({
   async getOrCreateAppUser(userId) {
     return { userId, plan: "free" };
+  },
+  async getAppUserPlan() {
+    return "free";
   },
   async getAiUsage(_userId, month) {
     return { month, used: 0 };

@@ -1,7 +1,7 @@
 import { aiUsageMonthly, type DbClient } from "@recipestock/db";
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
+import { type AppUserPlanSyncOptions, readAppUserPlanForDb, syncAppUserPlanForDb } from "./billing";
 import { type Bindings } from "./env";
 
 export type AiUsageSummary = {
@@ -19,7 +19,10 @@ export type ConsumeAiUsageResult =
     };
 
 export type UsageRepository = {
+  // 上限を強制する経路向け。app_users行を作りplanを書き戻す。
   getOrCreateAppUser(userId: string): Promise<{ userId: string; plan: Plan }>;
+  // 読み取り経路向け。導出だけを1往復で行い書き戻さない。
+  getAppUserPlan(userId: string): Promise<Plan>;
   getAiUsage(userId: string, month: string): Promise<AiUsageSummary | null>;
   consumeAiUsage(params: {
     userId: string;
@@ -62,6 +65,9 @@ export const createUsageRepository = (
     const plan = await syncAppUserPlanForDb(db, userId, planSyncOptions);
 
     return { userId, plan };
+  },
+  async getAppUserPlan(userId) {
+    return readAppUserPlanForDb(db, userId, planSyncOptions);
   },
   async getAiUsage(userId, month) {
     const [row] = await db

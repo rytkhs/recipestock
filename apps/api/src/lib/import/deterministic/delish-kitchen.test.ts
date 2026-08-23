@@ -621,6 +621,9 @@ const createUsageRepositoryStub = (
   async getOrCreateAppUser(userId) {
     return { userId, plan: "free" };
   },
+  async getAppUserPlan() {
+    return "free";
+  },
   async getAiUsage(_userId, month) {
     return { month, used: 0 };
   },

@@ -11,7 +11,7 @@ import {
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
-import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
+import { type AppUserPlanSyncOptions, readAppUserPlanForDb, syncAppUserPlanForDb } from "./billing";
 
 export type RecipeRecord = {
   id: string;
@@ -287,17 +287,21 @@ export const createRecipeRepository = (
     };
   },
   async getRecipe(userId, recipeId) {
-    const [row] = await db
-      .select()
-      .from(recipes)
-      .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
-      .limit(1);
+    // 行の取得とplanの導出は互いに独立なので同じ波で引く。
+    const [rows, plan] = await Promise.all([
+      db
+        .select()
+        .from(recipes)
+        .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
+        .limit(1),
+      readAppUserPlanForDb(db, userId, planSyncOptions),
+    ]);
+    const [row] = rows;
 
     if (!row) {
       return null;
     }
 
-    const plan = await syncAppUserPlanForDb(db, userId, planSyncOptions);
     const unlockedRecipeIds =
       plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
     const recipe = mapRecipeRow(row);
@@ -324,28 +328,31 @@ export const createRecipeRepository = (
       );
     }
 
-    const plan = await syncAppUserPlanForDb(db, userId, planSyncOptions);
-    const unlockedRecipeIds =
-      plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
-    const rows = await db
-      .select({
-        id: recipes.id,
-        title: recipes.title,
-        sourceName: recipes.sourceName,
-        createdAt: recipes.createdAt,
-        updatedAt: recipes.updatedAt,
-        coverImageObjectKey: sql<string | null>`
+    // 一覧本体はplanに依存しないので同じ波で引く。unlocked判定はfreeのときだけ足す。
+    const [plan, rows] = await Promise.all([
+      readAppUserPlanForDb(db, userId, planSyncOptions),
+      db
+        .select({
+          id: recipes.id,
+          title: recipes.title,
+          sourceName: recipes.sourceName,
+          createdAt: recipes.createdAt,
+          updatedAt: recipes.updatedAt,
+          coverImageObjectKey: sql<string | null>`
           case
             when jsonb_typeof(${recipes.content}->'coverImage'->'objectKey') = 'string'
               then ${recipes.content}->'coverImage'->>'objectKey'
             else null
           end
         `,
-      })
-      .from(recipes)
-      .where(and(...whereConditions))
-      .orderBy(desc(recipes.updatedAt), desc(recipes.id))
-      .limit(limit + 1);
+        })
+        .from(recipes)
+        .where(and(...whereConditions))
+        .orderBy(desc(recipes.updatedAt), desc(recipes.id))
+        .limit(limit + 1),
+    ]);
+    const unlockedRecipeIds =
+      plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
     const pageRows = rows.slice(0, limit);
     const lastRecipe = pageRows.at(-1);
 

@@ -40,6 +40,7 @@ describe("AI usage", () => {
         },
         repository: {
           getOrCreateAppUser: async (userId) => ({ userId, plan: "pro" }),
+          getAppUserPlan: async () => "pro",
           getAiUsage: async () => null,
           consumeAiUsage: consume,
         },
@@ -71,6 +72,7 @@ describe("AI usage", () => {
         },
         repository: {
           getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
+          getAppUserPlan: async () => "free",
           getAiUsage: async () => null,
           consumeAiUsage: consume,
         },
@@ -92,6 +94,7 @@ describe("AI usage", () => {
         env: { FREE_AI_MONTHLY_LIMIT: "10" },
         repository: {
           getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
+          getAppUserPlan: async () => "free",
           getAiUsage: async () => null,
           consumeAiUsage: async ({ month, limit }) => {
             if (used >= limit) {
@@ -108,6 +111,7 @@ describe("AI usage", () => {
         env: { FREE_AI_MONTHLY_LIMIT: "10" },
         repository: {
           getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
+          getAppUserPlan: async () => "free",
           getAiUsage: async () => null,
           consumeAiUsage: async ({ month, limit }) => {
             if (used >= limit) {

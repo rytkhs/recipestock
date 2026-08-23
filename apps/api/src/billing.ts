@@ -155,6 +155,25 @@ export const syncAppUserPlanForDb = async (
   });
 };
 
+// 読み取り経路向け。planはsubscriptionsだけで決まり、app_users.planは書き戻しの
+// 差分判定にしか使われていない。書き戻しはwebhookとplanを強制する書き込み経路が担うので、
+// ここは導出だけを1往復で行う。app_users行の存在も前提にしない。
+export const readAppUserPlanForDb = async (
+  db: DbClient,
+  userId: string,
+  { proPriceId, now = new Date(), syncAppUserPlan }: AppUserPlanSyncOptions,
+): Promise<Plan> => {
+  if (syncAppUserPlan) {
+    return syncAppUserPlan(userId, { now });
+  }
+
+  if (!proPriceId) {
+    throw new Error("Plan read requires a Stripe Pro price ID.");
+  }
+
+  return derivePlanFromSubscriptions(await listSubscriptionPlans(db, userId), { proPriceId, now });
+};
+
 const storageEnsureAppUser = async (db: DbClient, userId: string) => {
   await db.insert(appUsers).values({ userId }).onConflictDoNothing();
 };

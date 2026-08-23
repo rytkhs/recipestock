@@ -92,6 +92,7 @@ const createRecipeRepository = (overrides: Partial<RecipeRepository> = {}): Reci
 
 const createUsageRepository = (overrides: Partial<UsageRepository> = {}): UsageRepository => ({
   getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
+  getAppUserPlan: async () => "free",
   getAiUsage: async () => null,
   consumeAiUsage: async () => ({
     status: "consumed",
