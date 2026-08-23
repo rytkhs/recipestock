@@ -11,7 +11,7 @@ import {
   renderApp,
   viewerResponse,
 } from "../test/router-test-utils";
-import { checkoutRedirect } from "./settings";
+import { checkoutRedirect } from "./settings-billing";
 
 describe("Settings routes", () => {
   afterEach(() => {
