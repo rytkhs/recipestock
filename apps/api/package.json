@@ -9,7 +9,7 @@
     "build": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --port 8787",
-    "test": "vitest run && python3 -m unittest discover containers/ytdlp-metadata -p '*_test.py'",
+    "test": "vitest run",
     "test:db": "node --env-file-if-exists=../../.env.test.local test/db/run.mjs",
     "typecheck": "tsc --noEmit",
     "wrangler:check": "wrangler check",
@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@ai-sdk/groq": "^3.0.41",
-    "@cloudflare/containers": "0.3.7",
     "@hono/zod-validator": "^0.7.5",
     "@neondatabase/serverless": "^1.0.2",
     "@openrouter/ai-sdk-provider": "^2.9.0",

@@ -1,7 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { createLogger, type LoggerFactory } from "./logger";
-import { type YtDlpMetadataContainer } from "./ytdlp-metadata-container";
 
 export type BrowserRunBinding = {
   quickAction(
@@ -25,7 +24,6 @@ export type Bindings = {
   IMPORT_QUEUE: Queue<{ jobId: string }>;
   SHORTCUT_CLIENT_RATE_LIMITER: RateLimit;
   SHORTCUT_RATE_LIMITER: RateLimit;
-  YTDLP_METADATA_CONTAINER: DurableObjectNamespace<YtDlpMetadataContainer>;
   DATABASE_URL: string;
   APP_ORIGIN: string;
   RECIPE_IMAGES: R2Bucket;
