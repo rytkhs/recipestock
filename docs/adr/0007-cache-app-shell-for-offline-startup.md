@@ -7,13 +7,15 @@ Recipe StockのService WorkerはWeb Pushだけを扱っており、アプリ起�
 `vite-plugin-pwa`のWorkbox `injectManifest`を使用し、既存のPush handlerを維持したTypeScript Service Workerへbuild時のprecache manifestを注入する。precache対象は公開App Shellを構成する次のファイルだけとする。
 
 - `index.html`
-- Viteが生成した`assets`配下のhashed JavaScriptとCSS
+- Viteが生成した`assets`配下のhashed JavaScriptとCSS（route-level code splittingで生成される遅延chunkを含む）
 - `manifest.webmanifest`
 - `icons/icon-192.png`
 
 API response、session、viewer、Recipe、認証が必要な画像、mutation、screenshot、512px icon、shortcut icon、Google Fontsはキャッシュしない。これらのデータをofflineで利用することやoffline writeは別の決定とする。初回のService Worker installはonlineで成功する必要があり、初回からofflineの起動は保証しない。
 
 Service Workerはprecache routeを他のWorkbox routeより先に登録する。navigation requestはprecache済みの`/index.html`へfallbackするが、`/api`以下は対象外とし、APIをHTMLで応答したりキャッシュしたりしない。Cloudflare WorkerのSPA fallbackはonline navigationを担当し、Service Workerのnavigation fallbackはoffline navigationを担当する。
+
+route-level code splittingを導入しても、offlineで未訪問の画面を開ける契約を維持するため、生成された全JavaScript/CSS chunkを引き続きprecacheする。したがって、code splittingの効果は現在のrouteで初期転送・parse・evaluationするJavaScriptの削減として測定し、Service Worker install/update時のprecache総転送量とは別の指標として扱う。各chunkは同じService Worker世代のApp Shellに含め、古いclientが古いHTMLから参照するchunkを新workerのactivateで削除しない。
 
 ## 認証済み画面のavailability
 

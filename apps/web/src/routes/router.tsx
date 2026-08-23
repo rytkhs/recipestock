@@ -2,6 +2,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
   RouterProvider,
   useNavigate,
@@ -12,18 +13,46 @@ import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { Header, MobileBottomNav } from "../components/header";
 import {
   ImportUrlSkeleton,
+  LoadingStatus,
   RecipeDetailSkeleton,
   RecipeFormSkeleton,
   RecipeListSkeleton,
   SettingsSkeleton,
 } from "../components/loading";
+import { RouteChunkError } from "../components/route-chunk-error";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { useProtectedAccess } from "../lib/protected-access";
 import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
-import { ImportUrlRoute, type ImportUrlSearch } from "./import";
-import { LoginRoute } from "./login";
-import { EditRecipeRoute, NewRecipeRoute, RecipeDetailRoute, RecipesIndexRoute } from "./recipes";
-import { SettingsBillingRoute, SettingsIndexRoute } from "./settings";
+import { type ImportUrlSearch } from "./import";
+
+const LoginScreen = lazyRouteComponent(() => import("./login"), "LoginRoute");
+const ImportUrlScreen = lazyRouteComponent(() => import("./import"), "ImportUrlRoute");
+const RecipesIndexRoute = lazyRouteComponent(() => import("./recipes-index"), "RecipesIndexRoute");
+const NewRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "NewRecipeRoute");
+const EditRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "EditRecipeRoute");
+const RecipeDetailRoute = lazyRouteComponent(() => import("./recipe-detail"), "RecipeDetailRoute");
+const SettingsIndexRoute = lazyRouteComponent(
+  () => import("./settings-index"),
+  "SettingsIndexRoute",
+);
+const SettingsBillingRoute = lazyRouteComponent(
+  () => import("./settings-billing"),
+  "SettingsBillingRoute",
+);
+
+const withPreload = <TProps,>(
+  component: (props: TProps) => ReactNode,
+  preload: (() => Promise<unknown>) | undefined,
+) => Object.assign(component, { preload });
+
+const LoginRoute = withPreload(
+  ({ redirectTo }: { redirectTo: string }) => <LoginScreen redirectTo={redirectTo} />,
+  LoginScreen.preload,
+);
+const ImportUrlRoute = withPreload(
+  ({ search }: { search: ImportUrlSearch }) => <ImportUrlScreen search={search} />,
+  ImportUrlScreen.preload,
+);
 
 const ProtectedRouteSkeleton = () => {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -121,11 +150,9 @@ const PublicLayout = () => {
 };
 
 const RootLayout = () => (
-  <AuthStateProvider>
-    <div className="min-h-screen bg-brand-cream text-brand-ink">
-      <Outlet />
-    </div>
-  </AuthStateProvider>
+  <div className="min-h-screen bg-brand-cream text-brand-ink">
+    <Outlet />
+  </div>
 );
 
 const rootRoute = createRootRoute({
@@ -165,24 +192,36 @@ const recipesRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/recipes",
   component: RecipesIndexRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: RecipeListSkeleton,
+  pendingMs: 0,
 });
 
 const newRecipeRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/recipes/new",
   component: NewRecipeRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: RecipeFormSkeleton,
+  pendingMs: 0,
 });
 
 const recipeDetailRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/recipes/$recipeId",
   component: RecipeDetailRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: RecipeDetailSkeleton,
+  pendingMs: 0,
 });
 
 const editRecipeRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/recipes/$recipeId/edit",
   component: EditRecipeRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: RecipeFormSkeleton,
+  pendingMs: 0,
 });
 
 type LoginSearch = {
@@ -205,6 +244,9 @@ const loginRoute = createRoute({
       </RedirectAuthenticated>
     );
   },
+  errorComponent: RouteChunkError,
+  pendingComponent: () => <LoadingStatus label="ログイン画面を読み込み中" />,
+  pendingMs: 0,
 });
 
 const stringSearchParam = (value: unknown) => (typeof value === "string" ? value : undefined);
@@ -222,18 +264,27 @@ const importUrlRoute = createRoute({
 
     return <ImportUrlRoute key={JSON.stringify([search.url, search.text])} search={search} />;
   },
+  errorComponent: RouteChunkError,
+  pendingComponent: ImportUrlSkeleton,
+  pendingMs: 0,
 });
 
 const settingsRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings",
   component: SettingsIndexRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: SettingsSkeleton,
+  pendingMs: 0,
 });
 
 const settingsBillingRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings/billing",
   component: SettingsBillingRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: SettingsSkeleton,
+  pendingMs: 0,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -263,5 +314,7 @@ declare module "@tanstack/react-router" {
 }
 
 export const AppRouter = ({ appRouter = router }: { appRouter?: typeof router }) => (
-  <RouterProvider router={appRouter} />
+  <AuthStateProvider>
+    <RouterProvider router={appRouter} />
+  </AuthStateProvider>
 );
