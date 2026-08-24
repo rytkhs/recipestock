@@ -33,7 +33,6 @@ import {
   type RecipeRepository,
 } from "./recipes";
 import { type AiUsageConsumptionRepository } from "./usage";
-import { createYtDlpMetadataClient, type YtDlpMetadataClient } from "./ytdlp-metadata";
 
 export type ImportJobRecord = {
   id: string;
@@ -800,7 +799,6 @@ export type ProcessImportJobDependencies = {
   imageService?: RecipeImageService;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
-  ytdlpMetadataClient?: YtDlpMetadataClient;
   youtubeDataClient?: YouTubeDataClient;
   createRecipeId?: () => string;
   createImageId?: () => string;
@@ -817,7 +815,6 @@ export const processImportJob = async ({
   imageService,
   aiProvider,
   fetcher,
-  ytdlpMetadataClient,
   youtubeDataClient,
   createRecipeId,
   createImageId,
@@ -904,11 +901,6 @@ export const processImportJob = async ({
       usageRepository,
       aiProvider,
       fetcher,
-      ytdlpMetadataClient:
-        ytdlpMetadataClient ??
-        createYtDlpMetadataClient({
-          binding: env.YTDLP_METADATA_CONTAINER,
-        }),
       youtubeDataClient,
       now,
       deadline,

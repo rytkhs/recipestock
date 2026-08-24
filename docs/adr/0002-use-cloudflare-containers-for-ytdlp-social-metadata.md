@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0014
+---
+
 # yt-dlp ソーシャルメタデータ抽出に Cloudflare Containers を使用する
 
 TikTok など、Worker の通常 fetch だけでは投稿本文、caption、description、thumbnail、attached images などの AI 正規化用 source extraction を安定して作れない SNS 投稿 URL import では、`yt-dlp` を実行する metadata service を Cloudflare Containers 上に置き、Cloudflare Worker から container-enabled Durable Object binding 経由で呼び出します。動画の中身は解析しません。

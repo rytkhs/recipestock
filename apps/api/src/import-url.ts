@@ -39,7 +39,6 @@ import {
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
 import { type AiUsageConsumptionRepository, consumeAiUsage } from "./usage";
-import { type YtDlpMetadataClient } from "./ytdlp-metadata";
 
 export { assertImportUrlAllowed } from "./lib/import/policy";
 export {
@@ -312,7 +311,6 @@ export const importRecipeFromUrl = async ({
   usageRepository,
   aiProvider,
   fetcher,
-  ytdlpMetadataClient,
   youtubeDataClient,
   deterministicImporter = defaultDeterministicImporter,
   sourceExtractor = defaultSourceExtractor,
@@ -327,7 +325,6 @@ export const importRecipeFromUrl = async ({
   usageRepository: AiUsageConsumptionRepository;
   aiProvider?: RecipeImportAIProvider;
   fetcher?: RecipeImportFetcher;
-  ytdlpMetadataClient?: YtDlpMetadataClient;
   youtubeDataClient?: YouTubeDataClient;
   deterministicImporter?: DeterministicImporter;
   sourceExtractor?: SourceExtractor;
@@ -360,7 +357,6 @@ export const importRecipeFromUrl = async ({
     normalizedUrl,
     fetcher: deterministicFetcher,
     fetchOptions,
-    ytdlpMetadataClient,
     youtubeDataClient: youtubeDataClient ?? resolveYouTubeDataClient(env),
   });
   assertImportJobDeadline(deadline, currentDate());

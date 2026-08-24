@@ -23,7 +23,6 @@ coverage
 .env.*
 !.env.example
 !.dev.vars.example
-apps/api/containers/ytdlp-metadata/__pycache__/
 packages/db/tools/
 CLAUDE.md
 .claude

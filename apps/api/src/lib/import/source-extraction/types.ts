@@ -1,6 +1,5 @@
 import { type RecipeSourceDraft, recipeSourceDraftSchema } from "@recipestock/schemas";
 import { z } from "zod";
-import { type YtDlpMetadataClient } from "../../../ytdlp-metadata";
 import {
   type FetchedImportPage,
   type RecipeImportImageCandidate,
@@ -19,7 +18,6 @@ export type SourceExtractionContext = {
   host: string;
   timeoutMs: number;
   fetchHtml(url: string): Promise<FetchedImportPage>;
-  ytdlpMetadataClient?: YtDlpMetadataClient;
   youtubeDataClient?: YouTubeDataClient;
 };
 
