@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "analyze:bundle": "node scripts/analyze-bundle.mjs",
     "build": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --port 8787",
