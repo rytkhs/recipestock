@@ -128,18 +128,9 @@ describe("Instagram source extraction adapter", () => {
         }),
       }),
     );
-    const ytdlpMetadataClient = {
-      extract: vi.fn(async () => {
-        throw new Error("yt-dlp should not be called.");
-      }),
-    };
-
-    const result = await instagramSourceExtractionAdapter.extract(
-      createContext({ fetchHtml, ytdlpMetadataClient }),
-    );
+    const result = await instagramSourceExtractionAdapter.extract(createContext({ fetchHtml }));
 
     expect(fetchHtml).toHaveBeenCalledWith(EMBED_URL);
-    expect(ytdlpMetadataClient.extract).not.toHaveBeenCalled();
     expect(result).toEqual({
       promptProfile: "social",
       input: {

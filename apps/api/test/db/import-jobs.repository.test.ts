@@ -2,17 +2,12 @@ import { neonConfig } from "@neondatabase/serverless";
 import { aiUsageMonthly, appUsers, createDb, importJobs } from "@recipestock/db";
 import { PLAN_LIMITS } from "@recipestock/shared";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   createImportJobRepository,
   type ImportJobAiUsageLimits,
   type ImportJobRepository,
 } from "../../src/import-jobs";
-
-vi.mock("@cloudflare/containers", () => ({
-  Container: class {},
-  getRandom: vi.fn(),
-}));
 
 const now = new Date("2026-07-14T00:00:00.000Z");
 

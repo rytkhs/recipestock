@@ -55,28 +55,6 @@ describe("createSourceExtractor", () => {
     expect(extract).toHaveBeenCalledTimes(1);
   });
 
-  it("ytdlp metadata clientをAdapterのcontextへ渡す", async () => {
-    const ytdlpMetadataClient = {
-      extract: vi.fn(),
-    };
-    const extract = vi.fn(async ({ ytdlpMetadataClient: contextClient }) => {
-      expect(contextClient).toBe(ytdlpMetadataClient);
-      return createResult();
-    });
-    const extractor = createSourceExtractor([createAdapter({ extract })]);
-
-    await expect(
-      extractor.tryExtract({
-        normalizedUrl: NORMALIZED_URL,
-        fetcher: async (url) => createPage(url),
-        fetchOptions: FETCH_OPTIONS,
-        ytdlpMetadataClient,
-      }),
-    ).resolves.toEqual(createResult());
-
-    expect(extract).toHaveBeenCalledTimes(1);
-  });
-
   it("unsafeな取得URLを拒否する", async () => {
     const fetcher = vi.fn();
     const extractor = createSourceExtractor([

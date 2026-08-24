@@ -1,4 +1,3 @@
-import { type YtDlpMetadataClient } from "../../../ytdlp-metadata";
 import { assertFetchedPageIsHtml, assertImportUrlAllowed } from "../policy";
 import { RecipeImportError, type RecipeImportFetcher } from "../types";
 import {
@@ -19,7 +18,6 @@ export type SourceExtractor = {
     normalizedUrl: string;
     fetcher: RecipeImportFetcher;
     fetchOptions: SourceExtractionFetchOptions;
-    ytdlpMetadataClient?: YtDlpMetadataClient;
     youtubeDataClient?: YouTubeDataClient;
   }): Promise<SourceExtractionResult | null>;
 };
@@ -27,13 +25,7 @@ export type SourceExtractor = {
 export const createSourceExtractor = (
   adapters: readonly SourceExtractionAdapter[] = [],
 ): SourceExtractor => ({
-  async tryExtract({
-    normalizedUrl,
-    fetcher,
-    fetchOptions,
-    ytdlpMetadataClient,
-    youtubeDataClient,
-  }) {
+  async tryExtract({ normalizedUrl, fetcher, fetchOptions, youtubeDataClient }) {
     const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
     const matchInput = { normalizedUrl, host };
     const adapter = adapters.find((candidate) => candidate.match(matchInput));
@@ -43,7 +35,6 @@ export const createSourceExtractor = (
       normalizedUrl,
       host,
       timeoutMs: fetchOptions.timeoutMs,
-      ytdlpMetadataClient,
       youtubeDataClient,
       async fetchHtml(url) {
         assertImportUrlAllowed(url);
