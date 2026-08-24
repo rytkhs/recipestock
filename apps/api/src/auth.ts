@@ -3,9 +3,9 @@ import { appUsers, createDb } from "@recipestock/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins/email-otp";
-import { Resend } from "resend";
 import { type BillingRepository, createBillingRepository } from "./billing";
 import { type Bindings } from "./env";
+import { createResendEmailSender } from "./lib/email/resend";
 import { createStripeBillingClient, type StripeBillingClient } from "./stripe-billing";
 
 export type AuthSession = {
@@ -72,7 +72,7 @@ export const syncStripeCustomerEmailForUser = async ({
 const createAuth = (env: Bindings) => {
   const db = createDb(env.DATABASE_URL);
   const billingRepository = createBillingRepository(db);
-  const resend = new Resend(env.RESEND_API_KEY);
+  const emailSender = createResendEmailSender(env.RESEND_API_KEY);
   const stripeClient = createStripeBillingClient(env);
 
   return betterAuth({
@@ -105,7 +105,7 @@ const createAuth = (env: Bindings) => {
       autoSignInAfterVerification: true,
       sendOnSignUp: false,
       async sendVerificationEmail({ user, url }) {
-        await resend.emails.send({
+        await emailSender.send({
           from: env.AUTH_EMAIL_FROM,
           to: user.email,
           subject: "Recipe Stock email verification",
@@ -127,7 +127,7 @@ const createAuth = (env: Bindings) => {
         otpLength: 6,
         sendVerificationOnSignUp: true,
         async sendVerificationOTP({ email, otp, type }) {
-          await resend.emails.send({
+          await emailSender.send({
             from: env.AUTH_EMAIL_FROM,
             to: email,
             subject:
