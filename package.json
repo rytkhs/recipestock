@@ -23,6 +23,9 @@
     "typescript": "^5.9.3"
   },
   "pnpm": {
+    "overrides": {
+      "@ai-sdk/provider-utils": "4.0.29"
+    },
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp",
