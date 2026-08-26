@@ -2,7 +2,7 @@ import * as schema from "@recipestock/db";
 import { appUsers, createDb } from "@recipestock/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { emailOTP } from "better-auth/plugins/email-otp";
+import { type EmailOTPOptions, emailOTP } from "better-auth/plugins/email-otp";
 import { type BillingRepository, createBillingRepository } from "./billing";
 import { type Bindings } from "./env";
 import { createResendEmailSender, type EmailSender } from "./lib/email/resend";
@@ -28,6 +28,8 @@ type AuthInstance = {
 };
 
 type AuthFactory = (env: Bindings) => AuthInstance;
+
+type SendVerificationOTPData = Parameters<EmailOTPOptions["sendVerificationOTP"]>[0];
 
 type StripeCustomerEmailSyncLogger = {
   error(...data: unknown[]): void;
@@ -84,7 +86,7 @@ export const createAuthEmailCallbacks = ({
       text: `Open this link to verify your Recipe Stock email address: ${url}`,
     });
   },
-  async sendVerificationOTP({ email, otp, type }: { email: string; otp: string; type: string }) {
+  async sendVerificationOTP({ email, otp, type }: SendVerificationOTPData) {
     await emailSender.send({
       from,
       to: email,

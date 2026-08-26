@@ -29,9 +29,11 @@ describe("createAuthEmailCallbacks", () => {
   });
 
   it.each([
+    ["sign-in", "Recipe Stock verification code"],
     ["email-verification", "Recipe Stock verification code"],
     ["forget-password", "Recipe Stock password reset code"],
-  ])("%s OTPを送る", async (type, subject) => {
+    ["change-email", "Recipe Stock verification code"],
+  ] as const)("%s OTPを送る", async (type, subject) => {
     const send = vi.fn<EmailSender["send"]>(async () => ({ id: "email-1" }));
     const callbacks = createAuthEmailCallbacks({
       emailSender: { send },
