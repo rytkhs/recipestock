@@ -5,7 +5,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { type BillingRepository, createBillingRepository } from "./billing";
 import { type Bindings } from "./env";
-import { createResendEmailSender } from "./lib/email/resend";
+import { createResendEmailSender, type EmailSender } from "./lib/email/resend";
 import { createStripeBillingClient, type StripeBillingClient } from "./stripe-billing";
 
 export type AuthSession = {
@@ -69,10 +69,42 @@ export const syncStripeCustomerEmailForUser = async ({
   }
 };
 
+export const createAuthEmailCallbacks = ({
+  emailSender,
+  from,
+}: {
+  emailSender: EmailSender;
+  from: string;
+}) => ({
+  async sendVerificationEmail({ user, url }: { user: { email: string }; url: string }) {
+    await emailSender.send({
+      from,
+      to: user.email,
+      subject: "Recipe Stock email verification",
+      text: `Open this link to verify your Recipe Stock email address: ${url}`,
+    });
+  },
+  async sendVerificationOTP({ email, otp, type }: { email: string; otp: string; type: string }) {
+    await emailSender.send({
+      from,
+      to: email,
+      subject:
+        type === "forget-password"
+          ? "Recipe Stock password reset code"
+          : "Recipe Stock verification code",
+      text: `Your Recipe Stock code is ${otp}.`,
+    });
+  },
+});
+
 const createAuth = (env: Bindings) => {
   const db = createDb(env.DATABASE_URL);
   const billingRepository = createBillingRepository(db);
   const emailSender = createResendEmailSender(env.RESEND_API_KEY);
+  const emailCallbacks = createAuthEmailCallbacks({
+    emailSender,
+    from: env.AUTH_EMAIL_FROM,
+  });
   const stripeClient = createStripeBillingClient(env);
 
   return betterAuth({
@@ -104,14 +136,7 @@ const createAuth = (env: Bindings) => {
     emailVerification: {
       autoSignInAfterVerification: true,
       sendOnSignUp: false,
-      async sendVerificationEmail({ user, url }) {
-        await emailSender.send({
-          from: env.AUTH_EMAIL_FROM,
-          to: user.email,
-          subject: "Recipe Stock email verification",
-          text: `Open this link to verify your Recipe Stock email address: ${url}`,
-        });
-      },
+      sendVerificationEmail: emailCallbacks.sendVerificationEmail,
     },
     socialProviders:
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
@@ -126,17 +151,7 @@ const createAuth = (env: Bindings) => {
       emailOTP({
         otpLength: 6,
         sendVerificationOnSignUp: true,
-        async sendVerificationOTP({ email, otp, type }) {
-          await emailSender.send({
-            from: env.AUTH_EMAIL_FROM,
-            to: email,
-            subject:
-              type === "forget-password"
-                ? "Recipe Stock password reset code"
-                : "Recipe Stock verification code",
-            text: `Your Recipe Stock code is ${otp}.`,
-          });
-        },
+        sendVerificationOTP: emailCallbacks.sendVerificationOTP,
       }),
     ],
     databaseHooks: {

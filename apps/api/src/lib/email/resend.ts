@@ -1,4 +1,16 @@
+import { z } from "zod";
+
 const RESEND_EMAILS_ENDPOINT = "https://api.resend.com/emails";
+const RESEND_USER_AGENT = "recipestock-api";
+
+const resendSendResponseSchema = z.strictObject({
+  id: z.string().min(1),
+});
+
+const resendErrorResponseSchema = z.object({
+  name: z.string().optional(),
+  message: z.string().optional(),
+});
 
 export type SendEmailParams = {
   from: string;
@@ -29,12 +41,24 @@ const describeFailure = async (response: Response) => {
   }
 
   try {
-    const parsed = JSON.parse(body) as { name?: unknown; message?: unknown };
-    const name = typeof parsed.name === "string" ? parsed.name : "unknown_error";
-    const message = typeof parsed.message === "string" ? parsed.message : body;
-    return `Resend responded with ${response.status} ${name}: ${message}`;
+    const parsed = resendErrorResponseSchema.safeParse(JSON.parse(body));
+    if (parsed.success) {
+      const name = parsed.data.name ?? "unknown_error";
+      const message = parsed.data.message ?? body;
+      return `Resend responded with ${response.status} ${name}: ${message}`;
+    }
   } catch {
-    return `Resend responded with ${response.status}: ${body}`;
+    // JSON以外のerror responseもstatusとbodyを残して診断できるようにする。
+  }
+
+  return `Resend responded with ${response.status}: ${body}`;
+};
+
+const readJsonResponse = async (response: Response) => {
+  try {
+    return await response.json();
+  } catch {
+    throw new EmailSendError("Resend returned a non-JSON response.", response.status);
   }
 };
 
@@ -55,6 +79,7 @@ export const createResendEmailSender = (apiKey: string): EmailSender => ({
         headers: {
           authorization: `Bearer ${apiKey}`,
           "content-type": "application/json",
+          "user-agent": RESEND_USER_AGENT,
         },
         body: JSON.stringify({ from, to, subject, text }),
       });
@@ -69,12 +94,12 @@ export const createResendEmailSender = (apiKey: string): EmailSender => ({
       throw new EmailSendError(await describeFailure(response), response.status);
     }
 
-    const payload = (await response.json()) as { id?: unknown };
+    const payload = resendSendResponseSchema.safeParse(await readJsonResponse(response));
 
-    if (typeof payload.id !== "string") {
+    if (!payload.success) {
       throw new EmailSendError("Resend returned a response without an email id.", response.status);
     }
 
-    return { id: payload.id };
+    return payload.data;
   },
 });

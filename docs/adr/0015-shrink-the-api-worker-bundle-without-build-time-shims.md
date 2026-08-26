@@ -8,7 +8,7 @@ API Worker の bundle は raw 4,709.5 KiB / gzip 811.75 KiB で、Cloudflare が
 
 `wrangler deploy --dry-run --metafile` が出力する esbuild metafile を集計したところ、寄与の大きい順に kysely 611.7 KiB、AI SDK 一式 775.4 KiB、Resend SDK 454.1 KiB、zod v4 の locales 273.3 KiB、web-push 257.3 KiB、OpenTelemetry 173.3 KiB、Stripe SDK 165.4 KiB だった。Issue が疑っていた `auth.ts` の top-level import は、`createAuthService` が遅延 factory であるため起動時の実行コストにはなっておらず、実体は bundle と parse のコストだった。一方で wrangler の minify が無効のままだった。
 
-そこで次の3つを採用する。wrangler の `minify` を有効にする。`upload_source_maps` は既に有効なので stack trace は復元できる。Resend は SDK をやめ、Email API へ直接 POST する client に置き換える。SDK は送信のほかに webhook 検証（svix）と受信 mail 解析（postal-mime）を抱えており、利用しているのは `emails.send` だけだった。`@ai-sdk/provider-utils` は `ai` 系と `@ai-sdk/groq` が別 version を引いて二重に bundle されていたため、pnpm の overrides で寄せる。結果は raw 2,046.4 KiB / gzip 532.97 KiB、`startup_time_ms` は 124〜132 ms である。
+そこで次の3つを採用する。wrangler の `minify` を有効にする。`upload_source_maps` は既に有効なので stack trace は復元できる。Resend は SDK をやめ、Email API へ直接 POST する client に置き換える。SDK は送信のほかに webhook 検証（svix）と受信 mail 解析（postal-mime）を抱えており、利用しているのは `emails.send` だけだった。`@ai-sdk/provider-utils` は `ai` 系と `@ai-sdk/groq` が別 version を引いて二重に bundle されていたため、pnpm の overrides で 4.0.29 に寄せる。結果は raw 2,019.84 KiB / gzip 524.66 KiB、bundle module 数は 1,043 である。override 修正前の build で計測した `startup_time_ms` は 124〜132 ms だったが、最終的な bundle では再計測していない。
 
 Resend client は送信失敗を throw する。SDK は失敗を `{ data, error }` で返し、呼び出し側はそれを読んでいなかったため、送信失敗が Better Auth へ伝わらず sign-up が成功したように見えていた。この経路は throw する側が正しい。
 

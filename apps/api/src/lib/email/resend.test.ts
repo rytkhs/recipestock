@@ -26,6 +26,7 @@ describe("Resend email sender", () => {
     expect(url).toBe("https://api.resend.com/emails");
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer test-key");
+    expect((init.headers as Record<string, string>)["user-agent"]).toBe("recipestock-api");
     expect(JSON.parse(init.body as string)).toEqual(params);
   });
 
@@ -56,11 +57,36 @@ describe("Resend email sender", () => {
     expect((error as EmailSendError).message).toContain("network down");
   });
 
+  it("APIのerror responseがJSONでなくてもEmailSendErrorをthrowする", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("upstream unavailable", { status: 503 }),
+    );
+
+    const error = await createResendEmailSender("test-key")
+      .send(params)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(EmailSendError);
+    expect((error as EmailSendError).status).toBe(503);
+    expect((error as EmailSendError).message).toContain("upstream unavailable");
+  });
+
   it("email idを含まない応答をエラーとして扱う", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
 
     await expect(createResendEmailSender("test-key").send(params)).rejects.toBeInstanceOf(
       EmailSendError,
     );
+  });
+
+  it("success responseがJSONでなければEmailSendErrorをthrowする", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("not-json"));
+
+    const error = await createResendEmailSender("test-key")
+      .send(params)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(EmailSendError);
+    expect((error as EmailSendError).status).toBe(200);
   });
 });
