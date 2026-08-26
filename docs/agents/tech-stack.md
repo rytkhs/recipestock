@@ -35,7 +35,7 @@ Browser / PWA
 | Database connection | `@neondatabase/serverless` |
 | Image storage | Cloudflare R2 |
 | Auth | Better Auth |
-| Email | Resend |
+| Email | Resend Email API（SDKは使わずHTTPを直接呼ぶ。ADR 0015） |
 | Billing | Stripe |
 | AI | Vercel AI SDK + workers-ai-provider + Cloudflare Workers AI + Cloudflare AI Gateway |
 | PWA | Web App Manifest + Workbox via `vite-plugin-pwa` `injectManifest` |

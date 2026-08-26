@@ -1,6 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+overrides:
+  "@ai-sdk/provider-utils": 4.0.29
 allowBuilds:
   esbuild: true
   sharp: true
