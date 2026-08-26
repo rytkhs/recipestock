@@ -1,6 +1,79 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAuthService, syncStripeCustomerEmailForUser } from "./auth";
+import {
+  createAuthEmailCallbacks,
+  createAuthService,
+  syncStripeCustomerEmailForUser,
+} from "./auth";
 import { type Bindings } from "./env";
+import { type EmailSender } from "./lib/email/resend";
+
+describe("createAuthEmailCallbacks", () => {
+  it("email verification linkを送る", async () => {
+    const send = vi.fn<EmailSender["send"]>(async () => ({ id: "email-1" }));
+    const callbacks = createAuthEmailCallbacks({
+      emailSender: { send },
+      from: "Recipe Stock <login@example.com>",
+    });
+
+    await callbacks.sendVerificationEmail({
+      user: { email: "user@example.com" },
+      url: "https://recipestock.example/verify/token",
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      from: "Recipe Stock <login@example.com>",
+      to: "user@example.com",
+      subject: "Recipe Stock email verification",
+      text: "Open this link to verify your Recipe Stock email address: https://recipestock.example/verify/token",
+    });
+  });
+
+  it.each([
+    ["sign-in", "Recipe Stock verification code"],
+    ["email-verification", "Recipe Stock verification code"],
+    ["forget-password", "Recipe Stock password reset code"],
+    ["change-email", "Recipe Stock verification code"],
+  ] as const)("%s OTPを送る", async (type, subject) => {
+    const send = vi.fn<EmailSender["send"]>(async () => ({ id: "email-1" }));
+    const callbacks = createAuthEmailCallbacks({
+      emailSender: { send },
+      from: "Recipe Stock <login@example.com>",
+    });
+
+    await callbacks.sendVerificationOTP({
+      email: "user@example.com",
+      otp: "123456",
+      type,
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      from: "Recipe Stock <login@example.com>",
+      to: "user@example.com",
+      subject,
+      text: "Your Recipe Stock code is 123456.",
+    });
+  });
+
+  it("email送信失敗を認証処理へ伝播する", async () => {
+    const error = new Error("email send failed");
+    const callbacks = createAuthEmailCallbacks({
+      emailSender: {
+        send: vi.fn<EmailSender["send"]>(async () => {
+          throw error;
+        }),
+      },
+      from: "Recipe Stock <login@example.com>",
+    });
+
+    await expect(
+      callbacks.sendVerificationOTP({
+        email: "user@example.com",
+        otp: "123456",
+        type: "email-verification",
+      }),
+    ).rejects.toBe(error);
+  });
+});
 
 describe("syncStripeCustomerEmailForUser", () => {
   it("Stripe Customer未作成ユーザーではStripe APIを呼ばない", async () => {
