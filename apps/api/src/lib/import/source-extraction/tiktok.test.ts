@@ -20,27 +20,27 @@ describe("TikTok source extraction URL handling", () => {
   it.each([
     {
       url: VIDEO_URL,
-      target: { kind: "post", contentId: CONTENT_ID, username: USERNAME },
+      target: { kind: "post", contentId: CONTENT_ID },
     },
     {
       url: PHOTO_URL,
-      target: { kind: "post", contentId: CONTENT_ID, username: USERNAME },
+      target: { kind: "post", contentId: CONTENT_ID },
     },
     {
       url: `${VIDEO_URL}/`,
-      target: { kind: "post", contentId: CONTENT_ID, username: USERNAME },
+      target: { kind: "post", contentId: CONTENT_ID },
     },
     {
       url: `${VIDEO_URL}?is_from_webapp=1&sender_device=pc&_r=1&_t=ZS-997lXyspAr1`,
-      target: { kind: "post", contentId: CONTENT_ID, username: USERNAME },
+      target: { kind: "post", contentId: CONTENT_ID },
     },
     {
       url: `https://tiktok.com/@${USERNAME}/video/${CONTENT_ID}`,
-      target: { kind: "post", contentId: CONTENT_ID, username: USERNAME },
+      target: { kind: "post", contentId: CONTENT_ID },
     },
     {
       url: `https://m.tiktok.com/@${USERNAME}/video/${CONTENT_ID}`,
-      target: { kind: "post", contentId: CONTENT_ID, username: USERNAME },
+      target: { kind: "post", contentId: CONTENT_ID },
     },
     {
       url: "https://vt.tiktok.com/ZSVHJ23b9/",
@@ -305,20 +305,39 @@ describe("TikTok source extraction adapter", () => {
     expect(result.source.sourceUrl).toBe(VIDEO_URL);
   });
 
-  it("uniqueIdが無ければURLのusernameでcanonicalを組み立ててnickNameをauthorにする", async () => {
-    const result = await tiktokSourceExtractionAdapter.extract(
-      createContext({
-        fetchHtml: createFetchHtml(
-          createTikTokEmbedHtml(
-            createTikTokVideoData({ text: "材料\n卵 2個", uniqueId: "", nickName: "あす" }),
+  it.each([
+    { uniqueId: "" },
+    { uniqueId: "not a username" },
+  ])("uniqueIdが取れない場合はextraction_failedにする: $uniqueId", async ({ uniqueId }) => {
+    await expect(
+      tiktokSourceExtractionAdapter.extract(
+        createContext({
+          fetchHtml: createFetchHtml(
+            createTikTokEmbedHtml(createTikTokVideoData({ text: "材料\n卵 2個", uniqueId })),
           ),
-        ),
-      }),
-    );
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
 
-    expect(result.source.sourceUrl).toBe(VIDEO_URL);
-    expect(result.input.markdownContent).toContain("# Post by あす");
-    expect(result.input.markdownContent).toContain("Author: あす");
+  it("displayImagesがあってもurlListから画像を取れない場合はextraction_failedにする", async () => {
+    await expect(
+      tiktokSourceExtractionAdapter.extract(
+        createContext({
+          normalizedUrl: PHOTO_URL,
+          fetchHtml: createFetchHtml(
+            createTikTokEmbedHtml({
+              ...createTikTokVideoData({ text: "作り置き5品" }),
+              imagePostInfo: { displayImages: [{ height: 1574, width: 1180, urlList: [] }] },
+            }),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
   });
 
   it("短縮URLをwatch URLに解決してからembedを取得する", async () => {
@@ -448,7 +467,6 @@ const createTikTokVideoData = ({
   id = CONTENT_ID,
   text = "",
   uniqueId = USERNAME,
-  nickName = "あす",
   covers = [],
   coversOrigin = [],
   displayImages,
@@ -456,7 +474,6 @@ const createTikTokVideoData = ({
   id?: string;
   text?: string;
   uniqueId?: string;
-  nickName?: string;
   covers?: string[];
   coversOrigin?: string[];
   displayImages?: string[];
@@ -469,7 +486,6 @@ const createTikTokVideoData = ({
   },
   authorInfos: {
     uniqueId,
-    nickName,
   },
   ...(displayImages
     ? {

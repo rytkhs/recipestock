@@ -25,7 +25,6 @@ type TikTokMediaKind = "video" | "photo";
 type TikTokPostTarget = {
   kind: "post";
   contentId: string;
-  username: string;
 };
 
 export type TikTokUrlTarget =
@@ -37,7 +36,6 @@ export type TikTokUrlTarget =
 
 type TikTokAuthorInfos = {
   uniqueId?: unknown;
-  nickName?: unknown;
 };
 
 type TikTokItemInfos = {
@@ -56,7 +54,6 @@ type TikTokVideoData = {
 };
 
 type TikTokProjection = {
-  mediaKind: TikTokMediaKind;
   canonicalUrl: string;
   title: string;
   author: string;
@@ -99,7 +96,7 @@ export const tiktokSourceExtractionAdapter: SourceExtractionAdapter = {
       );
     }
 
-    const projection = projectTikTokVideoData(post, videoData);
+    const projection = projectTikTokVideoData(post.contentId, videoData);
     if (!projection.caption && projection.referenceImageUrls.length === 0) {
       throw new RecipeImportError("extraction_failed", "TikTok caption could not be extracted.");
     }
@@ -159,13 +156,11 @@ export const getTikTokUrlTarget = (rawUrl: string): TikTokUrlTarget | null => {
 
   const [author, route, contentId] = pathnameParts;
   if (!author.startsWith("@")) return null;
-
-  const username = author.slice(1);
-  if (!TIKTOK_USERNAME.test(username)) return null;
+  if (!TIKTOK_USERNAME.test(author.slice(1))) return null;
   if (!TIKTOK_POST_ROUTES.has(route)) return null;
   if (!TIKTOK_CONTENT_ID.test(contentId)) return null;
 
-  return { kind: "post", contentId, username };
+  return { kind: "post", contentId };
 };
 
 export const createTikTokCanonicalUrl = ({
@@ -224,59 +219,69 @@ const extractTikTokVideoData = (html: string, contentId: string): TikTokVideoDat
 };
 
 const projectTikTokVideoData = (
-  post: TikTokPostTarget,
+  contentId: string,
   videoData: TikTokVideoData,
 ): TikTokProjection => {
-  const uniqueId = normalizeString(readString(videoData.authorInfos?.uniqueId));
-  const nickName = normalizeString(readString(videoData.authorInfos?.nickName));
-  const author = uniqueId || nickName;
-  const title = author ? `Post by ${author}` : "TikTok post";
+  const author = normalizeString(readString(videoData.authorInfos?.uniqueId));
+  if (!TIKTOK_USERNAME.test(author)) {
+    throw new RecipeImportError("extraction_failed", "TikTok author could not be extracted.");
+  }
+
+  const title = `Post by ${author}`;
   const caption = normalizeString(readString(videoData.itemInfos?.text));
-  const displayImageUrls = readTikTokDisplayImageUrls(videoData);
-  const mediaKind: TikTokMediaKind = displayImageUrls.length > 0 ? "photo" : "video";
-  const coverImageUrl =
-    mediaKind === "photo" ? displayImageUrls[0] : selectTikTokCoverImage(videoData.itemInfos);
-  const referenceImageUrls = mediaKind === "photo" ? displayImageUrls : [];
-  const imageCandidates =
-    mediaKind === "photo"
-      ? displayImageUrls.map((url, position) => ({
-          id: `tiktok_image_${position}`,
-          url,
-          alt: `${title} image ${position + 1}`,
-          position,
-        }))
-      : coverImageUrl
+  const displayImages = readTikTokDisplayImages(videoData);
+  const mediaKind: TikTokMediaKind = displayImages.length > 0 ? "photo" : "video";
+
+  if (mediaKind === "video") {
+    const coverImageUrl = selectTikTokCoverImage(videoData.itemInfos);
+
+    return {
+      canonicalUrl: createTikTokCanonicalUrl({ username: author, mediaKind, contentId }),
+      title,
+      author,
+      caption,
+      imageCandidates: coverImageUrl
         ? [{ id: "tiktok_cover", url: coverImageUrl, alt: `${title} cover`, position: 0 }]
-        : [];
+        : [],
+      ...(coverImageUrl ? { coverImageUrl } : {}),
+      referenceImageUrls: [],
+    };
+  }
+
+  const displayImageUrls = uniqueImageUrls(displayImages.map(readTikTokDisplayImageUrl));
+  if (displayImageUrls.length === 0) {
+    throw new RecipeImportError(
+      "extraction_failed",
+      "TikTok photo carousel images could not be extracted.",
+    );
+  }
 
   return {
-    mediaKind,
-    canonicalUrl: createTikTokCanonicalUrl({
-      username: TIKTOK_USERNAME.test(uniqueId) ? uniqueId : post.username,
-      mediaKind,
-      contentId: post.contentId,
-    }),
+    canonicalUrl: createTikTokCanonicalUrl({ username: author, mediaKind, contentId }),
     title,
     author,
     caption,
-    imageCandidates,
-    ...(coverImageUrl ? { coverImageUrl } : {}),
-    referenceImageUrls,
+    imageCandidates: displayImageUrls.map((url, position) => ({
+      id: `tiktok_image_${position}`,
+      url,
+      alt: `${title} image ${position + 1}`,
+      position,
+    })),
+    coverImageUrl: displayImageUrls[0],
+    referenceImageUrls: displayImageUrls,
   };
 };
 
-const readTikTokDisplayImageUrls = (videoData: TikTokVideoData) => {
+const readTikTokDisplayImages = (videoData: TikTokVideoData) => {
   const displayImages = videoData.imagePostInfo?.displayImages;
-  if (!Array.isArray(displayImages)) return [];
+  return Array.isArray(displayImages) ? displayImages : [];
+};
 
-  return uniqueImageUrls(
-    displayImages.map((displayImage) => {
-      if (!isRecord(displayImage)) return undefined;
-      if (!Array.isArray(displayImage.urlList)) return undefined;
+const readTikTokDisplayImageUrl = (displayImage: unknown) => {
+  if (!isRecord(displayImage)) return undefined;
+  if (!Array.isArray(displayImage.urlList)) return undefined;
 
-      return displayImage.urlList.find(isHttpsUrl);
-    }),
-  );
+  return displayImage.urlList.find(isHttpsUrl);
 };
 
 const selectTikTokCoverImage = (itemInfos: TikTokItemInfos | undefined) => {
