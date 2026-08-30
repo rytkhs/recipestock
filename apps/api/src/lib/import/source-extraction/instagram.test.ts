@@ -393,13 +393,89 @@ describe("Instagram source extraction adapter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("captionが空の場合はextraction_failedにする", async () => {
+  it("captionが空でも単一画像があれば成功する", async () => {
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createInstagramEmbedHtml({
+            shortcode_media: createInstagramMedia({ caption: "   " }),
+          }),
+        ),
+      }),
+    );
+
+    expect(result.input.markdownContent).toBe(
+      [
+        "# Post by mizuki_31cafe",
+        "",
+        "Source: Instagram",
+        `URL: ${CANONICAL_URL}`,
+        "Author: mizuki_31cafe",
+      ].join("\n"),
+    );
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: "https://cdn.example.com/cover.jpg",
+      referenceImageUrls: ["https://cdn.example.com/cover.jpg"],
+    });
+  });
+
+  it("captionが空でもcarouselに静止画像があれば成功する", async () => {
+    const result = await instagramSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createInstagramEmbedHtml({
+            shortcode_media: createInstagramMedia({
+              caption: "",
+              children: [
+                createInstagramMediaNode({
+                  isVideo: true,
+                  displayUrl: "https://cdn.example.com/video-cover.jpg",
+                }),
+                createInstagramMediaNode({ displayUrl: "https://cdn.example.com/image.jpg" }),
+              ],
+            }),
+          }),
+        ),
+      }),
+    );
+
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: "https://cdn.example.com/video-cover.jpg",
+      referenceImageUrls: ["https://cdn.example.com/image.jpg"],
+    });
+  });
+
+  it.each([
+    { name: "単一動画投稿", normalizedUrl: CANONICAL_URL },
+    { name: "Reel", normalizedUrl: REEL_CANONICAL_URL },
+  ])("captionが空の$nameはextraction_failedにする", async ({ normalizedUrl }) => {
+    await expect(
+      instagramSourceExtractionAdapter.extract(
+        createContext({
+          normalizedUrl,
+          fetchHtml: createFetchHtml(
+            createInstagramEmbedHtml({
+              shortcode_media: createInstagramMedia({
+                caption: "",
+                isVideo: true,
+                displayUrl: "https://cdn.example.com/video-cover.jpg",
+              }),
+            }),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it("captionも画像もない場合はextraction_failedにする", async () => {
     await expect(
       instagramSourceExtractionAdapter.extract(
         createContext({
           fetchHtml: createFetchHtml(
             createInstagramEmbedHtml({
-              shortcode_media: createInstagramMedia({ caption: "   " }),
+              shortcode_media: createInstagramMedia({ caption: "", displayUrl: null }),
             }),
           ),
         }),

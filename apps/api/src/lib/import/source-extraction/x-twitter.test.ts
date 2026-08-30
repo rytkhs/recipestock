@@ -374,6 +374,39 @@ describe("X/Twitter source extraction adapter", () => {
     expect(result.imageCandidates.map((candidate) => candidate.url)).toEqual([imageUrl]);
   });
 
+  it("本文が空でも静止画像があれば成功する", async () => {
+    const imageUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg";
+    const result = await xTwitterSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createPage(CANONICAL_URL, `<html><body>${imageUrl}</body></html>`),
+        ),
+      }),
+    );
+
+    expect(result.input.markdownContent).toBe(`Source: X\nURL: ${CANONICAL_URL}`);
+    expect(result.imagePlacement).toEqual({
+      coverImageUrl: imageUrl,
+      referenceImageUrls: [imageUrl],
+    });
+  });
+
+  it("本文が空で動画thumbnailしかない場合はextraction_failedにする", async () => {
+    const thumbnailUrl = "https://pbs.twimg.com/amplify_video_thumb/2070/img/abc.jpg";
+
+    await expect(
+      xTwitterSourceExtractionAdapter.extract(
+        createContext({
+          fetchHtml: createFetchHtml(
+            createPage(CANONICAL_URL, `<html><body>${thumbnailUrl}</body></html>`),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
   it("本文がない場合はextraction_failedにする", async () => {
     await expect(
       xTwitterSourceExtractionAdapter.extract(

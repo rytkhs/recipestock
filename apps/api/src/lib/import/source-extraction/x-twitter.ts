@@ -1,4 +1,5 @@
 import { type FetchedImportPage, RecipeImportError } from "../types";
+import { hasUsableSocialEvidence } from "./social-evidence";
 import {
   type SourceExtractionAdapter,
   type SourceExtractionContext,
@@ -93,13 +94,6 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
       ? ""
       : rawFallbackPostText;
     const postText = hasPrimaryPostText ? primaryPostText : fallbackPostText;
-    if (!postText) {
-      throw new RecipeImportError(
-        "extraction_failed",
-        "X/Twitter post text could not be extracted.",
-      );
-    }
-
     const media = extractXTwitterMedia(html);
     const imageCandidates = media.map((item, index) => ({
       id: item.kind === "image" ? `x_image_${index}` : `x_video_thumbnail_${index}`,
@@ -112,6 +106,12 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
     const firstVideoThumbnail = media.find((item) => item.kind === "videoThumbnail")?.url;
     const coverImageUrl = imageUrls[0] ?? firstVideoThumbnail;
     const referenceImageUrls = imageUrls.length > 0 ? imageUrls : [];
+    if (!hasUsableSocialEvidence({ text: postText, referenceImageUrls })) {
+      throw new RecipeImportError(
+        "extraction_failed",
+        "X/Twitter post text or images could not be extracted.",
+      );
+    }
 
     return {
       promptProfile: "social",
@@ -120,7 +120,7 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
           finalUrl: source.canonicalUrl,
           host: "x.com",
         },
-        markdownContent: buildXTwitterMarkdownContent(postText),
+        markdownContent: buildXTwitterMarkdownContent({ postText, source }),
       },
       imageCandidates,
       ...(coverImageUrl || referenceImageUrls.length > 0
@@ -478,4 +478,14 @@ const isPrivateOrUnavailableHtml = (html: string) => {
   );
 };
 
-const buildXTwitterMarkdownContent = (postText: string) => postText.trim();
+const buildXTwitterMarkdownContent = ({
+  postText,
+  source,
+}: {
+  postText: string;
+  source: XTwitterSource;
+}) => {
+  if (postText) return postText.trim();
+
+  return [`Source: ${X_SOURCE_NAME}`, `URL: ${source.canonicalUrl}`].join("\n");
+};
