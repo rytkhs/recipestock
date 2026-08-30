@@ -3,6 +3,7 @@ import {
   RecipeImportError,
   type RecipeImportImageCandidate,
 } from "../types";
+import { hasUsableSocialEvidence } from "./social-evidence";
 import {
   type SourceExtractionAdapter,
   type SourceExtractionContext,
@@ -97,7 +98,12 @@ export const tiktokSourceExtractionAdapter: SourceExtractionAdapter = {
     }
 
     const projection = projectTikTokVideoData(post.contentId, videoData);
-    if (!projection.caption && projection.referenceImageUrls.length === 0) {
+    if (
+      !hasUsableSocialEvidence({
+        text: projection.caption,
+        referenceImageUrls: projection.referenceImageUrls,
+      })
+    ) {
       throw new RecipeImportError("extraction_failed", "TikTok caption could not be extracted.");
     }
 

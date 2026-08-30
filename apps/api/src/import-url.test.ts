@@ -881,6 +881,70 @@ describe("URL import flow", () => {
     expect(aiInput?.markdownContent).not.toContain(imageUrl);
   });
 
+  it("X/Twitter画像投稿は本文が空でも画像だけでRecipeを作る", async () => {
+    const imageUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg";
+    const fetcher = vi.fn(async (url: string) => ({
+      finalUrl: url,
+      contentType: "text/html",
+      body: createXTwitterHtml({ description: "", body: imageUrl }),
+    }));
+    const aiNormalize = vi.fn(async () => ({
+      title: null,
+      ingredientGroups: [],
+      steps: [],
+    }));
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: "https://x.com/HG7654321/status/2071084010705727927",
+        userId: "user_123",
+        env: {
+          AI_TEXT_MODEL: "@cf/test",
+        },
+        usageRepository: createUsageRepositoryStub(),
+        fetcher,
+        deterministicImporter: {
+          async tryImport() {
+            return null;
+          },
+        },
+        aiProvider: {
+          normalize: aiNormalize,
+        },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: {
+        title: "X",
+        coverImage: {
+          type: "externalImageUrl",
+          url: imageUrl,
+        },
+        referenceImages: [
+          {
+            type: "externalImageUrl",
+            url: imageUrl,
+          },
+        ],
+        ingredientGroups: [],
+        steps: [],
+      },
+    });
+
+    expect(aiNormalize).toHaveBeenCalledWith({
+      promptProfile: "social",
+      input: {
+        source: {
+          finalUrl: "https://x.com/HG7654321/status/2071084010705727927",
+          host: "x.com",
+        },
+        markdownContent: [
+          "Source: X",
+          "URL: https://x.com/HG7654321/status/2071084010705727927",
+        ].join("\n"),
+      },
+    });
+  });
+
   it("X/Twitter source extraction失敗時はgeneric HTML conversionへfallbackしない", async () => {
     const aiNormalize = vi.fn();
     const fetcher = vi.fn(async (url: string) => ({
