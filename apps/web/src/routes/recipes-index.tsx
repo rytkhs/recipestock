@@ -392,8 +392,11 @@ export const RecipesIndexRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-4 py-3 sm:py-8 sm:px-6 lg:px-10">
-      <form className="mt-2 flex min-w-0 items-end gap-3" onSubmit={submitSearch}>
+    <section className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10">
+      <form
+        className="-mx-4 sticky top-14 z-30 flex min-w-0 items-end gap-3 border-b border-brand-line-soft bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10"
+        onSubmit={submitSearch}
+      >
         <div className="relative min-w-0 flex-1">
           <TextField className="min-w-0">
             <Label className="sr-only">検索</Label>

@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
-import { Header, MobileBottomNav } from "../components/header";
+import { Header, MobileAddRecipeFab } from "../components/header";
 import {
   ImportUrlSkeleton,
   LoadingStatus,
@@ -97,18 +97,23 @@ const ProtectedLayout = () => {
   }, [access.status, currentHref, currentPathname, navigate]);
 
   const isReady = access.status === "ready";
+  const isHome = currentPathname === "/recipes";
 
   return (
     <>
-      <Header variant={isReady ? "private" : "brand"} />
-      <main className={isReady ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"}>
+      <Header isMobileVisible={isHome} variant={isReady ? "private" : "brand"} />
+      <main
+        className={
+          isReady && isHome ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"
+        }
+      >
         {access.status === "pending" ? <ProtectedRouteSkeleton /> : null}
         {access.status === "ready" ? <Outlet /> : null}
         {access.status === "unavailable" ? (
           <ConnectionUnavailable isRetrying={access.isRetrying} onRetry={access.retry} />
         ) : null}
       </main>
-      {isReady ? <MobileBottomNav /> : null}
+      {isReady && isHome ? <MobileAddRecipeFab /> : null}
     </>
   );
 };

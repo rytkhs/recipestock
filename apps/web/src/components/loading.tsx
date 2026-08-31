@@ -1,5 +1,6 @@
 import { Skeleton } from "@heroui/react";
 import { type ReactNode } from "react";
+import { ScreenTopBarFrame } from "./screen-top-bar";
 
 const skeletonBaseClass =
   "overflow-hidden rounded-[14px] border border-brand-line-soft/50 bg-brand-paper-muted";
@@ -165,13 +166,11 @@ export const RecipeFormSkeleton = () => (
     role="status"
   >
     <span className="sr-only">レシピ編集フォームを読み込み中</span>
-    <div className="sticky top-0 z-20 border-b border-brand-line-soft bg-brand-cream/95 px-3 py-2.5 backdrop-blur-md sm:top-3 sm:mt-3 sm:rounded-[20px] sm:border sm:px-5 sm:py-3 sm:shadow-pantry-sm">
-      <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_auto] sm:gap-3">
-        <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
-        <SkeletonBlock className="mx-auto h-5 w-40" />
-        <SkeletonBlock className="h-10 w-20 rounded-full sm:h-11" />
-      </div>
-    </div>
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-40" />
+      <SkeletonBlock className="h-10 w-20 rounded-full sm:h-11" />
+    </ScreenTopBarFrame>
 
     <div className="mt-4 grid gap-5 px-3 sm:mt-6 sm:px-0">
       <section className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-4 shadow-pantry-sm sm:p-5">
@@ -225,39 +224,41 @@ export const RecipeFormSkeleton = () => (
 export const ImportUrlSkeleton = () => (
   <section
     aria-label="URL取り込み画面を読み込み中"
-    className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-3xl px-0 pb-10 sm:px-6 lg:px-10"
     role="status"
   >
-    <div className="mb-2 flex items-center gap-3">
-      <SkeletonBlock className="h-10 w-10 rounded-full" />
-      <div className="min-w-0 flex-1">
-        <SkeletonBlock className="h-7 w-44 rounded-[16px]" />
-        <SkeletonBlock className="mt-2 h-4 w-full max-w-md" />
-      </div>
-    </div>
-    <section className="mt-6 rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <div>
-          <SkeletonBlock className="h-4 w-12" />
-          <SkeletonBlock className="mt-2 h-11 w-full" />
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-40" />
+      <span aria-hidden="true" className="block h-10 w-10 sm:h-11 sm:w-11" />
+    </ScreenTopBarFrame>
+    <div className="mt-4 px-4 sm:mt-6 sm:px-0">
+      <SkeletonBlock className="h-4 w-full max-w-md" />
+      <section className="mt-6 rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div>
+            <SkeletonBlock className="h-4 w-12" />
+            <SkeletonBlock className="mt-2 h-11 w-full" />
+          </div>
+          <SkeletonBlock className="h-11 w-full rounded-full sm:w-24" />
         </div>
-        <SkeletonBlock className="h-11 w-full rounded-full sm:w-24" />
-      </div>
-    </section>
+      </section>
+    </div>
   </section>
 );
 
 export const SettingsSkeleton = () => (
   <section
     aria-label="設定画面を読み込み中"
-    className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-[1120px] px-0 pb-10 sm:px-6 lg:px-10"
     role="status"
   >
-    <div className="mb-6 flex items-center gap-3">
-      <SkeletonBlock className="h-10 w-10 rounded-full" />
-      <SkeletonBlock className="h-7 w-20 rounded-[16px]" />
-    </div>
-    <div className="grid gap-5">
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-24" />
+      <span aria-hidden="true" className="block h-10 w-10 sm:h-11 sm:w-11" />
+    </ScreenTopBarFrame>
+    <div className="mt-4 grid gap-5 px-4 sm:mt-6 sm:px-0">
       <SectionSkeleton titleWidth="w-28">
         <div className="grid gap-6 md:grid-cols-2">
           <div className="grid gap-4">

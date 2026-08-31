@@ -4,9 +4,10 @@ import {
   Link as LinkIcon,
   List as ListIcon,
   PencilSimple,
+  Plus,
   UserCircle,
 } from "@phosphor-icons/react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
 const PublicNav = () => (
@@ -27,16 +28,18 @@ const AddRecipeMenu = ({
   "aria-label": ariaLabel,
   children,
   className,
+  "data-testid": testId,
 }: {
   "aria-label"?: string;
   children: ReactNode;
   className: string;
+  "data-testid"?: string;
 }) => {
   const navigate = useNavigate();
 
   return (
     <Dropdown>
-      <Dropdown.Trigger aria-label={ariaLabel} className={className}>
+      <Dropdown.Trigger aria-label={ariaLabel} className={className} data-testid={testId}>
         {children}
       </Dropdown.Trigger>
       <Dropdown.Popover className="min-w-56 rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
@@ -81,14 +84,14 @@ const AddRecipeMenu = ({
 };
 
 const AppNav = () => (
-  <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-x-1 gap-y-2">
-    <AddRecipeMenu className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-brand-sage px-3 font-semibold text-sm text-white hover:bg-brand-sage-dark">
+  <nav aria-label="Main navigation" className="flex items-center gap-x-1">
+    <AddRecipeMenu className="hidden h-8 items-center justify-center gap-1.5 rounded-full bg-brand-sage px-3 font-semibold text-sm text-white hover:bg-brand-sage-dark sm:inline-flex">
       <CookingPot size={16} weight="bold" />
       レシピ追加
     </AddRecipeMenu>
     <Link
       activeProps={{ className: "text-brand-sage font-semibold" }}
-      className="no-underline text-brand-walnut text-sm"
+      className="hidden no-underline text-brand-walnut text-sm sm:block"
       to="/recipes"
     >
       <Button className="rounded-full text-sm gap-1.5" size="sm" variant="ghost">
@@ -98,88 +101,48 @@ const AppNav = () => (
     </Link>
     <Link
       activeProps={{ className: "text-brand-sage font-semibold" }}
+      aria-label="アカウント"
       className="no-underline text-brand-walnut text-sm"
       to="/settings"
     >
-      <Button className="rounded-full text-sm gap-1.5" size="sm" variant="ghost">
-        <UserCircle size={16} weight="bold" />
-        アカウント
+      <Button
+        className="h-10 w-10 rounded-full text-sm gap-1.5 sm:h-8 sm:w-auto"
+        size="sm"
+        variant="ghost"
+      >
+        <UserCircle className="size-6 sm:size-4" weight="bold" />
+        <span className="hidden sm:inline">アカウント</span>
       </Button>
     </Link>
   </nav>
 );
 
-const MobileBottomNavLink = ({
-  isActive,
-  icon,
-  label,
-  to,
-}: {
-  isActive: boolean;
-  icon: ReactNode;
-  label: string;
-  to: "/recipes" | "/settings";
-}) => (
-  <Link
-    aria-current={isActive ? "page" : undefined}
-    className={`group relative flex h-12 w-22 flex-col items-center justify-center gap-0.5 rounded-full no-underline transition-all duration-200 ${
-      isActive ? "text-brand-sage-dark" : "text-brand-muted hover:text-brand-walnut"
-    }`}
-    to={to}
+export const MobileAddRecipeFab = () => (
+  <AddRecipeMenu
+    aria-label="レシピ追加"
+    data-testid="add-recipe-fab"
+    className="fixed right-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-sage text-white shadow-lg shadow-brand-sage/40 transition-all duration-200 hover:scale-105 hover:bg-brand-sage-dark sm:hidden"
   >
-    <div
-      className={`relative z-10 transition-transform duration-300 ${isActive ? "[transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] scale-110 -translate-y-1" : "ease-out scale-100 group-hover:scale-110"}`}
-    >
-      {icon}
-    </div>
-    <span
-      className={`relative z-10 text-[10px] font-bold tracking-wide transition-opacity duration-200 ${isActive ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
-    >
-      {label}
-    </span>
-  </Link>
+    <Plus size={26} weight="bold" />
+  </AddRecipeMenu>
 );
 
-export const MobileBottomNav = () => {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+export const Header = ({
+  isMobileVisible = true,
+  variant,
+}: {
+  isMobileVisible?: boolean;
+  variant: "brand" | "public" | "private";
+}) => {
+  const isAppChrome = variant === "private" || variant === "brand";
 
-  return (
-    <nav
-      aria-label="Mobile navigation"
-      className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-max -translate-x-1/2 rounded-full border border-white/60 bg-brand-paper/85 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_16px_32px_-8px_rgba(0,0,0,0.15)] backdrop-blur-xl sm:hidden"
-    >
-      <div className="flex items-center gap-2 px-1">
-        <MobileBottomNavLink
-          icon={<ListIcon size={24} weight={pathname.startsWith("/recipes") ? "fill" : "bold"} />}
-          isActive={pathname.startsWith("/recipes")}
-          label="レシピ"
-          to="/recipes"
-        />
-        <AddRecipeMenu
-          aria-label="レシピ追加"
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-sage text-white shadow-lg shadow-brand-sage/40 transition-all duration-200 hover:scale-105 hover:bg-brand-sage-dark"
-        >
-          <CookingPot size={24} weight="fill" />
-        </AddRecipeMenu>
-        <MobileBottomNavLink
-          icon={
-            <UserCircle size={24} weight={pathname.startsWith("/settings") ? "fill" : "bold"} />
-          }
-          isActive={pathname.startsWith("/settings")}
-          label="設定"
-          to="/settings"
-        />
-      </div>
-    </nav>
-  );
-};
-
-export const Header = ({ variant }: { variant: "brand" | "public" | "private" }) => {
   return (
     <header
-      className={`sticky top-0 z-40 flex-col gap-4 border-b border-brand-line bg-brand-cream/95 backdrop-blur-md px-4 py-3 sm:px-6 lg:px-10 sm:flex-row sm:items-center sm:justify-between ${
-        variant === "private" ? "hidden sm:flex" : "flex"
-      }`}
+      className={`sticky top-0 z-40 border-b border-brand-line bg-brand-cream/95 backdrop-blur-md px-4 sm:px-6 lg:px-10 ${
+        isAppChrome
+          ? "h-14 items-center justify-between gap-4 sm:h-16"
+          : "flex-col gap-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+      } ${isMobileVisible ? "flex" : "hidden sm:flex"}`}
     >
       <Link className="font-bold text-lg text-brand-walnut no-underline tracking-tight" to="/">
         Recipe Stock

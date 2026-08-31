@@ -203,8 +203,55 @@ describe("AppRouter", () => {
     ).resolves.toBeInTheDocument();
     expect(appRouter.state.location.href).toBe(importPath);
     expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "Mobile navigation" })).toBeNull();
+    expect(screen.queryAllByRole("button", { name: "レシピ追加" })).toHaveLength(0);
     expect(screen.queryByRole("link", { name: "アカウント" })).toBeNull();
+  });
+
+  it("レシピ一覧ではレシピ追加FABとアカウント導線を表示する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(screen.findByTestId("add-recipe-fab")).resolves.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "アカウント" })).toBeInTheDocument();
+  });
+
+  it("レシピ一覧以外ではレシピ追加FABを表示しない", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp("/settings");
+
+    await expect(screen.findByRole("heading", { name: "設定" })).resolves.toBeInTheDocument();
+    expect(screen.queryByTestId("add-recipe-fab")).toBeNull();
+  });
+
+  it("設定から戻るとレシピ一覧へ遷移する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/settings");
+
+    await userEvent.click(await screen.findByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.pathname).toBe("/recipes");
   });
 
   it("viewerの5xxはルートの描画を妨げない", async () => {
