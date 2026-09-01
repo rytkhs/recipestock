@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 
 export const ScreenTopBarFrame = ({ children }: { children: ReactNode }) => (
-  <div className="sticky top-0 z-20 border-b border-brand-line-soft bg-brand-cream/95 px-3 py-2.5 backdrop-blur-md sm:top-3 sm:mt-3 sm:rounded-[20px] sm:border sm:px-5 sm:py-3 sm:shadow-pantry-sm">
+  <div className="sticky top-0 z-30 bg-brand-cream/95 px-3 py-2.5 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
     <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_auto] sm:gap-3">
       {children}
     </div>
@@ -38,7 +38,7 @@ export const ScreenTopBar = ({
 }) => (
   <ScreenTopBarFrame>
     {leading}
-    <h1 className="min-w-0 truncate text-center font-bold text-brand-ink text-md leading-tight sm:text-xl">
+    <h1 className="min-w-0 truncate text-center font-bold text-brand-ink text-md leading-tight sm:text-left sm:text-xl">
       {title}
     </h1>
     {trailing ?? <span aria-hidden="true" className="block h-10 w-10 sm:h-11 sm:w-11" />}
