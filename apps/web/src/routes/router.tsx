@@ -101,7 +101,7 @@ const ProtectedLayout = () => {
 
   return (
     <>
-      <Header isMobileVisible={isHome} variant={isReady ? "private" : "brand"} />
+      <Header isMobileVisible={false} variant={isReady ? "private" : "brand"} />
       <main
         className={
           isReady && isHome ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"

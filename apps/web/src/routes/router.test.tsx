@@ -222,7 +222,7 @@ describe("AppRouter", () => {
     await renderApp("/recipes");
 
     await expect(screen.findByTestId("add-recipe-fab")).resolves.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "アカウント" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "アカウント" })).not.toHaveLength(0);
   });
 
   it("レシピ一覧以外ではレシピ追加FABを表示しない", async () => {
@@ -278,7 +278,7 @@ describe("AppRouter", () => {
     await renderApp("/recipes");
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "アカウント" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "アカウント" })).not.toHaveLength(0);
     expect(screen.queryByRole("heading", { name: "接続を確認できません" })).toBeNull();
   });
 

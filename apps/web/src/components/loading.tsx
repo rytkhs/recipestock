@@ -86,13 +86,14 @@ export const RecipeCardSkeleton = ({ viewMode }: { viewMode: "grid" | "list" }) 
 export const RecipeListSkeleton = () => (
   <section
     aria-label="レシピ一覧を読み込み中"
-    className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10"
     role="status"
   >
     <span className="sr-only">レシピ一覧を読み込み中</span>
-    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+    <div className="flex items-center gap-3 py-3 sm:py-4">
       <SkeletonBlock className="h-11 w-full rounded-full" />
-      <SkeletonBlock className="h-10 w-20 rounded-full" />
+      <SkeletonBlock className="hidden h-10 w-20 shrink-0 rounded-full sm:block" />
+      <SkeletonBlock className="h-11 w-11 shrink-0 rounded-full sm:hidden" />
     </div>
     <div className="mt-6 flex justify-end">
       <SkeletonBlock className="h-10 w-24 rounded-full" />
