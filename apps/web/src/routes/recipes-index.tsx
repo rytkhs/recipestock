@@ -394,7 +394,7 @@ export const RecipesIndexRoute = () => {
 
   return (
     <section className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10">
-      <div className="-mx-4 sticky top-0 z-30 flex min-w-0 items-center gap-3 border-b border-brand-line-soft bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
+      <div className="-mx-4 sticky top-0 z-30 flex min-w-0 items-center gap-3 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
         <form className="flex min-w-0 flex-1 items-end gap-3" onSubmit={submitSearch}>
           <div className="relative min-w-0 flex-1">
             <TextField className="min-w-0">
