@@ -606,22 +606,34 @@ export const RecipeDetailRoute = () => {
     return <RecipeDetailSkeleton />;
   }
 
-  if (error || !recipe) {
-    return (
-      <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-10">
-        <h1 className="text-brand-ink font-bold text-2xl">レシピを表示できません</h1>
-      </section>
-    );
-  }
+  if (error || !recipe || recipe.locked) {
+    const isLocked = Boolean(recipe?.locked);
 
-  if (recipe.locked) {
     return (
-      <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-10">
-        <div className="flex items-center gap-2">
-          <LockSimple size={20} className="text-brand-muted" weight="bold" />
-          <h1 className="text-brand-ink font-bold text-2xl">ロック中のレシピ</h1>
+      <article className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10">
+        <ScreenTopBar
+          leading={
+            <ScreenTopBarIconButton
+              aria-label="レシピ一覧へ戻る"
+              onPress={() => {
+                void navigate({ to: "/recipes" });
+              }}
+            >
+              <CaretLeft size={21} weight="bold" />
+            </ScreenTopBarIconButton>
+          }
+          title={isLocked ? "ロック中のレシピ" : "レシピを表示できません"}
+        />
+        <div className="px-4 pt-6 sm:px-0">
+          {isLocked ? (
+            <div className="flex items-start gap-2 text-brand-muted">
+              <LockSimple className="mt-0.5 shrink-0" size={20} weight="bold" />
+              <p>このレシピの詳細は現在表示できません。</p>
+            </div>
+          ) : (
+            <p className="text-brand-muted">レシピの取得に失敗しました。</p>
+          )}
         </div>
-        <p className="mt-4 text-brand-muted">このレシピの詳細は現在表示できません。</p>
       </article>
     );
   }

@@ -114,15 +114,34 @@ export const SettingsBillingRoute = () => {
     }
   };
 
+  const billingTopBar = (
+    <ScreenTopBar
+      leading={
+        <ScreenTopBarIconButton
+          aria-label="設定へ戻る"
+          onPress={() => {
+            void navigate({ to: "/settings" });
+          }}
+        >
+          <CaretLeft size={21} weight="bold" />
+        </ScreenTopBarIconButton>
+      }
+      title="課金設定"
+    />
+  );
+
   // planと利用状況がすべてviewer由来なので、この画面だけはviewerを待つ。
   if (!viewer.data) {
     return viewer.isError ? (
-      <ConnectionUnavailable
-        isRetrying={viewer.isFetching}
-        onRetry={async () => {
-          await viewer.refetch();
-        }}
-      />
+      <section className="mx-auto w-full max-w-[1120px] px-0 pb-10 sm:px-6 lg:px-10">
+        {billingTopBar}
+        <ConnectionUnavailable
+          isRetrying={viewer.isFetching}
+          onRetry={async () => {
+            await viewer.refetch();
+          }}
+        />
+      </section>
     ) : (
       <SettingsSkeleton />
     );
@@ -132,19 +151,7 @@ export const SettingsBillingRoute = () => {
 
   return (
     <section className="mx-auto w-full max-w-[1120px] px-0 pb-10 sm:px-6 lg:px-10">
-      <ScreenTopBar
-        leading={
-          <ScreenTopBarIconButton
-            aria-label="設定へ戻る"
-            onPress={() => {
-              void navigate({ to: "/settings" });
-            }}
-          >
-            <CaretLeft size={21} weight="bold" />
-          </ScreenTopBarIconButton>
-        }
-        title="課金設定"
-      />
+      {billingTopBar}
 
       <div className="mt-4 px-4 sm:mt-6 sm:px-0">
         {message ? (

@@ -972,6 +972,38 @@ describe("Settings routes", () => {
     expect(screen.queryByRole("button", { name: "請求管理" })).not.toBeInTheDocument();
   });
 
+  it("課金設定のviewer取得に失敗しても設定へ戻れる", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+
+      if (path.endsWith("/get-session")) {
+        return createSessionResponse(true);
+      }
+
+      if (path === "/api/me") {
+        return jsonResponse(
+          {
+            error: {
+              code: "temporarily_unavailable",
+              message: "Please retry later.",
+            },
+          },
+          { status: 503 },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    const { appRouter } = await renderApp("/settings/billing");
+
+    await expect(
+      screen.findByRole("heading", { name: "接続を確認できません" }),
+    ).resolves.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "設定へ戻る" }));
+    expect(appRouter.state.location.pathname).toBe("/settings");
+  });
+
   it("ProユーザーにはPro契約ボタンを表示しない", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);

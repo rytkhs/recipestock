@@ -90,7 +90,7 @@ export const RecipeListSkeleton = () => (
     role="status"
   >
     <span className="sr-only">レシピ一覧を読み込み中</span>
-    <div className="flex items-center gap-3 py-3 sm:py-4">
+    <div className="-mx-4 sticky top-0 z-30 flex items-center gap-3 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
       <SkeletonBlock className="h-11 w-full rounded-full" />
       <SkeletonBlock className="hidden h-10 w-20 shrink-0 rounded-full sm:block" />
       <SkeletonBlock className="h-11 w-11 shrink-0 rounded-full sm:hidden" />
@@ -116,46 +116,46 @@ const SectionSkeleton = ({ titleWidth, children }: { titleWidth: string; childre
 export const RecipeDetailSkeleton = () => (
   <section
     aria-label="レシピ詳細を読み込み中"
-    className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10"
     role="status"
   >
     <span className="sr-only">レシピ詳細を読み込み中</span>
-    <div className="mb-5 flex items-center justify-between gap-4">
-      <div className="min-w-0 flex-1">
-        <SkeletonBlock className="h-8 w-3/4 rounded-[16px]" />
-        <SkeletonBlock className="mt-3 h-6 w-36 rounded-full" />
-      </div>
-      <SkeletonBlock className="h-10 w-20 rounded-full" />
-    </div>
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-40" />
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+    </ScreenTopBarFrame>
 
-    <SkeletonBlock className="aspect-[4/3] w-full rounded-[22px] sm:aspect-video" />
+    <div className="px-3 pt-4 sm:px-0 sm:pt-6">
+      <SkeletonBlock className="mx-auto aspect-[4/3] w-full max-w-[640px] rounded-[16px] sm:aspect-video sm:rounded-[18px]" />
 
-    <div className="mt-6 grid gap-5">
-      <SectionSkeleton titleWidth="w-20">
-        <div className="grid gap-3">
-          <SkeletonBlock className="h-5 w-full" />
-          <SkeletonBlock className="h-5 w-5/6" />
-          <SkeletonBlock className="h-5 w-2/3" />
-        </div>
-      </SectionSkeleton>
+      <div className="mt-6 grid gap-5">
+        <SectionSkeleton titleWidth="w-20">
+          <div className="grid gap-3">
+            <SkeletonBlock className="h-5 w-full" />
+            <SkeletonBlock className="h-5 w-5/6" />
+            <SkeletonBlock className="h-5 w-2/3" />
+          </div>
+        </SectionSkeleton>
 
-      <SectionSkeleton titleWidth="w-20">
-        <div className="grid gap-4">
-          {detailStepSkeletonKeys.map((key) => (
-            <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3" key={key}>
-              <SkeletonBlock className="h-8 w-8 rounded-full" />
-              <div>
-                <SkeletonBlock className="h-5 w-full" />
-                <SkeletonBlock className="mt-2 h-5 w-4/5" />
+        <SectionSkeleton titleWidth="w-20">
+          <div className="grid gap-4">
+            {detailStepSkeletonKeys.map((key) => (
+              <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3" key={key}>
+                <SkeletonBlock className="h-8 w-8 rounded-full" />
+                <div>
+                  <SkeletonBlock className="h-5 w-full" />
+                  <SkeletonBlock className="mt-2 h-5 w-4/5" />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </SectionSkeleton>
+            ))}
+          </div>
+        </SectionSkeleton>
 
-      <SectionSkeleton titleWidth="w-16">
-        <SkeletonBlock className="h-20 w-full" />
-      </SectionSkeleton>
+        <SectionSkeleton titleWidth="w-16">
+          <SkeletonBlock className="h-20 w-full" />
+        </SectionSkeleton>
+      </div>
     </div>
   </section>
 );
@@ -235,7 +235,7 @@ export const ImportUrlSkeleton = () => (
     </ScreenTopBarFrame>
     <div className="mt-4 px-4 sm:mt-6 sm:px-0">
       <SkeletonBlock className="h-4 w-full max-w-md" />
-      <section className="mt-6 rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
+      <section className="mt-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <div>
             <SkeletonBlock className="h-4 w-12" />
