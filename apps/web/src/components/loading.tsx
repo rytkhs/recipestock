@@ -128,6 +128,7 @@ export const RecipeDetailSkeleton = () => (
 
     <div className="px-3 pt-4 sm:px-0 sm:pt-6">
       <SkeletonBlock className="mx-auto aspect-[4/3] w-full max-w-[640px] rounded-[16px] sm:aspect-video sm:rounded-[18px]" />
+      <SkeletonBlock className="mx-auto mt-5 h-6 w-3/4 max-w-3xl sm:h-8" />
 
       <div className="mt-6 grid gap-5">
         <SectionSkeleton titleWidth="w-20">
