@@ -1218,7 +1218,7 @@ describe("RecipesRoute", () => {
       { authenticated: true },
     );
 
-    await renderApp("/recipes/recipe_locked");
+    const { appRouter } = await renderApp("/recipes/recipe_locked");
 
     await expect(
       screen.findByRole("heading", { name: "ロック中のレシピ" }),
@@ -1226,6 +1226,9 @@ describe("RecipesRoute", () => {
     expect(screen.getByText("このレシピの詳細は現在表示できません。")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "編集" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "材料" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+    expect(appRouter.state.location.pathname).toBe("/recipes");
   });
 
   it("編集画面の初回読み込みではフォームskeletonを表示する", async () => {
@@ -1262,12 +1265,15 @@ describe("RecipesRoute", () => {
       { authenticated: true },
     );
 
-    await renderApp("/recipes/recipe_locked/edit");
+    const { appRouter } = await renderApp("/recipes/recipe_locked/edit");
 
     await expect(
       screen.findByRole("heading", { name: "レシピを編集できません" }),
     ).resolves.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更新" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "レシピ詳細へ戻る" }));
+    expect(appRouter.state.location.pathname).toBe("/recipes/recipe_locked");
   });
 
   it("詳細画面から編集して本文だけを更新できる", async () => {
@@ -1874,6 +1880,7 @@ describe("RecipesRoute", () => {
     await expect(
       screen.findByRole("heading", { name: "レシピを表示できません" }),
     ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "レシピ一覧へ戻る" })).toBeInTheDocument();
     expect(screen.queryByText("レシピを更新できませんでした。")).not.toBeInTheDocument();
   });
 

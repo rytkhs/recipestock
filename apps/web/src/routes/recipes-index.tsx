@@ -21,6 +21,7 @@ import {
   PencilSimple,
   SquaresFour,
   Trash,
+  UserCircle,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -392,34 +393,44 @@ export const RecipesIndexRoute = () => {
   };
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-4 py-3 sm:py-8 sm:px-6 lg:px-10">
-      <form className="mt-2 flex min-w-0 items-end gap-3" onSubmit={submitSearch}>
-        <div className="relative min-w-0 flex-1">
-          <TextField className="min-w-0">
-            <Label className="sr-only">検索</Label>
-            <div className="relative min-w-0">
-              <MagnifyingGlass
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-wheat"
-                size={18}
-                weight="bold"
-              />
-              <Input
-                className="w-full min-w-0 pl-10"
-                placeholder="レシピを検索..."
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-              />
-            </div>
-          </TextField>
-        </div>
-        <Button
-          className="shrink-0 rounded-full border border-brand-line bg-brand-paper-raised font-semibold text-brand-walnut hover:bg-brand-paper-muted"
-          type="submit"
-          variant="secondary"
+    <section className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10">
+      <div className="-mx-4 sticky top-0 z-30 flex min-w-0 items-center gap-3 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
+        <form className="flex min-w-0 flex-1 items-end gap-3" onSubmit={submitSearch}>
+          <div className="relative min-w-0 flex-1">
+            <TextField className="min-w-0">
+              <Label className="sr-only">検索</Label>
+              <div className="relative min-w-0">
+                <MagnifyingGlass
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-wheat"
+                  size={18}
+                  weight="bold"
+                />
+                <Input
+                  className="w-full min-w-0 pl-10"
+                  enterKeyHint="search"
+                  placeholder="レシピを検索..."
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                />
+              </div>
+            </TextField>
+          </div>
+          <Button
+            className="hidden shrink-0 rounded-full border border-brand-line bg-brand-paper-raised font-semibold text-brand-walnut hover:bg-brand-paper-muted sm:inline-flex"
+            type="submit"
+            variant="secondary"
+          >
+            検索
+          </Button>
+        </form>
+        <Link
+          aria-label="アカウント"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut no-underline transition-colors hover:bg-brand-paper-muted sm:hidden"
+          to="/settings"
         >
-          検索
-        </Button>
-      </form>
+          <UserCircle size={24} weight="bold" />
+        </Link>
+      </div>
 
       <ImportJobIsland />
 

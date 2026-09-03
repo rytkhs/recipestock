@@ -1,8 +1,9 @@
 import { Button, Input, Label, TextField } from "@heroui/react";
-import { ClipboardText, Link as LinkIcon, X } from "@phosphor-icons/react";
+import { CaretLeft, ClipboardText, X } from "@phosphor-icons/react";
 import { extractFirstUrl } from "@recipestock/shared";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
+import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
 
 export type ImportUrlSearch = {
@@ -62,78 +63,86 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-10">
-      <div className="mb-2 flex min-w-0 items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-orange-soft text-brand-orange">
-          <LinkIcon size={20} weight="bold" />
-        </div>
-        <div className="min-w-0">
-          <h1 className="text-brand-ink font-bold text-2xl">URLから取り込む</h1>
-          <p className="text-brand-muted text-sm">
-            レシピサイトのURLを入力すると、AIがレシピを自動で取り込みます
-          </p>
-        </div>
-      </div>
-      <div className="mt-6 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-        <form className="grid min-w-0 gap-4" onSubmit={submit}>
-          <TextField className="min-w-0" isRequired>
-            <div className="mb-1 flex min-w-0 items-center justify-between gap-3">
-              <Label className="text-brand-walnut font-semibold text-sm">URL</Label>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  aria-label="ペースト"
-                  className="h-7 min-h-7 rounded-full border border-brand-line bg-brand-paper px-2 text-brand-walnut text-xs hover:bg-brand-paper-muted"
-                  isDisabled={isSubmitting}
-                  size="sm"
-                  type="button"
-                  variant="secondary"
-                  onPress={pasteUrl}
-                >
-                  <ClipboardText size={14} weight="bold" />
-                  <span>ペースト</span>
-                </Button>
-                <Button
-                  aria-label="クリア"
-                  className="h-7 min-h-7 rounded-full px-2 text-brand-muted text-xs hover:bg-brand-paper-muted hover:text-brand-walnut"
-                  isDisabled={isSubmitting || url.length === 0}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                  onPress={() => updateUrl("")}
-                >
-                  <X size={14} weight="bold" />
-                  <span>クリア</span>
-                </Button>
+    <section className="mx-auto w-full max-w-3xl px-0 pb-10 sm:px-6 lg:px-10">
+      <ScreenTopBar
+        leading={
+          <ScreenTopBarIconButton
+            aria-label="レシピ一覧へ戻る"
+            onPress={() => {
+              void navigate({ to: "/recipes" });
+            }}
+          >
+            <CaretLeft size={21} weight="bold" />
+          </ScreenTopBarIconButton>
+        }
+        title="URLから取り込む"
+      />
+
+      <div className="mt-4 px-4 sm:mt-6 sm:px-0">
+        <p className="text-brand-muted text-sm">
+          レシピサイトのURLを入力すると、AIがレシピを自動で取り込みます
+        </p>
+        <div className="mt-4 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
+          <form className="grid min-w-0 gap-4" onSubmit={submit}>
+            <TextField className="min-w-0" isRequired>
+              <div className="mb-1 flex min-w-0 items-center justify-between gap-3">
+                <Label className="text-brand-walnut font-semibold text-sm">URL</Label>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    aria-label="ペースト"
+                    className="h-7 min-h-7 rounded-full border border-brand-line bg-brand-paper px-2 text-brand-walnut text-xs hover:bg-brand-paper-muted"
+                    isDisabled={isSubmitting}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                    onPress={pasteUrl}
+                  >
+                    <ClipboardText size={14} weight="bold" />
+                    <span>ペースト</span>
+                  </Button>
+                  <Button
+                    aria-label="クリア"
+                    className="h-7 min-h-7 rounded-full px-2 text-brand-muted text-xs hover:bg-brand-paper-muted hover:text-brand-walnut"
+                    isDisabled={isSubmitting || url.length === 0}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                    onPress={() => updateUrl("")}
+                  >
+                    <X size={14} weight="bold" />
+                    <span>クリア</span>
+                  </Button>
+                </div>
               </div>
+              <div className="min-w-0">
+                <Input
+                  className="w-full min-w-0"
+                  inputMode="url"
+                  type="url"
+                  value={url}
+                  onChange={(event) => updateUrl(event.target.value)}
+                />
+              </div>
+            </TextField>
+            <div className="flex justify-end">
+              <Button
+                className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+                isDisabled={isSubmitting}
+                type="submit"
+                variant="primary"
+              >
+                取り込む
+              </Button>
             </div>
-            <div className="min-w-0">
-              <Input
-                className="w-full min-w-0"
-                inputMode="url"
-                type="url"
-                value={url}
-                onChange={(event) => updateUrl(event.target.value)}
-              />
+          </form>
+          {error ? (
+            <div className="mt-4 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
+              <p className="break-words text-brand-danger text-sm" role="alert">
+                {error}
+              </p>
             </div>
-          </TextField>
-          <div className="flex justify-end">
-            <Button
-              className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
-              isDisabled={isSubmitting}
-              type="submit"
-              variant="primary"
-            >
-              取り込む
-            </Button>
-          </div>
-        </form>
-        {error ? (
-          <div className="mt-4 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
-            <p className="break-words text-brand-danger text-sm" role="alert">
-              {error}
-            </p>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     </section>
   );
