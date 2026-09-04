@@ -1,7 +1,9 @@
+import { CaretLeft } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { RecipeFormSkeleton } from "../components/loading";
+import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import {
   createEmptyRecipeDraftFormValues,
   formValuesToCreateRecipeRequest,
@@ -86,8 +88,23 @@ export const EditRecipeRoute = () => {
 
   if (error || !recipe || recipe.locked) {
     return (
-      <section className="mx-auto w-full max-w-4xl px-4 sm:px-6 lg:px-10 py-10">
-        <h1 className="text-brand-ink font-bold text-2xl">レシピを編集できません</h1>
+      <section className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10">
+        <ScreenTopBar
+          leading={
+            <ScreenTopBarIconButton
+              aria-label="レシピ詳細へ戻る"
+              onPress={() => {
+                void navigate({ to: "/recipes/$recipeId", params: { recipeId } });
+              }}
+            >
+              <CaretLeft size={21} weight="bold" />
+            </ScreenTopBarIconButton>
+          }
+          title="レシピを編集"
+        />
+        <div className="px-4 pt-6 sm:px-0">
+          <h2 className="text-brand-ink font-bold text-2xl">レシピを編集できません</h2>
+        </div>
       </section>
     );
   }

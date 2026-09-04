@@ -23,6 +23,7 @@ import {
   useState,
 } from "react";
 import { RecipeDetailSkeleton } from "../components/loading";
+import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import {
   deleteRecipe,
   getRecipe,
@@ -605,22 +606,34 @@ export const RecipeDetailRoute = () => {
     return <RecipeDetailSkeleton />;
   }
 
-  if (error || !recipe) {
-    return (
-      <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-10">
-        <h1 className="text-brand-ink font-bold text-2xl">レシピを表示できません</h1>
-      </section>
-    );
-  }
+  if (error || !recipe || recipe.locked) {
+    const isLocked = Boolean(recipe?.locked);
 
-  if (recipe.locked) {
     return (
-      <article className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-10 py-10">
-        <div className="flex items-center gap-2">
-          <LockSimple size={20} className="text-brand-muted" weight="bold" />
-          <h1 className="text-brand-ink font-bold text-2xl">ロック中のレシピ</h1>
+      <article className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10">
+        <ScreenTopBar
+          leading={
+            <ScreenTopBarIconButton
+              aria-label="レシピ一覧へ戻る"
+              onPress={() => {
+                void navigate({ to: "/recipes" });
+              }}
+            >
+              <CaretLeft size={21} weight="bold" />
+            </ScreenTopBarIconButton>
+          }
+          title={isLocked ? "ロック中のレシピ" : "レシピを表示できません"}
+        />
+        <div className="px-4 pt-6 sm:px-0">
+          {isLocked ? (
+            <div className="flex items-start gap-2 text-brand-muted">
+              <LockSimple className="mt-0.5 shrink-0" size={20} weight="bold" />
+              <p>このレシピの詳細は現在表示できません。</p>
+            </div>
+          ) : (
+            <p className="text-brand-muted">レシピの取得に失敗しました。</p>
+          )}
         </div>
-        <p className="mt-4 text-brand-muted">このレシピの詳細は現在表示できません。</p>
       </article>
     );
   }
@@ -639,22 +652,19 @@ export const RecipeDetailRoute = () => {
 
   return (
     <article className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10">
-      <div className="sticky top-0 z-20 border-brand-line-soft border-b bg-brand-cream/95 px-3 py-2.5 backdrop-blur sm:top-3 sm:mt-3 sm:rounded-[20px] sm:border sm:px-5 sm:py-3 sm:shadow-pantry-sm">
-        <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] sm:gap-3">
-          <Button
+      <ScreenTopBar
+        leading={
+          <ScreenTopBarIconButton
             aria-label="レシピ一覧へ戻る"
-            className="h-10 w-10 rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut hover:bg-brand-paper-muted sm:h-11 sm:w-11"
-            isIconOnly
-            variant="secondary"
             onPress={() => {
               void navigate({ to: "/recipes" });
             }}
           >
             <CaretLeft size={21} weight="bold" />
-          </Button>
-          <h1 className="min-w-0 truncate text-center font-bold text-brand-ink text-md leading-tight sm:text-xl">
-            {recipe.title}
-          </h1>
+          </ScreenTopBarIconButton>
+        }
+        title={recipe.title}
+        trailing={
           <Dropdown>
             <Dropdown.Trigger
               aria-label="操作メニュー"
@@ -687,8 +697,8 @@ export const RecipeDetailRoute = () => {
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown>
-        </div>
-      </div>
+        }
+      />
 
       <div className="px-3 pt-4 sm:px-0 sm:pt-6">
         {recipe.content.coverImage?.url ? (

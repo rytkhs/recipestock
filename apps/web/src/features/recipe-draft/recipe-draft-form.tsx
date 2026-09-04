@@ -8,6 +8,7 @@ import {
 } from "@recipestock/schemas";
 import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
+import { ScreenTopBar, ScreenTopBarIconButton } from "../../components/screen-top-bar";
 import { CoverImageTitleBlock } from "./cover-image-title-block";
 import {
   countFormImages,
@@ -92,19 +93,14 @@ export const RecipeDraftForm = ({
       className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10"
       onSubmit={(event) => void handleFormSubmit(event)}
     >
-      <div className="sticky top-0 z-20 border-b border-brand-line-soft bg-brand-cream/95 px-3 py-2.5 backdrop-blur-md sm:top-3 sm:mt-3 sm:rounded-[20px] sm:border sm:px-5 sm:py-3 sm:shadow-pantry-sm">
-        <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_auto] sm:gap-3">
-          <button
-            aria-label="閉じる"
-            className="grid h-10 w-10 place-items-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-orange sm:h-11 sm:w-11"
-            type="button"
-            onClick={handleClose}
-          >
+      <ScreenTopBar
+        leading={
+          <ScreenTopBarIconButton aria-label="閉じる" onPress={handleClose}>
             <X size={20} weight="bold" />
-          </button>
-          <h1 className="min-w-0 truncate text-center font-bold text-brand-ink text-md leading-tight sm:text-xl">
-            {title}
-          </h1>
+          </ScreenTopBarIconButton>
+        }
+        title={title}
+        trailing={
           <Button
             className="h-10 rounded-full bg-brand-sage px-5 font-semibold text-white shadow-pantry-sm hover:bg-brand-sage-dark sm:h-11"
             isDisabled={formState.isSubmitting || uploadingImageCount > 0}
@@ -113,8 +109,8 @@ export const RecipeDraftForm = ({
           >
             {submitLabel}
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="mt-4 grid gap-5 px-3 sm:mt-6 sm:px-0">
         <CoverImageTitleBlock

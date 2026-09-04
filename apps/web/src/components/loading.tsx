@@ -1,5 +1,6 @@
 import { Skeleton } from "@heroui/react";
 import { type ReactNode } from "react";
+import { ScreenTopBarFrame } from "./screen-top-bar";
 
 const skeletonBaseClass =
   "overflow-hidden rounded-[14px] border border-brand-line-soft/50 bg-brand-paper-muted";
@@ -85,13 +86,14 @@ export const RecipeCardSkeleton = ({ viewMode }: { viewMode: "grid" | "list" }) 
 export const RecipeListSkeleton = () => (
   <section
     aria-label="レシピ一覧を読み込み中"
-    className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10"
     role="status"
   >
     <span className="sr-only">レシピ一覧を読み込み中</span>
-    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+    <div className="-mx-4 sticky top-0 z-30 flex items-center gap-3 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
       <SkeletonBlock className="h-11 w-full rounded-full" />
-      <SkeletonBlock className="h-10 w-20 rounded-full" />
+      <SkeletonBlock className="hidden h-10 w-20 shrink-0 rounded-full sm:block" />
+      <SkeletonBlock className="h-11 w-11 shrink-0 rounded-full sm:hidden" />
     </div>
     <div className="mt-6 flex justify-end">
       <SkeletonBlock className="h-10 w-24 rounded-full" />
@@ -114,46 +116,47 @@ const SectionSkeleton = ({ titleWidth, children }: { titleWidth: string; childre
 export const RecipeDetailSkeleton = () => (
   <section
     aria-label="レシピ詳細を読み込み中"
-    className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10"
     role="status"
   >
     <span className="sr-only">レシピ詳細を読み込み中</span>
-    <div className="mb-5 flex items-center justify-between gap-4">
-      <div className="min-w-0 flex-1">
-        <SkeletonBlock className="h-8 w-3/4 rounded-[16px]" />
-        <SkeletonBlock className="mt-3 h-6 w-36 rounded-full" />
-      </div>
-      <SkeletonBlock className="h-10 w-20 rounded-full" />
-    </div>
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-40" />
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+    </ScreenTopBarFrame>
 
-    <SkeletonBlock className="aspect-[4/3] w-full rounded-[22px] sm:aspect-video" />
+    <div className="px-3 pt-4 sm:px-0 sm:pt-6">
+      <SkeletonBlock className="mx-auto aspect-[4/3] w-full max-w-[640px] rounded-[16px] sm:aspect-video sm:rounded-[18px]" />
+      <SkeletonBlock className="mx-auto mt-5 h-6 w-3/4 max-w-3xl sm:h-8" />
 
-    <div className="mt-6 grid gap-5">
-      <SectionSkeleton titleWidth="w-20">
-        <div className="grid gap-3">
-          <SkeletonBlock className="h-5 w-full" />
-          <SkeletonBlock className="h-5 w-5/6" />
-          <SkeletonBlock className="h-5 w-2/3" />
-        </div>
-      </SectionSkeleton>
+      <div className="mt-6 grid gap-5">
+        <SectionSkeleton titleWidth="w-20">
+          <div className="grid gap-3">
+            <SkeletonBlock className="h-5 w-full" />
+            <SkeletonBlock className="h-5 w-5/6" />
+            <SkeletonBlock className="h-5 w-2/3" />
+          </div>
+        </SectionSkeleton>
 
-      <SectionSkeleton titleWidth="w-20">
-        <div className="grid gap-4">
-          {detailStepSkeletonKeys.map((key) => (
-            <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3" key={key}>
-              <SkeletonBlock className="h-8 w-8 rounded-full" />
-              <div>
-                <SkeletonBlock className="h-5 w-full" />
-                <SkeletonBlock className="mt-2 h-5 w-4/5" />
+        <SectionSkeleton titleWidth="w-20">
+          <div className="grid gap-4">
+            {detailStepSkeletonKeys.map((key) => (
+              <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3" key={key}>
+                <SkeletonBlock className="h-8 w-8 rounded-full" />
+                <div>
+                  <SkeletonBlock className="h-5 w-full" />
+                  <SkeletonBlock className="mt-2 h-5 w-4/5" />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </SectionSkeleton>
+            ))}
+          </div>
+        </SectionSkeleton>
 
-      <SectionSkeleton titleWidth="w-16">
-        <SkeletonBlock className="h-20 w-full" />
-      </SectionSkeleton>
+        <SectionSkeleton titleWidth="w-16">
+          <SkeletonBlock className="h-20 w-full" />
+        </SectionSkeleton>
+      </div>
     </div>
   </section>
 );
@@ -165,13 +168,11 @@ export const RecipeFormSkeleton = () => (
     role="status"
   >
     <span className="sr-only">レシピ編集フォームを読み込み中</span>
-    <div className="sticky top-0 z-20 border-b border-brand-line-soft bg-brand-cream/95 px-3 py-2.5 backdrop-blur-md sm:top-3 sm:mt-3 sm:rounded-[20px] sm:border sm:px-5 sm:py-3 sm:shadow-pantry-sm">
-      <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_auto] sm:gap-3">
-        <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
-        <SkeletonBlock className="mx-auto h-5 w-40" />
-        <SkeletonBlock className="h-10 w-20 rounded-full sm:h-11" />
-      </div>
-    </div>
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-40" />
+      <SkeletonBlock className="h-10 w-20 rounded-full sm:h-11" />
+    </ScreenTopBarFrame>
 
     <div className="mt-4 grid gap-5 px-3 sm:mt-6 sm:px-0">
       <section className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-4 shadow-pantry-sm sm:p-5">
@@ -225,39 +226,41 @@ export const RecipeFormSkeleton = () => (
 export const ImportUrlSkeleton = () => (
   <section
     aria-label="URL取り込み画面を読み込み中"
-    className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-3xl px-0 pb-10 sm:px-6 lg:px-10"
     role="status"
   >
-    <div className="mb-2 flex items-center gap-3">
-      <SkeletonBlock className="h-10 w-10 rounded-full" />
-      <div className="min-w-0 flex-1">
-        <SkeletonBlock className="h-7 w-44 rounded-[16px]" />
-        <SkeletonBlock className="mt-2 h-4 w-full max-w-md" />
-      </div>
-    </div>
-    <section className="mt-6 rounded-[20px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry-sm">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <div>
-          <SkeletonBlock className="h-4 w-12" />
-          <SkeletonBlock className="mt-2 h-11 w-full" />
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-40" />
+      <span aria-hidden="true" className="block h-10 w-10 sm:h-11 sm:w-11" />
+    </ScreenTopBarFrame>
+    <div className="mt-4 px-4 sm:mt-6 sm:px-0">
+      <SkeletonBlock className="h-4 w-full max-w-md" />
+      <section className="mt-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div>
+            <SkeletonBlock className="h-4 w-12" />
+            <SkeletonBlock className="mt-2 h-11 w-full" />
+          </div>
+          <SkeletonBlock className="h-11 w-full rounded-full sm:w-24" />
         </div>
-        <SkeletonBlock className="h-11 w-full rounded-full sm:w-24" />
-      </div>
-    </section>
+      </section>
+    </div>
   </section>
 );
 
 export const SettingsSkeleton = () => (
   <section
     aria-label="設定画面を読み込み中"
-    className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-[1120px] px-0 pb-10 sm:px-6 lg:px-10"
     role="status"
   >
-    <div className="mb-6 flex items-center gap-3">
-      <SkeletonBlock className="h-10 w-10 rounded-full" />
-      <SkeletonBlock className="h-7 w-20 rounded-[16px]" />
-    </div>
-    <div className="grid gap-5">
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-24" />
+      <span aria-hidden="true" className="block h-10 w-10 sm:h-11 sm:w-11" />
+    </ScreenTopBarFrame>
+    <div className="mt-4 grid gap-5 px-4 sm:mt-6 sm:px-0">
       <SectionSkeleton titleWidth="w-28">
         <div className="grid gap-6 md:grid-cols-2">
           <div className="grid gap-4">

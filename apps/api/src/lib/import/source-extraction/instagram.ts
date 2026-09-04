@@ -3,6 +3,7 @@ import {
   RecipeImportError,
   type RecipeImportImageCandidate,
 } from "../types";
+import { hasUsableSocialEvidence } from "./social-evidence";
 import {
   type SourceExtractionAdapter,
   type SourceExtractionContext,
@@ -97,7 +98,12 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
     }
 
     const projection = projectInstagramEmbedMedia(source, media);
-    if (!projection.caption) {
+    if (
+      !hasUsableSocialEvidence({
+        text: projection.caption,
+        referenceImageUrls: projection.referenceImageUrls,
+      })
+    ) {
       throw new RecipeImportError("extraction_failed", "Instagram caption could not be extracted.");
     }
 
@@ -313,7 +319,7 @@ const buildInstagramMarkdownContent = ({
 }) => {
   const lines = [`# ${title}`, "", `Source: ${INSTAGRAM_SOURCE_NAME}`, `URL: ${canonicalUrl}`];
   if (author) lines.push(`Author: ${author}`);
-  lines.push("", "## Caption", "", caption);
+  if (caption) lines.push("", "## Caption", "", caption);
 
   return lines.join("\n").trim();
 };
