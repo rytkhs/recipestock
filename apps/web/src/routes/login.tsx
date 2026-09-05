@@ -1,7 +1,9 @@
-import { Button, Input, Label, TextField } from "@heroui/react";
 import { EnvelopeSimple, GoogleLogo, Key } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   requestPasswordResetOtp,
   resetPasswordWithOtp,
@@ -21,6 +23,9 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
+  const emailId = useId();
+  const passwordId = useId();
+  const otpId = useId();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,7 +129,7 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
           <Button
             className="w-full rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold gap-2 hover:bg-brand-paper-muted"
             variant="secondary"
-            onPress={() => void startGoogleLogin(redirectTo)}
+            onClick={() => void startGoogleLogin(redirectTo)}
           >
             <GoogleLogo size={20} weight="bold" />
             Googleでログイン
@@ -138,26 +143,38 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
 
           {mode === "signIn" ? (
             <form className="grid min-w-0 gap-4" onSubmit={handleSignIn}>
-              <TextField className="min-w-0" isRequired type="email">
-                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+              <Field className="min-w-0">
+                <FieldLabel
+                  className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5"
+                  htmlFor={emailId}
+                >
                   <EnvelopeSimple size={14} weight="bold" />
                   メールアドレス
-                </Label>
+                </FieldLabel>
                 <Input
+                  id={emailId}
+                  required
+                  type="email"
                   autoComplete="email"
                   className="w-full min-w-0"
                   inputMode="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
-              </TextField>
+              </Field>
 
-              <TextField className="min-w-0" isRequired type="password">
-                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+              <Field className="min-w-0">
+                <FieldLabel
+                  className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5"
+                  htmlFor={passwordId}
+                >
                   <Key size={14} weight="bold" />
                   パスワード
-                </Label>
+                </FieldLabel>
                 <Input
+                  id={passwordId}
+                  required
+                  type="password"
                   autoComplete="current-password"
                   className="w-full min-w-0"
                   maxLength={128}
@@ -165,12 +182,12 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
-              </TextField>
+              </Field>
 
               <Button
                 className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
                 type="submit"
-                variant="primary"
+                variant="default"
               >
                 ログイン
               </Button>
@@ -179,26 +196,38 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
 
           {mode === "signUp" ? (
             <form className="grid min-w-0 gap-4" onSubmit={handleSignUp}>
-              <TextField className="min-w-0" isRequired type="email">
-                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+              <Field className="min-w-0">
+                <FieldLabel
+                  className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5"
+                  htmlFor={emailId}
+                >
                   <EnvelopeSimple size={14} weight="bold" />
                   メールアドレス
-                </Label>
+                </FieldLabel>
                 <Input
+                  id={emailId}
+                  required
+                  type="email"
                   autoComplete="email"
                   className="w-full min-w-0"
                   inputMode="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
-              </TextField>
+              </Field>
 
-              <TextField className="min-w-0" isRequired type="password">
-                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+              <Field className="min-w-0">
+                <FieldLabel
+                  className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5"
+                  htmlFor={passwordId}
+                >
                   <Key size={14} weight="bold" />
                   パスワード
-                </Label>
+                </FieldLabel>
                 <Input
+                  id={passwordId}
+                  required
+                  type="password"
                   autoComplete="new-password"
                   className="w-full min-w-0"
                   maxLength={128}
@@ -206,12 +235,12 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
-              </TextField>
+              </Field>
 
               <Button
                 className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
                 type="submit"
-                variant="primary"
+                variant="default"
               >
                 登録してコードを送信
               </Button>
@@ -220,9 +249,13 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
 
           {mode === "verifySignUp" ? (
             <form className="grid min-w-0 gap-4" onSubmit={handleVerifySignUp}>
-              <TextField className="min-w-0" isRequired>
-                <Label className="text-brand-walnut font-semibold text-sm">確認コード</Label>
+              <Field className="min-w-0">
+                <FieldLabel className="text-brand-walnut font-semibold text-sm" htmlFor={otpId}>
+                  確認コード
+                </FieldLabel>
                 <Input
+                  id={otpId}
+                  required
                   autoComplete="one-time-code"
                   className="w-full min-w-0 text-center text-lg tracking-[0.3em] font-bold"
                   inputMode="numeric"
@@ -232,12 +265,12 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                   value={otp}
                   onChange={(event) => setOtp(event.target.value)}
                 />
-              </TextField>
+              </Field>
 
               <Button
                 className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
                 type="submit"
-                variant="primary"
+                variant="default"
               >
                 登録を完了
               </Button>
@@ -246,24 +279,30 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
 
           {mode === "requestReset" ? (
             <form className="grid min-w-0 gap-4" onSubmit={handleRequestReset}>
-              <TextField className="min-w-0" isRequired type="email">
-                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+              <Field className="min-w-0">
+                <FieldLabel
+                  className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5"
+                  htmlFor={emailId}
+                >
                   <EnvelopeSimple size={14} weight="bold" />
                   メールアドレス
-                </Label>
+                </FieldLabel>
                 <Input
+                  id={emailId}
+                  required
+                  type="email"
                   autoComplete="email"
                   className="w-full min-w-0"
                   inputMode="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
-              </TextField>
+              </Field>
 
               <Button
                 className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
                 type="submit"
-                variant="primary"
+                variant="default"
               >
                 再設定コードを送信
               </Button>
@@ -272,9 +311,13 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
 
           {mode === "resetPassword" ? (
             <form className="grid min-w-0 gap-4" onSubmit={handleResetPassword}>
-              <TextField className="min-w-0" isRequired>
-                <Label className="text-brand-walnut font-semibold text-sm">確認コード</Label>
+              <Field className="min-w-0">
+                <FieldLabel className="text-brand-walnut font-semibold text-sm" htmlFor={otpId}>
+                  確認コード
+                </FieldLabel>
                 <Input
+                  id={otpId}
+                  required
                   autoComplete="one-time-code"
                   className="w-full min-w-0 text-center text-lg tracking-[0.3em] font-bold"
                   inputMode="numeric"
@@ -284,14 +327,20 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                   value={otp}
                   onChange={(event) => setOtp(event.target.value)}
                 />
-              </TextField>
+              </Field>
 
-              <TextField className="min-w-0" isRequired type="password">
-                <Label className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5">
+              <Field className="min-w-0">
+                <FieldLabel
+                  className="text-brand-walnut font-semibold text-sm flex items-center gap-1.5"
+                  htmlFor={passwordId}
+                >
                   <Key size={14} weight="bold" />
                   新しいパスワード
-                </Label>
+                </FieldLabel>
                 <Input
+                  id={passwordId}
+                  required
+                  type="password"
                   autoComplete="new-password"
                   className="w-full min-w-0"
                   maxLength={128}
@@ -299,12 +348,12 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
-              </TextField>
+              </Field>
 
               <Button
                 className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
                 type="submit"
-                variant="primary"
+                variant="default"
               >
                 パスワードを再設定
               </Button>
@@ -317,7 +366,7 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                 className="text-brand-sage text-sm rounded-full hover:bg-brand-sage-soft/50"
                 size="sm"
                 variant="ghost"
-                onPress={() => switchMode("signIn")}
+                onClick={() => switchMode("signIn")}
               >
                 ログインに戻る
               </Button>
@@ -327,7 +376,7 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                 className="text-brand-sage text-sm rounded-full hover:bg-brand-sage-soft/50"
                 size="sm"
                 variant="ghost"
-                onPress={() => switchMode("signUp")}
+                onClick={() => switchMode("signUp")}
               >
                 アカウントを作成
               </Button>
@@ -337,7 +386,7 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                 className="text-brand-muted text-sm rounded-full hover:bg-brand-paper-muted"
                 size="sm"
                 variant="ghost"
-                onPress={() => switchMode("requestReset")}
+                onClick={() => switchMode("requestReset")}
               >
                 パスワードを忘れた場合
               </Button>

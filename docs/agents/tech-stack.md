@@ -24,6 +24,9 @@ Browser / PWA
 | Area | Choice |
 | --- | --- |
 | Frontend | Vite + React + TypeScript |
+| Styling | Tailwind CSS v4 |
+| UI components | shadcn/ui — Base UI base, `base-nova` style.`apps/web/src/components/ui/` にベンダリング |
+| Icons | `@phosphor-icons/react` |
 | Routing | TanStack Router |
 | Server state | TanStack Query |
 | Forms | React Hook Form + Zod |
@@ -53,6 +56,7 @@ Browser / PWA
 - Use Drizzle for database schema and migrations.
 - Use TanStack Query for server state in the frontend.
 - Use React Hook Form + Zod for forms.
+- Add UI primitives with `npx shadcn@latest add <name> -c apps/web` instead of hand-rolling them. Files under `apps/web/src/components/ui/` are registry output and are excluded from Biome linting.
 - Use Biome for repository-wide formatting and baseline linting.
 - Use Vitest for unit tests, component tests, and request-level API tests.
 - Use Testing Library with Vitest for React component behavior tests.

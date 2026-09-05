@@ -1,4 +1,3 @@
-import { AlertDialog, Button, Dropdown } from "@heroui/react";
 import {
   CaretLeft,
   CaretRight,
@@ -7,6 +6,7 @@ import {
   LockSimple,
   PencilSimple,
   Trash,
+  WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +22,21 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { RecipeDetailSkeleton } from "../components/loading";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import {
@@ -436,9 +451,9 @@ const RecipeImageLightbox = ({
         <Button
           aria-label="閉じる"
           className="rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper"
-          isIconOnly
+          size="icon"
           variant="secondary"
-          onPress={onClose}
+          onClick={onClose}
         >
           <X size={20} weight="bold" />
         </Button>
@@ -448,10 +463,10 @@ const RecipeImageLightbox = ({
         <Button
           aria-label="前の画像"
           className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper sm:left-6"
-          isDisabled={!hasPreviousImage}
-          isIconOnly
+          disabled={!hasPreviousImage}
+          size="icon"
           variant="secondary"
-          onPress={() => requestSlide(-1)}
+          onClick={() => requestSlide(-1)}
         >
           <CaretLeft size={24} weight="bold" />
         </Button>
@@ -501,10 +516,10 @@ const RecipeImageLightbox = ({
         <Button
           aria-label="次の画像"
           className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper sm:right-6"
-          isDisabled={!hasNextImage}
-          isIconOnly
+          disabled={!hasNextImage}
+          size="icon"
           variant="secondary"
-          onPress={() => requestSlide(1)}
+          onClick={() => requestSlide(1)}
         >
           <CaretRight size={24} weight="bold" />
         </Button>
@@ -665,38 +680,36 @@ export const RecipeDetailRoute = () => {
         }
         title={recipe.title}
         trailing={
-          <Dropdown>
-            <Dropdown.Trigger
+          <DropdownMenu>
+            <DropdownMenuTrigger
               aria-label="操作メニュー"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut hover:bg-brand-paper-muted sm:h-11 sm:w-11"
             >
               <DotsThreeVertical size={20} weight="bold" />
-            </Dropdown.Trigger>
-            <Dropdown.Popover className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
-              <Dropdown.Menu
-                onAction={(key) => {
-                  if (key === "edit") {
-                    void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
-                  } else if (key === "delete") {
-                    setIsDeleteDialogOpen(true);
-                  }
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
+              <DropdownMenuItem
+                onClick={() => {
+                  void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
                 }}
               >
-                <Dropdown.Item id="edit" textValue="編集">
-                  <div className="flex items-center gap-2 text-brand-walnut">
-                    <PencilSimple size={16} weight="bold" />
-                    <span className="text-sm font-semibold">編集</span>
-                  </div>
-                </Dropdown.Item>
-                <Dropdown.Item id="delete" textValue="削除">
-                  <div className="flex items-center gap-2 text-brand-danger">
-                    <Trash size={16} weight="bold" />
-                    <span className="text-sm font-semibold">削除</span>
-                  </div>
-                </Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown>
+                <div className="flex items-center gap-2 text-brand-walnut">
+                  <PencilSimple size={16} weight="bold" />
+                  <span className="text-sm font-semibold">編集</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setIsDeleteDialogOpen(true);
+                }}
+              >
+                <div className="flex items-center gap-2 text-brand-danger">
+                  <Trash size={16} weight="bold" />
+                  <span className="text-sm font-semibold">削除</span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
       />
 
@@ -738,32 +751,32 @@ export const RecipeDetailRoute = () => {
         </div>
       ) : null}
 
-      <AlertDialog.Backdrop isOpen={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog>
-            <AlertDialog.Header>
-              <AlertDialog.Icon status="danger" />
-              <AlertDialog.Heading>レシピを削除しますか？</AlertDialog.Heading>
-            </AlertDialog.Header>
-            <AlertDialog.Footer>
-              <Button
-                isDisabled={deleteMutation.isPending}
-                variant="tertiary"
-                onPress={() => setIsDeleteDialogOpen(false)}
-              >
-                キャンセル
-              </Button>
-              <Button
-                isDisabled={deleteMutation.isPending}
-                variant="danger"
-                onPress={confirmDelete}
-              >
-                削除
-              </Button>
-            </AlertDialog.Footer>
-          </AlertDialog.Dialog>
-        </AlertDialog.Container>
-      </AlertDialog.Backdrop>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-brand-danger/10 text-brand-danger">
+              <WarningCircle weight="fill" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>レシピを削除しますか？</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              disabled={deleteMutation.isPending}
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              キャンセル
+            </Button>
+            <Button
+              disabled={deleteMutation.isPending}
+              variant="destructive"
+              onClick={confirmDelete}
+            >
+              削除
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {referenceImages.some((image) => image.url) ? (
         <section className="mx-4 mt-7 sm:mx-0">

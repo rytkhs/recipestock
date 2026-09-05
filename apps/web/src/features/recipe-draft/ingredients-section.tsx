@@ -1,6 +1,7 @@
-import { Button, Input } from "@heroui/react";
 import { CaretDown, CaretUp, Plus, Trash, X } from "@phosphor-icons/react";
 import { useController, useFieldArray } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { type RecipeDraftFormControl } from "./form-internals";
 import { createEmptyIngredientGroup } from "./recipe-draft-form-values";
 
@@ -39,7 +40,6 @@ const IngredientGroupBlock = ({
             name={groupLabel.field.name}
             placeholder="例）ソース、仕上げ"
             ref={groupLabel.field.ref}
-            variant="secondary"
             value={groupLabel.field.value ?? ""}
             onBlur={groupLabel.field.onBlur}
             onChange={(event) => groupLabel.field.onChange(event.target.value)}
@@ -48,10 +48,9 @@ const IngredientGroupBlock = ({
             <Button
               aria-label="グループを削除"
               className="h-9 min-w-9 justify-self-end rounded-full px-0 text-brand-muted"
-              isIconOnly
-              size="sm"
-              variant="tertiary"
-              onPress={onRemoveGroup}
+              size="icon-sm"
+              variant="ghost"
+              onClick={onRemoveGroup}
             >
               <Trash size={16} />
             </Button>
@@ -77,7 +76,7 @@ const IngredientGroupBlock = ({
         className="mt-1 justify-self-center rounded-full border border-brand-line bg-brand-paper px-4 text-brand-sage text-sm font-semibold hover:bg-brand-paper-muted"
         size="sm"
         variant="secondary"
-        onPress={() => append({ name: "", amount: "" })}
+        onClick={() => append({ name: "", amount: "" })}
       >
         <Plus size={14} />
         材料を追加
@@ -123,7 +122,6 @@ const IngredientRow = ({
         name={nameField.field.name}
         placeholder="材料名"
         ref={nameField.field.ref}
-        variant="secondary"
         value={nameField.field.value ?? ""}
         onBlur={nameField.field.onBlur}
         onChange={(event) => nameField.field.onChange(event.target.value)}
@@ -135,7 +133,6 @@ const IngredientRow = ({
         name={amountField.field.name}
         placeholder="量"
         ref={amountField.field.ref}
-        variant="secondary"
         value={amountField.field.value ?? ""}
         onBlur={amountField.field.onBlur}
         onChange={(event) => amountField.field.onChange(event.target.value)}
@@ -145,32 +142,29 @@ const IngredientRow = ({
         <Button
           aria-label="上に移動"
           className="h-8 min-w-8 rounded-full px-0 text-brand-muted"
-          isDisabled={isFirst}
-          isIconOnly
-          size="sm"
+          disabled={isFirst}
+          size="icon-sm"
           variant="ghost"
-          onPress={onMoveUp}
+          onClick={onMoveUp}
         >
           <CaretUp size={13} />
         </Button>
         <Button
           aria-label="下に移動"
           className="h-8 min-w-8 rounded-full px-0 text-brand-muted"
-          isDisabled={isLast}
-          isIconOnly
-          size="sm"
+          disabled={isLast}
+          size="icon-sm"
           variant="ghost"
-          onPress={onMoveDown}
+          onClick={onMoveDown}
         >
           <CaretDown size={13} />
         </Button>
         <Button
           aria-label="材料を削除"
           className="h-8 min-w-8 rounded-full px-0 text-brand-muted hover:text-brand-danger"
-          isIconOnly
-          size="sm"
+          size="icon-sm"
           variant="ghost"
-          onPress={onRemove}
+          onClick={onRemove}
         >
           <X size={15} />
         </Button>
@@ -205,7 +199,7 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
           className="h-8 rounded-full px-3 text-brand-sage text-xs font-semibold sm:text-sm"
           size="sm"
           variant="ghost"
-          onPress={() => append(createEmptyIngredientGroup())}
+          onClick={() => append(createEmptyIngredientGroup())}
         >
           <Plus size={14} />
           材料グループを追加
@@ -224,7 +218,6 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
             name={yieldField.field.name}
             placeholder="例）2人分"
             ref={yieldField.field.ref}
-            variant="secondary"
             value={yieldField.field.value ?? ""}
             onBlur={yieldField.field.onBlur}
             onChange={(event) => yieldField.field.onChange(event.target.value)}

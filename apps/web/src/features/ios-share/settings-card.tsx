@@ -1,7 +1,9 @@
-import { Button, Input, Label, TextField } from "@heroui/react";
 import { ShareNetwork, Trash } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { issueShortcutCredential, listShortcutCredentials, revokeShortcutCredential } from "./api";
 import { isStandaloneWebApp } from "./display-mode";
 
@@ -12,6 +14,7 @@ export const IosShareSettingsCard = () => {
   const queryClient = useQueryClient();
   const standalone = isStandaloneWebApp();
   const [name, setName] = useState("iPhone");
+  const deviceNameId = useId();
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const credentials = useQuery({
@@ -69,19 +72,25 @@ export const IosShareSettingsCard = () => {
       ) : (
         <>
           <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-            <TextField className="min-w-0">
-              <Label className="text-brand-walnut font-semibold text-sm">端末名</Label>
+            <Field className="min-w-0">
+              <FieldLabel
+                className="text-brand-walnut font-semibold text-sm"
+                htmlFor={deviceNameId}
+              >
+                端末名
+              </FieldLabel>
               <Input
                 className="w-full min-w-0"
+                id={deviceNameId}
                 value={name}
                 maxLength={60}
                 onChange={(event) => setName(event.target.value)}
               />
-            </TextField>
+            </Field>
             <Button
               className="rounded-full bg-brand-sage font-semibold text-white hover:bg-brand-sage-dark"
-              isDisabled={!name.trim() || createMutation.isPending}
-              onPress={() => createMutation.mutate()}
+              disabled={!name.trim() || createMutation.isPending}
+              onClick={() => createMutation.mutate()}
             >
               連携トークンを発行
             </Button>
@@ -99,7 +108,7 @@ export const IosShareSettingsCard = () => {
                 <Button
                   className="rounded-full font-semibold"
                   variant="secondary"
-                  onPress={copyToken}
+                  onClick={copyToken}
                 >
                   トークンをコピー
                 </Button>
@@ -140,10 +149,9 @@ export const IosShareSettingsCard = () => {
                   </div>
                   <Button
                     aria-label={`${credential.name}の連携を解除`}
-                    isIconOnly
-                    size="sm"
+                    size="icon-sm"
                     variant="ghost"
-                    onPress={() => revokeMutation.mutate(credential.id)}
+                    onClick={() => revokeMutation.mutate(credential.id)}
                   >
                     <Trash size={16} />
                   </Button>

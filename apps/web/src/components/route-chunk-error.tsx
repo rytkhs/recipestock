@@ -1,5 +1,5 @@
-import { Button } from "@heroui/react";
 import { type ErrorComponentProps } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 
 export const RouteChunkError = (_props: ErrorComponentProps) => (
   <section
@@ -13,8 +13,8 @@ export const RouteChunkError = (_props: ErrorComponentProps) => (
     </p>
     <Button
       className="mt-6 rounded-full bg-brand-sage px-5 font-semibold text-white hover:bg-brand-sage-dark"
-      variant="primary"
-      onPress={() => window.location.reload()}
+      variant="default"
+      onClick={() => window.location.reload()}
     >
       再読み込み
     </Button>

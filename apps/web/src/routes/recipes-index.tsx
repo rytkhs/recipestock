@@ -1,18 +1,7 @@
 import {
-  AlertDialog,
-  Button,
-  Dropdown,
-  Input,
-  Label,
-  ProgressCircle,
-  Surface,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-} from "@heroui/react";
-import {
   CaretRight,
   CheckCircle,
+  CircleNotch,
   DotsThreeVertical,
   Globe,
   List,
@@ -28,7 +17,25 @@ import {
 import { type RecentImportJobsResponse } from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RecipeCardSkeleton } from "../components/loading";
 import {
   dismissFinishedImportJob,
@@ -85,40 +92,34 @@ const RecipeCardActionMenu = ({
         isList ? "top-2 right-2 sm:top-3 sm:right-3" : "top-1 right-1 sm:top-2 sm:right-2"
       }`}
     >
-      <Dropdown>
-        <Dropdown.Trigger
+      <DropdownMenu>
+        <DropdownMenuTrigger
           aria-label={`${title}の操作メニュー`}
           className={`flex h-8 w-8 items-center justify-center sm:h-9 sm:w-9 ${
             isList ? "text-brand-walnut" : "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]"
           }`}
         >
           <DotsThreeVertical size={19} weight="bold" />
-        </Dropdown.Trigger>
-        <Dropdown.Popover className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
-          <Dropdown.Menu
-            onAction={(key) => {
-              if (key === "edit") {
-                void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
-              } else if (key === "delete") {
-                onDelete();
-              }
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
+          <DropdownMenuItem
+            onClick={() => {
+              void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
             }}
           >
-            <Dropdown.Item id="edit" textValue="編集">
-              <div className="flex items-center gap-2 text-brand-walnut">
-                <PencilSimple size={16} weight="bold" />
-                <span className="text-sm font-semibold">編集</span>
-              </div>
-            </Dropdown.Item>
-            <Dropdown.Item id="delete" textValue="削除">
-              <div className="flex items-center gap-2 text-brand-danger">
-                <Trash size={16} weight="bold" />
-                <span className="text-sm font-semibold">削除</span>
-              </div>
-            </Dropdown.Item>
-          </Dropdown.Menu>
-        </Dropdown.Popover>
-      </Dropdown>
+            <div className="flex items-center gap-2 text-brand-walnut">
+              <PencilSimple size={16} weight="bold" />
+              <span className="text-sm font-semibold">編集</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onDelete}>
+            <div className="flex items-center gap-2 text-brand-danger">
+              <Trash size={16} weight="bold" />
+              <span className="text-sm font-semibold">削除</span>
+            </div>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 };
@@ -215,10 +216,9 @@ const ImportJobIsland = () => {
   const hasActive = activeJobs.length > 0;
 
   return (
-    <Surface
+    <div
       className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 mx-auto max-w-[520px] rounded-[20px] border border-brand-line-soft bg-brand-paper/95 text-sm shadow-pantry backdrop-blur-xl sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-[76px] sm:w-[min(520px,calc(100vw-2rem))] sm:-translate-x-1/2"
       role={hasFailure ? "alert" : "status"}
-      variant="transparent"
     >
       <button
         aria-expanded={isExpanded}
@@ -236,18 +236,12 @@ const ImportJobIsland = () => {
           }`}
         >
           {hasActive && !hasFailure ? (
-            <ProgressCircle
-              aria-label="取り込み中"
-              className="text-brand-orange"
-              color="warning"
-              isIndeterminate
-              size="sm"
-            >
-              <ProgressCircle.Track>
-                <ProgressCircle.TrackCircle />
-                <ProgressCircle.FillCircle />
-              </ProgressCircle.Track>
-            </ProgressCircle>
+            <CircleNotch
+              aria-hidden="true"
+              className="animate-spin motion-reduce:animate-none"
+              size={19}
+              weight="bold"
+            />
           ) : null}
           {!hasActive && !hasFailure ? <CheckCircle size={19} weight="fill" /> : null}
           {hasFailure ? <WarningCircle size={19} weight="fill" /> : null}
@@ -300,10 +294,10 @@ const ImportJobIsland = () => {
                 {isFailed ? (
                   <Button
                     className="h-8 shrink-0 rounded-full bg-brand-sage px-3 text-white text-xs font-semibold hover:bg-brand-sage-dark"
-                    isDisabled={!job.url || retryMutation.isPending}
+                    disabled={!job.url || retryMutation.isPending}
                     size="sm"
-                    variant="primary"
-                    onPress={() => retryMutation.mutate(job)}
+                    variant="default"
+                    onClick={() => retryMutation.mutate(job)}
                   >
                     再試行
                   </Button>
@@ -312,10 +306,9 @@ const ImportJobIsland = () => {
                   <Button
                     aria-label={`${job.url ?? status}を閉じる`}
                     className="h-8 w-8 shrink-0 rounded-full bg-transparent text-brand-muted hover:bg-brand-paper-muted hover:text-brand-walnut"
-                    isIconOnly
-                    size="sm"
+                    size="icon-sm"
                     variant="ghost"
-                    onPress={() => dismissImportJob(job.id)}
+                    onClick={() => dismissImportJob(job.id)}
                   >
                     <X size={16} weight="bold" />
                   </Button>
@@ -330,7 +323,7 @@ const ImportJobIsland = () => {
           ) : null}
         </div>
       ) : null}
-    </Surface>
+    </div>
   );
 };
 
@@ -341,6 +334,7 @@ const SourceIcon = () => {
 export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
+  const searchId = useId();
   const [query, setQuery] = useState("");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
@@ -397,8 +391,10 @@ export const RecipesIndexRoute = () => {
       <div className="-mx-4 sticky top-0 z-30 flex min-w-0 items-center gap-3 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
         <form className="flex min-w-0 flex-1 items-end gap-3" onSubmit={submitSearch}>
           <div className="relative min-w-0 flex-1">
-            <TextField className="min-w-0">
-              <Label className="sr-only">検索</Label>
+            <Field className="min-w-0">
+              <FieldLabel className="sr-only" htmlFor={searchId}>
+                検索
+              </FieldLabel>
               <div className="relative min-w-0">
                 <MagnifyingGlass
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-wheat"
@@ -408,12 +404,13 @@ export const RecipesIndexRoute = () => {
                 <Input
                   className="w-full min-w-0 pl-10"
                   enterKeyHint="search"
+                  id={searchId}
                   placeholder="レシピを検索..."
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                 />
               </div>
-            </TextField>
+            </Field>
           </div>
           <Button
             className="hidden shrink-0 rounded-full border border-brand-line bg-brand-paper-raised font-semibold text-brand-walnut hover:bg-brand-paper-muted sm:inline-flex"
@@ -465,40 +462,33 @@ export const RecipesIndexRoute = () => {
 
       {recipes.length > 0 || isInitialRecipesLoading ? (
         <div className="mt-6 flex justify-end">
-          <ToggleButtonGroup
+          <ToggleGroup
             aria-label="レシピ一覧の表示形式"
-            disallowEmptySelection
             className="inline-flex shrink-0 p-1 rounded-full border border-brand-line-soft bg-brand-paper-raised"
-            selectedKeys={[viewMode]}
-            selectionMode="single"
-            size="md"
-            onSelectionChange={(keys) => {
-              const [selectedKey] = keys;
+            value={[viewMode]}
+            onValueChange={(groupValue) => {
+              const [selectedKey] = groupValue;
 
               if (selectedKey === "grid" || selectedKey === "list") {
                 setViewMode(selectedKey);
               }
             }}
           >
-            <ToggleButton
+            <ToggleGroupItem
               aria-label="グリッド表示"
-              className="h-9 w-9 rounded-full text-brand-muted transition-all duration-200 data-[selected=true]:bg-brand-paper data-[selected=true]:shadow-pantry-sm data-[selected=true]:text-brand-ink hover:text-brand-ink sm:h-10 sm:w-10"
-              id="grid"
-              isIconOnly
-              variant="ghost"
+              className="h-9 w-9 rounded-full text-brand-muted transition-all duration-200 aria-pressed:bg-brand-paper aria-pressed:shadow-pantry-sm aria-pressed:text-brand-ink hover:text-brand-ink sm:h-10 sm:w-10"
+              value="grid"
             >
               <SquaresFour size={18} weight={viewMode === "grid" ? "fill" : "bold"} />
-            </ToggleButton>
-            <ToggleButton
+            </ToggleGroupItem>
+            <ToggleGroupItem
               aria-label="リスト表示"
-              className="h-9 w-9 rounded-full text-brand-muted transition-all duration-200 data-[selected=true]:bg-brand-paper data-[selected=true]:shadow-pantry-sm data-[selected=true]:text-brand-ink hover:text-brand-ink sm:h-10 sm:w-10"
-              id="list"
-              isIconOnly
-              variant="ghost"
+              className="h-9 w-9 rounded-full text-brand-muted transition-all duration-200 aria-pressed:bg-brand-paper aria-pressed:shadow-pantry-sm aria-pressed:text-brand-ink hover:text-brand-ink sm:h-10 sm:w-10"
+              value="list"
             >
               <List size={18} weight="bold" />
-            </ToggleButton>
-          </ToggleButtonGroup>
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
       ) : null}
 
@@ -628,48 +618,48 @@ export const RecipesIndexRoute = () => {
         <div className="mt-8 flex justify-center">
           <Button
             className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold hover:bg-brand-paper-muted"
-            isDisabled={isFetching}
+            disabled={isFetching}
             variant="secondary"
-            onPress={loadNextPage}
+            onClick={loadNextPage}
           >
             もっと見る
           </Button>
         </div>
       ) : null}
 
-      <AlertDialog.Backdrop
-        isOpen={Boolean(deleteTargetId)}
+      <AlertDialog
+        open={Boolean(deleteTargetId)}
         onOpenChange={(isOpen) => {
           if (!isOpen) {
             setDeleteTargetId(null);
           }
         }}
       >
-        <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog>
-            <AlertDialog.Header>
-              <AlertDialog.Icon status="danger" />
-              <AlertDialog.Heading>レシピを削除しますか？</AlertDialog.Heading>
-            </AlertDialog.Header>
-            <AlertDialog.Footer>
-              <Button
-                isDisabled={deleteMutation.isPending}
-                variant="tertiary"
-                onPress={() => setDeleteTargetId(null)}
-              >
-                キャンセル
-              </Button>
-              <Button
-                isDisabled={deleteMutation.isPending}
-                variant="danger"
-                onPress={confirmDelete}
-              >
-                削除
-              </Button>
-            </AlertDialog.Footer>
-          </AlertDialog.Dialog>
-        </AlertDialog.Container>
-      </AlertDialog.Backdrop>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-brand-danger/10 text-brand-danger">
+              <WarningCircle weight="fill" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>レシピを削除しますか？</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              disabled={deleteMutation.isPending}
+              variant="outline"
+              onClick={() => setDeleteTargetId(null)}
+            >
+              キャンセル
+            </Button>
+            <Button
+              disabled={deleteMutation.isPending}
+              variant="destructive"
+              onClick={confirmDelete}
+            >
+              削除
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 };

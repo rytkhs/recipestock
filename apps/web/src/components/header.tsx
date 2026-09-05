@@ -1,4 +1,3 @@
-import { Button, Description, Dropdown, Label } from "@heroui/react";
 import {
   CookingPot,
   Link as LinkIcon,
@@ -9,6 +8,13 @@ import {
 } from "@phosphor-icons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const PublicNav = () => (
   <nav aria-label="Main navigation" className="flex items-center gap-2">
@@ -38,48 +44,43 @@ const AddRecipeMenu = ({
   const navigate = useNavigate();
 
   return (
-    <Dropdown>
-      <Dropdown.Trigger aria-label={ariaLabel} className={className} data-testid={testId}>
+    <DropdownMenu>
+      <DropdownMenuTrigger aria-label={ariaLabel} className={className} data-testid={testId}>
         {children}
-      </Dropdown.Trigger>
-      <Dropdown.Popover className="min-w-56 rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
-        <Dropdown.Menu
-          onAction={(key) => {
-            if (key === "manual") {
-              void navigate({ to: "/recipes/new" });
-              return;
-            }
-
-            if (key === "url") {
-              void navigate({ to: "/import/url" });
-            }
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="min-w-56 rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
+        <DropdownMenuItem
+          onClick={() => {
+            void navigate({ to: "/import/url" });
           }}
         >
-          <Dropdown.Item id="url" textValue="URLから">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-orange-soft text-brand-orange">
-                <LinkIcon size={16} weight="bold" />
-              </div>
-              <div className="flex flex-col">
-                <Label className="text-brand-ink font-semibold text-sm">URLから</Label>
-                <Description className="text-brand-muted text-xs">サイトから取り込む</Description>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-orange-soft text-brand-orange">
+              <LinkIcon size={16} weight="bold" />
             </div>
-          </Dropdown.Item>
-          <Dropdown.Item id="manual" textValue="手入力">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-sage-soft text-brand-sage">
-                <PencilSimple size={16} weight="bold" />
-              </div>
-              <div className="flex flex-col">
-                <Label className="text-brand-ink font-semibold text-sm">手入力</Label>
-                <Description className="text-brand-muted text-xs">レシピを自分で入力</Description>
-              </div>
+            <div className="flex flex-col">
+              <span className="text-brand-ink font-semibold text-sm">URLから</span>
+              <span className="text-brand-muted text-xs">サイトから取り込む</span>
             </div>
-          </Dropdown.Item>
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            void navigate({ to: "/recipes/new" });
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-sage-soft text-brand-sage">
+              <PencilSimple size={16} weight="bold" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-brand-ink font-semibold text-sm">手入力</span>
+              <span className="text-brand-muted text-xs">レシピを自分で入力</span>
+            </div>
+          </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

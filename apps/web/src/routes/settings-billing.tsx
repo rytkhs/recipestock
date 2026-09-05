@@ -1,4 +1,3 @@
-import { Button } from "@heroui/react";
 import { CaretLeft } from "@phosphor-icons/react";
 import {
   type CreateBillingPortalResponse,
@@ -8,6 +7,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { SettingsSkeleton } from "../components/loading";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
@@ -192,10 +192,10 @@ export const SettingsBillingRoute = () => {
                 </p>
                 <Button
                   className="mt-4 rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
-                  isDisabled={isPortalSubmitting}
+                  disabled={isPortalSubmitting}
                   type="button"
-                  variant="primary"
-                  onPress={() => void openBillingPortal()}
+                  variant="default"
+                  onClick={() => void openBillingPortal()}
                 >
                   請求管理
                 </Button>
@@ -203,10 +203,10 @@ export const SettingsBillingRoute = () => {
             ) : (
               <Button
                 className="mt-4 rounded-full bg-brand-orange text-white font-semibold hover:bg-brand-orange-dark"
-                isDisabled={isSubmitting}
+                disabled={isSubmitting}
                 type="button"
-                variant="primary"
-                onPress={() => void startCheckout()}
+                variant="default"
+                onClick={() => void startCheckout()}
               >
                 Proにアップグレード
               </Button>
