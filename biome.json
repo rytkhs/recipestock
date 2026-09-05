@@ -47,6 +47,14 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["apps/web/src/components/ui/**"],
+      "linter": {
+        "enabled": false
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": {

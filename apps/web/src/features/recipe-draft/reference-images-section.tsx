@@ -1,8 +1,9 @@
-import { Button, Label, ProgressBar } from "@heroui/react";
 import { ImageSquare, Plus, X } from "@phosphor-icons/react";
 import { type DraftImageRef } from "@recipestock/schemas";
 import { useEffect, useRef, useState } from "react";
 import { useController } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   createLocalPreviewUrl,
   type ImagePreviewUrlsByImageId,
@@ -102,9 +103,9 @@ export const ReferenceImagesSection = ({
   return (
     <section className="overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:rounded-[18px]">
       <div className="flex items-center justify-between gap-3 border-brand-line-soft border-b bg-brand-paper-muted/70 px-3.5 py-3 sm:px-5">
-        <Label className="font-semibold text-brand-walnut text-sm sm:font-bold sm:text-base">
+        <span className="font-semibold text-brand-walnut text-sm sm:font-bold sm:text-base">
           レシピ画像
-        </Label>
+        </span>
       </div>
       <input
         ref={inputRef}
@@ -141,11 +142,11 @@ export const ReferenceImagesSection = ({
                 </div>
                 <Button
                   aria-label={`レシピ画像${imageIndex + 1}を削除`}
-                  className="absolute right-1 top-1 h-5 min-w-5 rounded-full px-0 text-[10px] leading-none shadow-pantry-sm"
-                  isDisabled={isUploading}
-                  isIconOnly
-                  variant="danger"
-                  onPress={() => handleRemove(imageIndex)}
+                  className="absolute right-1 top-1 h-5 min-w-5 rounded-full bg-brand-danger px-0 text-[10px] text-white leading-none shadow-pantry-sm hover:bg-brand-danger/90"
+                  disabled={isUploading}
+                  size="icon"
+                  variant="destructive"
+                  onClick={() => handleRemove(imageIndex)}
                 >
                   <X size={12} weight="bold" />
                 </Button>
@@ -166,7 +167,13 @@ export const ReferenceImagesSection = ({
           </button>
         </div>
 
-        {isUploading ? <ProgressBar aria-label="レシピ画像アップロード中" isIndeterminate /> : null}
+        {isUploading ? (
+          <Progress
+            aria-label="レシピ画像アップロード中"
+            className="[&_[data-slot=progress-indicator]]:bg-brand-sage"
+            value={null}
+          />
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
           {isUploading ? <span className="text-sm text-brand-muted">アップロード中</span> : null}

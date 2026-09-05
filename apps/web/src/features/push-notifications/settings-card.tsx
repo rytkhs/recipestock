@@ -1,8 +1,8 @@
-import { Button } from "@heroui/react";
 import { Bell } from "@phosphor-icons/react";
 import { type GetPushSubscriptionsResponse } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { registerAppServiceWorker } from "../../pwa/browser";
 import { getPushSubscriptions, pushSubscriptionsQueryKey, registerPushSubscription } from "./api";
 import {
@@ -226,10 +226,10 @@ export const PushNotificationSettingsCard = () => {
       {state === "disabled" ? (
         <Button
           className="mt-4 rounded-full font-semibold"
-          isDisabled={isSubmitting || !pushSubscriptions.data?.applicationServerKey}
+          disabled={isSubmitting || !pushSubscriptions.data?.applicationServerKey}
           type="button"
           variant="secondary"
-          onPress={() => void enable()}
+          onClick={() => void enable()}
         >
           通知を有効にする
         </Button>
@@ -237,10 +237,10 @@ export const PushNotificationSettingsCard = () => {
       {(state === "enabled" || state === "denied") && subscription ? (
         <Button
           className="mt-4 rounded-full font-semibold"
-          isDisabled={isSubmitting}
+          disabled={isSubmitting}
           type="button"
           variant="secondary"
-          onPress={() => void disable()}
+          onClick={() => void disable()}
         >
           通知を解除する
         </Button>
@@ -248,10 +248,10 @@ export const PushNotificationSettingsCard = () => {
       {state === "error" ? (
         <Button
           className="mt-4 rounded-full font-semibold"
-          isDisabled={pushSubscriptions.isFetching}
+          disabled={pushSubscriptions.isFetching}
           type="button"
           variant="secondary"
-          onPress={() => void pushSubscriptions.refetch()}
+          onClick={() => void pushSubscriptions.refetch()}
         >
           状態を再確認する
         </Button>

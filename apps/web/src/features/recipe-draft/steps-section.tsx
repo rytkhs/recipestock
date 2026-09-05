@@ -1,8 +1,10 @@
-import { Button, ProgressBar, TextArea, TextField } from "@heroui/react";
 import { CaretDown, CaretUp, ImageSquare, Plus, X } from "@phosphor-icons/react";
 import { type DraftImageRef, MAX_RECIPE_STEP_IMAGES } from "@recipestock/schemas";
 import { useEffect, useRef, useState } from "react";
 import { useController, useFieldArray, useWatch } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import {
   createLocalPreviewUrl,
   type ImagePreviewUrlsByImageId,
@@ -22,12 +24,6 @@ type StepsSectionProps = {
   previewUrlsByImageId?: ImagePreviewUrlsByImageId;
   uploadImage: (file: File) => Promise<DraftImageRef>;
   uploadingImageCount: number;
-};
-
-const handleTextAreaInput = (event: React.FormEvent<HTMLTextAreaElement>) => {
-  const target = event.currentTarget;
-  target.style.height = "auto";
-  target.style.height = `${target.scrollHeight}px`;
 };
 
 const StepImages = ({
@@ -155,10 +151,10 @@ const StepImages = ({
               <Button
                 aria-label={`${stepLabel}${imageIndex + 1}を削除`}
                 className="absolute top-1 right-1 h-5 min-w-5 rounded-full bg-black/50 px-0 text-xs leading-none text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                isDisabled={isUploading}
-                isIconOnly
-                variant="tertiary"
-                onPress={() => handleRemove(imageIndex)}
+                disabled={isUploading}
+                size="icon"
+                variant="ghost"
+                onClick={() => handleRemove(imageIndex)}
               >
                 <X size={12} weight="bold" />
               </Button>
@@ -178,7 +174,11 @@ const StepImages = ({
         ) : null}
       </div>
       {isUploading ? (
-        <ProgressBar aria-label={`${stepLabel}アップロード中`} isIndeterminate />
+        <Progress
+          aria-label={`${stepLabel}アップロード中`}
+          className="[&_[data-slot=progress-indicator]]:bg-brand-sage"
+          value={null}
+        />
       ) : null}
       {isAddDisabled ? (
         <span className="text-brand-muted text-xs">{imageLimitReachedText}</span>
@@ -205,33 +205,18 @@ const StepTextField = ({
     control,
     name: `steps.${stepIndex}.text`,
   });
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  useEffect(() => {
-    const el = textAreaRef.current;
-    if (el) {
-      el.style.height = "auto";
-      el.style.height = `${el.scrollHeight}px`;
-    }
-  }, []);
-
   return (
-    <TextField aria-label={`手順${stepIndex + 1}`}>
-      <TextArea
-        className="min-h-20 rounded-[14px] bg-brand-paper-raised text-sm leading-6 sm:min-h-24 sm:text-base"
-        name={field.name}
-        placeholder="手順を入力"
-        ref={(node) => {
-          field.ref(node);
-          textAreaRef.current = node;
-        }}
-        rows={2}
-        value={field.value ?? ""}
-        onBlur={field.onBlur}
-        onChange={(event) => field.onChange(event.target.value)}
-        onInput={handleTextAreaInput}
-      />
-    </TextField>
+    <Textarea
+      aria-label={`手順${stepIndex + 1}`}
+      className="min-h-20 rounded-[14px] bg-brand-paper-raised text-sm leading-6 sm:min-h-24 sm:text-base"
+      name={field.name}
+      placeholder="手順を入力"
+      ref={field.ref}
+      rows={2}
+      value={field.value ?? ""}
+      onBlur={field.onBlur}
+      onChange={(event) => field.onChange(event.target.value)}
+    />
   );
 };
 
@@ -286,33 +271,30 @@ export const StepsSection = ({
                   <Button
                     aria-label="上に移動"
                     className="h-8 min-w-8 rounded-full px-0 text-brand-muted"
-                    isDisabled={isFirst || uploadingImageCount > 0}
-                    isIconOnly
-                    size="sm"
+                    disabled={isFirst || uploadingImageCount > 0}
+                    size="icon-sm"
                     variant="ghost"
-                    onPress={() => swap(stepIndex, stepIndex - 1)}
+                    onClick={() => swap(stepIndex, stepIndex - 1)}
                   >
                     <CaretUp size={13} weight="bold" />
                   </Button>
                   <Button
                     aria-label="下に移動"
                     className="h-8 min-w-8 rounded-full px-0 text-brand-muted"
-                    isDisabled={isLast || uploadingImageCount > 0}
-                    isIconOnly
-                    size="sm"
+                    disabled={isLast || uploadingImageCount > 0}
+                    size="icon-sm"
                     variant="ghost"
-                    onPress={() => swap(stepIndex, stepIndex + 1)}
+                    onClick={() => swap(stepIndex, stepIndex + 1)}
                   >
                     <CaretDown size={13} weight="bold" />
                   </Button>
                   <Button
                     aria-label={`手順${stepIndex + 1}を削除`}
                     className="h-8 min-w-8 rounded-full px-0 text-brand-muted hover:text-brand-danger"
-                    isDisabled={uploadingImageCount > 0}
-                    isIconOnly
-                    size="sm"
+                    disabled={uploadingImageCount > 0}
+                    size="icon-sm"
                     variant="ghost"
-                    onPress={() => remove(stepIndex)}
+                    onClick={() => remove(stepIndex)}
                   >
                     <X size={15} weight="bold" />
                   </Button>
@@ -341,7 +323,7 @@ export const StepsSection = ({
         <Button
           className="my-3 justify-self-center rounded-full border border-brand-line bg-brand-paper px-5 text-brand-sage font-semibold hover:bg-brand-paper-muted sm:my-4"
           variant="secondary"
-          onPress={() => append(createEmptyStep())}
+          onClick={() => append(createEmptyStep())}
         >
           <Plus size={16} weight="bold" />
           手順を追加
