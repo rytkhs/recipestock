@@ -25,7 +25,7 @@ Browser / PWA
 | --- | --- |
 | Frontend | Vite + React + TypeScript |
 | Styling | Tailwind CSS v4 |
-| UI components | shadcn/ui — Base UI base, `base-nova` style（ADR 0018）。`apps/web/src/components/ui/` にベンダリング |
+| UI components | shadcn/ui — Base UI base, `base-nova` style.`apps/web/src/components/ui/` にベンダリング |
 | Icons | `@phosphor-icons/react` |
 | Routing | TanStack Router |
 | Server state | TanStack Query |
