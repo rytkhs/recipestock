@@ -148,7 +148,7 @@ describe("Recipe list routes", () => {
         {
           id: "recipe_5",
           title: "Unlocked recipe",
-          coverImageUrl: "/api/images/object/recipes/user_123/recipe_5/cover.webp",
+          coverImageUrl: "/api/images/thumbnail/v1/recipes/user_123/recipe_5/cover.webp",
           sourceName: null,
           createdAt: "2026-05-25T00:00:00.000Z",
           updatedAt: "2026-05-30T00:00:00.000Z",

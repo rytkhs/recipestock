@@ -61,13 +61,20 @@ describe("RecipeThumbnail", () => {
     );
   });
 
-  it("reveals the browser image error state", () => {
-    render(<RecipeThumbnail alt="Tomato pasta" index={0} src="/missing.webp" />);
+  it("shows a placeholder after failure and retries when the source changes", () => {
+    const { rerender } = render(
+      <RecipeThumbnail alt="Tomato pasta" index={0} src="/missing.webp" />,
+    );
 
     const image = screen.getByRole("img", { name: "Tomato pasta" });
 
     fireEvent.error(image);
 
-    expect(image).toHaveClass("opacity-100");
+    expect(image).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Tomato pastaの画像を読み込めませんでした" }),
+    ).toBeInTheDocument();
+    rerender(<RecipeThumbnail alt="Tomato pasta" index={0} src="/new.webp" />);
+    expect(screen.getByRole("img", { name: "Tomato pasta" })).toHaveAttribute("src", "/new.webp");
   });
 });

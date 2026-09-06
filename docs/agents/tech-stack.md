@@ -37,6 +37,7 @@ Browser / PWA
 | ORM | Drizzle ORM |
 | Database connection | `@neondatabase/serverless` |
 | Image storage | Cloudflare R2 |
+| Recipe thumbnails | Cloudflare Images binding (`IMAGES`) で初回取得時に変換し、R2へ保存（ADR 0018） |
 | Auth | Better Auth |
 | Email | Resend Email API（SDKは使わずHTTPを直接呼ぶ。ADR 0015） |
 | Billing | Stripe |

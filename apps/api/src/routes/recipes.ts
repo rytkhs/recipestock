@@ -20,11 +20,7 @@ import {
 } from "../api-error";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
-import {
-  createRecipeImageDisplayUrl,
-  createRecipeImageService,
-  type RecipeImageService,
-} from "../images";
+import { createRecipeImageService, type RecipeImageService } from "../images";
 import { requireAuth } from "../middleware/auth";
 import {
   attachRecipeImageUrls,
@@ -33,6 +29,7 @@ import {
   getRemovedRecipeImageKeys,
   RecipeImageFinalizeError,
 } from "../recipe-images";
+import { createRecipeThumbnailUrl } from "../recipe-thumbnails";
 import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
@@ -169,7 +166,7 @@ export const createRecipeRoutes = ({
         result.items.map((item) => {
           const base = toRecipeListItem(item);
           if (!item.locked && item.coverImageObjectKey) {
-            base.coverImageUrl = createRecipeImageDisplayUrl({
+            base.coverImageUrl = createRecipeThumbnailUrl({
               objectKey: item.coverImageObjectKey,
             });
           }

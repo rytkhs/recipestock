@@ -22,6 +22,7 @@ export const apiErrorCodeSchema = z.enum([
   "invalid_image_type",
   "image_too_large",
   "image_finalize_failed",
+  "thumbnail_unavailable",
   "forbidden",
   "unknown",
 ]);
