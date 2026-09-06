@@ -301,7 +301,8 @@ const deleteImagePrefix = async (bucket: R2Bucket, prefix: string) => {
   let cursor: string | undefined;
   do {
     const result = await bucket.list({ prefix, cursor });
-    await Promise.all(result.objects.map((object) => bucket.delete(object.key)));
+    const keys = result.objects.map((object) => object.key);
+    if (keys.length > 0) await bucket.delete(keys);
     cursor = result.truncated ? result.cursor : undefined;
   } while (cursor);
 };

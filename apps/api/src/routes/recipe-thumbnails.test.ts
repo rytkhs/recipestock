@@ -1,6 +1,8 @@
+import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { type Bindings } from "../env";
 import { createRecipeImageService } from "../images";
+import { createLogger, createMemoryLogSink } from "../logger";
 import { createSilentTestApp } from "../test-helpers";
 
 const sourceKey = "recipes/user_123/recipe_123/cover.jpg";
@@ -11,7 +13,7 @@ const auth = {
   handleAuthRequest: async () => new Response(null, { status: 404 }),
 };
 
-const setup = ({ cached = false, authenticated = true } = {}) => {
+const setup = ({ cached = false, authenticated = true, sourceSize = 3 } = {}) => {
   const objects = new Map<string, Uint8Array>([[sourceKey, new Uint8Array([1, 2, 3])]]);
   if (cached) objects.set(thumbnailKey, new Uint8Array([4, 5]));
   const object = (key: string): R2ObjectBody | null => {
@@ -20,7 +22,7 @@ const setup = ({ cached = false, authenticated = true } = {}) => {
     const contentType = key.endsWith(".webp") ? "image/webp" : "image/jpeg";
     return {
       key,
-      size: bytes.length,
+      size: key === sourceKey ? sourceSize : bytes.length,
       httpEtag: `"${bytes.join("-")}"`,
       uploaded: new Date("2026-09-06T00:00:00Z"),
       writeHttpMetadata: (headers: Headers) => headers.set("content-type", contentType),
@@ -29,14 +31,27 @@ const setup = ({ cached = false, authenticated = true } = {}) => {
   };
   const bucket = {
     head: vi.fn(async (key: string) => object(key)),
-    get: vi.fn(async (key: string) => object(key)),
+    get: vi.fn(async (key: string, options?: R2GetOptions) => {
+      const found = object(key);
+      if (!found || !(options?.onlyIf instanceof Headers)) return found;
+      const ifNoneMatch = options.onlyIf.get("if-none-match");
+      const etagMatches = ifNoneMatch
+        ?.split(",")
+        .some((tag) => tag.trim() === "*" || tag.trim().replace(/^W\//, "") === found.httpEtag);
+      const ifModifiedSince = options.onlyIf.get("if-modified-since");
+      const notModifiedSince =
+        ifModifiedSince !== null && found.uploaded <= new Date(ifModifiedSince);
+      if (!etagMatches && !notModifiedSince) return found;
+      const { body: _body, ...metadata } = found;
+      return { ...metadata, writeHttpMetadata: found.writeHttpMetadata } as R2Object;
+    }),
     put: vi.fn(async (key: string, bytes: ArrayBuffer, options: R2PutOptions) => {
       if (options.onlyIf && objects.has(key)) return null;
       objects.set(key, new Uint8Array(bytes));
       return object(key);
     }),
-    delete: vi.fn(async (key: string) => {
-      objects.delete(key);
+    delete: vi.fn(async (keys: string | string[]) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) objects.delete(key);
     }),
     list: vi.fn(async ({ prefix }: { prefix: string }) => ({
       objects: [...objects.keys()].filter((key) => key.startsWith(prefix)).map((key) => ({ key })),
@@ -51,8 +66,10 @@ const setup = ({ cached = false, authenticated = true } = {}) => {
       return { transform };
     }),
   };
+  const logSink = createMemoryLogSink();
   const app = createSilentTestApp({
     auth: authenticated ? auth : { ...auth, getSession: async () => null },
+    loggerFactory: (baseFields) => createLogger(baseFields, { sink: logSink }),
   });
   const env = {
     APP_ENV: "development",
@@ -65,6 +82,7 @@ const setup = ({ cached = false, authenticated = true } = {}) => {
     images,
     transform,
     output,
+    logSink,
     env,
     request: (path = url, headers?: HeadersInit) => app.request(path, { headers }, env),
   };
@@ -88,6 +106,9 @@ describe("Recipe thumbnails", () => {
     expect(fixture.bucket.head).toHaveBeenCalledTimes(2);
     expect((await fixture.request()).status).toBe(200);
     expect(fixture.images.input).toHaveBeenCalledTimes(1);
+    expect(
+      fixture.logSink.entries.filter((entry) => entry.event === "recipe_thumbnail_served"),
+    ).toHaveLength(1);
   });
 
   it("returns 304 only for the derivative ETag, including weak validators", async () => {
@@ -97,6 +118,18 @@ describe("Recipe thumbnails", () => {
     expect(await response.text()).toBe("");
     expect(response.headers.get("cache-control")).toBe("private, max-age=604800");
     expect((await fixture.request(url, { "if-none-match": '"1-2-3"' })).status).toBe(200);
+    expect(fixture.images.input).not.toHaveBeenCalled();
+    expect(fixture.bucket.get).toHaveBeenCalledWith(thumbnailKey, {
+      onlyIf: expect.any(Headers),
+    });
+  });
+
+  it("returns 304 for If-Modified-Since through R2 conditional get", async () => {
+    const fixture = setup({ cached: true });
+    const response = await fixture.request(url, {
+      "if-modified-since": "Sun, 06 Sep 2026 00:00:00 GMT",
+    });
+    expect(response.status).toBe(304);
     expect(fixture.images.input).not.toHaveBeenCalled();
   });
 
@@ -170,6 +203,49 @@ describe("Recipe thumbnails", () => {
     expect(fixture.objects.has(thumbnailKey)).toBe(false);
   });
 
+  it.each([
+    9412, 9413, 9520,
+  ])("returns a temporarily private-cached unsupported error for permanent Images code %i", async (code) => {
+    const fixture = setup();
+    fixture.output.mockRejectedValueOnce(
+      Object.assign(new Error("Permanent transform failure"), { code }),
+    );
+    const response = await fixture.request();
+    expect(response.status).toBe(422);
+    expect(response.headers.get("cache-control")).toBe("private, max-age=3600");
+    expect(await response.json()).toMatchObject({
+      error: { code: "thumbnail_source_unsupported" },
+    });
+    expect(
+      fixture.logSink.entries.find((entry) => entry.event === "recipe_thumbnail_failed"),
+    ).toMatchObject({ cloudflareErrorCode: code, failureKind: "source_unsupported" });
+  });
+
+  it("keeps an ambiguous Images error transient and uncached", async () => {
+    const fixture = setup();
+    fixture.output.mockRejectedValueOnce(
+      Object.assign(new Error("Ambiguous transform failure"), { code: 9523 }),
+    );
+    const response = await fixture.request();
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({ error: { code: "thumbnail_unavailable" } });
+    expect(
+      fixture.logSink.entries.find((entry) => entry.event === "recipe_thumbnail_failed"),
+    ).toMatchObject({ cloudflareErrorCode: 9523, failureKind: "unavailable" });
+  });
+
+  it("treats an oversized stored source as unsupported", async () => {
+    const fixture = setup({ sourceSize: MAX_IMAGE_UPLOAD_SIZE_BYTES + 1 });
+    const response = await fixture.request();
+    expect(response.status).toBe(422);
+    expect(response.headers.get("cache-control")).toBe("private, max-age=3600");
+    expect(await response.json()).toMatchObject({
+      error: { code: "thumbnail_source_unsupported" },
+    });
+    expect(fixture.images.input).not.toHaveBeenCalled();
+  });
+
   it("deletes all derivative versions along with a removed original", async () => {
     const fixture = setup({ cached: true });
     fixture.objects.set(thumbnailKey.replace("v1", "v0"), new Uint8Array([6]));
@@ -177,6 +253,9 @@ describe("Recipe thumbnails", () => {
     await createRecipeImageService(fixture.env).deleteObject(sourceKey);
     expect([...fixture.objects.keys()]).toEqual(["recipes/user_123/recipe_123/other.jpg"]);
     expect(fixture.bucket.delete.mock.calls[0]).toEqual([sourceKey]);
+    expect(fixture.bucket.delete.mock.calls[1]).toEqual([
+      [thumbnailKey, thumbnailKey.replace("v1", "v0")],
+    ]);
   });
 
   it("does not list derivatives for temporary uploads", async () => {

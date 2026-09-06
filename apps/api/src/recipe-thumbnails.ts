@@ -5,10 +5,39 @@ import { recipeThumbnailPrefix } from "./recipe-image-keys";
 
 export const RECIPE_THUMBNAIL_VERSION = "v1";
 
+const PERMANENT_IMAGES_ERROR_CODES = new Set([9412, 9413, 9520]);
+
+export class UnsupportedRecipeThumbnailSourceError extends Error {
+  override name = "UnsupportedRecipeThumbnailSourceError";
+}
+
+export const getImagesErrorCode = (error: unknown) => {
+  if (!(error instanceof Error)) return undefined;
+  const code = Reflect.get(error, "code");
+  return typeof code === "number" ? code : undefined;
+};
+
+export const isUnsupportedRecipeThumbnailSourceError = (error: unknown) => {
+  if (error instanceof UnsupportedRecipeThumbnailSourceError) return true;
+  const code = getImagesErrorCode(error);
+  return code !== undefined && PERMANENT_IMAGES_ERROR_CODES.has(code);
+};
+
 export const createRecipeThumbnailUrl = ({ objectKey }: { objectKey: string }) =>
   `/api/images/thumbnail/${RECIPE_THUMBNAIL_VERSION}/${objectKey.split("/").map(encodeURIComponent).join("/")}`;
 
-const thumbnailResponse = (object: R2Object, body: BodyInit, requestHeaders: Headers) => {
+const hasR2ObjectBody = (object: R2Object | R2ObjectBody): object is R2ObjectBody =>
+  "body" in object;
+
+const conditionalThumbnailResponse = (object: R2Object | R2ObjectBody) => {
+  const headers = createRecipeImageResponseHeaders(object);
+
+  if (!hasR2ObjectBody(object)) return new Response(null, { status: 304, headers });
+
+  return new Response(object.body, { headers });
+};
+
+const generatedThumbnailResponse = (object: R2Object, body: BodyInit, requestHeaders: Headers) => {
   const headers = createRecipeImageResponseHeaders(object);
   const condition = requestHeaders.get("if-none-match");
   const matches = condition
@@ -41,21 +70,14 @@ export const createRecipeThumbnailResponse = async ({
   // A surviving derivative must not make a deleted source readable again.
   const sourceMetadata = await bucket.head(objectKey);
   if (!sourceMetadata) return null;
-  const cached = await bucket.get(thumbnailKey);
-  if (cached) {
-    logger.info("recipe_thumbnail_served", {
-      cache: "hit",
-      durationMs: Date.now() - startedAt,
-      outputBytes: cached.size,
-    });
-    return thumbnailResponse(cached, cached.body, requestHeaders);
-  }
+  const cached = await bucket.get(thumbnailKey, { onlyIf: requestHeaders });
+  if (cached) return conditionalThumbnailResponse(cached);
 
   const source = await bucket.get(objectKey);
   if (!source) return null;
   if (source.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
     await source.body.cancel();
-    throw new Error("Thumbnail source is too large.");
+    throw new UnsupportedRecipeThumbnailSourceError("Thumbnail source is too large.");
   }
   const transformStartedAt = Date.now();
   const transformed = await images
@@ -80,8 +102,8 @@ export const createRecipeThumbnailResponse = async ({
     outputBytes: bytes.byteLength,
     concurrentWrite: !stored,
   });
-  if (stored) return thumbnailResponse(stored, bytes, requestHeaders);
+  if (stored) return generatedThumbnailResponse(stored, bytes, requestHeaders);
   // Another request won the conditional write. Serve its bytes and ETag together.
-  const winner = await bucket.get(thumbnailKey);
-  return winner ? thumbnailResponse(winner, winner.body, requestHeaders) : null;
+  const winner = await bucket.get(thumbnailKey, { onlyIf: requestHeaders });
+  return winner ? conditionalThumbnailResponse(winner) : null;
 };

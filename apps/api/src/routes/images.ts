@@ -24,7 +24,12 @@ import {
 } from "../images";
 import { requireAuth } from "../middleware/auth";
 import { parseRecipeImageKey } from "../recipe-image-keys";
-import { createRecipeThumbnailResponse, RECIPE_THUMBNAIL_VERSION } from "../recipe-thumbnails";
+import {
+  createRecipeThumbnailResponse,
+  getImagesErrorCode,
+  isUnsupportedRecipeThumbnailSourceError,
+  RECIPE_THUMBNAIL_VERSION,
+} from "../recipe-thumbnails";
 import { createRecipeId as createDefaultImageId } from "../recipes";
 
 type ImageRouteDependencies = {
@@ -34,6 +39,7 @@ type ImageRouteDependencies = {
 };
 
 const IMAGE_OBJECT_ROUTE_PREFIX = "/api/images/object/";
+const UNSUPPORTED_THUMBNAIL_CACHE_CONTROL = "private, max-age=3600";
 
 const objectKeyFromImageObjectPath = (pathname: string) => {
   if (!pathname.startsWith(IMAGE_OBJECT_ROUTE_PREFIX)) {
@@ -61,7 +67,11 @@ export const createImageRoutes = ({
   const routes = new Hono<ApiEnv>();
   routes.use("/thumbnail/*", async (c, next) => {
     await next();
-    if (c.res.status >= 400) c.header("cache-control", "no-store");
+    if (
+      c.res.status >= 400 &&
+      c.res.headers.get("cache-control") !== UNSUPPORTED_THUMBNAIL_CACHE_CONTROL
+    )
+      c.header("cache-control", "no-store");
   });
 
   return routes
@@ -93,7 +103,22 @@ export const createImageRoutes = ({
         });
         return response ?? notFoundResponse("Image was not found.");
       } catch (error) {
-        c.get("logger").error("recipe_thumbnail_failed", { error });
+        const cloudflareErrorCode = getImagesErrorCode(error);
+        const sourceUnsupported = isUnsupportedRecipeThumbnailSourceError(error);
+        c.get("logger").error("recipe_thumbnail_failed", {
+          error,
+          cloudflareErrorCode,
+          failureKind: sourceUnsupported ? "source_unsupported" : "unavailable",
+        });
+        if (sourceUnsupported) {
+          const response = apiErrorResponse({
+            status: 422,
+            code: "thumbnail_source_unsupported",
+            message: "Thumbnail source is not supported.",
+          });
+          response.headers.set("cache-control", UNSUPPORTED_THUMBNAIL_CACHE_CONTROL);
+          return response;
+        }
         return apiErrorResponse({
           status: 503,
           code: "thumbnail_unavailable",
