@@ -1,0 +1,50 @@
+name: Database Tests
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "packages/db/**"
+      - "compose.db-test.yml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/db-test.yml"
+  push:
+    branches: [main, develop]
+    paths:
+      - "apps/api/**"
+      - "packages/db/**"
+      - "compose.db-test.yml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/db-test.yml"
+
+# Neon Local が親 branch に ephemeral branch を作るため、実行は直列化する。
+concurrency:
+  group: db-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  db-test:
+    # fork からの pull request には secrets が渡らないため実行しない。
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+      NEON_PARENT_BRANCH_ID: ${{ secrets.NEON_PARENT_BRANCH_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm test:db

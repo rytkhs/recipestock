@@ -195,3 +195,16 @@ Worker 設定と static assets の確認には `wrangler deploy --dry-run` を�
 ```bash
 pnpm --filter @recipestock/api exec wrangler deploy --dry-run
 ```
+
+## CI
+
+GitHub Actions で 2 つの workflow を実行します。Node のバージョンは `.nvmrc` に固定しています。
+
+| Workflow | 契機 | 内容 |
+| --- | --- | --- |
+| `.github/workflows/verify.yml` | 全 pull request と `main` / `develop` への push | `pnpm lint` / migration 差分チェック / `typecheck` / `test` / `build` |
+| `.github/workflows/db-test.yml` | `apps/api/**`、`packages/db/**`、`compose.db-test.yml`、`pnpm-lock.yaml` を変更した pull request と `main` / `develop` への push | `pnpm test:db` |
+
+`verify.yml` は secrets を必要としません。`db-test.yml` には repository secrets として `NEON_API_KEY`、`NEON_PROJECT_ID`、`NEON_PARENT_BRANCH_ID` を設定します。値はテスト専用 Neon project のものを使い、production 由来のデータを含む branch は親にしません（ADR 0005）。
+
+migration 差分チェックは `pnpm db:generate` を実行し、`packages/db/migrations` に差分が出た場合に失敗します。Drizzle schema を変更して migration を生成し忘れた状態を検出します。Database 接続は不要です。

@@ -1,0 +1,57 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - run: pnpm lint
+
+      # schema と migration の同期漏れを検出する。Database 接続は不要。
+      - name: Check migration drift
+        timeout-minutes: 5
+        run: |
+          pnpm db:generate < /dev/null
+          if [ -n "$(git status --porcelain -- packages/db/migrations)" ]; then
+            echo "::error::packages/db/migrations is out of sync with the Drizzle schema. Run 'pnpm db:generate' and commit the result."
+            git status --porcelain -- packages/db/migrations
+            git diff -- packages/db/migrations
+            exit 1
+          fi
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      - run: pnpm build
