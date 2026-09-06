@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 const eagerRecipeThumbnailCount = 4;
 
@@ -8,21 +9,37 @@ type RecipeThumbnailProps = {
   src: string;
 };
 
-export const RecipeThumbnail = ({ alt, index, src }: RecipeThumbnailProps) => {
-  const [completedSrc, setCompletedSrc] = useState<string | null>(null);
-  const isComplete = completedSrc === src;
+export const RecipeThumbnail = (props: RecipeThumbnailProps) => (
+  <RecipeThumbnailImage key={props.src} {...props} />
+);
+
+const RecipeThumbnailImage = ({ alt, index, src }: RecipeThumbnailProps) => {
+  const [status, setStatus] = useState<"loading" | "loaded" | "failed">("loading");
+
+  if (status === "failed") {
+    return (
+      <span
+        role="img"
+        aria-label={`${alt}の画像を読み込めませんでした`}
+        className="flex size-full items-center justify-center text-muted-foreground"
+      >
+        <span aria-hidden="true">🍳</span>
+      </span>
+    );
+  }
 
   return (
     <img
       alt={alt}
-      className={`h-full w-full object-cover transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none group-hover:scale-105 ${
-        isComplete ? "opacity-100" : "opacity-0"
-      }`}
+      className={cn(
+        "size-full object-cover transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none group-hover:scale-105",
+        status === "loaded" ? "opacity-100" : "opacity-0",
+      )}
       decoding="async"
       loading={index < eagerRecipeThumbnailCount ? "eager" : "lazy"}
       src={src}
-      onError={() => setCompletedSrc(src)}
-      onLoad={() => setCompletedSrc(src)}
+      onError={() => setStatus("failed")}
+      onLoad={() => setStatus("loaded")}
     />
   );
 };
