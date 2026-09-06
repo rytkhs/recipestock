@@ -133,6 +133,20 @@ describe("Recipe thumbnails", () => {
     expect(fixture.images.input).not.toHaveBeenCalled();
   });
 
+  it("does not pass non-cache preconditions to R2", async () => {
+    const fixture = setup({ cached: true });
+    const response = await fixture.request(url, {
+      "if-match": '"other"',
+      "if-unmodified-since": "Sat, 05 Sep 2026 00:00:00 GMT",
+    });
+    expect(response.status).toBe(200);
+    const options = fixture.bucket.get.mock.calls[0]?.[1];
+    expect(options?.onlyIf).toBeInstanceOf(Headers);
+    if (!(options?.onlyIf instanceof Headers)) throw new Error("Expected conditional headers.");
+    expect(options.onlyIf.has("if-match")).toBe(false);
+    expect(options.onlyIf.has("if-unmodified-since")).toBe(false);
+  });
+
   it("requires authentication before storage access", async () => {
     const fixture = setup({ authenticated: false });
     const response = await fixture.request();

@@ -75,6 +75,15 @@ export const createRecipeImageResponseHeaders = (object: R2Object) => {
   return headers;
 };
 
+export const createImageCacheRevalidationHeaders = (requestHeaders: Headers) => {
+  const headers = new Headers();
+  for (const name of ["if-none-match", "if-modified-since"]) {
+    const value = requestHeaders.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  return headers;
+};
+
 export const createRecipeImageObjectResponse = async ({
   bucket,
   objectKey,
@@ -84,7 +93,9 @@ export const createRecipeImageObjectResponse = async ({
   objectKey: string;
   requestHeaders: Headers;
 }) => {
-  const object = await bucket.get(objectKey, { onlyIf: requestHeaders });
+  const object = await bucket.get(objectKey, {
+    onlyIf: createImageCacheRevalidationHeaders(requestHeaders),
+  });
 
   if (!object) {
     return null;

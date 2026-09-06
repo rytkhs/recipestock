@@ -1,5 +1,5 @@
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
-import { createRecipeImageResponseHeaders } from "./images";
+import { createImageCacheRevalidationHeaders, createRecipeImageResponseHeaders } from "./images";
 import { type Logger } from "./logger";
 import { recipeThumbnailPrefix } from "./recipe-image-keys";
 
@@ -70,7 +70,8 @@ export const createRecipeThumbnailResponse = async ({
   // A surviving derivative must not make a deleted source readable again.
   const sourceMetadata = await bucket.head(objectKey);
   if (!sourceMetadata) return null;
-  const cached = await bucket.get(thumbnailKey, { onlyIf: requestHeaders });
+  const revalidationHeaders = createImageCacheRevalidationHeaders(requestHeaders);
+  const cached = await bucket.get(thumbnailKey, { onlyIf: revalidationHeaders });
   if (cached) return conditionalThumbnailResponse(cached);
 
   const source = await bucket.get(objectKey);
@@ -104,6 +105,6 @@ export const createRecipeThumbnailResponse = async ({
   });
   if (stored) return generatedThumbnailResponse(stored, bytes, requestHeaders);
   // Another request won the conditional write. Serve its bytes and ETag together.
-  const winner = await bucket.get(thumbnailKey, { onlyIf: requestHeaders });
+  const winner = await bucket.get(thumbnailKey, { onlyIf: revalidationHeaders });
   return winner ? conditionalThumbnailResponse(winner) : null;
 };
