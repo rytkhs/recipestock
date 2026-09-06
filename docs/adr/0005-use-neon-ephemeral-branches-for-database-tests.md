@@ -1,5 +1,7 @@
 # Database統合テストにNeon ephemeral branchを使用する
 
+CI導入時の`pnpm test:all`必須化については[ADR 0019](0019-start-ci-with-secret-free-checks.md)で更新した。以下は当時の決定を記録したものであり、Neon ephemeral branchを使用するDB統合テスト方式は引き続き有効。
+
 RepositoryのSQL、migration、PostgreSQL制約、および本番で使用する`@neondatabase/serverless`のHTTP接続をまとめて検証するため、Database統合テストにはNeon Localが作成するephemeral branchを使用する。
 
 テストは実データを含まないテスト専用Neon projectのbranchを親にする。`production`またはproduction由来のデータを含むbranchは親にしない。Neon Localの起動時にbranchを作成し、テストの成否にかかわらず停止時に削除する。各実行ではリポジトリ内の全migrationを適用し、migrationをschemaのSource of Truthとして検証する。
