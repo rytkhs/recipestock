@@ -3,7 +3,7 @@ import { extractFirstUrl } from "@recipestock/shared";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
@@ -87,41 +87,36 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
         </p>
         <div className="mt-4 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
           <form className="grid min-w-0 gap-4" onSubmit={submit}>
-            <Field className="min-w-0">
-              <div className="mb-1 flex min-w-0 items-center justify-between gap-3">
-                <FieldLabel className="text-brand-walnut font-semibold text-sm" htmlFor={urlId}>
-                  URL
-                </FieldLabel>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    aria-label="ペースト"
-                    className="h-7 min-h-7 rounded-full border border-brand-line bg-brand-paper px-2 text-brand-walnut text-xs hover:bg-brand-paper-muted"
-                    disabled={isSubmitting}
-                    size="sm"
-                    type="button"
-                    variant="secondary"
-                    onClick={pasteUrl}
-                  >
-                    <ClipboardText size={14} weight="bold" />
-                    <span>ペースト</span>
-                  </Button>
-                  <Button
-                    aria-label="クリア"
-                    className="h-7 min-h-7 rounded-full px-2 text-brand-muted text-xs hover:bg-brand-paper-muted hover:text-brand-walnut"
-                    disabled={isSubmitting || url.length === 0}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                    onClick={() => updateUrl("")}
-                  >
-                    <X size={14} weight="bold" />
-                    <span>クリア</span>
-                  </Button>
+            <FieldGroup>
+              <Field className="min-w-0">
+                <div className="mb-1 flex min-w-0 items-center justify-between gap-3">
+                  <FieldLabel htmlFor={urlId}>URL</FieldLabel>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      aria-label="ペースト"
+                      disabled={isSubmitting}
+                      size="sm"
+                      type="button"
+                      variant="secondary"
+                      onClick={pasteUrl}
+                    >
+                      <ClipboardText data-icon="inline-start" weight="bold" />
+                      <span>ペースト</span>
+                    </Button>
+                    <Button
+                      aria-label="クリア"
+                      disabled={isSubmitting || url.length === 0}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                      onClick={() => updateUrl("")}
+                    >
+                      <X data-icon="inline-start" weight="bold" />
+                      <span>クリア</span>
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <div className="min-w-0">
                 <Input
-                  className="w-full min-w-0"
                   id={urlId}
                   inputMode="url"
                   required
@@ -129,15 +124,10 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
                   value={url}
                   onChange={(event) => updateUrl(event.target.value)}
                 />
-              </div>
-            </Field>
+              </Field>
+            </FieldGroup>
             <div className="flex justify-end">
-              <Button
-                className="rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
-                disabled={isSubmitting}
-                type="submit"
-                variant="default"
-              >
+              <Button disabled={isSubmitting} type="submit">
                 取り込む
               </Button>
             </div>

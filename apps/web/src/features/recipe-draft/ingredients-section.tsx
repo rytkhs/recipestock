@@ -1,6 +1,7 @@
 import { CaretDown, CaretUp, Plus, Trash, X } from "@phosphor-icons/react";
 import { useController, useFieldArray } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { type RecipeDraftFormControl } from "./form-internals";
 import { createEmptyIngredientGroup } from "./recipe-draft-form-values";
@@ -31,28 +32,29 @@ const IngredientGroupBlock = ({
   });
 
   return (
-    <div className="grid min-w-0 gap-3">
+    <FieldGroup className="grid min-w-0 gap-3">
       {showGroupLabel && (
         <div className="grid min-w-0 gap-2 border-t border-brand-line-soft pt-4 first:border-t-0 first:pt-0 sm:flex sm:items-center">
-          <Input
-            aria-label="グループ名"
-            className="h-9 min-w-0 flex-1 text-sm font-semibold sm:h-10 sm:text-base"
-            name={groupLabel.field.name}
-            placeholder="例）ソース、仕上げ"
-            ref={groupLabel.field.ref}
-            value={groupLabel.field.value ?? ""}
-            onBlur={groupLabel.field.onBlur}
-            onChange={(event) => groupLabel.field.onChange(event.target.value)}
-          />
+          <Field className="min-w-0 flex-1">
+            <Input
+              aria-label="グループ名"
+              name={groupLabel.field.name}
+              placeholder="例）ソース、仕上げ"
+              ref={groupLabel.field.ref}
+              value={groupLabel.field.value ?? ""}
+              onBlur={groupLabel.field.onBlur}
+              onChange={(event) => groupLabel.field.onChange(event.target.value)}
+            />
+          </Field>
           {onRemoveGroup && (
             <Button
               aria-label="グループを削除"
-              className="h-9 min-w-9 justify-self-end rounded-full px-0 text-brand-muted"
+              className="justify-self-end"
               size="icon-sm"
               variant="ghost"
               onClick={onRemoveGroup}
             >
-              <Trash size={16} />
+              <Trash />
             </Button>
           )}
         </div>
@@ -73,15 +75,15 @@ const IngredientGroupBlock = ({
       ))}
 
       <Button
-        className="mt-1 justify-self-center rounded-full border border-brand-line bg-brand-paper px-4 text-brand-sage text-sm font-semibold hover:bg-brand-paper-muted"
+        className="mt-1 justify-self-center"
         size="sm"
         variant="secondary"
         onClick={() => append({ name: "", amount: "" })}
       >
-        <Plus size={14} />
+        <Plus data-icon="inline-start" />
         材料を追加
       </Button>
-    </div>
+    </FieldGroup>
   );
 };
 
@@ -115,61 +117,55 @@ const IngredientRow = ({
   });
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_5rem_auto] items-center gap-2 rounded-[14px] border border-transparent py-0.5 transition-colors hover:border-brand-line-soft hover:bg-brand-paper-raised/70 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:py-1">
-      <Input
-        aria-label="材料名"
-        className="h-9 min-w-0 text-sm sm:h-10 sm:text-base"
-        name={nameField.field.name}
-        placeholder="材料名"
-        ref={nameField.field.ref}
-        value={nameField.field.value ?? ""}
-        onBlur={nameField.field.onBlur}
-        onChange={(event) => nameField.field.onChange(event.target.value)}
-      />
+    <FieldGroup className="grid min-w-0 grid-cols-[minmax(0,1fr)_5rem_auto] items-center gap-2 rounded-[14px] border border-transparent py-0.5 transition-colors hover:border-brand-line-soft hover:bg-brand-paper-raised/70 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:py-1">
+      <Field className="min-w-0">
+        <Input
+          aria-label="材料名"
+          name={nameField.field.name}
+          placeholder="材料名"
+          ref={nameField.field.ref}
+          value={nameField.field.value ?? ""}
+          onBlur={nameField.field.onBlur}
+          onChange={(event) => nameField.field.onChange(event.target.value)}
+        />
+      </Field>
 
-      <Input
-        aria-label="量"
-        className="h-9 min-w-0 text-sm sm:h-10 sm:text-base"
-        name={amountField.field.name}
-        placeholder="量"
-        ref={amountField.field.ref}
-        value={amountField.field.value ?? ""}
-        onBlur={amountField.field.onBlur}
-        onChange={(event) => amountField.field.onChange(event.target.value)}
-      />
+      <Field className="min-w-0">
+        <Input
+          aria-label="量"
+          name={amountField.field.name}
+          placeholder="量"
+          ref={amountField.field.ref}
+          value={amountField.field.value ?? ""}
+          onBlur={amountField.field.onBlur}
+          onChange={(event) => amountField.field.onChange(event.target.value)}
+        />
+      </Field>
 
       <div className="flex shrink-0 items-center rounded-full border border-brand-line-soft bg-brand-paper">
         <Button
           aria-label="上に移動"
-          className="h-8 min-w-8 rounded-full px-0 text-brand-muted"
           disabled={isFirst}
           size="icon-sm"
           variant="ghost"
           onClick={onMoveUp}
         >
-          <CaretUp size={13} />
+          <CaretUp />
         </Button>
         <Button
           aria-label="下に移動"
-          className="h-8 min-w-8 rounded-full px-0 text-brand-muted"
           disabled={isLast}
           size="icon-sm"
           variant="ghost"
           onClick={onMoveDown}
         >
-          <CaretDown size={13} />
+          <CaretDown />
         </Button>
-        <Button
-          aria-label="材料を削除"
-          className="h-8 min-w-8 rounded-full px-0 text-brand-muted hover:text-brand-danger"
-          size="icon-sm"
-          variant="ghost"
-          onClick={onRemove}
-        >
-          <X size={15} />
+        <Button aria-label="材料を削除" size="icon-sm" variant="destructive" onClick={onRemove}>
+          <X />
         </Button>
       </div>
-    </div>
+    </FieldGroup>
   );
 };
 
@@ -195,34 +191,27 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
         >
           材料
         </h2>
-        <Button
-          className="h-8 rounded-full px-3 text-brand-sage text-xs font-semibold sm:text-sm"
-          size="sm"
-          variant="ghost"
-          onClick={() => append(createEmptyIngredientGroup())}
-        >
-          <Plus size={14} />
+        <Button size="sm" variant="ghost" onClick={() => append(createEmptyIngredientGroup())}>
+          <Plus data-icon="inline-start" />
           材料グループを追加
         </Button>
       </div>
 
       <div className="grid min-w-0 gap-4 px-3.5 py-3 sm:px-5">
-        <div className="grid gap-2 sm:max-w-48">
-          <label className="text-brand-walnut text-sm font-semibold" htmlFor="recipe-yield-text">
-            できあがり量
-          </label>
-          <Input
-            id="recipe-yield-text"
-            aria-label="できあがり量"
-            className="h-9 text-sm sm:h-10 sm:text-base"
-            name={yieldField.field.name}
-            placeholder="例）2人分"
-            ref={yieldField.field.ref}
-            value={yieldField.field.value ?? ""}
-            onBlur={yieldField.field.onBlur}
-            onChange={(event) => yieldField.field.onChange(event.target.value)}
-          />
-        </div>
+        <FieldGroup className="sm:max-w-48">
+          <Field>
+            <FieldLabel htmlFor="recipe-yield-text">できあがり量</FieldLabel>
+            <Input
+              id="recipe-yield-text"
+              name={yieldField.field.name}
+              placeholder="例）2人分"
+              ref={yieldField.field.ref}
+              value={yieldField.field.value ?? ""}
+              onBlur={yieldField.field.onBlur}
+              onChange={(event) => yieldField.field.onChange(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
 
         {fields.map((field, groupIndex) => (
           <IngredientGroupBlock

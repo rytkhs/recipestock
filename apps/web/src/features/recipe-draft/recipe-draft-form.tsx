@@ -102,10 +102,9 @@ export const RecipeDraftForm = ({
         title={title}
         trailing={
           <Button
-            className="h-10 rounded-full bg-brand-sage px-5 font-semibold text-white shadow-pantry-sm hover:bg-brand-sage-dark sm:h-11"
             disabled={formState.isSubmitting || uploadingImageCount > 0}
+            size="lg"
             type="submit"
-            variant="default"
           >
             {submitLabel}
           </Button>

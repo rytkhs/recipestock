@@ -3,7 +3,7 @@ import { type DraftImageRef } from "@recipestock/schemas";
 import { useEffect, useRef, useState } from "react";
 import { useController } from "react-hook-form";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
 import {
   createLocalPreviewUrl,
   type ImagePreviewUrlsByImageId,
@@ -142,13 +142,13 @@ export const ReferenceImagesSection = ({
                 </div>
                 <Button
                   aria-label={`レシピ画像${imageIndex + 1}を削除`}
-                  className="absolute right-1 top-1 h-5 min-w-5 rounded-full bg-brand-danger px-0 text-[10px] text-white leading-none shadow-pantry-sm hover:bg-brand-danger/90"
+                  className="absolute right-1 top-1"
                   disabled={isUploading}
-                  size="icon"
+                  size="icon-xs"
                   variant="destructive"
                   onClick={() => handleRemove(imageIndex)}
                 >
-                  <X size={12} weight="bold" />
+                  <X weight="bold" />
                 </Button>
               </div>
             );
@@ -167,13 +167,7 @@ export const ReferenceImagesSection = ({
           </button>
         </div>
 
-        {isUploading ? (
-          <Progress
-            aria-label="レシピ画像アップロード中"
-            className="[&_[data-slot=progress-indicator]]:bg-brand-sage"
-            value={null}
-          />
-        ) : null}
+        {isUploading ? <Spinner aria-label="レシピ画像アップロード中" /> : null}
 
         <div className="flex flex-wrap items-center gap-2">
           {isUploading ? <span className="text-sm text-brand-muted">アップロード中</span> : null}

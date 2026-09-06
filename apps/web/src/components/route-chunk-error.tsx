@@ -11,11 +11,7 @@ export const RouteChunkError = (_props: ErrorComponentProps) => (
     <p className="mt-3 text-brand-muted text-sm">
       通信状態を確認してから、もう一度お試しください。
     </p>
-    <Button
-      className="mt-6 rounded-full bg-brand-sage px-5 font-semibold text-white hover:bg-brand-sage-dark"
-      variant="default"
-      onClick={() => window.location.reload()}
-    >
+    <Button className="mt-6" onClick={() => window.location.reload()}>
       再読み込み
     </Button>
   </section>

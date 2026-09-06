@@ -191,10 +191,9 @@ export const SettingsBillingRoute = () => {
                   {cancellationMessage ? "Proは請求期間終了まで利用できます。" : "Pro契約中です。"}
                 </p>
                 <Button
-                  className="mt-4 rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
+                  className="mt-4"
                   disabled={isPortalSubmitting}
                   type="button"
-                  variant="default"
                   onClick={() => void openBillingPortal()}
                 >
                   請求管理
@@ -202,10 +201,9 @@ export const SettingsBillingRoute = () => {
               </div>
             ) : (
               <Button
-                className="mt-4 rounded-full bg-brand-orange text-white font-semibold hover:bg-brand-orange-dark"
+                className="mt-4"
                 disabled={isSubmitting}
                 type="button"
-                variant="default"
                 onClick={() => void startCheckout()}
               >
                 Proにアップグレード

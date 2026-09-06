@@ -1,7 +1,6 @@
 import {
   CaretRight,
   CheckCircle,
-  CircleNotch,
   DotsThreeVertical,
   Globe,
   List,
@@ -20,22 +19,27 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 import { RecipeCardSkeleton } from "../components/loading";
 import {
   dismissFinishedImportJob,
@@ -88,36 +92,34 @@ const RecipeCardActionMenu = ({
 
   return (
     <div
-      className={`absolute z-10 ${
-        isList ? "top-2 right-2 sm:top-3 sm:right-3" : "top-1 right-1 sm:top-2 sm:right-2"
-      }`}
+      className={cn(
+        "absolute z-10",
+        isList ? "top-2 right-2 sm:top-3 sm:right-3" : "top-1 right-1 sm:top-2 sm:right-2",
+      )}
     >
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`${title}の操作メニュー`}
-          className={`flex h-8 w-8 items-center justify-center sm:h-9 sm:w-9 ${
-            isList ? "text-brand-walnut" : "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]"
-          }`}
+          className={cn(!isList && "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]")}
+          render={<Button size="icon" variant="ghost" />}
         >
-          <DotsThreeVertical size={19} weight="bold" />
+          <DotsThreeVertical weight="bold" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
-          <DropdownMenuItem
-            onClick={() => {
-              void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
-            }}
-          >
-            <div className="flex items-center gap-2 text-brand-walnut">
-              <PencilSimple size={16} weight="bold" />
-              <span className="text-sm font-semibold">編集</span>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onDelete}>
-            <div className="flex items-center gap-2 text-brand-danger">
-              <Trash size={16} weight="bold" />
-              <span className="text-sm font-semibold">削除</span>
-            </div>
-          </DropdownMenuItem>
+        <DropdownMenuContent className="min-w-36">
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              onClick={() => {
+                void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
+              }}
+            >
+              <PencilSimple weight="bold" />
+              <span>編集</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+              <Trash weight="bold" />
+              <span>削除</span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -235,14 +237,7 @@ const ImportJobIsland = () => {
                 : "bg-brand-sage-soft text-brand-sage-dark"
           }`}
         >
-          {hasActive && !hasFailure ? (
-            <CircleNotch
-              aria-hidden="true"
-              className="animate-spin motion-reduce:animate-none"
-              size={19}
-              weight="bold"
-            />
-          ) : null}
+          {hasActive && !hasFailure ? <Spinner aria-hidden="true" role="presentation" /> : null}
           {!hasActive && !hasFailure ? <CheckCircle size={19} weight="fill" /> : null}
           {hasFailure ? <WarningCircle size={19} weight="fill" /> : null}
         </div>
@@ -283,7 +278,7 @@ const ImportJobIsland = () => {
                 </div>
                 {isSucceeded && job.recipeId ? (
                   <Link
-                    className="inline-flex min-h-8 shrink-0 items-center justify-center rounded-full bg-brand-sage px-3 font-semibold text-white text-xs no-underline hover:bg-brand-sage-dark"
+                    className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
                     params={{ recipeId: job.recipeId }}
                     to="/recipes/$recipeId"
                     onClick={() => dismissImportJob(job.id)}
@@ -293,10 +288,9 @@ const ImportJobIsland = () => {
                 ) : null}
                 {isFailed ? (
                   <Button
-                    className="h-8 shrink-0 rounded-full bg-brand-sage px-3 text-white text-xs font-semibold hover:bg-brand-sage-dark"
+                    className="shrink-0"
                     disabled={!job.url || retryMutation.isPending}
                     size="sm"
-                    variant="default"
                     onClick={() => retryMutation.mutate(job)}
                   >
                     再試行
@@ -305,12 +299,12 @@ const ImportJobIsland = () => {
                 {!isActive ? (
                   <Button
                     aria-label={`${job.url ?? status}を閉じる`}
-                    className="h-8 w-8 shrink-0 rounded-full bg-transparent text-brand-muted hover:bg-brand-paper-muted hover:text-brand-walnut"
+                    className="shrink-0"
                     size="icon-sm"
                     variant="ghost"
                     onClick={() => dismissImportJob(job.id)}
                   >
-                    <X size={16} weight="bold" />
+                    <X weight="bold" />
                   </Button>
                 ) : null}
               </div>
@@ -390,42 +384,38 @@ export const RecipesIndexRoute = () => {
     <section className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10">
       <div className="-mx-4 sticky top-0 z-30 flex min-w-0 items-center gap-3 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
         <form className="flex min-w-0 flex-1 items-end gap-3" onSubmit={submitSearch}>
-          <div className="relative min-w-0 flex-1">
+          <FieldGroup className="min-w-0 flex-1">
             <Field className="min-w-0">
               <FieldLabel className="sr-only" htmlFor={searchId}>
                 検索
               </FieldLabel>
-              <div className="relative min-w-0">
-                <MagnifyingGlass
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-wheat"
-                  size={18}
-                  weight="bold"
-                />
-                <Input
-                  className="w-full min-w-0 pl-10"
+              <InputGroup>
+                <InputGroupAddon>
+                  <MagnifyingGlass weight="bold" />
+                </InputGroupAddon>
+                <InputGroupInput
                   enterKeyHint="search"
                   id={searchId}
                   placeholder="レシピを検索..."
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                 />
-              </div>
+              </InputGroup>
             </Field>
-          </div>
-          <Button
-            className="hidden shrink-0 rounded-full border border-brand-line bg-brand-paper-raised font-semibold text-brand-walnut hover:bg-brand-paper-muted sm:inline-flex"
-            type="submit"
-            variant="secondary"
-          >
+          </FieldGroup>
+          <Button className="hidden shrink-0 sm:inline-flex" type="submit" variant="outline">
             検索
           </Button>
         </form>
         <Link
           aria-label="アカウント"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut no-underline transition-colors hover:bg-brand-paper-muted sm:hidden"
+          className={cn(
+            buttonVariants({ size: "icon-lg", variant: "outline" }),
+            "shrink-0 no-underline sm:hidden",
+          )}
           to="/settings"
         >
-          <UserCircle size={24} weight="bold" />
+          <UserCircle weight="bold" />
         </Link>
       </div>
 
@@ -464,7 +454,7 @@ export const RecipesIndexRoute = () => {
         <div className="mt-6 flex justify-end">
           <ToggleGroup
             aria-label="レシピ一覧の表示形式"
-            className="inline-flex shrink-0 p-1 rounded-full border border-brand-line-soft bg-brand-paper-raised"
+            variant="outline"
             value={[viewMode]}
             onValueChange={(groupValue) => {
               const [selectedKey] = groupValue;
@@ -474,19 +464,11 @@ export const RecipesIndexRoute = () => {
               }
             }}
           >
-            <ToggleGroupItem
-              aria-label="グリッド表示"
-              className="h-9 w-9 rounded-full text-brand-muted transition-all duration-200 aria-pressed:bg-brand-paper aria-pressed:shadow-pantry-sm aria-pressed:text-brand-ink hover:text-brand-ink sm:h-10 sm:w-10"
-              value="grid"
-            >
-              <SquaresFour size={18} weight={viewMode === "grid" ? "fill" : "bold"} />
+            <ToggleGroupItem aria-label="グリッド表示" value="grid">
+              <SquaresFour weight={viewMode === "grid" ? "fill" : "bold"} />
             </ToggleGroupItem>
-            <ToggleGroupItem
-              aria-label="リスト表示"
-              className="h-9 w-9 rounded-full text-brand-muted transition-all duration-200 aria-pressed:bg-brand-paper aria-pressed:shadow-pantry-sm aria-pressed:text-brand-ink hover:text-brand-ink sm:h-10 sm:w-10"
-              value="list"
-            >
-              <List size={18} weight="bold" />
+            <ToggleGroupItem aria-label="リスト表示" value="list">
+              <List weight="bold" />
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
@@ -616,12 +598,7 @@ export const RecipesIndexRoute = () => {
 
       {hasNextPage ? (
         <div className="mt-8 flex justify-center">
-          <Button
-            className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold hover:bg-brand-paper-muted"
-            disabled={isFetching}
-            variant="secondary"
-            onClick={loadNextPage}
-          >
+          <Button disabled={isFetching} variant="outline" onClick={loadNextPage}>
             もっと見る
           </Button>
         </div>
@@ -637,26 +614,20 @@ export const RecipesIndexRoute = () => {
       >
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
-            <AlertDialogMedia className="bg-brand-danger/10 text-brand-danger">
+            <AlertDialogMedia>
               <WarningCircle weight="fill" />
             </AlertDialogMedia>
             <AlertDialogTitle>レシピを削除しますか？</AlertDialogTitle>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button
-              disabled={deleteMutation.isPending}
-              variant="outline"
-              onClick={() => setDeleteTargetId(null)}
-            >
-              キャンセル
-            </Button>
-            <Button
+            <AlertDialogCancel disabled={deleteMutation.isPending}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
               disabled={deleteMutation.isPending}
               variant="destructive"
               onClick={confirmDelete}
             >
               削除
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

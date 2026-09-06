@@ -1,9 +1,10 @@
 import { ShareNetwork, Trash } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { issueShortcutCredential, listShortcutCredentials, revokeShortcutCredential } from "./api";
 import { isStandaloneWebApp } from "./display-mode";
 
@@ -72,23 +73,18 @@ export const IosShareSettingsCard = () => {
       ) : (
         <>
           <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-            <Field className="min-w-0">
-              <FieldLabel
-                className="text-brand-walnut font-semibold text-sm"
-                htmlFor={deviceNameId}
-              >
-                端末名
-              </FieldLabel>
-              <Input
-                className="w-full min-w-0"
-                id={deviceNameId}
-                value={name}
-                maxLength={60}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </Field>
+            <FieldGroup>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={deviceNameId}>端末名</FieldLabel>
+                <Input
+                  id={deviceNameId}
+                  value={name}
+                  maxLength={60}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </Field>
+            </FieldGroup>
             <Button
-              className="rounded-full bg-brand-sage font-semibold text-white hover:bg-brand-sage-dark"
               disabled={!name.trim() || createMutation.isPending}
               onClick={() => createMutation.mutate()}
             >
@@ -105,15 +101,11 @@ export const IosShareSettingsCard = () => {
                 value={issuedToken}
               />
               <div className="flex flex-wrap gap-2">
-                <Button
-                  className="rounded-full font-semibold"
-                  variant="secondary"
-                  onClick={copyToken}
-                >
+                <Button variant="secondary" onClick={copyToken}>
                   トークンをコピー
                 </Button>
                 <a
-                  className="inline-flex min-h-10 items-center justify-center rounded-full bg-brand-sage px-5 font-semibold text-white text-sm no-underline"
+                  className={cn(buttonVariants(), "no-underline")}
                   href={iosShareShortcutUrl}
                   rel="noreferrer"
                   target="_blank"
@@ -153,7 +145,7 @@ export const IosShareSettingsCard = () => {
                     variant="ghost"
                     onClick={() => revokeMutation.mutate(credential.id)}
                   >
-                    <Trash size={16} />
+                    <Trash />
                   </Button>
                 </div>
               ))}

@@ -225,7 +225,7 @@ export const PushNotificationSettingsCard = () => {
 
       {state === "disabled" ? (
         <Button
-          className="mt-4 rounded-full font-semibold"
+          className="mt-4"
           disabled={isSubmitting || !pushSubscriptions.data?.applicationServerKey}
           type="button"
           variant="secondary"
@@ -236,7 +236,7 @@ export const PushNotificationSettingsCard = () => {
       ) : null}
       {(state === "enabled" || state === "denied") && subscription ? (
         <Button
-          className="mt-4 rounded-full font-semibold"
+          className="mt-4"
           disabled={isSubmitting}
           type="button"
           variant="secondary"
@@ -247,7 +247,7 @@ export const PushNotificationSettingsCard = () => {
       ) : null}
       {state === "error" ? (
         <Button
-          className="mt-4 rounded-full font-semibold"
+          className="mt-4"
           disabled={pushSubscriptions.isFetching}
           type="button"
           variant="secondary"

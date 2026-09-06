@@ -24,6 +24,8 @@ import {
 } from "react";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -34,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -448,27 +451,21 @@ const RecipeImageLightbox = ({
             {index + 1} / {images.length}
           </span>
         ) : null}
-        <Button
-          aria-label="閉じる"
-          className="rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper"
-          size="icon"
-          variant="secondary"
-          onClick={onClose}
-        >
-          <X size={20} weight="bold" />
+        <Button aria-label="閉じる" size="icon" variant="secondary" onClick={onClose}>
+          <X weight="bold" />
         </Button>
       </div>
 
       {hasMultipleImages ? (
         <Button
           aria-label="前の画像"
-          className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper sm:left-6"
+          className="absolute left-3 top-1/2 z-20 -translate-y-1/2 sm:left-6"
           disabled={!hasPreviousImage}
           size="icon"
           variant="secondary"
           onClick={() => requestSlide(-1)}
         >
-          <CaretLeft size={24} weight="bold" />
+          <CaretLeft weight="bold" />
         </Button>
       ) : null}
 
@@ -515,13 +512,13 @@ const RecipeImageLightbox = ({
       {hasMultipleImages ? (
         <Button
           aria-label="次の画像"
-          className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper sm:right-6"
+          className="absolute right-3 top-1/2 z-20 -translate-y-1/2 sm:right-6"
           disabled={!hasNextImage}
           size="icon"
           variant="secondary"
           onClick={() => requestSlide(1)}
         >
-          <CaretRight size={24} weight="bold" />
+          <CaretRight weight="bold" />
         </Button>
       ) : null}
     </div>
@@ -683,31 +680,30 @@ export const RecipeDetailRoute = () => {
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label="操作メニュー"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut hover:bg-brand-paper-muted sm:h-11 sm:w-11"
+              render={<Button size="icon" variant="outline" />}
             >
-              <DotsThreeVertical size={20} weight="bold" />
+              <DotsThreeVertical weight="bold" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
-              <DropdownMenuItem
-                onClick={() => {
-                  void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
-                }}
-              >
-                <div className="flex items-center gap-2 text-brand-walnut">
-                  <PencilSimple size={16} weight="bold" />
-                  <span className="text-sm font-semibold">編集</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setIsDeleteDialogOpen(true);
-                }}
-              >
-                <div className="flex items-center gap-2 text-brand-danger">
-                  <Trash size={16} weight="bold" />
-                  <span className="text-sm font-semibold">削除</span>
-                </div>
-              </DropdownMenuItem>
+            <DropdownMenuContent className="min-w-36">
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  onClick={() => {
+                    void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
+                  }}
+                >
+                  <PencilSimple weight="bold" />
+                  <span>編集</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => {
+                    setIsDeleteDialogOpen(true);
+                  }}
+                >
+                  <Trash weight="bold" />
+                  <span>削除</span>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         }
@@ -754,26 +750,20 @@ export const RecipeDetailRoute = () => {
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
-            <AlertDialogMedia className="bg-brand-danger/10 text-brand-danger">
+            <AlertDialogMedia>
               <WarningCircle weight="fill" />
             </AlertDialogMedia>
             <AlertDialogTitle>レシピを削除しますか？</AlertDialogTitle>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button
-              disabled={deleteMutation.isPending}
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              キャンセル
-            </Button>
-            <Button
+            <AlertDialogCancel disabled={deleteMutation.isPending}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
               disabled={deleteMutation.isPending}
               variant="destructive"
               onClick={confirmDelete}
             >
               削除
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
