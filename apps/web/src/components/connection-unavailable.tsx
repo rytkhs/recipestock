@@ -1,5 +1,5 @@
-import { Button } from "@heroui/react";
 import { ArrowClockwise, WifiSlash } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
 
 export const ConnectionUnavailable = ({
   isRetrying,
@@ -18,13 +18,13 @@ export const ConnectionUnavailable = ({
         表示に必要な情報を取得できませんでした。接続が戻ると自動で再確認します。
       </p>
       <Button
-        className="mt-6 rounded-full font-semibold"
-        isDisabled={isRetrying}
+        className="mt-6"
+        disabled={isRetrying}
         type="button"
         variant="secondary"
-        onPress={() => void onRetry()}
+        onClick={() => void onRetry()}
       >
-        <ArrowClockwise size={16} weight="bold" />
+        <ArrowClockwise data-icon="inline-start" weight="bold" />
         {isRetrying ? "再試行中" : "再試行"}
       </Button>
     </div>

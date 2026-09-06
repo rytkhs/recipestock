@@ -1,4 +1,3 @@
-import { Button, Description, Dropdown, Label } from "@heroui/react";
 import {
   CookingPot,
   Link as LinkIcon,
@@ -9,17 +8,23 @@ import {
 } from "@phosphor-icons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type ReactNode } from "react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 const PublicNav = () => (
   <nav aria-label="Main navigation" className="flex items-center gap-2">
-    <Link className="no-underline" to="/login">
-      <Button
-        className="rounded-full bg-brand-paper-raised border border-brand-line text-brand-walnut font-semibold text-sm hover:bg-brand-paper-muted"
-        size="sm"
-        variant="secondary"
-      >
-        サインアップ / ログイン
-      </Button>
+    <Link
+      className={cn(buttonVariants({ size: "sm", variant: "secondary" }), "no-underline")}
+      to="/login"
+    >
+      サインアップ / ログイン
     </Link>
   </nav>
 );
@@ -38,81 +43,73 @@ const AddRecipeMenu = ({
   const navigate = useNavigate();
 
   return (
-    <Dropdown>
-      <Dropdown.Trigger aria-label={ariaLabel} className={className} data-testid={testId}>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={ariaLabel}
+        data-testid={testId}
+        render={<Button className={className} />}
+      >
         {children}
-      </Dropdown.Trigger>
-      <Dropdown.Popover className="min-w-56 rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
-        <Dropdown.Menu
-          onAction={(key) => {
-            if (key === "manual") {
-              void navigate({ to: "/recipes/new" });
-              return;
-            }
-
-            if (key === "url") {
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="min-w-56">
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            onClick={() => {
               void navigate({ to: "/import/url" });
-            }
-          }}
-        >
-          <Dropdown.Item id="url" textValue="URLから">
+            }}
+          >
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-orange-soft text-brand-orange">
-                <LinkIcon size={16} weight="bold" />
-              </div>
+              <LinkIcon weight="bold" />
               <div className="flex flex-col">
-                <Label className="text-brand-ink font-semibold text-sm">URLから</Label>
-                <Description className="text-brand-muted text-xs">サイトから取り込む</Description>
+                <span>URLから</span>
+                <span className="text-xs text-muted-foreground">サイトから取り込む</span>
               </div>
             </div>
-          </Dropdown.Item>
-          <Dropdown.Item id="manual" textValue="手入力">
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              void navigate({ to: "/recipes/new" });
+            }}
+          >
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-sage-soft text-brand-sage">
-                <PencilSimple size={16} weight="bold" />
-              </div>
+              <PencilSimple weight="bold" />
               <div className="flex flex-col">
-                <Label className="text-brand-ink font-semibold text-sm">手入力</Label>
-                <Description className="text-brand-muted text-xs">レシピを自分で入力</Description>
+                <span>手入力</span>
+                <span className="text-xs text-muted-foreground">レシピを自分で入力</span>
               </div>
             </div>
-          </Dropdown.Item>
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 
 const AppNav = () => (
   <nav aria-label="Main navigation" className="flex items-center gap-x-1">
-    <AddRecipeMenu className="hidden h-8 items-center justify-center gap-1.5 rounded-full bg-brand-sage px-3 font-semibold text-sm text-white hover:bg-brand-sage-dark sm:inline-flex">
-      <CookingPot size={16} weight="bold" />
+    <AddRecipeMenu className="hidden sm:inline-flex">
+      <CookingPot data-icon="inline-start" weight="bold" />
       レシピ追加
     </AddRecipeMenu>
     <Link
-      activeProps={{ className: "text-brand-sage font-semibold" }}
-      className="hidden no-underline text-brand-walnut text-sm sm:block"
+      activeProps={{ className: "text-primary" }}
+      className={cn(
+        buttonVariants({ size: "sm", variant: "ghost" }),
+        "hidden no-underline sm:inline-flex",
+      )}
       to="/recipes"
     >
-      <Button className="rounded-full text-sm gap-1.5" size="sm" variant="ghost">
-        <ListIcon size={16} weight="bold" />
-        レシピ一覧
-      </Button>
+      <ListIcon data-icon="inline-start" weight="bold" />
+      レシピ一覧
     </Link>
     <Link
-      activeProps={{ className: "text-brand-sage font-semibold" }}
+      activeProps={{ className: "text-primary" }}
       aria-label="アカウント"
-      className="no-underline text-brand-walnut text-sm"
+      className={cn(buttonVariants({ size: "sm", variant: "ghost" }), "no-underline")}
       to="/settings"
     >
-      <Button
-        className="h-10 w-10 rounded-full text-sm gap-1.5 sm:h-8 sm:w-auto"
-        size="sm"
-        variant="ghost"
-      >
-        <UserCircle className="size-6 sm:size-4" weight="bold" />
-        <span className="hidden sm:inline">アカウント</span>
-      </Button>
+      <UserCircle data-icon="inline-start" weight="bold" />
+      <span className="hidden sm:inline">アカウント</span>
     </Link>
   </nav>
 );
@@ -121,9 +118,9 @@ export const MobileAddRecipeFab = () => (
   <AddRecipeMenu
     aria-label="レシピ追加"
     data-testid="add-recipe-fab"
-    className="fixed right-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-sage text-white shadow-lg shadow-brand-sage/40 transition-all duration-200 hover:scale-105 hover:bg-brand-sage-dark sm:hidden"
+    className="fixed right-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 size-14 rounded-full shadow-lg sm:hidden"
   >
-    <Plus size={26} weight="bold" />
+    <Plus weight="bold" />
   </AddRecipeMenu>
 );
 

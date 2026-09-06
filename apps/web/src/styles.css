@@ -1,99 +1,185 @@
 @layer theme, base, components, utilities;
 
 @import "tailwindcss";
-@import "@heroui/styles";
 
-@import "./themes/pantry.css" layer(theme);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 /* ── Brand Color Tokens ── */
 @theme inline {
   /* Pantry palette — usable as bg-brand-*, text-brand-*, border-brand-* */
-  --color-brand-sage: #768055;
-  --color-brand-sage-dark: #4f5a38;
-  --color-brand-sage-soft: #d9ddc9;
-  --color-brand-walnut: #533e1d;
-  --color-brand-wheat: #a78b5a;
-  --color-brand-orange: #e47d25;
-  --color-brand-orange-dark: #9c5f2a;
-  --color-brand-orange-soft: #f4d2ae;
-  --color-brand-cream: #fdf9f4;
-  --color-brand-paper: #fffdfa;
-  --color-brand-paper-raised: #fefbf7;
-  --color-brand-paper-muted: #fbf7f2;
-  --color-brand-line: #e1d2be;
-  --color-brand-line-soft: #ede1d2;
-  --color-brand-ink: #2f2418;
-  --color-brand-muted: #7a6a56;
-  --color-brand-danger: #b5533d;
+  --color-brand-sage: var(--brand-sage);
+  --color-brand-sage-dark: var(--brand-sage-dark);
+  --color-brand-sage-soft: var(--brand-sage-soft);
+  --color-brand-walnut: var(--brand-walnut);
+  --color-brand-wheat: var(--brand-wheat);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-orange-dark: var(--brand-orange-dark);
+  --color-brand-orange-soft: var(--brand-orange-soft);
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-paper: var(--brand-paper);
+  --color-brand-paper-raised: var(--brand-paper-raised);
+  --color-brand-paper-muted: var(--brand-paper-muted);
+  --color-brand-line: var(--brand-line);
+  --color-brand-line-soft: var(--brand-line-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-danger: var(--brand-danger);
 
   /* Shadows */
   --shadow-pantry-sm: 0 1px 3px rgba(83, 62, 29, 0.05);
   --shadow-pantry: 0 4px 12px rgba(83, 62, 29, 0.06);
   --shadow-pantry-lg: 0 10px 28px rgba(83, 62, 29, 0.09);
-}
-
-/* ── Typography ── */
-:root {
-  font-family:
+  --font-heading: var(--font-sans);
+  --font-sans:
     "Noto Sans JP", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ── Theme ── */
+:root {
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --brand-sage: #768055;
+  --brand-sage-dark: #4f5a38;
+  --brand-sage-soft: #d9ddc9;
+  --brand-walnut: #533e1d;
+  --brand-wheat: #a78b5a;
+  --brand-orange: #e47d25;
+  --brand-orange-dark: #9c5f2a;
+  --brand-orange-soft: #f4d2ae;
+  --brand-cream: #fdf9f4;
+  --brand-paper: #fffdfa;
+  --brand-paper-raised: #fefbf7;
+  --brand-paper-muted: #fbf7f2;
+  --brand-line: #e1d2be;
+  --brand-line-soft: #ede1d2;
+  --brand-ink: #2f2418;
+  --brand-muted: #7a6a56;
+  --brand-danger: #b5533d;
+  --brand-on-primary: #ffffff;
+  --background: var(--brand-cream);
+  --foreground: var(--brand-ink);
+  --card: var(--brand-paper);
+  --card-foreground: var(--brand-ink);
+  --popover: var(--brand-paper);
+  --popover-foreground: var(--brand-ink);
+  --primary: var(--brand-sage);
+  --primary-foreground: var(--brand-on-primary);
+  --secondary: var(--brand-paper-muted);
+  --secondary-foreground: var(--brand-walnut);
+  --muted: var(--brand-paper-muted);
+  --muted-foreground: var(--brand-muted);
+  --accent: var(--brand-paper-muted);
+  --accent-foreground: var(--brand-walnut);
+  --destructive: var(--brand-danger);
+  --border: var(--brand-line-soft);
+  --input: var(--brand-line);
+  --ring: var(--brand-orange);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: var(--brand-paper);
+  --sidebar-foreground: var(--brand-ink);
+  --sidebar-primary: var(--brand-sage);
+  --sidebar-primary-foreground: var(--brand-on-primary);
+  --sidebar-accent: var(--brand-paper-muted);
+  --sidebar-accent-foreground: var(--brand-walnut);
+  --sidebar-border: var(--brand-line-soft);
+  --sidebar-ring: var(--brand-orange);
 }
 
 body {
   margin: 0;
 }
 
-/* ── Component Overrides (BEM) ── */
-@layer components {
-  /* Buttons: fully rounded pills */
-  .button {
-    @apply rounded-full font-semibold tracking-wide;
-  }
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
 
-  .button--primary {
-    background-color: #768055;
-    color: #fff;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-  .button--primary:hover {
-    background-color: #4f5a38;
+  body {
+    @apply bg-background text-foreground;
   }
-
-  /* Cards: warm paper with quiet separation */
-  .card {
-    @apply rounded-[20px] border border-brand-line-soft;
-    background-color: #fffdfa;
-    box-shadow: var(--shadow-pantry-sm);
-  }
-
-  /* Inputs: warm rounded fields */
-  .text-field__input,
-  .text-field__textarea {
-    @apply rounded-[14px];
-    border-color: #e1d2be;
-  }
-
-  .text-field__input:focus,
-  .text-field__textarea:focus {
-    border-color: #e47d25;
-  }
-
-  /* Chip styling */
-  .chip {
-    @apply rounded-full;
-  }
-
-  /* Progress bar: sage fill */
-  .progress-bar__indicator {
-    background-color: #768055;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    :root {
-      --skeleton-animation: none;
-    }
+  html {
+    @apply font-sans;
   }
 }

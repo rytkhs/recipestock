@@ -1,8 +1,10 @@
-import { Button, Input, Label, TextField } from "@heroui/react";
 import { CaretLeft, CreditCard, SignOut, User } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { SkeletonBlock } from "../components/loading";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import { IosShareSettingsCard } from "../features/ios-share/settings-card";
@@ -24,6 +26,9 @@ export const SettingsIndexRoute = () => {
   const [newEmail, setNewEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const newEmailId = useId();
+  const currentPasswordId = useId();
+  const newPasswordId = useId();
   const [emailMessage, setEmailMessage] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
@@ -130,24 +135,21 @@ export const SettingsIndexRoute = () => {
             <div className="mt-5 grid min-w-0 gap-6 md:grid-cols-2">
               <form className="grid min-w-0 content-start gap-4" onSubmit={handleEmailChange}>
                 <h3 className="text-brand-walnut font-semibold text-base">メールアドレス変更</h3>
-                <TextField className="min-w-0" isRequired type="email">
-                  <Label className="text-brand-walnut font-semibold text-sm">
-                    新しいメールアドレス
-                  </Label>
-                  <Input
-                    autoComplete="email"
-                    className="w-full min-w-0"
-                    inputMode="email"
-                    value={newEmail}
-                    onChange={(event) => setNewEmail(event.target.value)}
-                  />
-                </TextField>
-                <Button
-                  className="rounded-full font-semibold"
-                  isDisabled={isEmailSubmitting}
-                  type="submit"
-                  variant="secondary"
-                >
+                <FieldGroup>
+                  <Field className="min-w-0">
+                    <FieldLabel htmlFor={newEmailId}>新しいメールアドレス</FieldLabel>
+                    <Input
+                      id={newEmailId}
+                      required
+                      type="email"
+                      autoComplete="email"
+                      inputMode="email"
+                      value={newEmail}
+                      onChange={(event) => setNewEmail(event.target.value)}
+                    />
+                  </Field>
+                </FieldGroup>
+                <Button disabled={isEmailSubmitting} type="submit" variant="secondary">
                   確認メールを送信
                 </Button>
                 {emailMessage ? (
@@ -168,38 +170,35 @@ export const SettingsIndexRoute = () => {
 
               <form className="grid min-w-0 content-start gap-4" onSubmit={handlePasswordChange}>
                 <h3 className="text-brand-walnut font-semibold text-base">パスワード変更</h3>
-                <TextField className="min-w-0" isRequired type="password">
-                  <Label className="text-brand-walnut font-semibold text-sm">
-                    現在のパスワード
-                  </Label>
-                  <Input
-                    autoComplete="current-password"
-                    className="w-full min-w-0"
-                    maxLength={128}
-                    minLength={8}
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.target.value)}
-                  />
-                </TextField>
-                <TextField className="min-w-0" isRequired type="password">
-                  <Label className="text-brand-walnut font-semibold text-sm">
-                    新しいパスワード
-                  </Label>
-                  <Input
-                    autoComplete="new-password"
-                    className="w-full min-w-0"
-                    maxLength={128}
-                    minLength={8}
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                  />
-                </TextField>
-                <Button
-                  className="rounded-full font-semibold"
-                  isDisabled={isPasswordSubmitting}
-                  type="submit"
-                  variant="secondary"
-                >
+                <FieldGroup>
+                  <Field className="min-w-0">
+                    <FieldLabel htmlFor={currentPasswordId}>現在のパスワード</FieldLabel>
+                    <Input
+                      id={currentPasswordId}
+                      required
+                      type="password"
+                      autoComplete="current-password"
+                      maxLength={128}
+                      minLength={8}
+                      value={currentPassword}
+                      onChange={(event) => setCurrentPassword(event.target.value)}
+                    />
+                  </Field>
+                  <Field className="min-w-0">
+                    <FieldLabel htmlFor={newPasswordId}>新しいパスワード</FieldLabel>
+                    <Input
+                      id={newPasswordId}
+                      required
+                      type="password"
+                      autoComplete="new-password"
+                      maxLength={128}
+                      minLength={8}
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                    />
+                  </Field>
+                </FieldGroup>
+                <Button disabled={isPasswordSubmitting} type="submit" variant="secondary">
                   パスワードを変更
                 </Button>
                 {passwordMessage ? (
@@ -250,12 +249,11 @@ export const SettingsIndexRoute = () => {
 
         <div className="mt-8 flex justify-center">
           <Button
-            className="rounded-full text-brand-danger border-none bg-transparent hover:bg-brand-danger/5 gap-1.5"
-            isDisabled={isSigningOut}
-            variant="ghost"
-            onPress={() => void handleSignOut()}
+            disabled={isSigningOut}
+            variant="destructive"
+            onClick={() => void handleSignOut()}
           >
-            <SignOut size={16} weight="bold" />
+            <SignOut data-icon="inline-start" weight="bold" />
             ログアウト
           </Button>
         </div>

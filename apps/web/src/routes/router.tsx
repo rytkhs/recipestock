@@ -155,7 +155,7 @@ const PublicLayout = () => {
 };
 
 const RootLayout = () => (
-  <div className="min-h-screen bg-brand-cream text-brand-ink">
+  <div className="min-h-screen bg-background text-foreground">
     <Outlet />
   </div>
 );

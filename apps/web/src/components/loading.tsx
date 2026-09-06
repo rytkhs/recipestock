@@ -1,9 +1,9 @@
-import { Skeleton } from "@heroui/react";
 import { type ReactNode } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScreenTopBarFrame } from "./screen-top-bar";
 
 const skeletonBaseClass =
-  "overflow-hidden rounded-[14px] border border-brand-line-soft/50 bg-brand-paper-muted";
+  "overflow-hidden rounded-[14px] border border-brand-line-soft/50 bg-brand-paper-muted motion-reduce:animate-none";
 const detailStepSkeletonKeys = [
   "detail-step-primary",
   "detail-step-secondary",
