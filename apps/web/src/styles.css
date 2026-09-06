@@ -10,23 +10,23 @@
 /* ── Brand Color Tokens ── */
 @theme inline {
   /* Pantry palette — usable as bg-brand-*, text-brand-*, border-brand-* */
-  --color-brand-sage: #768055;
-  --color-brand-sage-dark: #4f5a38;
-  --color-brand-sage-soft: #d9ddc9;
-  --color-brand-walnut: #533e1d;
-  --color-brand-wheat: #a78b5a;
-  --color-brand-orange: #e47d25;
-  --color-brand-orange-dark: #9c5f2a;
-  --color-brand-orange-soft: #f4d2ae;
-  --color-brand-cream: #fdf9f4;
-  --color-brand-paper: #fffdfa;
-  --color-brand-paper-raised: #fefbf7;
-  --color-brand-paper-muted: #fbf7f2;
-  --color-brand-line: #e1d2be;
-  --color-brand-line-soft: #ede1d2;
-  --color-brand-ink: #2f2418;
-  --color-brand-muted: #7a6a56;
-  --color-brand-danger: #b5533d;
+  --color-brand-sage: var(--brand-sage);
+  --color-brand-sage-dark: var(--brand-sage-dark);
+  --color-brand-sage-soft: var(--brand-sage-soft);
+  --color-brand-walnut: var(--brand-walnut);
+  --color-brand-wheat: var(--brand-wheat);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-orange-dark: var(--brand-orange-dark);
+  --color-brand-orange-soft: var(--brand-orange-soft);
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-paper: var(--brand-paper);
+  --color-brand-paper-raised: var(--brand-paper-raised);
+  --color-brand-paper-muted: var(--brand-paper-muted);
+  --color-brand-line: var(--brand-line);
+  --color-brand-line-soft: var(--brand-line-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-danger: var(--brand-danger);
 
   /* Shadows */
   --shadow-pantry-sm: 0 1px 3px rgba(83, 62, 29, 0.05);
@@ -76,44 +76,62 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* ── Typography ── */
+/* ── Theme ── */
 :root {
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --background: #fdf9f4;
-  --foreground: #2f2418;
-  --card: #fffdfa;
-  --card-foreground: #2f2418;
-  --popover: #fffdfa;
-  --popover-foreground: #2f2418;
-  --primary: #768055;
-  --primary-foreground: #ffffff;
-  --secondary: #fbf7f2;
-  --secondary-foreground: #533e1d;
-  --muted: #fbf7f2;
-  --muted-foreground: #7a6a56;
-  --accent: #fbf7f2;
-  --accent-foreground: #533e1d;
-  --destructive: #b5533d;
-  --border: #ede1d2;
-  --input: #e1d2be;
-  --ring: #e47d25;
+  --brand-sage: #768055;
+  --brand-sage-dark: #4f5a38;
+  --brand-sage-soft: #d9ddc9;
+  --brand-walnut: #533e1d;
+  --brand-wheat: #a78b5a;
+  --brand-orange: #e47d25;
+  --brand-orange-dark: #9c5f2a;
+  --brand-orange-soft: #f4d2ae;
+  --brand-cream: #fdf9f4;
+  --brand-paper: #fffdfa;
+  --brand-paper-raised: #fefbf7;
+  --brand-paper-muted: #fbf7f2;
+  --brand-line: #e1d2be;
+  --brand-line-soft: #ede1d2;
+  --brand-ink: #2f2418;
+  --brand-muted: #7a6a56;
+  --brand-danger: #b5533d;
+  --brand-on-primary: #ffffff;
+  --background: var(--brand-cream);
+  --foreground: var(--brand-ink);
+  --card: var(--brand-paper);
+  --card-foreground: var(--brand-ink);
+  --popover: var(--brand-paper);
+  --popover-foreground: var(--brand-ink);
+  --primary: var(--brand-sage);
+  --primary-foreground: var(--brand-on-primary);
+  --secondary: var(--brand-paper-muted);
+  --secondary-foreground: var(--brand-walnut);
+  --muted: var(--brand-paper-muted);
+  --muted-foreground: var(--brand-muted);
+  --accent: var(--brand-paper-muted);
+  --accent-foreground: var(--brand-walnut);
+  --destructive: var(--brand-danger);
+  --border: var(--brand-line-soft);
+  --input: var(--brand-line);
+  --ring: var(--brand-orange);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: #fffdfa;
-  --sidebar-foreground: #2f2418;
-  --sidebar-primary: #768055;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #fbf7f2;
-  --sidebar-accent-foreground: #533e1d;
-  --sidebar-border: #ede1d2;
-  --sidebar-ring: #e47d25;
+  --sidebar: var(--brand-paper);
+  --sidebar-foreground: var(--brand-ink);
+  --sidebar-primary: var(--brand-sage);
+  --sidebar-primary-foreground: var(--brand-on-primary);
+  --sidebar-accent: var(--brand-paper-muted);
+  --sidebar-accent-foreground: var(--brand-walnut);
+  --sidebar-border: var(--brand-line-soft);
+  --sidebar-ring: var(--brand-orange);
 }
 
 body {
