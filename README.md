@@ -133,6 +133,22 @@ pnpm --filter @recipestock/web dev
 | `pnpm db:migrate` | Drizzle migration を適用 |
 | `pnpm deploy` | Web build 後に Cloudflare Worker へ deploy |
 
+### Continuous integration
+
+GitHub Actionsの`CI` workflowは、PRの作成・更新・再オープン、`main`へのpush、手動実行で起動する。forkからのPRも同じチェックの対象とする。
+
+`checks` jobはUbuntu 24.04、Node.js 22系、`package.json`に指定したpnpmで次を順に実行する。
+
+```bash
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm test
+```
+
+ビルドではPWA生成物も検証する。APIテストが参照するWebの静的アセットを生成するため、ビルドをテストより先に実行する。通常テストのCloudflare bindingsはローカルで実行し、CIにSecretsやローカル環境ファイルは不要。同じPR・ブランチへの更新では古い実行をキャンセルする。
+
 ### Database integration tests
 
 `pnpm test:db`はDockerでNeon Localを起動し、テスト専用Neon projectにephemeral branchを作成する。全migrationとDatabase統合テストを実行した後、成功・失敗にかかわらずbranchを削除する。通常の開発用または本番用`DATABASE_URL`は使用しない。
@@ -150,7 +166,7 @@ cp .env.example .env.test.local
 pnpm test:db
 ```
 
-日常の高速テストには`pnpm test`を使用し、Databaseまたはrepositoryを変更した場合は`pnpm test:all`を実行する。
+日常の高速テストには`pnpm test`を使用し、Databaseまたはrepositoryを変更した場合は、CIに加えて必要に応じてローカルでも`pnpm test:all`を実行する。
 
 Cloudflare Worker の deploy 前検証:
 
