@@ -4,6 +4,8 @@
 
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "yet-another-react-lightbox/styles.css";
+@import "yet-another-react-lightbox/plugins/counter.css";
 
 @custom-variant dark (&:is(.dark *));
 

@@ -38,6 +38,62 @@ const savedStepsWithImages = (imageCount: number, prefix: string) =>
     ),
   }));
 
+const lightboxRecipeResponse = {
+  recipe: {
+    id: "recipe_123",
+    title: "Tomato pasta",
+    content: {
+      title: "Tomato pasta",
+      coverImage: savedImage(
+        "recipes/user_123/recipe_123/cover.webp",
+        "https://images.example/cover.webp",
+      ),
+      referenceImages: [
+        savedImage(
+          "recipes/user_123/recipe_123/source-1.webp",
+          "https://images.example/source-1.webp",
+          1080,
+          1080,
+        ),
+      ],
+      ingredientGroups: [],
+      steps: [
+        {
+          text: "煮詰める",
+          images: [
+            savedImage(
+              "recipes/user_123/recipe_123/step.webp",
+              "https://images.example/step.webp",
+              800,
+              1200,
+            ),
+          ],
+        },
+      ],
+    },
+    source: {
+      sourceUrl: null,
+      normalizedSourceUrl: null,
+      sourceName: null,
+    },
+    createdAt: "2026-05-26T00:00:00.000Z",
+    updatedAt: "2026-05-26T00:00:00.000Z",
+    locked: false,
+  },
+};
+
+const mockLightboxRecipeFetch = () =>
+  mockFetch(
+    async (input) => {
+      if (getRequestPath(input) === "/api/recipes/recipe_123") {
+        return jsonResponse(lightboxRecipeResponse);
+      }
+
+      return new Response(null, { status: 404 });
+    },
+    { authenticated: true },
+  );
+
 const getReferenceImageInput = () => {
   const input = screen
     .getAllByLabelText("レシピ画像を追加")
@@ -1199,6 +1255,64 @@ describe("RecipesRoute", () => {
     expect(stepImage).toHaveAttribute("decoding", "async");
     expect(stepImage).toHaveStyle({ aspectRatio: "800 / 1200" });
     expect(screen.queryByAltText("手順2の画像1")).not.toBeInTheDocument();
+  });
+
+  it("詳細画面の画像を拡大するとライトボックスを開いて前後の画像に移動できる", async () => {
+    mockLightboxRecipeFetch();
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Tomato pastaを拡大" }));
+
+    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
+    expect(within(lightbox).getByText("1 / 3")).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "前の画像" })).toBeDisabled();
+    expect(within(lightbox).getByRole("button", { name: "拡大" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "縮小" })).toBeInTheDocument();
+    expect(within(lightbox).getByAltText("Tomato pasta")).toHaveAttribute(
+      "src",
+      "https://images.example/cover.webp",
+    );
+
+    await user.click(within(lightbox).getByRole("button", { name: "次の画像" }));
+
+    expect(await within(lightbox).findByText("2 / 3")).toBeInTheDocument();
+    expect(within(lightbox).getByAltText("レシピ画像1")).toHaveAttribute(
+      "src",
+      "https://images.example/source-1.webp",
+    );
+
+    await user.click(within(lightbox).getByRole("button", { name: "次の画像" }));
+
+    expect(await within(lightbox).findByText("3 / 3")).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "次の画像" })).toBeDisabled();
+
+    await user.click(within(lightbox).getByRole("button", { name: "前の画像" }));
+
+    expect(await within(lightbox).findByText("2 / 3")).toBeInTheDocument();
+  });
+
+  it("ライトボックスを閉じると拡大ボタンにフォーカスが戻る", async () => {
+    mockLightboxRecipeFetch();
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    const zoomButton = await screen.findByRole("button", { name: "手順1の画像1を拡大" });
+    await user.click(zoomButton);
+
+    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
+    expect(within(lightbox).getByText("3 / 3")).toBeInTheDocument();
+
+    await user.click(within(lightbox).getByRole("button", { name: "閉じる" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "画像プレビュー" })).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(zoomButton).toHaveFocus();
+    });
   });
 
   it("ロック中Recipe詳細に直接アクセスしても本文と編集リンクを表示しない", async () => {

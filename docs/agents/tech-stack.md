@@ -27,6 +27,7 @@ Browser / PWA
 | Styling | Tailwind CSS v4 |
 | UI components | shadcn/ui — Base UI base, `base-nova` style.`apps/web/src/components/ui/` にベンダリング |
 | Icons | `@phosphor-icons/react` |
+| Image lightbox | `yet-another-react-lightbox`（Counter / Zoom プラグイン）。アイコンは既定のまま使い、配色・z-index・safe-areaは `--yarl__*` CSS変数で上書きする。`render.icon*` で差し替えると `yarl__icon` クラスが付かずタップ領域が縮む |
 | Routing | TanStack Router |
 | Server state | TanStack Query |
 | Forms | React Hook Form + Zod |
