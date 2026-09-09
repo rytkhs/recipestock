@@ -1270,10 +1270,6 @@ describe("RecipesRoute", () => {
     expect(within(lightbox).getByRole("button", { name: "前の画像" })).toBeDisabled();
     expect(within(lightbox).getByRole("button", { name: "拡大" })).toBeInTheDocument();
     expect(within(lightbox).getByRole("button", { name: "縮小" })).toBeInTheDocument();
-    // アイコンサイズはツールバーのタップ領域（32px + padding 8px × 2）を決める。
-    expect(
-      within(lightbox).getByRole("button", { name: "閉じる" }).querySelector("svg"),
-    ).toHaveAttribute("width", "32");
     expect(within(lightbox).getByAltText("Tomato pasta")).toHaveAttribute(
       "src",
       "https://images.example/cover.webp",

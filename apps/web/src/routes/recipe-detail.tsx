@@ -1,15 +1,11 @@
 import {
   CaretLeft,
-  CaretRight,
   DotsThreeVertical,
   Globe,
   LockSimple,
-  MagnifyingGlassMinus,
-  MagnifyingGlassPlus,
   PencilSimple,
   Trash,
   WarningCircle,
-  X,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -73,22 +69,6 @@ const recipeLightboxLabels = {
   "Zoom out": "縮小",
   "{index} of {total}": "{total}枚中{index}枚目",
 } as const;
-
-// render.icon* を渡すと`yarl__icon`クラスが付かず、Phosphorの既定サイズ1emでタップ領域が
-// 32pxまで縮む。`--yarl__icon_size`の既定と同じ32pxを明示してYARL標準のタップ領域を保つ。
-const recipeLightboxIconSize = 32;
-
-const recipeLightboxRenderers = {
-  iconClose: () => <X aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />,
-  iconNext: () => <CaretRight aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />,
-  iconPrev: () => <CaretLeft aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />,
-  iconZoomIn: () => (
-    <MagnifyingGlassPlus aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />
-  ),
-  iconZoomOut: () => (
-    <MagnifyingGlassMinus aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />
-  ),
-};
 
 const recipeLightboxStyles = {
   root: {
@@ -542,7 +522,6 @@ export const RecipeDetailRoute = () => {
         on={{ view: ({ index }) => setLightboxIndex(index) }}
         open={isLightboxOpen}
         plugins={[Counter, Zoom]}
-        render={recipeLightboxRenderers}
         slides={lightboxImages}
         styles={recipeLightboxStyles}
         zoom={{ maxZoomPixelRatio: 2 }}
