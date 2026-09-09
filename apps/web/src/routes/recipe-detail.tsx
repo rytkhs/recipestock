@@ -74,12 +74,20 @@ const recipeLightboxLabels = {
   "{index} of {total}": "{total}枚中{index}枚目",
 } as const;
 
+// render.icon* を渡すと`yarl__icon`クラスが付かず、Phosphorの既定サイズ1emでタップ領域が
+// 32pxまで縮む。`--yarl__icon_size`の既定と同じ32pxを明示してYARL標準のタップ領域を保つ。
+const recipeLightboxIconSize = 32;
+
 const recipeLightboxRenderers = {
-  iconClose: () => <X weight="bold" />,
-  iconNext: () => <CaretRight weight="bold" />,
-  iconPrev: () => <CaretLeft weight="bold" />,
-  iconZoomIn: () => <MagnifyingGlassPlus weight="bold" />,
-  iconZoomOut: () => <MagnifyingGlassMinus weight="bold" />,
+  iconClose: () => <X aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />,
+  iconNext: () => <CaretRight aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />,
+  iconPrev: () => <CaretLeft aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />,
+  iconZoomIn: () => (
+    <MagnifyingGlassPlus aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />
+  ),
+  iconZoomOut: () => (
+    <MagnifyingGlassMinus aria-hidden="true" size={recipeLightboxIconSize} weight="bold" />
+  ),
 };
 
 const recipeLightboxStyles = {
