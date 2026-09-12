@@ -1,22 +1,18 @@
 import {
   CaretRight,
   CheckCircle,
-  DotsThreeVertical,
-  Globe,
+  CookingPot,
   List,
-  LockSimple,
   MagnifyingGlass,
-  PencilSimple,
   SquaresFour,
-  Trash,
   UserCircle,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import { type RecentImportJobsResponse } from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,15 +24,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -56,9 +50,16 @@ import {
   recipesQueryKeys,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
-import { RecipeThumbnail } from "../features/recipes/recipe-thumbnail";
+import { LockedShelfNotice, RecipeCard } from "../features/recipes/recipe-card";
+import { groupRecipesByPeriod, recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
+import {
+  type RecipeViewMode,
+  readRecipeViewMode,
+  writeRecipeViewMode,
+} from "../features/recipes/view-mode";
 
 const importJobSuccessDismissDelayMs = 4000;
+const nextPageRootMargin = "480px 0px";
 const gridRecipeSkeletonKeys = [
   "grid-recipe-skeleton-1",
   "grid-recipe-skeleton-2",
@@ -76,55 +77,6 @@ const listRecipeSkeletonKeys = [
   "list-recipe-skeleton-4",
   "list-recipe-skeleton-5",
 ];
-
-const RecipeCardActionMenu = ({
-  isList,
-  recipeId,
-  title,
-  onDelete,
-}: {
-  isList: boolean;
-  recipeId: string;
-  title: string;
-  onDelete: () => void;
-}) => {
-  const navigate = useNavigate();
-
-  return (
-    <div
-      className={cn(
-        "absolute z-10",
-        isList ? "top-2 right-2 sm:top-3 sm:right-3" : "top-1 right-1 sm:top-2 sm:right-2",
-      )}
-    >
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label={`${title}の操作メニュー`}
-          className={cn(!isList && "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]")}
-          render={<Button size="icon" variant="ghost" />}
-        >
-          <DotsThreeVertical weight="bold" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="min-w-36">
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              onClick={() => {
-                void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
-              }}
-            >
-              <PencilSimple weight="bold" />
-              <span>編集</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={onDelete}>
-              <Trash weight="bold" />
-              <span>削除</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-};
 
 const ImportJobIsland = () => {
   const queryClient = useQueryClient();
@@ -321,55 +273,76 @@ const ImportJobIsland = () => {
   );
 };
 
-const SourceIcon = () => {
-  return <Globe className="h-3.5 w-3.5 text-brand-wheat" weight="bold" />;
-};
-
 export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
   const searchId = useId();
+  const shelfId = useId();
   const [query, setQuery] = useState("");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
-    try {
-      return (localStorage.getItem("recipeViewMode") as "grid" | "list") || "grid";
-    } catch {
-      return "grid";
-    }
-  });
+  const [viewMode, setViewMode] = useState<RecipeViewMode>(readRecipeViewMode);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    try {
-      localStorage.setItem("recipeViewMode", viewMode);
-    } catch {}
+    writeRecipeViewMode(viewMode);
   }, [viewMode]);
 
-  const { data, error, fetchNextPage, hasNextPage, isFetching } = useInfiniteQuery({
-    queryKey: recipesQueryKeys.list(query),
-    initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => listRecipes({ query, cursor: pageParam }),
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-  });
+  const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: recipesQueryKeys.list(query),
+      initialPageParam: null as string | null,
+      queryFn: ({ pageParam }) => listRecipes({ query, cursor: pageParam }),
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    });
   const deleteMutation = useMutation({
     mutationFn: (recipeId: string) => deleteRecipe(recipeId),
     onSuccess: async (_response, recipeId) => {
       await syncDeletedRecipeCaches(queryClient, recipeId);
     },
   });
-  const recipes = data?.pages.flatMap((page) => page.items) ?? [];
+  const recipes = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
   const isInitialRecipesLoading = isFetching && recipes.length === 0 && !error;
   const recipeSkeletonKeys = viewMode === "grid" ? gridRecipeSkeletonKeys : listRecipeSkeletonKeys;
+  const containerClass = recipeShelfContainerClass(viewMode);
+  // 一覧は最近使った順なので、freeプランでロックされるRecipeは必ず末尾にまとまる。
+  // 案内は境目に一度だけ出す。
+  const firstLockedRecipeId = recipes.find((recipe) => recipe.locked)?.id ?? null;
+  const shelf = useMemo(() => {
+    const sections = query
+      ? [{ key: "search-results", label: "", recipes }]
+      : groupRecipesByPeriod(recipes);
+    const offsets: number[] = [];
+    let renderedCount = 0;
+
+    for (const section of sections) {
+      offsets.push(renderedCount);
+      renderedCount += section.recipes.length;
+    }
+
+    return { offsets, sections };
+  }, [query, recipes]);
+  // 取得前はdataが無く、hasNextPageもfalseになる。dataを見ないと「0件」が一瞬出る。
+  const loadedCountLabel = data && !hasNextPage ? `${recipes.length}件` : null;
+  const shelfSummary = query
+    ? [`「${query}」の検索結果`, loadedCountLabel].filter(Boolean).join(" · ")
+    : (loadedCountLabel ?? "");
+  const hasShelfToolbar = isInitialRecipesLoading || recipes.length > 0 || query !== "";
+  const isSearchMiss = !isFetching && !error && recipes.length === 0 && query !== "";
+  const isShelfEmpty = !isFetching && !error && recipes.length === 0 && query === "";
 
   const submitSearch = (event: { preventDefault: () => void }) => {
     event.preventDefault();
     setQuery(searchInput.trim());
   };
-
-  const loadNextPage = () => {
+  const clearSearch = () => {
+    setSearchInput("");
+    setQuery("");
+  };
+  const loadNextPage = useCallback(() => {
     if (hasNextPage && !isFetching) {
       void fetchNextPage();
     }
-  };
+  }, [fetchNextPage, hasNextPage, isFetching]);
   const confirmDelete = () => {
     if (!deleteTargetId) {
       return;
@@ -380,9 +353,30 @@ export const RecipesIndexRoute = () => {
     deleteMutation.mutate(recipeId);
   };
 
+  // 末尾が見えたら次ページを取りに行く。失敗したあとは「もっと見る」を押されるまで止める。
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+
+    if (!sentinel || !hasNextPage || isFetching || error) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: nextPageRootMargin },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [error, fetchNextPage, hasNextPage, isFetching]);
+
   return (
     <section className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10">
-      <div className="-mx-4 sticky top-0 z-30 flex min-w-0 items-center gap-3 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
+      <div className="-mx-4 sticky top-0 z-30 flex min-w-0 items-center gap-2 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:gap-3 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
         <form className="flex min-w-0 flex-1 items-end gap-3" onSubmit={submitSearch}>
           <FieldGroup className="min-w-0 flex-1">
             <Field className="min-w-0">
@@ -400,6 +394,13 @@ export const RecipesIndexRoute = () => {
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                 />
+                {searchInput ? (
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton aria-label="検索を消す" size="icon-xs" onClick={clearSearch}>
+                      <X weight="bold" />
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                ) : null}
               </InputGroup>
             </Field>
           </FieldGroup>
@@ -407,6 +408,35 @@ export const RecipesIndexRoute = () => {
             検索
           </Button>
         </form>
+        {hasShelfToolbar ? (
+          <>
+            {shelfSummary ? (
+              <p className="hidden shrink-0 truncate text-brand-muted text-sm sm:block sm:max-w-56">
+                {shelfSummary}
+              </p>
+            ) : null}
+            <ToggleGroup
+              aria-label="レシピ一覧の表示形式"
+              className="shrink-0"
+              variant="outline"
+              value={[viewMode]}
+              onValueChange={(groupValue) => {
+                const [selectedKey] = groupValue;
+
+                if (selectedKey === "grid" || selectedKey === "list") {
+                  setViewMode(selectedKey);
+                }
+              }}
+            >
+              <ToggleGroupItem aria-label="グリッド表示" value="grid">
+                <SquaresFour weight={viewMode === "grid" ? "fill" : "bold"} />
+              </ToggleGroupItem>
+              <ToggleGroupItem aria-label="リスト表示" value="list">
+                <List weight={viewMode === "list" ? "fill" : "bold"} />
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </>
+        ) : null}
         <Link
           aria-label="アカウント"
           className={cn(
@@ -440,167 +470,91 @@ export const RecipesIndexRoute = () => {
           レシピ一覧を読み込み中
         </div>
       ) : null}
-      {!isFetching && recipes.length === 0 && !error ? (
+
+      {isShelfEmpty ? (
         <div className="mt-16 flex flex-col items-center justify-center text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-sage-soft">
-            <MagnifyingGlass size={28} className="text-brand-sage" weight="bold" />
+            <CookingPot size={28} className="text-brand-sage-dark" weight="bold" />
           </div>
-          <p className="mt-4 text-brand-walnut font-semibold">レシピがありません</p>
-          <p className="mt-1 text-brand-muted text-sm">最初のレシピを追加してみましょう</p>
+          <p className="mt-5 font-semibold text-brand-walnut text-lg">レシピはまだありません</p>
+          <p className="mt-2 max-w-xs text-brand-muted text-sm leading-relaxed">
+            サイトや動画のURLを貼ると、材料と手順に整えて保存します。
+          </p>
+          <Link className={cn(buttonVariants(), "mt-6 no-underline")} to="/import/url">
+            URLから取り込む
+          </Link>
+        </div>
+      ) : null}
+      {isSearchMiss ? (
+        <div className="mt-14 flex flex-col items-center justify-center text-center">
+          <p className="max-w-sm font-semibold text-brand-walnut text-lg">
+            「{query}」に一致するレシピはありません
+          </p>
+          <p className="mt-2 text-brand-muted text-sm">材料名や出典でも探せます。</p>
+          <Button className="mt-6" variant="outline" onClick={clearSearch}>
+            すべてのレシピを表示
+          </Button>
         </div>
       ) : null}
 
-      {recipes.length > 0 || isInitialRecipesLoading ? (
-        <div className="mt-6 flex justify-end">
-          <ToggleGroup
-            aria-label="レシピ一覧の表示形式"
-            variant="outline"
-            value={[viewMode]}
-            onValueChange={(groupValue) => {
-              const [selectedKey] = groupValue;
+      {isInitialRecipesLoading ? (
+        <div className={cn("mt-6", containerClass)}>
+          {recipeSkeletonKeys.map((key) => (
+            <RecipeCardSkeleton key={key} viewMode={viewMode} />
+          ))}
+        </div>
+      ) : null}
 
-              if (selectedKey === "grid" || selectedKey === "list") {
-                setViewMode(selectedKey);
-              }
-            }}
+      {shelf.sections.map((section, sectionIndex) => {
+        const headingId = `${shelfId}-${section.key}`;
+
+        return (
+          <section
+            aria-label={section.label ? undefined : "検索結果"}
+            aria-labelledby={section.label ? headingId : undefined}
+            className={sectionIndex === 0 ? "mt-6" : "mt-9"}
+            key={section.key}
           >
-            <ToggleGroupItem aria-label="グリッド表示" value="grid">
-              <SquaresFour weight={viewMode === "grid" ? "fill" : "bold"} />
-            </ToggleGroupItem>
-            <ToggleGroupItem aria-label="リスト表示" value="list">
-              <List weight="bold" />
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      ) : null}
-
-      <div
-        className={
-          viewMode === "grid"
-            ? "mt-3 grid grid-cols-2 gap-3 sm:gap-5 sm:grid-cols-3 lg:grid-cols-4"
-            : "mt-3 flex flex-col gap-2 sm:gap-3"
-        }
-      >
-        {isInitialRecipesLoading
-          ? recipeSkeletonKeys.map((key) => <RecipeCardSkeleton key={key} viewMode={viewMode} />)
-          : null}
-        {recipes.map((recipe, recipeIndex) => {
-          const isList = viewMode === "list";
-          const content = isList ? (
-            <div className="flex min-w-0 w-full items-center p-1.5 sm:p-2">
-              <div className="relative aspect-square h-16 w-16 sm:h-20 sm:w-20 shrink-0 bg-brand-paper-muted overflow-hidden rounded-[10px] sm:rounded-[12px]">
-                {recipe.coverImageUrl ? (
-                  <RecipeThumbnail
-                    alt={recipe.title}
-                    index={recipeIndex}
-                    src={recipe.coverImageUrl}
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <div className="text-brand-line text-2xl">🍳</div>
-                  </div>
-                )}
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col justify-center py-1 pr-10 pl-4 sm:pr-12">
-                <h2 className="line-clamp-2 font-bold text-sm sm:text-base leading-tight text-brand-ink">
-                  {recipe.title}
+            {section.label ? (
+              <div className="mb-3 flex items-center gap-3">
+                <h2
+                  className="shrink-0 font-semibold text-[11px] text-brand-muted tracking-[0.08em]"
+                  id={headingId}
+                >
+                  {section.label}
                 </h2>
-                <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
-                  {recipe.sourceName ? (
-                    <div className="inline-flex min-w-0 flex-1 items-center gap-1.5 truncate rounded-full bg-brand-paper-muted px-2 py-0.5 font-medium text-[10px] text-brand-muted sm:text-xs">
-                      <SourceIcon />
-                      <span className="truncate">{recipe.sourceName}</span>
-                    </div>
-                  ) : (
-                    <div />
-                  )}
-                  {recipe.locked ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand-line px-1.5 py-0.5 font-medium text-[10px] text-brand-muted sm:text-xs">
-                      <LockSimple size={10} weight="bold" />
-                      <span className="hidden sm:inline">ロック中</span>
-                    </span>
-                  ) : null}
-                </div>
+                <span aria-hidden="true" className="h-px flex-1 bg-brand-line-soft" />
               </div>
-            </div>
-          ) : (
-            <>
-              <div className="relative aspect-[4/3] sm:aspect-video w-full bg-brand-paper-muted overflow-hidden rounded-t-[18px] sm:rounded-t-[20px]">
-                {recipe.coverImageUrl ? (
-                  <RecipeThumbnail
-                    alt={recipe.title}
-                    index={recipeIndex}
-                    src={recipe.coverImageUrl}
+            ) : null}
+            <div className={containerClass}>
+              {section.recipes.map((recipe, recipeIndex) => (
+                <Fragment key={recipe.id}>
+                  {recipe.id === firstLockedRecipeId ? <LockedShelfNotice /> : null}
+                  <RecipeCard
+                    index={shelf.offsets[sectionIndex] + recipeIndex}
+                    onDelete={setDeleteTargetId}
+                    recipe={recipe}
+                    viewMode={viewMode}
                   />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <div className="text-brand-line text-3xl sm:text-4xl">🍳</div>
-                  </div>
-                )}
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">
-                <h2 className="line-clamp-2 font-bold text-sm sm:text-base leading-tight text-brand-ink">
-                  {recipe.title}
-                </h2>
-                <div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-2.5 sm:pt-3">
-                  {recipe.sourceName ? (
-                    <div className="inline-flex min-w-0 flex-1 items-center gap-1.5 truncate rounded-full bg-brand-paper-muted px-2.5 py-1 font-medium text-[10px] text-brand-muted sm:text-xs">
-                      <SourceIcon />
-                      <span className="truncate">{recipe.sourceName}</span>
-                    </div>
-                  ) : (
-                    <div />
-                  )}
-                  {recipe.locked ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand-line px-2 py-1 font-medium text-[10px] text-brand-muted sm:text-xs">
-                      <LockSimple size={10} weight="bold" />
-                      <span className="hidden sm:inline">ロック中</span>
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </>
-          );
-
-          if (recipe.locked) {
-            return (
-              <div
-                key={recipe.id}
-                className={`flex min-w-0 overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper opacity-60 sm:rounded-[20px] ${isList ? "flex-row items-center" : "flex-col"}`}
-              >
-                {content}
-              </div>
-            );
-          }
-
-          return (
-            <div
-              key={recipe.id}
-              className={`group relative flex min-w-0 overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm transition-shadow duration-200 hover:shadow-pantry sm:rounded-[20px] ${isList ? "flex-row items-center" : "flex-col"}`}
-            >
-              <Link
-                to="/recipes/$recipeId"
-                params={{ recipeId: recipe.id }}
-                className={`flex min-w-0 flex-1 ${isList ? "flex-row items-center" : "flex-col"}`}
-              >
-                {content}
-              </Link>
-              <RecipeCardActionMenu
-                isList={isList}
-                recipeId={recipe.id}
-                title={recipe.title}
-                onDelete={() => setDeleteTargetId(recipe.id)}
-              />
+                </Fragment>
+              ))}
             </div>
-          );
-        })}
-      </div>
+          </section>
+        );
+      })}
 
       {hasNextPage ? (
-        <div className="mt-8 flex justify-center">
-          <Button disabled={isFetching} variant="outline" onClick={loadNextPage}>
-            もっと見る
-          </Button>
+        <div className="mt-8 flex justify-center" ref={loadMoreRef}>
+          {isFetchingNextPage ? (
+            <p className="flex items-center gap-2 text-brand-muted text-sm">
+              <Spinner aria-hidden="true" role="presentation" />
+              読み込み中
+            </p>
+          ) : (
+            <Button disabled={isFetching} variant="outline" onClick={loadNextPage}>
+              もっと見る
+            </Button>
+          )}
         </div>
       ) : null}
 

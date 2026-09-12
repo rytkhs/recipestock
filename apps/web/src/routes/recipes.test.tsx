@@ -109,6 +109,7 @@ const getReferenceImageInput = () => {
 describe("RecipesRoute", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -279,6 +280,261 @@ describe("RecipesRoute", () => {
     ).resolves.toBeInTheDocument();
     expect(screen.getByText("ロック中")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Locked pasta" })).not.toBeInTheDocument();
+  });
+
+  it("最後に使った時期で見出しを分けて並べる", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    const thisWeek = await screen.findByRole("region", { name: "今週" });
+
+    expect(within(thisWeek).getByRole("heading", { name: "Tomato pasta" })).toBeInTheDocument();
+    expect(screen.getByText("1件")).toBeInTheDocument();
+  });
+
+  it("読み込みが終わるまで件数を出さない", async () => {
+    let releaseRecipes = () => {};
+    const recipesGate = new Promise<void>((resolve) => {
+      releaseRecipes = resolve;
+    });
+
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          await recipesGate;
+
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    expect(screen.getByRole("status", { name: "レシピ一覧を読み込み中" })).toBeInTheDocument();
+    expect(screen.queryByText("0件")).not.toBeInTheDocument();
+
+    releaseRecipes();
+
+    await expect(screen.findByText("1件")).resolves.toBeInTheDocument();
+  });
+
+  it("検索が0件のときは検索を消して一覧に戻れる", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (input === "/api/recipes?limit=20&q=zzz") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.type(screen.getByLabelText("検索"), "zzz");
+    await userEvent.click(screen.getByRole("button", { name: "検索" }));
+
+    await expect(
+      screen.findByText("「zzz」に一致するレシピはありません"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByText("レシピはまだありません")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "すべてのレシピを表示" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("検索")).toHaveValue("");
+  });
+
+  it("ロックが始まる位置にプラン導線を1つだけ出す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_open",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+              {
+                id: "recipe_locked_1",
+                title: "Locked pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-20T00:00:00.000Z",
+                updatedAt: "2026-05-20T00:00:00.000Z",
+                locked: true,
+              },
+              {
+                id: "recipe_locked_2",
+                title: "Locked salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-19T00:00:00.000Z",
+                updatedAt: "2026-05-19T00:00:00.000Z",
+                locked: true,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(screen.findByText("ここから先はロック中")).resolves.toBeInTheDocument();
+    expect(screen.getAllByText("ここから先はロック中")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
+      "href",
+      "/settings/billing",
+    );
+  });
+
+  it("一覧の末尾が見えたら次ページを自動で読み込む", async () => {
+    const observerCallbacks: IntersectionObserverCallback[] = [];
+
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class IntersectionObserverStub {
+        constructor(callback: IntersectionObserverCallback) {
+          observerCallbacks.push(callback);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return [];
+        }
+      },
+    );
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                updatedAt: "2026-05-26T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: "cursor_2",
+          });
+        }
+
+        if (getRequestPath(input) === "/api/recipes?limit=20&cursor=cursor_2") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_456",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-24T00:00:00.000Z",
+                updatedAt: "2026-05-24T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    const notifyIntersection = observerCallbacks.at(-1);
+
+    if (!notifyIntersection) {
+      throw new Error("Sentinel observer was not created");
+    }
+
+    act(() => {
+      notifyIntersection(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+
+    await expect(
+      screen.findByRole("heading", { name: "Potato salad" }),
+    ).resolves.toBeInTheDocument();
   });
 
   it("複数のactive import jobを集約して個別表示する", async () => {

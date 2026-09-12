@@ -1,9 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { RecipeThumbnail } from "./recipe-thumbnail";
 
+const fallback = <span data-testid="thumbnail-fallback">題簽</span>;
+
 describe("RecipeThumbnail", () => {
   it("reveals the image after it loads", () => {
-    render(<RecipeThumbnail alt="Tomato pasta" index={0} src="/tomato-pasta.webp" />);
+    render(
+      <RecipeThumbnail fallback={fallback} alt="Tomato pasta" index={0} src="/tomato-pasta.webp" />,
+    );
 
     const image = screen.getByRole("img", { name: "Tomato pasta" });
 
@@ -18,12 +22,14 @@ describe("RecipeThumbnail", () => {
 
   it("returns to the hidden state when the source changes", () => {
     const { rerender } = render(
-      <RecipeThumbnail alt="Tomato pasta" index={0} src="/tomato-pasta.webp" />,
+      <RecipeThumbnail fallback={fallback} alt="Tomato pasta" index={0} src="/tomato-pasta.webp" />,
     );
 
     fireEvent.load(screen.getByRole("img", { name: "Tomato pasta" }));
 
-    rerender(<RecipeThumbnail alt="Potato salad" index={0} src="/potato-salad.webp" />);
+    rerender(
+      <RecipeThumbnail fallback={fallback} alt="Potato salad" index={0} src="/potato-salad.webp" />,
+    );
 
     const updatedImage = screen.getByRole("img", { name: "Potato salad" });
 
@@ -36,18 +42,22 @@ describe("RecipeThumbnail", () => {
 
   it("loads the first four images eagerly and later images lazily", () => {
     const { rerender } = render(
-      <RecipeThumbnail alt="Fourth recipe" index={3} src="/fourth.webp" />,
+      <RecipeThumbnail fallback={fallback} alt="Fourth recipe" index={3} src="/fourth.webp" />,
     );
 
     expect(screen.getByRole("img", { name: "Fourth recipe" })).toHaveAttribute("loading", "eager");
 
-    rerender(<RecipeThumbnail alt="Fifth recipe" index={4} src="/fifth.webp" />);
+    rerender(
+      <RecipeThumbnail fallback={fallback} alt="Fifth recipe" index={4} src="/fifth.webp" />,
+    );
 
     expect(screen.getByRole("img", { name: "Fifth recipe" })).toHaveAttribute("loading", "lazy");
   });
 
   it("keeps decoding and motion behavior inside the module", () => {
-    render(<RecipeThumbnail alt="Tomato pasta" index={0} src="/tomato-pasta.webp" />);
+    render(
+      <RecipeThumbnail fallback={fallback} alt="Tomato pasta" index={0} src="/tomato-pasta.webp" />,
+    );
 
     const image = screen.getByRole("img", { name: "Tomato pasta" });
 
@@ -63,7 +73,7 @@ describe("RecipeThumbnail", () => {
 
   it("shows a placeholder after failure and retries when the source changes", () => {
     const { rerender } = render(
-      <RecipeThumbnail alt="Tomato pasta" index={0} src="/missing.webp" />,
+      <RecipeThumbnail fallback={fallback} alt="Tomato pasta" index={0} src="/missing.webp" />,
     );
 
     const image = screen.getByRole("img", { name: "Tomato pasta" });
@@ -74,7 +84,8 @@ describe("RecipeThumbnail", () => {
     expect(
       screen.getByRole("img", { name: "Tomato pastaの画像を読み込めませんでした" }),
     ).toBeInTheDocument();
-    rerender(<RecipeThumbnail alt="Tomato pasta" index={0} src="/new.webp" />);
+    expect(screen.getByTestId("thumbnail-fallback")).toBeInTheDocument();
+    rerender(<RecipeThumbnail fallback={fallback} alt="Tomato pasta" index={0} src="/new.webp" />);
     expect(screen.getByRole("img", { name: "Tomato pasta" })).toHaveAttribute("src", "/new.webp");
   });
 });
