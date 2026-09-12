@@ -321,7 +321,8 @@ export const RecipesIndexRoute = () => {
 
     return { offsets, sections };
   }, [query, recipes]);
-  const loadedCountLabel = hasNextPage ? null : `${recipes.length}件`;
+  // 取得前はdataが無く、hasNextPageもfalseになる。dataを見ないと「0件」が一瞬出る。
+  const loadedCountLabel = data && !hasNextPage ? `${recipes.length}件` : null;
   const shelfSummary = query
     ? [`「${query}」の検索結果`, loadedCountLabel].filter(Boolean).join(" · ")
     : (loadedCountLabel ?? "");

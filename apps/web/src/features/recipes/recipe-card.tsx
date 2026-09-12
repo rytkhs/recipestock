@@ -18,9 +18,9 @@ import { type RecipeViewMode } from "./view-mode";
 const coverClass = "@container relative aspect-[4/3] w-full overflow-hidden bg-brand-paper-muted";
 const titleClass = "line-clamp-2 font-semibold text-[15px] leading-[1.45] sm:text-base";
 const metaClass = "truncate text-[11px] text-brand-muted sm:text-xs";
-// タッチではhoverがないので常時出す。ポインタのある画面だけ、写真の上から消しておく。
-const actionMenuClass =
-  "opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 sm:data-popup-open:opacity-100";
+
+const gridActionMenuClass =
+  "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)] hover:bg-transparent hover:text-white aria-expanded:bg-transparent aria-expanded:text-white";
 
 const RecipeCardActionMenu = ({
   className,
@@ -42,7 +42,7 @@ const RecipeCardActionMenu = ({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`${title}の操作メニュー`}
-          className={cn(actionMenuClass, triggerClassName)}
+          className={triggerClassName}
           render={<Button size="icon-sm" variant="ghost" />}
         >
           <DotsThreeVertical weight="bold" />
@@ -164,11 +164,7 @@ export const RecipeCard = ({
         onDelete={() => onDelete(recipe.id)}
         recipeId={recipe.id}
         title={recipe.title}
-        triggerClassName={
-          isList
-            ? "text-brand-muted"
-            : "bg-brand-ink/30 text-white backdrop-blur-[2px] hover:bg-brand-ink/50 hover:text-white"
-        }
+        triggerClassName={isList ? "text-brand-muted" : gridActionMenuClass}
       />
     </article>
   );

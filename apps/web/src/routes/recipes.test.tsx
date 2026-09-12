@@ -315,6 +315,48 @@ describe("RecipesRoute", () => {
     expect(screen.getByText("1件")).toBeInTheDocument();
   });
 
+  it("読み込みが終わるまで件数を出さない", async () => {
+    let releaseRecipes = () => {};
+    const recipesGate = new Promise<void>((resolve) => {
+      releaseRecipes = resolve;
+    });
+
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          await recipesGate;
+
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    expect(screen.getByRole("status", { name: "レシピ一覧を読み込み中" })).toBeInTheDocument();
+    expect(screen.queryByText("0件")).not.toBeInTheDocument();
+
+    releaseRecipes();
+
+    await expect(screen.findByText("1件")).resolves.toBeInTheDocument();
+  });
+
   it("検索が0件のときは検索を消して一覧に戻れる", async () => {
     mockFetch(
       async (input) => {
