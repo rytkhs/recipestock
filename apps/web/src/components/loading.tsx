@@ -1,5 +1,8 @@
 import { type ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
+import { type RecipeViewMode, readRecipeViewMode } from "../features/recipes/view-mode";
 import { ScreenTopBarFrame } from "./screen-top-bar";
 
 const skeletonBaseClass =
@@ -20,13 +23,20 @@ const gridRecipeSkeletonKeys = [
   "route-grid-recipe-skeleton-7",
   "route-grid-recipe-skeleton-8",
 ];
+const listRecipeSkeletonKeys = [
+  "route-list-recipe-skeleton-1",
+  "route-list-recipe-skeleton-2",
+  "route-list-recipe-skeleton-3",
+  "route-list-recipe-skeleton-4",
+  "route-list-recipe-skeleton-5",
+];
 
 type SkeletonBlockProps = {
   className?: string;
 };
 
 export const SkeletonBlock = ({ className = "" }: SkeletonBlockProps) => (
-  <Skeleton aria-hidden="true" className={`${skeletonBaseClass} ${className}`} />
+  <Skeleton aria-hidden="true" className={cn(skeletonBaseClass, className)} />
 );
 
 export const LoadingStatus = ({ label = "読み込み中" }: { label?: string }) => (
@@ -45,66 +55,58 @@ export const LoadingStatus = ({ label = "読み込み中" }: { label?: string })
   </section>
 );
 
-export const RecipeCardSkeleton = ({ viewMode }: { viewMode: "grid" | "list" }) => {
+export const RecipeCardSkeleton = ({ viewMode }: { viewMode: RecipeViewMode }) => {
   if (viewMode === "list") {
     return (
       <div
         aria-hidden="true"
-        className="flex overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper p-1.5 shadow-pantry-sm sm:p-2"
+        className="flex items-center gap-3 py-3"
         data-testid="recipe-card-skeleton"
       >
-        <SkeletonBlock className="h-16 w-16 shrink-0 rounded-[10px] sm:h-20 sm:w-20 sm:rounded-[12px]" />
-        <div className="flex min-w-0 flex-1 flex-col justify-center px-4 py-1">
+        <SkeletonBlock className="aspect-[4/3] w-20 shrink-0 rounded-[10px] sm:w-24" />
+        <div className="min-w-0 flex-1">
           <SkeletonBlock className="h-4 w-3/4" />
-          <SkeletonBlock className="mt-2 h-4 w-1/2" />
-          <SkeletonBlock className="mt-3 h-5 w-28 rounded-full" />
+          <SkeletonBlock className="mt-2 h-3 w-1/3" />
         </div>
       </div>
     );
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className="flex overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:rounded-[20px]"
-      data-testid="recipe-card-skeleton"
-    >
-      <div className="flex w-full flex-col">
-        <SkeletonBlock className="aspect-[4/3] w-full rounded-none border-0 sm:aspect-video" />
-        <div className="flex flex-1 flex-col p-3 sm:p-4">
-          <SkeletonBlock className="h-4 w-5/6" />
-          <SkeletonBlock className="mt-2 h-4 w-2/3" />
-          <div className="mt-auto pt-3">
-            <SkeletonBlock className="h-6 w-28 rounded-full" />
-          </div>
-        </div>
-      </div>
+    <div aria-hidden="true" className="flex flex-col" data-testid="recipe-card-skeleton">
+      <SkeletonBlock className="aspect-[4/3] w-full" />
+      <SkeletonBlock className="mt-2.5 h-4 w-5/6" />
+      <SkeletonBlock className="mt-1.5 h-3 w-1/2" />
     </div>
   );
 };
 
-export const RecipeListSkeleton = () => (
-  <section
-    aria-label="レシピ一覧を読み込み中"
-    className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10"
-    role="status"
-  >
-    <span className="sr-only">レシピ一覧を読み込み中</span>
-    <div className="-mx-4 sticky top-0 z-30 flex items-center gap-3 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
-      <SkeletonBlock className="h-11 w-full rounded-full" />
-      <SkeletonBlock className="hidden h-10 w-20 shrink-0 rounded-full sm:block" />
-      <SkeletonBlock className="h-11 w-11 shrink-0 rounded-full sm:hidden" />
-    </div>
-    <div className="mt-6 flex justify-end">
-      <SkeletonBlock className="h-10 w-24 rounded-full" />
-    </div>
-    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
-      {gridRecipeSkeletonKeys.map((key) => (
-        <RecipeCardSkeleton key={key} viewMode="grid" />
-      ))}
-    </div>
-  </section>
-);
+export const RecipeListSkeleton = () => {
+  const viewMode = readRecipeViewMode();
+  const skeletonKeys = viewMode === "grid" ? gridRecipeSkeletonKeys : listRecipeSkeletonKeys;
+
+  return (
+    <section
+      aria-label="レシピ一覧を読み込み中"
+      className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10"
+      role="status"
+    >
+      <span className="sr-only">レシピ一覧を読み込み中</span>
+      <div className="-mx-4 sticky top-0 z-30 flex items-center gap-2 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:gap-3 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
+        <SkeletonBlock className="h-11 w-full rounded-full" />
+        <SkeletonBlock className="hidden h-10 w-20 shrink-0 rounded-full sm:block" />
+        <SkeletonBlock className="hidden h-4 w-12 shrink-0 sm:block" />
+        <SkeletonBlock className="h-9 w-[4.5rem] shrink-0 rounded-full" />
+        <SkeletonBlock className="h-11 w-11 shrink-0 rounded-full sm:hidden" />
+      </div>
+      <div className={cn("mt-6", recipeShelfContainerClass(viewMode))}>
+        {skeletonKeys.map((key) => (
+          <RecipeCardSkeleton key={key} viewMode={viewMode} />
+        ))}
+      </div>
+    </section>
+  );
+};
 
 const SectionSkeleton = ({ titleWidth, children }: { titleWidth: string; children: ReactNode }) => (
   <section className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">

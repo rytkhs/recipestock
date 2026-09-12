@@ -27,6 +27,7 @@ Browser / PWA
 | Styling | Tailwind CSS v4 |
 | UI components | shadcn/ui — Base UI base, `base-nova` style.`apps/web/src/components/ui/` にベンダリング |
 | Icons | `@phosphor-icons/react` |
+| Fonts | Google Fonts。本文・UI・見出しとも Noto Sans JP。`apps/web/index.html` から `media="print"` + `onload` で描画を止めずに読み込む |
 | Image lightbox | `yet-another-react-lightbox`（Counter / Zoom プラグイン）。アイコンは既定のまま使い、配色・z-index・safe-areaは `--yarl__*` CSS変数で上書きする。`render.icon*` で差し替えると `yarl__icon` クラスが付かずタップ領域が縮む |
 | Routing | TanStack Router |
 | Server state | TanStack Query |

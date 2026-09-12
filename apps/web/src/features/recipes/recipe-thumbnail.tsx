@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const eagerRecipeThumbnailCount = 4;
 
 type RecipeThumbnailProps = {
   alt: string;
+  fallback: ReactNode;
   index: number;
   src: string;
 };
@@ -13,7 +14,7 @@ export const RecipeThumbnail = (props: RecipeThumbnailProps) => (
   <RecipeThumbnailImage key={props.src} {...props} />
 );
 
-const RecipeThumbnailImage = ({ alt, index, src }: RecipeThumbnailProps) => {
+const RecipeThumbnailImage = ({ alt, fallback, index, src }: RecipeThumbnailProps) => {
   const [status, setStatus] = useState<"loading" | "loaded" | "failed">("loading");
 
   if (status === "failed") {
@@ -21,9 +22,9 @@ const RecipeThumbnailImage = ({ alt, index, src }: RecipeThumbnailProps) => {
       <span
         role="img"
         aria-label={`${alt}の画像を読み込めませんでした`}
-        className="flex size-full items-center justify-center text-muted-foreground"
+        className="flex size-full items-center justify-center"
       >
-        <span aria-hidden="true">🍳</span>
+        {fallback}
       </span>
     );
   }

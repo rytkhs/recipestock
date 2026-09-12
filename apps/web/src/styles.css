@@ -30,11 +30,17 @@
   --color-brand-muted: var(--brand-muted);
   --color-brand-danger: var(--brand-danger);
 
+  /* 表紙画像のないRecipeに配る地色。写真と並んでも沈むよう明度をそろえてある */
+  --color-plate-1: var(--plate-1);
+  --color-plate-2: var(--plate-2);
+  --color-plate-3: var(--plate-3);
+  --color-plate-4: var(--plate-4);
+  --color-plate-5: var(--plate-5);
+
   /* Shadows */
   --shadow-pantry-sm: 0 1px 3px rgba(83, 62, 29, 0.05);
   --shadow-pantry: 0 4px 12px rgba(83, 62, 29, 0.06);
   --shadow-pantry-lg: 0 10px 28px rgba(83, 62, 29, 0.09);
-  --font-heading: var(--font-sans);
   --font-sans:
     "Noto Sans JP", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -101,6 +107,11 @@
   --brand-ink: #2f2418;
   --brand-muted: #7a6a56;
   --brand-danger: #b5533d;
+  --plate-1: #e3e6d3;
+  --plate-2: #f1e3ca;
+  --plate-3: #f6ddc6;
+  --plate-4: #e9e1d4;
+  --plate-5: #eeded7;
   --brand-on-primary: #ffffff;
   --background: var(--brand-cream);
   --foreground: var(--brand-ink);
