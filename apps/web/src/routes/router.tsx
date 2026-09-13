@@ -1,3 +1,4 @@
+import { type RecipeListSort, recipeListSortSchema } from "@recipestock/schemas";
 import {
   createRootRoute,
   createRoute,
@@ -5,10 +6,12 @@ import {
   lazyRouteComponent,
   Outlet,
   RouterProvider,
+  stripSearchParams,
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
+import { z } from "zod";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { Header, MobileAddRecipeFab } from "../components/header";
 import {
@@ -30,7 +33,7 @@ import { type ImportTextSearch } from "./import-text";
 const LoginScreen = lazyRouteComponent(() => import("./login"), "LoginRoute");
 const ImportUrlScreen = lazyRouteComponent(() => import("./import"), "ImportUrlRoute");
 const ImportTextScreen = lazyRouteComponent(() => import("./import-text"), "ImportTextRoute");
-const RecipesIndexRoute = lazyRouteComponent(() => import("./recipes-index"), "RecipesIndexRoute");
+const RecipesIndexScreen = lazyRouteComponent(() => import("./recipes-index"), "RecipesIndexRoute");
 const NewRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "NewRecipeRoute");
 const EditRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "EditRecipeRoute");
 const RecipeDetailRoute = lazyRouteComponent(() => import("./recipe-detail"), "RecipeDetailRoute");
@@ -59,6 +62,10 @@ const ImportUrlRoute = withPreload(
 const ImportTextRoute = withPreload(
   ({ search }: { search: ImportTextSearch }) => <ImportTextScreen search={search} />,
   ImportTextScreen.preload,
+);
+const RecipesIndexRoute = withPreload(
+  ({ sort }: { sort: RecipeListSort }) => <RecipesIndexScreen sort={sort} />,
+  RecipesIndexScreen.preload,
 );
 
 const ProtectedRouteSkeleton = () => {
@@ -204,10 +211,21 @@ const indexRoute = createRoute({
   ),
 });
 
+const recipesSearchSchema = z.object({
+  // 既定の新しい順はURLに載せない。読めない値はエラーにせず新しい順に戻す。
+  sort: recipeListSortSchema.default("newest").catch("newest"),
+});
+
 const recipesRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/recipes",
-  component: RecipesIndexRoute,
+  validateSearch: recipesSearchSchema,
+  search: { middlewares: [stripSearchParams({ sort: "newest" })] },
+  component: () => {
+    const search = recipesRoute.useSearch();
+
+    return <RecipesIndexRoute sort={search.sort} />;
+  },
   errorComponent: RouteChunkError,
   pendingComponent: RecipeListSkeleton,
   pendingMs: 0,

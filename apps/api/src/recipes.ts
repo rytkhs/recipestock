@@ -4,12 +4,13 @@ import {
   type RecipeContent,
   type RecipeDetail,
   type RecipeListItem,
+  type RecipeListSort,
   type RecipeSourceDraft,
   recipeContentSchema,
   recipeContentWithUrlsSchema,
 } from "@recipestock/schemas";
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
-import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, lt, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
 import {
   type AppUserPlanSyncOptions,
@@ -32,10 +33,7 @@ export type RecipeRecord = {
   locked?: boolean;
 };
 
-export type RecipeListRecord = Pick<
-  RecipeRecord,
-  "id" | "title" | "sourceName" | "createdAt" | "updatedAt"
-> & {
+export type RecipeListRecord = Pick<RecipeRecord, "id" | "title" | "sourceName" | "createdAt"> & {
   coverImageObjectKey?: string | null;
   locked?: boolean;
 };
@@ -63,6 +61,7 @@ export type CreateRecipeResult =
 export type ListRecipesParams = {
   userId: string;
   searchTerms: string[];
+  sort: RecipeListSort;
   limit: number;
   cursor: string | null;
 };
@@ -133,7 +132,6 @@ export const toRecipeListItem = (recipe: RecipeListRecord): RecipeListItem => ({
   coverImageUrl: null,
   sourceName: recipe.sourceName,
   createdAt: recipe.createdAt.toISOString(),
-  updatedAt: recipe.updatedAt.toISOString(),
   locked: recipe.locked ?? false,
 });
 
@@ -167,7 +165,8 @@ export const isRecipeLockedForPlan = ({
 }) => plan === "free" && !unlockedRecipeIds.has(recipeId);
 
 type RecipeListCursor = {
-  updatedAt: string;
+  sort: RecipeListSort;
+  createdAt: string;
   id: string;
 };
 
@@ -180,7 +179,8 @@ export class InvalidRecipeListCursorError extends Error {
 
 const encodeRecipeListCursor = (cursor: RecipeListCursor) => btoa(JSON.stringify(cursor));
 
-const decodeRecipeListCursor = (cursor: string): RecipeListCursor => {
+// cursorは並び順ごとに発行する。向きの違うcursorで続きを引くと抜けや重複が出るので、入力エラーにする。
+const decodeRecipeListCursor = (cursor: string, sort: RecipeListSort): RecipeListCursor => {
   let parsed: unknown;
 
   try {
@@ -193,17 +193,22 @@ const decodeRecipeListCursor = (cursor: string): RecipeListCursor => {
     throw new InvalidRecipeListCursorError();
   }
 
-  const { updatedAt, id } = parsed as Record<string, unknown>;
+  const { sort: cursorSort, createdAt, id } = parsed as Record<string, unknown>;
 
-  if (typeof updatedAt !== "string" || typeof id !== "string" || id.length === 0) {
+  if (
+    cursorSort !== sort ||
+    typeof createdAt !== "string" ||
+    typeof id !== "string" ||
+    id.length === 0
+  ) {
     throw new InvalidRecipeListCursorError();
   }
 
-  if (Number.isNaN(new Date(updatedAt).getTime())) {
+  if (Number.isNaN(new Date(createdAt).getTime())) {
     throw new InvalidRecipeListCursorError();
   }
 
-  return { updatedAt, id };
+  return { sort, createdAt, id };
 };
 
 export const normalizeRecipeSearchTerms = (query?: string) =>
@@ -315,19 +320,23 @@ export const createRecipeRepository = (
       locked: isRecipeLockedForPlan({ plan, recipeId: recipe.id, unlockedRecipeIds }),
     };
   },
-  async listRecipes({ userId, searchTerms, limit, cursor }) {
-    const decodedCursor = cursor ? decodeRecipeListCursor(cursor) : null;
-    const cursorUpdatedAt = decodedCursor ? new Date(decodedCursor.updatedAt) : null;
+  async listRecipes({ userId, searchTerms, sort, limit, cursor }) {
+    const decodedCursor = cursor ? decodeRecipeListCursor(cursor, sort) : null;
+    // 追加日で並べ、同時刻はidで同じ向きに並べてcursorの位置を一意にする。
+    const order = sort === "newest" ? desc : asc;
+    const isPastCursor = sort === "newest" ? lt : gt;
     const whereConditions = [
       eq(recipes.userId, userId),
       ...searchTerms.map((term) => ilike(recipes.searchText, `%${term}%`)),
     ];
 
-    if (decodedCursor && cursorUpdatedAt) {
+    if (decodedCursor) {
+      const cursorCreatedAt = new Date(decodedCursor.createdAt);
+
       whereConditions.push(
         or(
-          lt(recipes.updatedAt, cursorUpdatedAt),
-          and(eq(recipes.updatedAt, cursorUpdatedAt), lt(recipes.id, decodedCursor.id)),
+          isPastCursor(recipes.createdAt, cursorCreatedAt),
+          and(eq(recipes.createdAt, cursorCreatedAt), isPastCursor(recipes.id, decodedCursor.id)),
         ) ?? sql`false`,
       );
     }
@@ -341,7 +350,6 @@ export const createRecipeRepository = (
           title: recipes.title,
           sourceName: recipes.sourceName,
           createdAt: recipes.createdAt,
-          updatedAt: recipes.updatedAt,
           coverImageObjectKey: sql<string | null>`
           case
             when jsonb_typeof(${recipes.content}->'coverImage'->'objectKey') = 'string'
@@ -352,7 +360,7 @@ export const createRecipeRepository = (
         })
         .from(recipes)
         .where(and(...whereConditions))
-        .orderBy(desc(recipes.updatedAt), desc(recipes.id))
+        .orderBy(order(recipes.createdAt), order(recipes.id))
         .limit(limit + 1),
     ]);
     const unlockedRecipeIds =
@@ -368,7 +376,8 @@ export const createRecipeRepository = (
       nextCursor:
         rows.length > limit && lastRecipe
           ? encodeRecipeListCursor({
-              updatedAt: lastRecipe.updatedAt.toISOString(),
+              sort,
+              createdAt: lastRecipe.createdAt.toISOString(),
               id: lastRecipe.id,
             })
           : null,
@@ -411,12 +420,14 @@ export const createRecipeRepository = (
   },
 });
 
+// Freeで開けておくのは新しく保存した5件。一覧と同じ追加日の軸で選ぶので、
+// 並び順や検索によらずロック中のRecipeは一続きになる。
 const getUnlockedRecipeIdSet = async (db: DbClient, userId: string): Promise<Set<string>> => {
   const rows = await db
     .select({ id: recipes.id })
     .from(recipes)
     .where(eq(recipes.userId, userId))
-    .orderBy(desc(recipes.updatedAt), desc(recipes.id))
+    .orderBy(desc(recipes.createdAt), desc(recipes.id))
     .limit(PLAN_LIMITS.free.savedRecipes);
 
   return new Set(rows.map((row) => row.id));

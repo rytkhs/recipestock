@@ -151,6 +151,7 @@ export const createRecipeRoutes = ({
         result = await repository.listRecipes({
           userId,
           searchTerms: normalizeRecipeSearchTerms(query.data.q),
+          sort: query.data.sort,
           limit: query.data.limit,
           cursor: query.data.cursor ?? null,
         });

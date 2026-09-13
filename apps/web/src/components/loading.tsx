@@ -96,7 +96,7 @@ export const RecipeListSkeleton = () => {
         <SkeletonBlock className="h-11 w-full rounded-full" />
         <SkeletonBlock className="hidden h-10 w-20 shrink-0 rounded-full sm:block" />
         <SkeletonBlock className="hidden h-4 w-12 shrink-0 sm:block" />
-        <SkeletonBlock className="h-9 w-[4.5rem] shrink-0 rounded-full" />
+        <SkeletonBlock className="size-9 shrink-0 rounded-full" />
         <SkeletonBlock className="h-11 w-11 shrink-0 rounded-full sm:hidden" />
       </div>
       <div className={cn("mt-6", recipeShelfContainerClass(viewMode))}>

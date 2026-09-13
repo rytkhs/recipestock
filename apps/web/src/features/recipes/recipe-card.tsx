@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { RecipeCover } from "./recipe-cover";
-import { formatRecipeUpdatedAt } from "./recipe-shelf";
+import { formatRecipeCreatedAt } from "./recipe-shelf";
 import { type RecipeViewMode } from "./view-mode";
 
 const coverClass = "@container relative aspect-[4/3] w-full overflow-hidden bg-brand-paper-muted";
@@ -78,9 +78,9 @@ const LockedBadge = () => (
 export const LockedShelfNotice = () => (
   <div className="col-span-full flex flex-col items-start gap-3 rounded-[14px] border border-brand-line border-dashed bg-brand-paper-muted/60 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
     <div className="min-w-0 flex-1">
-      <p className="font-semibold text-brand-walnut text-sm">ここから先はロック中</p>
+      <p className="font-semibold text-brand-walnut text-sm">ロック中のレシピ</p>
       <p className="mt-0.5 text-brand-muted text-xs">
-        フリープランで開けるのは、最近使った{FREE_RECIPE_LIMIT}件までです。
+        フリープランで開けるのは、新しく保存した{FREE_RECIPE_LIMIT}件までです。
       </p>
     </div>
     <Link
@@ -104,9 +104,9 @@ export const RecipeCard = ({
   viewMode: RecipeViewMode;
 }) => {
   const isList = viewMode === "list";
-  const updatedAtLabel = formatRecipeUpdatedAt(recipe.updatedAt);
+  const createdAtLabel = formatRecipeCreatedAt(recipe.createdAt);
   const meta = isList
-    ? [recipe.sourceName, updatedAtLabel].filter(Boolean).join(" · ")
+    ? [recipe.sourceName, createdAtLabel].filter(Boolean).join(" · ")
     : recipe.sourceName;
   const cover = (
     <div

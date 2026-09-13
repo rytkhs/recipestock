@@ -19,7 +19,7 @@ export const recipes = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("recipes_user_id_updated_at_idx").on(table.userId, table.updatedAt),
+    index("recipes_user_id_created_at_idx").on(table.userId, table.createdAt),
     index("recipes_normalized_source_url_idx").on(table.userId, table.normalizedSourceUrl),
   ],
 );
