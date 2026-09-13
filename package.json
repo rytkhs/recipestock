@@ -9,6 +9,7 @@
     "db:migrate": "pnpm --filter @recipestock/db db:migrate",
     "deploy": "pnpm --filter @recipestock/web build && pnpm --filter @recipestock/api deploy",
     "dev": "turbo dev",
+    "dev:mock": "pnpm --filter @recipestock/web dev:mock",
     "format": "biome format --write .",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
