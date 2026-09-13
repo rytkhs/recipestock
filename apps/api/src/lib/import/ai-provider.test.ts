@@ -1,15 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createDefaultRecipeImportAIProvider } from "./ai-provider";
+import { GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT, SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT } from "./prompts";
 import {
-  createDefaultRecipeImportAIProvider,
   type RecipeImportAINormalizeRequest,
   type RecipeImportError,
   type RecipeImportGenericAIInput,
   type RecipeImportSocialAIInput,
-} from "./import-url";
-import {
-  GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT,
-  SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT,
-} from "./lib/import/prompts";
+} from "./types";
 
 const mocks = vi.hoisted(() => {
   const workersAiModel = { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" };
@@ -552,5 +549,55 @@ describe("default recipe import AI provider", () => {
     await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_timeout",
     } satisfies Partial<RecipeImportError>);
+  });
+
+  const textRequest = {
+    promptProfile: "text",
+    input: { text: "鶏むね肉のレモン煮\n鶏むね肉 300g\nレモン汁で煮る" },
+  } satisfies RecipeImportAINormalizeRequest;
+
+  it("text profileでは貼り付けた原文だけをテキスト用system promptと一緒に渡す", async () => {
+    mocks.generateObject.mockResolvedValueOnce({ object: createStrictAiDraft() });
+
+    const provider = createDefaultRecipeImportAIProvider(createEnv());
+
+    await expect(provider.normalize(textRequest)).resolves.toMatchObject({
+      title: "Tomato pasta",
+    });
+    expect(mocks.generateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining("text import normalization engine"),
+      }),
+    );
+    const prompt = mocks.generateObject.mock.calls[0]?.[0]?.prompt;
+    expect(prompt).toContain(textRequest.input.text);
+    expect(prompt).not.toContain("markdownContent");
+    expect(prompt).not.toContain("source:");
+  });
+
+  it("text profileの失敗ログには原文を含めず長さだけを残す", async () => {
+    mocks.generateObject.mockRejectedValueOnce(
+      Object.assign(new Error("upstream failed"), { name: "AI_APICallError" }),
+    );
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    };
+    const provider = createDefaultRecipeImportAIProvider(
+      createEnv({ IMPORT_AI_TIMEOUT_MS: "1000" }),
+      { logger },
+    );
+
+    await expect(provider.normalize(textRequest)).rejects.toThrow("upstream failed");
+    expect(logger.error).toHaveBeenCalledWith(
+      "recipe_import_ai_normalization_failed",
+      expect.objectContaining({
+        promptProfile: "text",
+        textLength: textRequest.input.text.length,
+      }),
+    );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(textRequest.input.text);
   });
 });

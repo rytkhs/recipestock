@@ -12,6 +12,7 @@ import { type ReactNode, useEffect } from "react";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { Header, MobileAddRecipeFab } from "../components/header";
 import {
+  ImportTextSkeleton,
   ImportUrlSkeleton,
   LoadingStatus,
   RecipeDetailSkeleton,
@@ -24,9 +25,11 @@ import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { useProtectedAccess } from "../lib/protected-access";
 import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
 import { type ImportUrlSearch } from "./import";
+import { type ImportTextSearch } from "./import-text";
 
 const LoginScreen = lazyRouteComponent(() => import("./login"), "LoginRoute");
 const ImportUrlScreen = lazyRouteComponent(() => import("./import"), "ImportUrlRoute");
+const ImportTextScreen = lazyRouteComponent(() => import("./import-text"), "ImportTextRoute");
 const RecipesIndexRoute = lazyRouteComponent(() => import("./recipes-index"), "RecipesIndexRoute");
 const NewRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "NewRecipeRoute");
 const EditRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "EditRecipeRoute");
@@ -53,6 +56,10 @@ const ImportUrlRoute = withPreload(
   ({ search }: { search: ImportUrlSearch }) => <ImportUrlScreen search={search} />,
   ImportUrlScreen.preload,
 );
+const ImportTextRoute = withPreload(
+  ({ search }: { search: ImportTextSearch }) => <ImportTextScreen search={search} />,
+  ImportTextScreen.preload,
+);
 
 const ProtectedRouteSkeleton = () => {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -71,6 +78,10 @@ const ProtectedRouteSkeleton = () => {
 
   if (pathname === "/import/url") {
     return <ImportUrlSkeleton />;
+  }
+
+  if (pathname === "/import/text") {
+    return <ImportTextSkeleton />;
   }
 
   if (pathname === "/settings" || pathname.startsWith("/settings/")) {
@@ -274,6 +285,22 @@ const importUrlRoute = createRoute({
   pendingMs: 0,
 });
 
+const importTextRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/import/text",
+  validateSearch: (search): ImportTextSearch => ({
+    fromJob: stringSearchParam(search.fromJob),
+  }),
+  component: () => {
+    const search = importTextRoute.useSearch();
+
+    return <ImportTextRoute key={search.fromJob ?? ""} search={search} />;
+  },
+  errorComponent: RouteChunkError,
+  pendingComponent: ImportTextSkeleton,
+  pendingMs: 0,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings",
@@ -300,6 +327,7 @@ const routeTree = rootRoute.addChildren([
     recipeDetailRoute,
     editRecipeRoute,
     importUrlRoute,
+    importTextRoute,
     settingsRoute,
     settingsBillingRoute,
   ]),

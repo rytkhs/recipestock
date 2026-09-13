@@ -1,17 +1,19 @@
 import { createDb } from "@recipestock/db";
 import {
-  createImportUrlJobResponseSchema,
+  createImportJobResponseSchema,
   dismissImportJobResponseSchema,
   getImportJobResponseSchema,
   recentImportJobsResponseSchema,
 } from "@recipestock/schemas";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import {
   aiUsageLimitExceededResponse,
   invalidUrlResponse,
   notFoundResponse,
   recipeLimitExceededResponse,
   temporarilyUnavailableResponse,
+  validationFailedResponse,
 } from "../api-error";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
@@ -22,12 +24,20 @@ import {
   resolveImportJobTimeoutMs,
   toImportJobSummary,
 } from "../import-jobs";
+import { type TextImportJobSubmissionFactory } from "../lib/import/text-import-job-submission";
 import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
 import { requireAuth } from "../middleware/auth";
+
+/**
+ * 原文の文字数はJSONを読んでから検証するので、読む前に本文の大きさを抑える。
+ * 上限文字数の原文がJSONのエスケープで膨らんでも収まる大きさにしている。
+ */
+const IMPORT_TEXT_REQUEST_MAX_BYTES = 64 * 1024;
 
 type ImportRouteDependencies = {
   auth: AuthService;
   urlImportJobSubmissionFor: UrlImportJobSubmissionFactory;
+  textImportJobSubmissionFor: TextImportJobSubmissionFactory;
   importJobRepository?: ImportJobRepository;
   getCurrentDate?: () => Date;
 };
@@ -35,6 +45,7 @@ type ImportRouteDependencies = {
 export const createImportRoutes = ({
   auth,
   urlImportJobSubmissionFor,
+  textImportJobSubmissionFor,
   importJobRepository,
   getCurrentDate,
 }: ImportRouteDependencies) => {
@@ -72,13 +83,55 @@ export const createImportRoutes = ({
       }
 
       return c.json(
-        createImportUrlJobResponseSchema.parse({
+        createImportJobResponseSchema.parse({
           kind: result.kind,
           job: toImportJobSummary(result.job),
         }),
         202,
       );
     })
+    .post(
+      "/text/jobs",
+      requireAuth(auth),
+      bodyLimit({
+        maxSize: IMPORT_TEXT_REQUEST_MAX_BYTES,
+        onError: () => validationFailedResponse(undefined),
+      }),
+      async (c) => {
+        const userId = c.get("userId");
+        const rawBody = await c.req.json().catch(() => null);
+        const text =
+          typeof rawBody === "object" && rawBody !== null && "text" in rawBody
+            ? rawBody.text
+            : undefined;
+
+        const result = await textImportJobSubmissionFor(c.env).submit({ userId, text });
+
+        if (result.status === "invalidText") {
+          return validationFailedResponse(result.issues);
+        }
+
+        if (result.status === "recipeLimitExceeded") {
+          return recipeLimitExceededResponse();
+        }
+
+        if (result.status === "aiUsageLimitExceeded") {
+          return aiUsageLimitExceededResponse();
+        }
+
+        if (result.status === "temporarilyUnavailable") {
+          return temporarilyUnavailableResponse();
+        }
+
+        return c.json(
+          createImportJobResponseSchema.parse({
+            kind: result.kind,
+            job: toImportJobSummary(result.job),
+          }),
+          202,
+        );
+      },
+    )
     .get("/jobs/recent", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
       const now = getCurrentDate?.() ?? new Date();
@@ -107,7 +160,12 @@ export const createImportRoutes = ({
         return notFoundResponse("Import job was not found.");
       }
 
-      return c.json(getImportJobResponseSchema.parse({ job: toImportJobSummary(job) }));
+      return c.json(
+        getImportJobResponseSchema.parse({
+          job: toImportJobSummary(job),
+          sourceText: job.sourceText,
+        }),
+      );
     })
     .patch("/jobs/:jobId/dismiss", requireAuth(auth), async (c) => {
       const userId = c.get("userId");

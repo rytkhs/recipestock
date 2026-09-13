@@ -140,15 +140,16 @@ pnpm dev:mock
 | `next-page-error` | 2ページ目の取得失敗 |
 | `importing` | 取り込み中 |
 | `import-failed` | 取り込み失敗 |
+| `text-import-failed` | テキストの取り込み失敗(原文を直して再試行) |
 | `no-cover` | カバー画像なし |
 | `broken-image` | カバー画像の読み込み失敗 |
 | `signed-out` | 未ログイン |
 | `offline` | 接続不可 |
 
 検索ヒットなしの表示は、`default` で一致しない語を検索すると出ます。
-取り込みは URL を送信してから数秒で成功に変わるので、島の一連の流れをそのまま追えます。
+取り込みは URL やテキストを送信してから数秒で成功に変わるので、島の一連の流れをそのまま追えます。
 レシピの作成・編集・削除も、リロードするまでは入力した内容で詳細と一覧に反映されます。
-フリープランで保存上限に達しているシナリオ(`limit-reached` / `free-locked`)では、作成と URL 取り込みが本番と同じく `recipe_limit_exceeded` で失敗します。
+フリープランで保存上限に達しているシナリオ(`limit-reached` / `free-locked`)では、作成と URL・テキストの取り込みが本番と同じく `recipe_limit_exceeded` で失敗します。
 `signed-out` でメールアドレスによるログインや新規登録(OTP 検証)をすると、そのままログイン状態になります。
 Google ログインはリロードを伴うので、戻り先で `default` シナリオに切り替わります。
 

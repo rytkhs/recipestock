@@ -216,6 +216,7 @@ const ImportJobIsland = () => {
                   : isFailed
                     ? "取り込めませんでした"
                     : "保存しました";
+            const label = job.kind === "text" ? (job.textPreview ?? "貼り付けたテキスト") : job.url;
 
             return (
               <div
@@ -225,7 +226,7 @@ const ImportJobIsland = () => {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-brand-ink text-xs">{status}</p>
                   <p className="mt-0.5 truncate text-brand-muted text-xs">
-                    {isFailed ? getImportJobFailureMessage(job) : job.url}
+                    {isFailed ? getImportJobFailureMessage(job) : label}
                   </p>
                 </div>
                 {isSucceeded && job.recipeId ? (
@@ -238,7 +239,16 @@ const ImportJobIsland = () => {
                     開く
                   </Link>
                 ) : null}
-                {isFailed ? (
+                {isFailed && job.kind === "text" ? (
+                  <Link
+                    className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
+                    search={{ fromJob: job.id }}
+                    to="/import/text"
+                  >
+                    再試行
+                  </Link>
+                ) : null}
+                {isFailed && job.kind === "url" ? (
                   <Button
                     className="shrink-0"
                     disabled={!job.url || retryMutation.isPending}
@@ -250,7 +260,7 @@ const ImportJobIsland = () => {
                 ) : null}
                 {!isActive ? (
                   <Button
-                    aria-label={`${job.url ?? status}を閉じる`}
+                    aria-label={`${label ?? status}を閉じる`}
                     className="shrink-0"
                     size="icon-sm"
                     variant="ghost"

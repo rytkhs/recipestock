@@ -9,8 +9,8 @@ import {
   fetchImportPage,
   importRecipeFromUrl,
   normalizeImportableUrl,
-  type RecipeImportAINormalizeRequest,
   RecipeImportError,
+  type RecipeImportUrlAINormalizeRequest,
 } from "./import-url";
 import { type DeterministicImporter } from "./lib/import/deterministic";
 import { type SourceExtractor } from "./lib/import/source-extraction";
@@ -694,7 +694,7 @@ describe("URL import flow", () => {
 
   it("YouTube URLはsource extraction結果をAI normalizationへ渡す", async () => {
     const usageRepository = createUsageRepositoryStub();
-    const aiNormalize = vi.fn(async (_request: RecipeImportAINormalizeRequest) => ({
+    const aiNormalize = vi.fn(async (_request: RecipeImportUrlAINormalizeRequest) => ({
       title: "鶏むねキャベツ鍋",
       ingredientGroups: [{ ingredients: [{ name: "キャベツ", amount: "500g" }] }],
       steps: [{ text: "煮る。", imageUrls: [] }],
@@ -806,7 +806,7 @@ describe("URL import flow", () => {
 
   it("X/Twitter URLはsource extraction結果をAI normalizationへ渡し画像を決定的に配置する", async () => {
     const imageUrl = "https://pbs.twimg.com/media/HL337ewbEAIg_Ux.jpg";
-    const aiNormalize = vi.fn(async ({ input }: RecipeImportAINormalizeRequest) => ({
+    const aiNormalize = vi.fn(async ({ input }: RecipeImportUrlAINormalizeRequest) => ({
       title: "卵焼き",
       ingredientGroups: [{ ingredients: [{ name: "卵", amount: "2個" }] }],
       steps: [
@@ -994,23 +994,25 @@ describe("URL import flow", () => {
             })
           : "<html><article><h1>Generic Instagram recipe</h1></article></html>",
     }));
-    const aiNormalize = vi.fn(async ({ input, promptProfile }: RecipeImportAINormalizeRequest) => {
-      expect(promptProfile).toBe("social");
-      expect(input.source).toEqual({
-        finalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
-        host: "instagram.com",
-      });
-      expect(input.markdownContent).toContain("Source: Instagram");
-      expect(input.markdownContent).toContain("## Caption\n\n材料\nなす 5本");
-      expect(input.markdownContent).not.toContain("## Images");
-      expect(input.markdownContent).not.toContain("https://cdn.example.com/cover.jpg");
+    const aiNormalize = vi.fn(
+      async ({ input, promptProfile }: RecipeImportUrlAINormalizeRequest) => {
+        expect(promptProfile).toBe("social");
+        expect(input.source).toEqual({
+          finalUrl: "https://www.instagram.com/p/DYsxvKyAZMg/",
+          host: "instagram.com",
+        });
+        expect(input.markdownContent).toContain("Source: Instagram");
+        expect(input.markdownContent).toContain("## Caption\n\n材料\nなす 5本");
+        expect(input.markdownContent).not.toContain("## Images");
+        expect(input.markdownContent).not.toContain("https://cdn.example.com/cover.jpg");
 
-      return {
-        title: "Instagram recipe",
-        ingredientGroups: [],
-        steps: [{ text: "揚げ焼きにする。", imageUrls: [] }],
-      };
-    });
+        return {
+          title: "Instagram recipe",
+          ingredientGroups: [],
+          steps: [{ text: "揚げ焼きにする。", imageUrls: [] }],
+        };
+      },
+    );
 
     await expect(
       importRecipeFromUrl({

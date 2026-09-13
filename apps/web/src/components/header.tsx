@@ -1,4 +1,5 @@
 import {
+  Article,
   CookingPot,
   Link as LinkIcon,
   List as ListIcon,
@@ -63,6 +64,19 @@ const AddRecipeMenu = ({
               <div className="flex flex-col">
                 <span>URLから</span>
                 <span className="text-xs text-muted-foreground">サイトから取り込む</span>
+              </div>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              void navigate({ to: "/import/text" });
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <Article weight="bold" />
+              <div className="flex flex-col">
+                <span>テキストから</span>
+                <span className="text-xs text-muted-foreground">文章を貼り付けて取り込む</span>
               </div>
             </div>
           </DropdownMenuItem>

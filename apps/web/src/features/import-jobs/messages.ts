@@ -18,6 +18,12 @@ const createImportUrlJobErrorMessages: Partial<Record<ApiErrorCode, string>> = {
   recipe_limit_exceeded: "保存できるレシピ数の上限に達しています。",
 };
 
+const createImportTextJobErrorMessages: Partial<Record<ApiErrorCode, string>> = {
+  validation_failed: "テキストを確認してください。",
+  ai_usage_limit_exceeded: "今月のAI利用回数の上限に達しています。",
+  recipe_limit_exceeded: "保存できるレシピ数の上限に達しています。",
+};
+
 const importJobFailureMessages: Partial<Record<ImportErrorCode, string>> = {
   invalid_url: "URLを確認してください。",
   fetch_failed: "ページを取得できませんでした。",
@@ -31,6 +37,18 @@ const importJobFailureMessages: Partial<Record<ImportErrorCode, string>> = {
   recipe_limit_exceeded: "保存できるレシピ数の上限に達しています。",
 };
 
+/**
+ * テキストの取り込みにはページを取得する段階がないので、本文が見つからなかったとは伝えない。
+ */
+const textImportJobFailureMessages: Partial<Record<ImportErrorCode, string>> = {
+  extraction_failed: "テキストからレシピを読み取れませんでした。",
+};
+
+const importJobFallbackMessages: Record<ImportJobSummary["kind"], string> = {
+  url: "URLを取り込めませんでした。",
+  text: "テキストを取り込めませんでした。",
+};
+
 export const getCreateImportUrlJobErrorMessage = (error: unknown): string => {
   if (!(error instanceof ApiClientError)) {
     return "URLを取り込めませんでした。";
@@ -39,7 +57,22 @@ export const getCreateImportUrlJobErrorMessage = (error: unknown): string => {
   return createImportUrlJobErrorMessages[error.code] ?? "URLを取り込めませんでした。";
 };
 
-export const getImportJobFailureMessage = (job: ImportJobSummary): string =>
-  job.errorCode
-    ? (importJobFailureMessages[job.errorCode] ?? "URLを取り込めませんでした。")
-    : "URLを取り込めませんでした。";
+export const getCreateImportTextJobErrorMessage = (error: unknown): string => {
+  if (!(error instanceof ApiClientError)) {
+    return importJobFallbackMessages.text;
+  }
+
+  return createImportTextJobErrorMessages[error.code] ?? importJobFallbackMessages.text;
+};
+
+export const getImportJobFailureMessage = (job: ImportJobSummary): string => {
+  const fallback = importJobFallbackMessages[job.kind];
+
+  if (!job.errorCode) {
+    return fallback;
+  }
+
+  const textMessage = job.kind === "text" ? textImportJobFailureMessages[job.errorCode] : undefined;
+
+  return textMessage ?? importJobFailureMessages[job.errorCode] ?? fallback;
+};

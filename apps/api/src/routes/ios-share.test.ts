@@ -23,6 +23,7 @@ const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord =>
   status: "queued",
   url: "https://example.com/recipe",
   normalizedUrl: "https://example.com/recipe",
+  sourceText: null,
   recipeId: null,
   errorCode: null,
   errorMessage: null,
@@ -40,6 +41,7 @@ const createImportJobRepository = (
   overrides: Partial<ImportJobRepository> = {},
 ): ImportJobRepository => ({
   createUrlJob: async () => ({ status: "created", job: createJob() }),
+  createTextJob: async () => ({ status: "created", job: createJob() }),
   listRecentJobs: async () => [],
   getJob: async () => null,
   getJobById: async () => null,

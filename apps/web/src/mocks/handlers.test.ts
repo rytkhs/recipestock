@@ -1,5 +1,7 @@
 import {
+  createImportJobResponseSchema,
   createRecipeResponseSchema,
+  getImportJobResponseSchema,
   getRecipeResponseSchema,
   listRecipesResponseSchema,
   type RecipeDetail,
@@ -187,5 +189,71 @@ describe("mock handlers", () => {
 
     expect(response.status).toBe(501);
     expect(console.error).toHaveBeenCalledWith("[mock] No handler for GET /api/not-mocked");
+  });
+
+  it("テキストの取り込みは原文の最初の行を持つjobを作り、詳細で原文を返す", async () => {
+    const handlers = setup();
+
+    const response = await send(handlers, "POST", "/api/import/text/jobs", {
+      text: "  鶏むね肉のレモン煮\n鶏むね肉 300g  ",
+    });
+
+    expect(response.status).toBe(202);
+    const { job } = createImportJobResponseSchema.parse(await response.json());
+    expect(job).toMatchObject({ kind: "text", url: null, textPreview: "鶏むね肉のレモン煮" });
+
+    const detail = getImportJobResponseSchema.parse(
+      await (await send(handlers, "GET", `/api/import/jobs/${job.id}`)).json(),
+    );
+    expect(detail.sourceText).toBe("鶏むね肉のレモン煮\n鶏むね肉 300g");
+  });
+
+  it("保存上限に達しているとテキストの取り込みもrecipe_limit_exceededになる", async () => {
+    const handlers = setup("limit-reached");
+
+    const response = await send(handlers, "POST", "/api/import/text/jobs", {
+      text: "鶏むね肉のレモン煮",
+    });
+
+    expect(response.status).toBe(403);
+    expect(await errorCodeOf(response)).toBe("recipe_limit_exceeded");
+  });
+
+  it("テキストの取り込み失敗シナリオは送り直し用の原文を返し、閉じると見つからなくなる", async () => {
+    const handlers = setup("text-import-failed");
+
+    const detail = getImportJobResponseSchema.parse(
+      await (await send(handlers, "GET", "/api/import/jobs/job_text_failed")).json(),
+    );
+    expect(detail).toMatchObject({ job: { kind: "text", status: "failed" } });
+    expect(detail.sourceText).toContain("今日の夕飯");
+
+    await send(handlers, "PATCH", "/api/import/jobs/job_text_failed/dismiss");
+
+    const dismissed = await send(handlers, "GET", "/api/import/jobs/job_text_failed");
+    expect(dismissed.status).toBe(404);
+  });
+
+  it("成功したテキストのjobも保持している原文を詳細で返す", async () => {
+    const state = findScenario("text-import-failed").build();
+    const [failedJob] = state.importJobs;
+    state.importJobs = [
+      {
+        ...failedJob,
+        status: "succeeded",
+        recipeId: "recipe_123",
+        errorCode: null,
+      },
+    ];
+    const handlers = createHandlers(state, { delayMs: 0 });
+
+    const detail = getImportJobResponseSchema.parse(
+      await (await send(handlers, "GET", "/api/import/jobs/job_text_failed")).json(),
+    );
+
+    expect(detail).toMatchObject({
+      job: { status: "succeeded", textPreview: "今日の夕飯" },
+      sourceText: "今日の夕飯\n鶏むね肉を焼いただけ。おいしかった。",
+    });
   });
 });

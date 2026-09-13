@@ -29,10 +29,12 @@ export const importJobs = pgTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    kind: text("kind", { enum: ["url"] }).notNull(),
+    kind: text("kind", { enum: ["url", "text"] }).notNull(),
     status: text("status", { enum: ["queued", "running", "succeeded", "failed"] }).notNull(),
     url: text("url"),
     normalizedUrl: text("normalized_url"),
+    sourceText: text("source_text"),
+    sourceTextDigest: text("source_text_digest"),
     recipeId: text("recipe_id"),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
@@ -53,5 +55,10 @@ export const importJobs = pgTable(
     uniqueIndex("import_jobs_user_normalized_url_active_idx")
       .on(table.userId, table.normalizedUrl)
       .where(sql`${table.status} in ('queued', 'running') and ${table.normalizedUrl} is not null`),
+    uniqueIndex("import_jobs_user_source_text_digest_active_idx")
+      .on(table.userId, table.sourceTextDigest)
+      .where(
+        sql`${table.status} in ('queued', 'running') and ${table.sourceTextDigest} is not null`,
+      ),
   ],
 );

@@ -319,6 +319,7 @@ export const importJobFixture = (overrides: Partial<ImportJobSummary> = {}): Imp
     kind: "url",
     status: "running",
     url: "https://www.sirogohan.com/recipe/potesara/",
+    textPreview: null,
     recipeId: null,
     errorCode: null,
     createdAt: new Date(now.getTime() - 20_000).toISOString(),
