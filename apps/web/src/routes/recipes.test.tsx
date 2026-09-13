@@ -850,6 +850,64 @@ describe("RecipesRoute", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("1件取り込めませんでした");
   });
 
+  it("テキスト取り込みは原文の最初の行を表示し、失敗したら原文を直す画面から再試行する", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_running",
+                kind: "text",
+                status: "running",
+                url: null,
+                textPreview: "豚の生姜焼き",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:20.000Z",
+                startedAt: "2026-06-01T00:00:21.000Z",
+                finishedAt: null,
+              },
+              {
+                id: "job_failed",
+                kind: "text",
+                status: "failed",
+                url: null,
+                textPreview: "今日の夕飯",
+                recipeId: null,
+                errorCode: "extraction_failed",
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: "2026-06-01T00:00:10.000Z",
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("1件取り込めませんでした");
+    });
+    await userEvent.click(screen.getByRole("button", { name: /1件取り込めませんでした/ }));
+
+    expect(screen.getByText("豚の生姜焼き")).toBeInTheDocument();
+    expect(screen.getByText("テキストからレシピを読み取れませんでした。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "再試行" })).toHaveAttribute(
+      "href",
+      "/import/text?fromJob=job_failed",
+    );
+  });
+
   it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {
     let nextPageRequests = 0;
     const fetchMock = mockFetch(

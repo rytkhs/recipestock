@@ -49,6 +49,12 @@ describe.each(
     expectValid(listShortcutCredentialsResponseSchema, state.shortcutCredentials);
   });
 
+  it("importJobSourceTextsはテキストの取り込みjobだけを指している", () => {
+    for (const jobId of Object.keys(state.importJobSourceTexts)) {
+      expect(state.importJobs.find((job) => job.id === jobId)?.kind).toBe("text");
+    }
+  });
+
   it("各Recipeの詳細がGetRecipeResponseの形をしている", () => {
     for (const recipe of state.recipes) {
       const detail = recipe.locked

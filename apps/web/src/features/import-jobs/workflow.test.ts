@@ -1,6 +1,6 @@
 import { type ImportJobSummary } from "@recipestock/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { hasActiveImportJob, retryImportUrlJob } from "./workflow";
+import { hasActiveImportJob, retryImportTextJob, retryImportUrlJob } from "./workflow";
 
 const createJob = (overrides: Partial<ImportJobSummary> = {}): ImportJobSummary => ({
   id: "job_123",
@@ -172,5 +172,76 @@ describe("retryImportUrlJob", () => {
     await expect(retryImportUrlJob(createJob({ url: null }))).rejects.toThrow(
       "Import job URL is missing.",
     );
+  });
+});
+
+describe("retryImportTextJob", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("直した原文でimport jobを作成してから失敗したjobを閉じる", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (getRequestPath(input) === "/api/import/text/jobs" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            kind: "created",
+            job: createJob({
+              id: "job_retry",
+              kind: "text",
+              status: "queued",
+              url: null,
+              textPreview: "今日の夕飯",
+              errorCode: null,
+              startedAt: null,
+              finishedAt: null,
+            }),
+          },
+          { status: 202 },
+        );
+      }
+
+      if (
+        getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
+        init?.method === "PATCH"
+      ) {
+        return jsonResponse({ job: createJob({ kind: "text", url: null }) });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await expect(
+      retryImportTextJob({ jobId: "job_123", text: "今日の夕飯\n鶏むね肉 300g" }),
+    ).resolves.toMatchObject({ kind: "created", job: { id: "job_retry" } });
+    expect(fetchMock.mock.calls.map(([input]) => getRequestPath(input))).toEqual([
+      "/api/import/text/jobs",
+      "/api/import/jobs/job_123/dismiss",
+    ]);
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        credentials: "include",
+        method: "POST",
+        body: JSON.stringify({ text: "今日の夕飯\n鶏むね肉 300g" }),
+      }),
+    );
+  });
+
+  it("新しいjobを作れなければ失敗したjobを閉じない", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (getRequestPath(input) === "/api/import/text/jobs" && init?.method === "POST") {
+        return jsonResponse(
+          { error: { code: "recipe_limit_exceeded", message: "Recipe limit exceeded." } },
+          { status: 403 },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await expect(
+      retryImportTextJob({ jobId: "job_123", text: "今日の夕飯" }),
+    ).rejects.toMatchObject({ code: "recipe_limit_exceeded" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

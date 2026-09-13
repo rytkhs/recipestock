@@ -251,6 +251,30 @@ export const ImportUrlSkeleton = () => (
   </section>
 );
 
+export const ImportTextSkeleton = () => (
+  <section
+    aria-label="テキスト取り込み画面を読み込み中"
+    className="mx-auto w-full max-w-3xl px-0 pb-10 sm:px-6 lg:px-10"
+    role="status"
+  >
+    <ScreenTopBarFrame>
+      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+      <SkeletonBlock className="mx-auto h-5 w-40" />
+      <span aria-hidden="true" className="block h-10 w-10 sm:h-11 sm:w-11" />
+    </ScreenTopBarFrame>
+    <div className="mt-4 px-4 sm:mt-6 sm:px-0">
+      <SkeletonBlock className="h-4 w-full max-w-md" />
+      <section className="mt-4 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
+        <SkeletonBlock className="h-4 w-16" />
+        <SkeletonBlock className="mt-2 h-48 w-full" />
+        <div className="mt-4 flex justify-end">
+          <SkeletonBlock className="h-11 w-full rounded-full sm:w-24" />
+        </div>
+      </section>
+    </div>
+  </section>
+);
+
 export const SettingsSkeleton = () => (
   <section
     aria-label="設定画面を読み込み中"

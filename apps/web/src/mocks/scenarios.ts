@@ -32,6 +32,8 @@ export type MockState = {
   billing: GetBillingStatusResponse;
   recipes: RecipeListItem[];
   importJobs: ImportJobSummary[];
+  /** テキスト取り込みのjobが持つ原文。jobのidで引く。送り直し画面が読み込む。 */
+  importJobSourceTexts: Record<string, string>;
   pushSubscriptions: GetPushSubscriptionsResponse;
   shortcutCredentials: ListShortcutCredentialsResponse;
   failures: {
@@ -61,6 +63,7 @@ const baseState = (): MockState => ({
   }),
   recipes: recipeListFixture(),
   importJobs: [],
+  importJobSourceTexts: {},
   pushSubscriptions: pushSubscriptionsFixture(),
   shortcutCredentials: shortcutCredentialsFixture(),
   failures: {},
@@ -140,6 +143,28 @@ export const scenarios: Scenario[] = [
           finishedAt: new Date(Date.now() - 30_000).toISOString(),
         }),
       ],
+    }),
+  },
+  {
+    id: "text-import-failed",
+    label: "テキストの取り込み失敗",
+    build: () => ({
+      ...baseState(),
+      importJobs: [
+        importJobFixture({
+          id: "job_text_failed",
+          kind: "text",
+          status: "failed",
+          url: null,
+          textPreview: "今日の夕飯",
+          errorCode: "extraction_failed",
+          startedAt: new Date(Date.now() - 60_000).toISOString(),
+          finishedAt: new Date(Date.now() - 30_000).toISOString(),
+        }),
+      ],
+      importJobSourceTexts: {
+        job_text_failed: "今日の夕飯\n鶏むね肉を焼いただけ。おいしかった。",
+      },
     }),
   },
   {

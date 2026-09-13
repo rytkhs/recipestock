@@ -1,7 +1,11 @@
 import { type ImportJobSummary } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
 import { ApiClientError } from "../../lib/api";
-import { getCreateImportUrlJobErrorMessage, getImportJobFailureMessage } from "./messages";
+import {
+  getCreateImportTextJobErrorMessage,
+  getCreateImportUrlJobErrorMessage,
+  getImportJobFailureMessage,
+} from "./messages";
 
 const createJob = (overrides: Partial<ImportJobSummary> = {}): ImportJobSummary => ({
   id: "job_123",
@@ -49,6 +53,26 @@ describe("getCreateImportUrlJobErrorMessage", () => {
   });
 });
 
+describe("getCreateImportTextJobErrorMessage", () => {
+  it("入力の検証エラーはテキストの確認を促す", () => {
+    expect(
+      getCreateImportTextJobErrorMessage(
+        new ApiClientError({
+          status: 400,
+          code: "validation_failed",
+          message: "Request validation failed.",
+        }),
+      ),
+    ).toBe("テキストを確認してください。");
+  });
+
+  it("未知のerrorはテキスト用のfallback messageにする", () => {
+    expect(getCreateImportTextJobErrorMessage(new Error("network error"))).toBe(
+      "テキストを取り込めませんでした。",
+    );
+  });
+});
+
 describe("getImportJobFailureMessage", () => {
   it("fetch failedを表示用messageにする", () => {
     expect(getImportJobFailureMessage(createJob({ errorCode: "fetch_failed" }))).toBe(
@@ -66,5 +90,24 @@ describe("getImportJobFailureMessage", () => {
     expect(getImportJobFailureMessage(createJob({ errorCode: "unknown" }))).toBe(
       "URLを取り込めませんでした。",
     );
+  });
+
+  it("テキストのjobで読み取れなかった場合は原文から読み取れなかったと伝える", () => {
+    expect(
+      getImportJobFailureMessage(
+        createJob({
+          kind: "text",
+          url: null,
+          textPreview: "今日の夕飯",
+          errorCode: "extraction_failed",
+        }),
+      ),
+    ).toBe("テキストからレシピを読み取れませんでした。");
+  });
+
+  it("テキストのjobの未知のerror codeはテキスト用のfallback messageにする", () => {
+    expect(
+      getImportJobFailureMessage(createJob({ kind: "text", url: null, errorCode: "unknown" })),
+    ).toBe("テキストを取り込めませんでした。");
   });
 });

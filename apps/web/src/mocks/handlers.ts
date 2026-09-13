@@ -3,6 +3,7 @@ import {
   type CreateRecipeRequest,
   createRecipeRequestSchema,
   type ImportJobSummary,
+  importTextRequestSchema,
   importUrlRequestSchema,
   type PushSubscriptionRequest,
   type RecipeDetail,
@@ -135,6 +136,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
   let session: SessionFixture | null = state.session;
   let recipes: RecipeListItem[] = [...state.recipes];
   let jobs: ImportJobSummary[] = [...state.importJobs];
+  const jobSourceTexts = new Map(Object.entries(state.importJobSourceTexts));
   let pushSubscriptions = { ...state.pushSubscriptions };
   let credentials: ShortcutCredential[] = [...state.shortcutCredentials.credentials];
   const jobCompletions = new Map<string, number>();
@@ -189,12 +191,17 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       jobCompletions.delete(job.id);
+      // APIと同じく、テキストの取り込みは成功したら原文を消し、画像も出典も持たないRecipeを作る。
+      jobSourceTexts.delete(job.id);
       const recipeId = `recipe_mock_${nextId++}`;
       const createdRecipe: RecipeListItem = {
         id: recipeId,
         title: "取り込んだレシピ",
-        coverImageUrl: recipeThumbnailUrl(`recipes/${MOCK_USER_ID}/${recipeId}/cover.webp`),
-        sourceName: "モック",
+        coverImageUrl:
+          job.kind === "url"
+            ? recipeThumbnailUrl(`recipes/${MOCK_USER_ID}/${recipeId}/cover.webp`)
+            : null,
+        sourceName: job.kind === "url" ? "モック" : null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         locked: false,
@@ -205,6 +212,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       return {
         ...job,
         status: "succeeded",
+        textPreview: null,
         recipeId,
         finishedAt: new Date().toISOString(),
       };
@@ -459,6 +467,51 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
 
       return HttpResponse.json({ kind: "created", job }, { status: 202 });
     }),
+    http.post("/api/import/text/jobs", async ({ request }) => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      const body = importTextRequestSchema.safeParse(await request.json());
+      if (!body.success) {
+        return apiError(400, "validation_failed", "Request validation failed.");
+      }
+
+      if (isRecipeLimitReached()) {
+        return recipeLimitExceeded();
+      }
+
+      const job: ImportJobSummary = {
+        id: `job_mock_${nextId++}`,
+        kind: "text",
+        status: "running",
+        url: null,
+        textPreview: body.data.text.split("\n", 1)[0]?.trim() || null,
+        recipeId: null,
+        errorCode: null,
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+      };
+
+      jobs = [job, ...jobs];
+      jobSourceTexts.set(job.id, body.data.text);
+      jobCompletions.set(job.id, Date.now() + IMPORT_JOB_DURATION_MS);
+
+      return HttpResponse.json({ kind: "created", job }, { status: 202 });
+    }),
+    http.get("/api/import/jobs/:jobId", ({ params }) => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      const jobId = String(params.jobId);
+      const job = jobs.find((candidate) => candidate.id === jobId);
+
+      if (!job) {
+        return apiError(404, "not_found", "Import job was not found.");
+      }
+
+      return HttpResponse.json({ job, sourceText: jobSourceTexts.get(jobId) ?? null });
+    }),
     http.patch("/api/import/jobs/:jobId/dismiss", ({ params }) => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
@@ -471,6 +524,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       jobs = jobs.filter((candidate) => candidate.id !== jobId);
+      jobSourceTexts.delete(jobId);
 
       return HttpResponse.json({ job });
     }),
