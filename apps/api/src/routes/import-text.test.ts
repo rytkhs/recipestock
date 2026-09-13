@@ -330,4 +330,51 @@ describe("Import job detail route", () => {
       sourceText: null,
     });
   });
+
+  it("成功したテキストjobも保存された原文を返す", async () => {
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({
+        getJob: async () =>
+          createJob({
+            status: "succeeded",
+            sourceText,
+            recipeId: "recipe_123",
+            finishedAt: new Date("2026-06-01T00:00:10.000Z"),
+          }),
+      }),
+    });
+
+    const response = await testApp.request("/api/import/jobs/job_123");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      job: { status: "succeeded", textPreview: "鶏むね肉のレモン煮" },
+      sourceText,
+    });
+  });
+
+  it("閉じた失敗テキストjobも保存された原文を返す", async () => {
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({
+        getJob: async () =>
+          createJob({
+            status: "failed",
+            sourceText,
+            errorCode: "extraction_failed",
+            dismissedAt: new Date("2026-06-01T00:00:20.000Z"),
+            finishedAt: new Date("2026-06-01T00:00:10.000Z"),
+          }),
+      }),
+    });
+
+    const response = await testApp.request("/api/import/jobs/job_123");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      job: { status: "failed", textPreview: "鶏むね肉のレモン煮" },
+      sourceText,
+    });
+  });
 });

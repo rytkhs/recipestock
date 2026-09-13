@@ -251,7 +251,7 @@ describe("Import Job repository with Neon Postgres", () => {
     expect(second.status).toBe("created");
   });
 
-  it("成功したテキストJobは原文を残さない", async () => {
+  it("成功したテキストJobも原文を保持する", async () => {
     const runId = crypto.randomUUID();
     const userId = `dbtest_text_succeeded_user_${runId}`;
     const jobId = `dbtest_text_succeeded_job_${runId}`;
@@ -290,10 +290,28 @@ describe("Import Job repository with Neon Postgres", () => {
     ).resolves.toEqual({ status: "succeeded" });
 
     const [storedJob] = await db.select().from(importJobs).where(eq(importJobs.id, jobId));
-    expect(storedJob).toMatchObject({ status: "succeeded", recipeId, sourceText: null });
+    expect(storedJob).toMatchObject({ status: "succeeded", recipeId, sourceText });
   });
 
-  it("閉じた失敗テキストJobは原文を残さない", async () => {
+  it("既存Recipeを検出して成功へ戻す経路でも原文を保持する", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_text_recovered_user_${runId}`;
+    const jobId = `dbtest_text_recovered_job_${runId}`;
+    const recipeId = `dbtest_text_recovered_recipe_${runId}`;
+    const expiresBefore = new Date(now.getTime() - 60_000);
+
+    await createTextJob({ id: jobId, userId });
+    await repository.claimQueuedJob({ jobId, recipeId, expiresBefore, now });
+    await repository.markJobSucceeded({ jobId, recipeId, now });
+
+    await expect(repository.getJob(userId, jobId)).resolves.toMatchObject({
+      status: "succeeded",
+      recipeId,
+      sourceText,
+    });
+  });
+
+  it("閉じた失敗テキストJobも原文を保持する", async () => {
     const runId = crypto.randomUUID();
     const userId = `dbtest_text_dismissed_user_${runId}`;
     const jobId = `dbtest_text_dismissed_job_${runId}`;
@@ -308,7 +326,8 @@ describe("Import Job repository with Neon Postgres", () => {
 
     await expect(repository.getJob(userId, jobId)).resolves.toMatchObject({ sourceText });
     await expect(repository.dismissJob({ userId, jobId, now })).resolves.toMatchObject({
-      sourceText: null,
+      dismissedAt: now,
+      sourceText,
     });
   });
 });

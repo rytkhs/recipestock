@@ -233,4 +233,27 @@ describe("mock handlers", () => {
     const dismissed = await send(handlers, "GET", "/api/import/jobs/job_text_failed");
     expect(dismissed.status).toBe(404);
   });
+
+  it("成功したテキストのjobも保持している原文を詳細で返す", async () => {
+    const state = findScenario("text-import-failed").build();
+    const [failedJob] = state.importJobs;
+    state.importJobs = [
+      {
+        ...failedJob,
+        status: "succeeded",
+        recipeId: "recipe_123",
+        errorCode: null,
+      },
+    ];
+    const handlers = createHandlers(state, { delayMs: 0 });
+
+    const detail = getImportJobResponseSchema.parse(
+      await (await send(handlers, "GET", "/api/import/jobs/job_text_failed")).json(),
+    );
+
+    expect(detail).toMatchObject({
+      job: { status: "succeeded", textPreview: "今日の夕飯" },
+      sourceText: "今日の夕飯\n鶏むね肉を焼いただけ。おいしかった。",
+    });
+  });
 });

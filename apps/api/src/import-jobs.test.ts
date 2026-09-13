@@ -7,6 +7,7 @@ import {
   type ImportJobRepository,
   processImportJob,
   resolveImportJobTimeoutMs,
+  toImportJobSummary,
 } from "./import-jobs";
 import { type RecipeImportAIProvider, RecipeImportError } from "./import-url";
 import { type RecipeRepository } from "./recipes";
@@ -118,6 +119,26 @@ const env = {
   FREE_AI_MONTHLY_LIMIT: "10",
   IMPORT_TIMEOUT_MS: "1000",
 } as Bindings;
+
+describe("Import JobのSource Text preview", () => {
+  const sourceText = "鶏むね肉のレモン煮\n鶏むね肉 300g";
+
+  it("text Jobでは状態やdismissの有無にかかわらず原文のpreviewを返す", () => {
+    for (const status of ["queued", "running", "failed", "succeeded"] as const) {
+      const job = createJob({ kind: "text", status, sourceText });
+
+      expect(toImportJobSummary(job).textPreview).toBe("鶏むね肉のレモン煮");
+    }
+
+    const dismissedJob = createJob({
+      kind: "text",
+      status: "failed",
+      sourceText,
+      dismissedAt: new Date("2026-06-01T00:01:00.000Z"),
+    });
+    expect(toImportJobSummary(dismissedJob).textPreview).toBe("鶏むね肉のレモン煮");
+  });
+});
 
 describe("Import job timeout", () => {
   it("デフォルト期限を10分として計算する", () => {

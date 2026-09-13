@@ -57,8 +57,8 @@ export const recentImportJobsResponseSchema = z.object({
 });
 
 /**
- * `sourceText`は、失敗したテキストのImport Jobを直して送り直すために返す。
- * URLのJobと、成功したか閉じたテキストのJobは原文を持たないので`null`になる。
+ * `sourceText`は、テキストのImport Jobに保存された原文を本人へ返す。
+ * URLのJobは原文を持たないので`null`になる。
  */
 export const getImportJobResponseSchema = z.object({
   job: importJobSummarySchema,

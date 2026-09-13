@@ -765,7 +765,6 @@ export const createImportJobRepository = (
           recipe_id = ${recipe.id},
           error_code = null,
           error_message = null,
-          source_text = null,
           finished_at = ${now.toISOString()}::timestamptz,
           updated_at = ${now.toISOString()}::timestamptz
         where id in (select id from eligible_job)
@@ -835,7 +834,6 @@ export const createImportJobRepository = (
         recipeId,
         errorCode: null,
         errorMessage: null,
-        sourceText: null,
         finishedAt: now,
         updatedAt: now,
       })
@@ -873,7 +871,6 @@ export const createImportJobRepository = (
       .update(importJobs)
       .set({
         dismissedAt: now,
-        sourceText: null,
         updatedAt: now,
       })
       .where(

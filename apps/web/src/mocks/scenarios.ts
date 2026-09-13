@@ -32,7 +32,7 @@ export type MockState = {
   billing: GetBillingStatusResponse;
   recipes: RecipeListItem[];
   importJobs: ImportJobSummary[];
-  /** テキスト取り込みのjobが持つ原文。jobのidで引く。送り直し画面が読み込む。 */
+  /** テキスト取り込みのjobが保持し、本人向けの詳細APIから返す原文。 */
   importJobSourceTexts: Record<string, string>;
   pushSubscriptions: GetPushSubscriptionsResponse;
   shortcutCredentials: ListShortcutCredentialsResponse;

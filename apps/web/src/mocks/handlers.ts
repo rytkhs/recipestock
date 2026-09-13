@@ -191,8 +191,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       jobCompletions.delete(job.id);
-      // APIと同じく、テキストの取り込みは成功したら原文を消し、画像も出典も持たないRecipeを作る。
-      jobSourceTexts.delete(job.id);
+      // APIと同じく原文は内部に保持し、画像も出典も持たないRecipeを作る。
       const recipeId = `recipe_mock_${nextId++}`;
       const createdRecipe: RecipeListItem = {
         id: recipeId,
@@ -212,7 +211,6 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       return {
         ...job,
         status: "succeeded",
-        textPreview: null,
         recipeId,
         finishedAt: new Date().toISOString(),
       };
@@ -510,7 +508,10 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         return apiError(404, "not_found", "Import job was not found.");
       }
 
-      return HttpResponse.json({ job, sourceText: jobSourceTexts.get(jobId) ?? null });
+      return HttpResponse.json({
+        job,
+        sourceText: jobSourceTexts.get(jobId) ?? null,
+      });
     }),
     http.patch("/api/import/jobs/:jobId/dismiss", ({ params }) => {
       const unauthorized = requireSession();
@@ -524,7 +525,6 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       jobs = jobs.filter((candidate) => candidate.id !== jobId);
-      jobSourceTexts.delete(jobId);
 
       return HttpResponse.json({ job });
     }),
