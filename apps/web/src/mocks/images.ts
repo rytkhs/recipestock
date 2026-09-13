@@ -26,10 +26,14 @@ const hashSeed = (seed: string) => {
   return hash;
 };
 
+/** 保存するRecipeImageの縦横を、実際に返すSVGと揃えるために使う。 */
+export const imagePlaceholderSize = (seed: string) =>
+  aspects[Math.floor(hashSeed(seed) / 7) % aspects.length];
+
 export const imagePlaceholderSvg = (seed: string) => {
   const hash = hashSeed(seed);
   const palette = palettes[hash % palettes.length];
-  const { width, height } = aspects[Math.floor(hash / 7) % aspects.length];
+  const { width, height } = imagePlaceholderSize(seed);
   const centerX = width / 2;
   const centerY = height / 2;
   const plateRadius = Math.min(width, height) * 0.32;

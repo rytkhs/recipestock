@@ -1,19 +1,24 @@
 import {
   type ApiErrorCode,
+  type CreateRecipeRequest,
+  createRecipeRequestSchema,
   type ImportJobSummary,
   type PushSubscriptionRequest,
+  type RecipeDetail,
   type RecipeListItem,
   type ShortcutCredential,
+  updateRecipeRequestSchema,
 } from "@recipestock/schemas";
 import { delay, HttpResponse, http } from "msw";
 import {
   MOCK_USER_ID,
   recipeDetailFixture,
+  recipeImageUrl,
   recipeThumbnailUrl,
   type SessionFixture,
   sessionFixture,
 } from "./fixtures";
-import { imagePlaceholderSvg } from "./images";
+import { imagePlaceholderSize, imagePlaceholderSvg } from "./images";
 import { type MockState } from "./scenarios";
 
 const MOCK_UPLOAD_ORIGIN = "https://mock-r2.invalid";
@@ -36,9 +41,94 @@ const matchesQuery = (recipe: RecipeListItem, query: string) => {
   return haystack.includes(query.toLowerCase());
 };
 
+type RecipeContent = RecipeDetail["content"];
+type RecipeImage = NonNullable<RecipeContent["coverImage"]>;
+type DraftContent = CreateRecipeRequest["content"];
+type DraftImageRef = NonNullable<DraftContent["coverImage"]>;
+
+const recipeImages = ({ content }: RecipeDetail): RecipeImage[] => [
+  ...(content.coverImage ? [content.coverImage] : []),
+  ...content.referenceImages,
+  ...content.steps.flatMap((step) => step.images),
+];
+
+const toListItem = (detail: RecipeDetail): RecipeListItem => ({
+  id: detail.id,
+  title: detail.title,
+  coverImageUrl: detail.content.coverImage
+    ? recipeThumbnailUrl(detail.content.coverImage.objectKey)
+    : null,
+  sourceName: detail.source.sourceName ?? null,
+  createdAt: detail.createdAt,
+  updatedAt: detail.updatedAt,
+  locked: false,
+});
+
+/**
+ * 下書きの画像参照を、APIの保存処理(apps/api/src/recipe-images.ts)と同じ規則で解決する。
+ * 既存画像は保存済みのものだけを使え、アップロードや外部URLの画像はRecipe配下の新しいキーに置く。
+ * 保存済みにない既存キーが混ざっていたらnullを返す。
+ */
+const resolveDraftContent = ({
+  recipeId,
+  draft,
+  existingImages,
+  createImageId,
+}: {
+  recipeId: string;
+  draft: DraftContent;
+  existingImages: readonly RecipeImage[];
+  createImageId: () => string;
+}): RecipeContent | null => {
+  const existing = new Map(existingImages.map((image) => [image.objectKey, image]));
+  const resolved = new Map<string, RecipeImage>();
+  let hasUnknownExistingKey = false;
+
+  const resolve = (image: DraftImageRef): RecipeImage[] => {
+    const refId = image.type === "externalImageUrl" ? `url:${image.url}` : `key:${image.key}`;
+    const cached = resolved.get(refId);
+
+    if (cached) return [cached];
+
+    if (image.type === "existingObjectKey") {
+      const found = existing.get(image.key);
+
+      if (!found) {
+        hasUnknownExistingKey = true;
+        return [];
+      }
+
+      resolved.set(refId, found);
+      return [found];
+    }
+
+    const objectKey = `recipes/${MOCK_USER_ID}/${recipeId}/${createImageId()}.webp`;
+    const created = {
+      objectKey,
+      ...imagePlaceholderSize(objectKey),
+      url: recipeImageUrl(objectKey),
+    };
+
+    resolved.set(refId, created);
+    return [created];
+  };
+
+  const content: RecipeContent = {
+    title: draft.title,
+    yieldText: draft.yieldText,
+    coverImage: draft.coverImage ? resolve(draft.coverImage)[0] : undefined,
+    referenceImages: draft.referenceImages.flatMap(resolve),
+    ingredientGroups: draft.ingredientGroups,
+    steps: draft.steps.map((step) => ({ text: step.text, images: step.images.flatMap(resolve) })),
+    note: draft.note,
+  };
+
+  return hasUnknownExistingKey ? null : content;
+};
+
 /**
  * シナリオが宣言した状態を「動くサーバ」にする。
- * 作成・削除・ログアウトは同じセッションのあいだ反映されるので、実際の操作をそのまま追える。
+ * 作成・更新・削除・ログアウトは同じセッションのあいだ反映されるので、実際の操作をそのまま追える。
  */
 export const createHandlers = (state: MockState, { delayMs }: { delayMs: number }) => {
   let session: SessionFixture | null = state.session;
@@ -51,6 +141,34 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
 
   const requireSession = () =>
     session ? null : apiError(401, "unauthorized", "Sign in is required.");
+
+  // 作成・更新したRecipeの中身。シナリオや取り込みで一覧に入ったものは、初めて読むときに一覧の値からfixtureで作る。
+  const recipeDetails = new Map<string, RecipeDetail>();
+
+  const detailOf = (listed: RecipeListItem) => {
+    const stored = recipeDetails.get(listed.id);
+
+    if (stored) return stored;
+
+    const fixture = recipeDetailFixture(listed.id);
+    const detail: RecipeDetail = {
+      ...fixture,
+      title: listed.title,
+      content: {
+        ...fixture.content,
+        title: listed.title,
+        coverImage: listed.coverImageUrl ? fixture.content.coverImage : undefined,
+      },
+      source: { ...fixture.source, sourceName: listed.sourceName },
+      createdAt: listed.createdAt,
+      updatedAt: listed.updatedAt,
+    };
+
+    recipeDetails.set(listed.id, detail);
+    return detail;
+  };
+
+  const createImageId = () => `image_${nextId++}`;
 
   // 取り込みジョブは時間で進む。URLを貼ってから完了するまでの流れをそのまま見られるようにする。
   const advanceJobs = () => {
@@ -165,25 +283,43 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         nextCursor: nextOffset < matched.length ? String(nextOffset) : null,
       });
     }),
-    http.post("/api/recipes", () => {
+    http.post("/api/recipes", async ({ request }) => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
 
-      const recipeId = `recipe_mock_${nextId++}`;
-      const detail = recipeDetailFixture(recipeId);
+      const body = createRecipeRequestSchema.safeParse(await request.json());
+      if (!body.success) {
+        return apiError(400, "validation_failed", "Request validation failed.");
+      }
 
-      recipes = [
-        {
-          id: recipeId,
-          title: detail.title,
-          coverImageUrl: recipeThumbnailUrl(`recipes/${MOCK_USER_ID}/${recipeId}/cover.webp`),
-          sourceName: detail.source.sourceName ?? null,
-          createdAt: detail.createdAt,
-          updatedAt: detail.updatedAt,
-          locked: false,
+      const recipeId = `recipe_mock_${nextId++}`;
+      const content = resolveDraftContent({
+        recipeId,
+        draft: body.data.content,
+        existingImages: [],
+        createImageId,
+      });
+      if (!content) {
+        return apiError(422, "image_finalize_failed", "Image could not be saved.");
+      }
+
+      const now = new Date().toISOString();
+      const detail: RecipeDetail = {
+        id: recipeId,
+        title: content.title,
+        content,
+        source: {
+          sourceUrl: body.data.source.sourceUrl ?? null,
+          normalizedSourceUrl: body.data.source.sourceUrl ?? null,
+          sourceName: body.data.source.sourceName ?? null,
         },
-        ...recipes,
-      ];
+        createdAt: now,
+        updatedAt: now,
+        locked: false,
+      };
+
+      recipeDetails.set(recipeId, detail);
+      recipes = [toListItem(detail), ...recipes];
 
       return HttpResponse.json({ recipe: detail }, { status: 201 });
     }),
@@ -199,20 +335,48 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       return HttpResponse.json({
-        recipe: listed.locked ? { id: recipeId, locked: true } : recipeDetailFixture(recipeId),
+        recipe: listed.locked ? { id: recipeId, locked: true } : detailOf(listed),
       });
     }),
-    http.put("/api/recipes/:recipeId", ({ params }) => {
+    http.put("/api/recipes/:recipeId", async ({ params, request }) => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
 
       const recipeId = String(params.recipeId);
+      const listed = recipes.find((recipe) => recipe.id === recipeId);
 
-      if (!recipes.some((recipe) => recipe.id === recipeId)) {
+      if (!listed) {
         return apiError(404, "not_found", "Recipe was not found.");
       }
 
-      return HttpResponse.json({ recipe: recipeDetailFixture(recipeId) });
+      const body = updateRecipeRequestSchema.safeParse(await request.json());
+      if (!body.success) {
+        return apiError(400, "validation_failed", "Request validation failed.");
+      }
+
+      const current = detailOf(listed);
+      const content = resolveDraftContent({
+        recipeId,
+        draft: body.data.content,
+        existingImages: recipeImages(current),
+        createImageId,
+      });
+      if (!content) {
+        return apiError(422, "image_finalize_failed", "Image could not be saved.");
+      }
+
+      const detail: RecipeDetail = {
+        ...current,
+        title: content.title,
+        content,
+        updatedAt: new Date().toISOString(),
+      };
+
+      recipeDetails.set(recipeId, detail);
+      // APIの一覧は更新日時の新しい順なので、更新したRecipeを先頭に移す。
+      recipes = [toListItem(detail), ...recipes.filter((recipe) => recipe.id !== recipeId)];
+
+      return HttpResponse.json({ recipe: detail });
     }),
     http.delete("/api/recipes/:recipeId", ({ params }) => {
       const unauthorized = requireSession();
@@ -220,6 +384,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
 
       const recipeId = String(params.recipeId);
       recipes = recipes.filter((recipe) => recipe.id !== recipeId);
+      recipeDetails.delete(recipeId);
 
       return HttpResponse.json({ ok: true });
     }),
@@ -386,6 +551,14 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       return svgResponse(objectKey);
+    }),
+
+    // どのハンドラにも当たらなかったAPI。素通しするとViteのproxyで実APIに届くので、ここで止める。
+    // 必ず末尾に置く。
+    http.all("/api/*", ({ request }) => {
+      console.error(`[mock] No handler for ${request.method} ${new URL(request.url).pathname}`);
+
+      return apiError(501, "unknown", "No mock handler matched this request.");
     }),
   ];
 };
