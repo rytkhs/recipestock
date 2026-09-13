@@ -48,6 +48,7 @@ Browser / PWA
 | Monorepo | pnpm workspace + Turborepo |
 | Lint / Format | Biome |
 | Unit / Component / Request tests | Vitest + Testing Library |
+| Dev API mocking | MSW。`pnpm dev:mock`(`vite --mode mock`)のときだけ有効。ハンドラ・フィクスチャ・シナリオは `apps/web/src/mocks/` |
 | E2E tests | Deferred for the initial setup |
 
 ## Dependency Guidance
@@ -62,6 +63,7 @@ Browser / PWA
 - Add UI primitives with `npx shadcn@latest add <name> -c apps/web` instead of hand-rolling them. Files under `apps/web/src/components/ui/` are registry output and are excluded from Biome linting.
 - Use Biome for repository-wide formatting and baseline linting.
 - Use Vitest for unit tests, component tests, and request-level API tests.
+- Use MSW to inspect state-dependent screens during development. Declare the server state as a scenario in `apps/web/src/mocks/scenarios.ts` instead of hand-crafting data through the real API. Keep fixtures typed with `@recipestock/schemas` so `pnpm typecheck` and `src/mocks/scenarios.test.ts` catch contract drift. Do not enable MSW outside `--mode mock`.
 - Use Testing Library with Vitest for React component behavior tests.
 - Do not set up E2E testing in the initial project setup. Add Playwright later only when end-to-end coverage becomes necessary.
 - Add ESLint only if a concrete rule need appears that Biome does not cover, such as advanced React Hooks or type-aware linting.
