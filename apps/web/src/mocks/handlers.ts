@@ -3,6 +3,7 @@ import {
   type CreateRecipeRequest,
   createRecipeRequestSchema,
   type ImportJobSummary,
+  importUrlRequestSchema,
   type PushSubscriptionRequest,
   type RecipeDetail,
   type RecipeListItem,
@@ -142,6 +143,12 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
   const requireSession = () =>
     session ? null : apiError(401, "unauthorized", "Sign in is required.");
 
+  const isRecipeLimitReached = () =>
+    state.viewer.recipeLimit !== null && recipes.length >= state.viewer.recipeLimit;
+
+  const recipeLimitExceeded = () =>
+    apiError(403, "recipe_limit_exceeded", "Recipe limit exceeded.");
+
   // 作成・更新したRecipeの中身。シナリオや取り込みで一覧に入ったものは、初めて読むときに一覧の値からfixtureで作る。
   const recipeDetails = new Map<string, RecipeDetail>();
 
@@ -221,9 +228,15 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
 
       return HttpResponse.json(session);
     }),
-    http.post("/api/auth/sign-in/social", () =>
-      HttpResponse.json({ url: "/recipes", redirect: true }),
-    ),
+    // OAuthの往復でページがリロードされ、シナリオの状態は作り直される。
+    // 未ログインのシナリオに戻らないよう、戻り先でログイン済みのdefaultシナリオを選ばせる。
+    http.post("/api/auth/sign-in/social", async ({ request }) => {
+      const { callbackURL } = (await request.json()) as { callbackURL?: string };
+      const url = new URL(callbackURL ?? "/", window.location.origin);
+      url.searchParams.set("scenario", "default");
+
+      return HttpResponse.json({ url: `${url.pathname}${url.search}`, redirect: true });
+    }),
     http.post("/api/auth/sign-in/email", () => {
       session = sessionFixture();
 
@@ -237,7 +250,12 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     }),
     http.post("/api/auth/change-email", () => HttpResponse.json({ status: true })),
     http.post("/api/auth/change-password", () => HttpResponse.json({ status: true })),
-    http.post("/api/auth/email-otp/verify-email", () => HttpResponse.json({ status: true })),
+    // APIはautoSignInAfterVerificationなので、検証が通ればそのままログインする。
+    http.post("/api/auth/email-otp/verify-email", () => {
+      session = sessionFixture();
+
+      return HttpResponse.json({ status: true, token: "mock_token", user: session.user });
+    }),
     http.post("/api/auth/email-otp/request-password-reset", () =>
       HttpResponse.json({ success: true }),
     ),
@@ -251,8 +269,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         HttpResponse.json({
           ...state.viewer,
           recipeCount: recipes.length,
-          isRecipeLimitReached:
-            state.viewer.recipeLimit !== null && recipes.length >= state.viewer.recipeLimit,
+          isRecipeLimitReached: isRecipeLimitReached(),
         }),
     ),
 
@@ -290,6 +307,10 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       const body = createRecipeRequestSchema.safeParse(await request.json());
       if (!body.success) {
         return apiError(400, "validation_failed", "Request validation failed.");
+      }
+
+      if (isRecipeLimitReached()) {
+        return recipeLimitExceeded();
       }
 
       const recipeId = `recipe_mock_${nextId++}`;
@@ -411,12 +432,20 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
 
-      const body = (await request.json()) as { url?: string };
+      const body = importUrlRequestSchema.safeParse(await request.json());
+      if (!body.success) {
+        return apiError(400, "invalid_url", "Import URL is invalid.");
+      }
+
+      if (isRecipeLimitReached()) {
+        return recipeLimitExceeded();
+      }
+
       const job: ImportJobSummary = {
         id: `job_mock_${nextId++}`,
         kind: "url",
         status: "running",
-        url: body.url ?? null,
+        url: body.data.url,
         recipeId: null,
         errorCode: null,
         createdAt: new Date().toISOString(),
@@ -427,7 +456,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       jobs = [job, ...jobs];
       jobCompletions.set(job.id, Date.now() + IMPORT_JOB_DURATION_MS);
 
-      return HttpResponse.json({ kind: "created", job }, { status: 201 });
+      return HttpResponse.json({ kind: "created", job }, { status: 202 });
     }),
     http.patch("/api/import/jobs/:jobId/dismiss", ({ params }) => {
       const unauthorized = requireSession();

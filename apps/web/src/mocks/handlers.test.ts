@@ -27,7 +27,11 @@ const send = async (handlers: Handlers, method: string, path: string, body?: unk
   return response;
 };
 
-const setup = () => createHandlers(findScenario("default").build(), { delayMs: 0 });
+const setup = (scenarioId = "default") =>
+  createHandlers(findScenario(scenarioId).build(), { delayMs: 0 });
+
+const errorCodeOf = async (response: Response) =>
+  ((await response.json()) as { error: { code: string } }).error.code;
 
 const listFirstPage = async (handlers: Handlers) =>
   listRecipesResponseSchema.parse(await (await send(handlers, "GET", "/api/recipes")).json());
@@ -119,6 +123,60 @@ describe("mock handlers", () => {
 
     expect(response.status).toBe(422);
     expect((await getRecipe(handlers, "recipe_001")).title).not.toBe("編集したタイトル");
+  });
+
+  it("保存上限に達していると作成とURL取り込みはrecipe_limit_exceededになる", async () => {
+    const handlers = setup("limit-reached");
+
+    const created = await send(handlers, "POST", "/api/recipes", {
+      content: { title: "上限を超えるレシピ" },
+      source: {},
+    });
+    expect(created.status).toBe(403);
+    expect(await errorCodeOf(created)).toBe("recipe_limit_exceeded");
+
+    const imported = await send(handlers, "POST", "/api/import/url/jobs", {
+      url: "https://example.com/recipe",
+    });
+    expect(imported.status).toBe(403);
+    expect(await errorCodeOf(imported)).toBe("recipe_limit_exceeded");
+  });
+
+  it("取り込めないURLはinvalid_urlになる", async () => {
+    const handlers = setup();
+
+    const response = await send(handlers, "POST", "/api/import/url/jobs", {
+      url: "ftp://example.com/recipe",
+    });
+
+    expect(response.status).toBe(400);
+    expect(await errorCodeOf(response)).toBe("invalid_url");
+  });
+
+  it("未ログインでもOTP検証が通ればログイン状態になる", async () => {
+    const handlers = setup("signed-out");
+
+    expect(await (await send(handlers, "GET", "/api/auth/get-session")).json()).toBeNull();
+
+    await send(handlers, "POST", "/api/auth/email-otp/verify-email", {
+      email: "user@example.com",
+      otp: "123456",
+    });
+
+    expect(await (await send(handlers, "GET", "/api/auth/get-session")).json()).not.toBeNull();
+  });
+
+  it("Googleログインの戻り先ではログイン済みのdefaultシナリオを選ぶ", async () => {
+    const handlers = setup("signed-out");
+
+    const response = await send(handlers, "POST", "/api/auth/sign-in/social", {
+      provider: "google",
+      callbackURL: "/recipes/recipe_001",
+    });
+
+    expect(await response.json()).toMatchObject({
+      url: "/recipes/recipe_001?scenario=default",
+    });
   });
 
   it("ハンドラのないAPIは実APIに流さず501で止める", async () => {
