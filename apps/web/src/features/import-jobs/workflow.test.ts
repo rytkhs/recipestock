@@ -7,6 +7,7 @@ const createJob = (overrides: Partial<ImportJobSummary> = {}): ImportJobSummary 
   kind: "url",
   status: "failed",
   url: "https://example.com/recipes/tomato",
+  textPreview: null,
   recipeId: null,
   errorCode: "fetch_failed",
   createdAt: "2026-06-01T00:00:00.000Z",

@@ -446,6 +446,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         kind: "url",
         status: "running",
         url: body.data.url,
+        textPreview: null,
         recipeId: null,
         errorCode: null,
         createdAt: new Date().toISOString(),

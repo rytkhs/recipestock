@@ -27,6 +27,7 @@ const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord =>
   status: "queued",
   url: "https://example.com/recipe",
   normalizedUrl: "https://example.com/recipe",
+  sourceText: null,
   recipeId: null,
   errorCode: null,
   errorMessage: null,
@@ -42,6 +43,7 @@ const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord =>
 
 const createRepository = (overrides: Partial<ImportJobRepository> = {}): ImportJobRepository => ({
   createUrlJob: async () => ({ status: "created", job: createJob() }),
+  createTextJob: async () => ({ status: "created", job: createJob() }),
   listRecentJobs: async () => [],
   getJob: async () => null,
   getJobById: async () => null,
@@ -90,6 +92,7 @@ describe("Import job routes", () => {
         kind: "url",
         status: "queued",
         url: "https://example.com/recipe",
+        textPreview: null,
         recipeId: null,
         errorCode: null,
         createdAt: "2026-06-01T00:00:00.000Z",

@@ -199,4 +199,116 @@ describe("Import Job repository with Neon Postgres", () => {
       }),
     ).resolves.toEqual({ status: "aiUsageLimitExceeded", plan: "free" });
   });
+
+  const sourceText = "鶏むね肉のレモン煮\n鶏むね肉 300g";
+
+  const createTextJob = (params: { id: string; userId: string; sourceTextDigest?: string }) =>
+    repository.createTextJob({
+      id: params.id,
+      userId: params.userId,
+      sourceText,
+      sourceTextDigest: params.sourceTextDigest ?? "digest_lemon_chicken",
+      aiUsage,
+      now,
+    });
+
+  it("同じテキストの同時送信は一つのactive Jobへ収束する", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_text_race_user_${runId}`;
+
+    const results = await Promise.all(
+      Array.from({ length: 2 }, (_, index) =>
+        createTextJob({ id: `dbtest_text_race_job_${index}_${runId}`, userId }),
+      ),
+    );
+
+    expect(results.filter((result) => result.status === "created")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "existingActiveJob")).toHaveLength(1);
+
+    const storedJobs = await db.select().from(importJobs).where(eq(importJobs.userId, userId));
+    expect(storedJobs).toHaveLength(1);
+    expect(storedJobs[0]).toMatchObject({
+      kind: "text",
+      url: null,
+      normalizedUrl: null,
+      sourceText,
+      sourceTextDigest: "digest_lemon_chicken",
+    });
+  });
+
+  it("違うテキストはactive Jobがあっても別のJobにする", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_text_distinct_user_${runId}`;
+
+    const first = await createTextJob({ id: `dbtest_text_distinct_first_${runId}`, userId });
+    const second = await createTextJob({
+      id: `dbtest_text_distinct_second_${runId}`,
+      userId,
+      sourceTextDigest: "digest_other_recipe",
+    });
+
+    expect(first.status).toBe("created");
+    expect(second.status).toBe("created");
+  });
+
+  it("成功したテキストJobは原文を残さない", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_text_succeeded_user_${runId}`;
+    const jobId = `dbtest_text_succeeded_job_${runId}`;
+    const recipeId = `dbtest_text_succeeded_recipe_${runId}`;
+    const expiresBefore = new Date(now.getTime() - 60_000);
+    const completingRepository = createImportJobRepository(db, { proPriceId: "price_dbtest" });
+    const content = {
+      title: "鶏むね肉のレモン煮",
+      referenceImages: [],
+      ingredientGroups: [{ ingredients: [{ name: "鶏むね肉", amount: "300g" }] }],
+      steps: [],
+    };
+
+    await createTextJob({ id: jobId, userId });
+    await repository.claimQueuedJob({ jobId, recipeId, expiresBefore, now });
+
+    await expect(
+      completingRepository.completeJobWithRecipe({
+        jobId,
+        expiresBefore,
+        now,
+        recipe: {
+          id: recipeId,
+          userId,
+          title: content.title,
+          content,
+          originType: "text",
+          sourceUrl: null,
+          normalizedSourceUrl: null,
+          sourceName: null,
+          searchText: "鶏むね肉のレモン煮 鶏むね肉",
+          createdAt: now,
+          updatedAt: now,
+        },
+      }),
+    ).resolves.toEqual({ status: "succeeded" });
+
+    const [storedJob] = await db.select().from(importJobs).where(eq(importJobs.id, jobId));
+    expect(storedJob).toMatchObject({ status: "succeeded", recipeId, sourceText: null });
+  });
+
+  it("閉じた失敗テキストJobは原文を残さない", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_text_dismissed_user_${runId}`;
+    const jobId = `dbtest_text_dismissed_job_${runId}`;
+
+    await createTextJob({ id: jobId, userId });
+    await repository.markJobFailed({
+      jobId,
+      errorCode: "extraction_failed",
+      errorMessage: "Recipe could not be extracted from the text.",
+      now,
+    });
+
+    await expect(repository.getJob(userId, jobId)).resolves.toMatchObject({ sourceText });
+    await expect(repository.dismissJob({ userId, jobId, now })).resolves.toMatchObject({
+      sourceText: null,
+    });
+  });
 });

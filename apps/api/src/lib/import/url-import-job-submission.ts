@@ -1,17 +1,11 @@
-import { createDb } from "@recipestock/db";
 import { importUrlRequestSchema } from "@recipestock/schemas";
-import { type Plan } from "@recipestock/shared";
 import { type Bindings } from "../../env";
-import {
-  createImportJobId,
-  createImportJobRepository,
-  getImportJobExpiresBefore,
-  type ImportJobRecord,
-  type ImportJobRepository,
-  resolveImportJobTimeoutMs,
-} from "../../import-jobs";
 import { normalizeImportableUrl, RecipeImportError } from "../../import-url";
-import { getCurrentJstMonth, resolveAiMonthlyLimit } from "../../usage";
+import {
+  type ImportJobSubmissionDependencies,
+  type SubmitImportJobResult,
+  submitImportJob,
+} from "./import-job-submission";
 
 export type SubmitUrlImportJobInput = {
   userId: string;
@@ -19,16 +13,7 @@ export type SubmitUrlImportJobInput = {
   notifyOnCompletion: boolean;
 };
 
-export type SubmitUrlImportJobResult =
-  | {
-      status: "accepted";
-      kind: "created" | "existing_active_job";
-      job: ImportJobRecord;
-    }
-  | { status: "invalidUrl" }
-  | { status: "recipeLimitExceeded" }
-  | { status: "aiUsageLimitExceeded"; plan: Plan }
-  | { status: "temporarilyUnavailable" };
+export type SubmitUrlImportJobResult = SubmitImportJobResult | { status: "invalidUrl" };
 
 export type UrlImportJobSubmission = {
   submit(input: SubmitUrlImportJobInput): Promise<SubmitUrlImportJobResult>;
@@ -36,21 +21,9 @@ export type UrlImportJobSubmission = {
 
 export type UrlImportJobSubmissionFactory = (env: Bindings) => UrlImportJobSubmission;
 
-type UrlImportJobSubmissionDependencies = {
-  env: Bindings;
-  importJobRepository?: ImportJobRepository;
-  importQueue?: Queue<{ jobId: string }>;
-  createImportJobId?: () => string;
-  getCurrentDate?: () => Date;
-};
-
-export const createUrlImportJobSubmission = ({
-  env,
-  importJobRepository,
-  importQueue,
-  createImportJobId: createJobId,
-  getCurrentDate,
-}: UrlImportJobSubmissionDependencies): UrlImportJobSubmission => ({
+export const createUrlImportJobSubmission = (
+  dependencies: ImportJobSubmissionDependencies,
+): UrlImportJobSubmission => ({
   async submit(input) {
     const request = importUrlRequestSchema.safeParse({ url: input.url });
 
@@ -70,69 +43,18 @@ export const createUrlImportJobSubmission = ({
       throw error;
     }
 
-    const now = getCurrentDate?.() ?? new Date();
-    const repository =
-      importJobRepository ??
-      createImportJobRepository(createDb(env.DATABASE_URL), {
-        proPriceId: env.STRIPE_PRO_PRICE_ID,
-        now,
-      });
-
-    await repository.expireActiveJobsForUser({
+    return submitImportJob(dependencies, {
       userId: input.userId,
-      expiresBefore: getImportJobExpiresBefore(now, resolveImportJobTimeoutMs(env)),
-      now,
+      createJob: (repository, { id, aiUsage, now }) =>
+        repository.createUrlJob({
+          id,
+          userId: input.userId,
+          url: request.data.url,
+          normalizedUrl,
+          completionNotificationRequested: input.notifyOnCompletion,
+          aiUsage,
+          now,
+        }),
     });
-
-    const result = await repository.createUrlJob({
-      id: createJobId?.() ?? createImportJobId(),
-      userId: input.userId,
-      url: request.data.url,
-      normalizedUrl,
-      completionNotificationRequested: input.notifyOnCompletion,
-      aiUsage: {
-        month: getCurrentJstMonth(now),
-        freeLimit: resolveAiMonthlyLimit("free", env),
-        proLimit: resolveAiMonthlyLimit("pro", env),
-      },
-      now,
-    });
-
-    if (result.status === "recipeLimitExceeded") {
-      return { status: "recipeLimitExceeded" };
-    }
-
-    if (result.status === "aiUsageLimitExceeded") {
-      return { status: "aiUsageLimitExceeded", plan: result.plan };
-    }
-
-    if (result.status === "existingActiveJob") {
-      return {
-        status: "accepted",
-        kind: "existing_active_job",
-        job: result.job,
-      };
-    }
-
-    try {
-      await (importQueue ?? env.IMPORT_QUEUE).send(
-        { jobId: result.job.id },
-        { contentType: "json" },
-      );
-    } catch (error) {
-      await repository.markJobFailed({
-        jobId: result.job.id,
-        errorCode: "unknown",
-        errorMessage: error instanceof Error ? error.message : "Import queue send failed.",
-        now: getCurrentDate?.() ?? new Date(),
-      });
-      return { status: "temporarilyUnavailable" };
-    }
-
-    return {
-      status: "accepted",
-      kind: "created",
-      job: result.job,
-    };
   },
 });

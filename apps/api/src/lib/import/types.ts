@@ -82,9 +82,13 @@ export type RecipeImportSocialAIInput = RecipeImportAIInputBase;
 
 export type RecipeImportAIInput = RecipeImportGenericAIInput | RecipeImportSocialAIInput;
 
-export type RecipeImportPromptProfile = "generic" | "social";
+export type RecipeImportTextAIInput = {
+  text: string;
+};
 
-export type RecipeImportAINormalizeRequest =
+export type RecipeImportPromptProfile = "generic" | "social" | "text";
+
+export type RecipeImportUrlAINormalizeRequest =
   | {
       promptProfile: "generic";
       input: RecipeImportGenericAIInput;
@@ -92,6 +96,13 @@ export type RecipeImportAINormalizeRequest =
   | {
       promptProfile: "social";
       input: RecipeImportSocialAIInput;
+    };
+
+export type RecipeImportAINormalizeRequest =
+  | RecipeImportUrlAINormalizeRequest
+  | {
+      promptProfile: "text";
+      input: RecipeImportTextAIInput;
     };
 
 export type RecipeImportAIImageUrl = string;

@@ -234,6 +234,7 @@ describe("import queue handler", () => {
     status: "succeeded",
     url: "https://private.example.com/recipe",
     normalizedUrl: "https://private.example.com/recipe",
+    sourceText: null,
     recipeId: "recipe_123",
     errorCode: null,
     errorMessage: null,

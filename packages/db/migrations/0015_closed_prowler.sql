@@ -1,0 +1,3 @@
+ALTER TABLE "import_jobs" ADD COLUMN "source_text" text;--> statement-breakpoint
+ALTER TABLE "import_jobs" ADD COLUMN "source_text_digest" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "import_jobs_user_source_text_digest_active_idx" ON "import_jobs" USING btree ("user_id","source_text_digest") WHERE "import_jobs"."status" in ('queued', 'running') and "import_jobs"."source_text_digest" is not null;

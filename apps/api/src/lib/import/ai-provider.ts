@@ -172,6 +172,14 @@ const createImportProviderOptions = (providerKind: ImportAiProviderKind) => {
 };
 
 const buildImportUserPrompt = (request: RecipeImportAINormalizeRequest) => {
+  if (request.promptProfile === "text") {
+    return `
+text:
+<<<PASTED_TEXT
+${request.input.text}
+PASTED_TEXT`;
+  }
+
   const structuredEvidenceSection =
     request.promptProfile === "generic"
       ? `
@@ -306,9 +314,13 @@ const logImportAiFailure = (
     promptProfile: request.promptProfile,
     model: model || undefined,
     timeoutMs,
-    sourceHost: request.input.source.host,
-    sourceUrl: request.input.source.finalUrl,
-    markdownContentLength: request.input.markdownContent.length,
+    ...(request.promptProfile === "text"
+      ? { textLength: request.input.text.length }
+      : {
+          sourceHost: request.input.source.host,
+          sourceUrl: request.input.source.finalUrl,
+          markdownContentLength: request.input.markdownContent.length,
+        }),
     ...(request.promptProfile === "generic"
       ? { structuredEvidenceCount: request.input.recipeStructuredEvidence.length }
       : {}),

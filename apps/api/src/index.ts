@@ -21,6 +21,7 @@ import {
   processImportJob,
 } from "./import-jobs";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
+import { createTextImportJobSubmission } from "./lib/import/text-import-job-submission";
 import {
   createUrlImportJobSubmission,
   type UrlImportJobSubmission,
@@ -134,6 +135,14 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createImportJobId: dependencies.createImportJobId,
       getCurrentDate: dependencies.getCurrentDate,
     });
+  const textImportJobSubmissionFor = (env: Bindings) =>
+    createTextImportJobSubmission({
+      env,
+      importJobRepository: dependencies.importJobRepository,
+      importQueue: dependencies.importQueue,
+      createImportJobId: dependencies.createImportJobId,
+      getCurrentDate: dependencies.getCurrentDate,
+    });
   const shortcutRateLimiterFor = (env: Bindings) =>
     dependencies.shortcutRateLimiter ?? env.SHORTCUT_RATE_LIMITER;
   const shortcutClientRateLimiterFor = (env: Bindings) =>
@@ -183,6 +192,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createImportRoutes({
         auth,
         urlImportJobSubmissionFor,
+        textImportJobSubmissionFor,
         importJobRepository: dependencies.importJobRepository,
         getCurrentDate: dependencies.getCurrentDate,
       }),

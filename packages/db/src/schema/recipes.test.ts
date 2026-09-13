@@ -16,6 +16,16 @@ describe("importJobs schema", () => {
     );
   });
 
+  it("同一ユーザー・同一テキストのactive jobだけを重複排除する", () => {
+    const config = getTableConfig(importJobs);
+    const index = config.indexes.find(
+      (candidate) => candidate.config.name === "import_jobs_user_source_text_digest_active_idx",
+    );
+
+    expect(index?.config.unique).toBe(true);
+    expect(index?.config.columns).toHaveLength(2);
+  });
+
   it("完了通知の状態を保持する", () => {
     expect(importJobs.completionNotificationRequested.notNull).toBe(true);
     expect(importJobs.completionNotificationRequested.default).toBe(false);

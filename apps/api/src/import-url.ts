@@ -33,6 +33,7 @@ import {
   type RecipeImportImageCandidate,
   type RecipeImportImagePlacement,
   type RecipeImportResult,
+  type RecipeImportUrlAINormalizeRequest,
 } from "./lib/import/types";
 import { createLogger, type Logger } from "./logger";
 import { type AiUsageConsumptionRepository } from "./usage";
@@ -54,6 +55,7 @@ export {
   type RecipeImportResult,
   type RecipeImportSocialAIInput,
   type RecipeImportStructuredEvidence,
+  type RecipeImportUrlAINormalizeRequest,
 } from "./lib/import/types";
 
 type RecipeImportConverterResult = {
@@ -63,7 +65,7 @@ type RecipeImportConverterResult = {
   titleFallbackCandidates?: string[];
   source: RecipeSourceDraft;
   warnings: string[];
-} & RecipeImportAINormalizeRequest;
+} & RecipeImportUrlAINormalizeRequest;
 
 type ResolvedTitleRecipeImportAIDraftContent = RecipeImportAIDraftContent & {
   title: string;

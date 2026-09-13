@@ -1,4 +1,4 @@
-import { type CreateImportUrlJobResponse, type ImportJobSummary } from "@recipestock/schemas";
+import { type CreateImportJobResponse, type ImportJobSummary } from "@recipestock/schemas";
 import { createImportUrlJob, dismissFinishedImportJob } from "./api";
 
 export const hasActiveImportJob = (jobs: ImportJobSummary[]): boolean =>
@@ -6,7 +6,7 @@ export const hasActiveImportJob = (jobs: ImportJobSummary[]): boolean =>
 
 export const retryImportUrlJob = async (
   job: ImportJobSummary,
-): Promise<CreateImportUrlJobResponse> => {
+): Promise<CreateImportJobResponse> => {
   if (!job.url) {
     throw new Error("Import job URL is missing.");
   }

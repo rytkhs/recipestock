@@ -1,12 +1,12 @@
 import {
-  type CreateImportUrlJobResponse,
+  type CreateImportJobResponse,
   type DismissImportJobResponse,
   type RecentImportJobsResponse,
 } from "@recipestock/schemas";
 import { parseApiResponse } from "../../lib/api";
 
-export const createImportUrlJob = (url: string): Promise<CreateImportUrlJobResponse> =>
-  parseApiResponse<CreateImportUrlJobResponse>(
+export const createImportUrlJob = (url: string): Promise<CreateImportJobResponse> =>
+  parseApiResponse<CreateImportJobResponse>(
     fetch("/api/import/url/jobs", {
       method: "POST",
       credentials: "include",
