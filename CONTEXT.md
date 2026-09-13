@@ -22,8 +22,12 @@ Metadata describing where a **Recipe** came from, such as the source URL, normal
 _Avoid_: Origin, reference, citation
 
 **Import Job**:
-A user-requested attempt to create one **Recipe** from an external source. An **Import Job** may finish successfully, fail, or be canceled before producing a **Recipe**.
+A user-requested attempt to create one **Recipe** from an external source, such as a URL or pasted text. An **Import Job** may finish successfully, fail, or be canceled before producing a **Recipe**.
 _Avoid_: Import task, background import
+
+**Source Text**:
+The text a user pastes to create a **Recipe** through an **Import Job**.
+_Avoid_: Raw text, original text, text draft
 
 **Import Cancellation**:
 A user's request that an active **Import Job** must not produce a **Recipe**. Cancellation does not imply that already-started external processing stops immediately.
