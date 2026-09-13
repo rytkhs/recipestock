@@ -1,15 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createDefaultRecipeImportAIProvider } from "./ai-provider";
+import { GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT, SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT } from "./prompts";
 import {
-  createDefaultRecipeImportAIProvider,
   type RecipeImportAINormalizeRequest,
   type RecipeImportError,
   type RecipeImportGenericAIInput,
   type RecipeImportSocialAIInput,
-} from "./import-url";
-import {
-  GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT,
-  SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT,
-} from "./lib/import/prompts";
+} from "./types";
 
 const mocks = vi.hoisted(() => {
   const workersAiModel = { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" };
