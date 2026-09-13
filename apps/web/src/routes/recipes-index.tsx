@@ -12,7 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import { type RecentImportJobsResponse, type RecipeListSort } from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -67,6 +67,9 @@ import {
   writeRecipeViewMode,
 } from "../features/recipes/view-mode";
 
+// routeには遅延読み込みのcomponentをそのまま渡し、routerに画面のコードを先読みさせる。
+// そのため並び順はpropsではなく、ここでrouteから読む。
+const recipesRouteApi = getRouteApi("/_protected/recipes");
 const importJobSuccessDismissDelayMs = 4000;
 const nextPageRootMargin = "480px 0px";
 const gridRecipeSkeletonKeys = [
@@ -292,9 +295,10 @@ const ImportJobIsland = () => {
   );
 };
 
-export const RecipesIndexRoute = ({ sort }: { sort: RecipeListSort }) => {
+export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
+  const { sort } = recipesRouteApi.useSearch();
+  const navigate = recipesRouteApi.useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const searchId = useId();
   const shelfId = useId();
@@ -360,7 +364,7 @@ export const RecipesIndexRoute = ({ sort }: { sort: RecipeListSort }) => {
   };
   // 並び順はURLに持つ。戻る操作で並びが行き来しないようにreplaceし、別の並びは先頭から見せる。
   const changeSort = (nextSort: RecipeListSort) => {
-    void navigate({ to: "/recipes", search: { sort: nextSort }, replace: true });
+    void navigate({ search: { sort: nextSort }, replace: true });
     window.scrollTo({ top: 0 });
   };
   const loadNextPage = useCallback(() => {

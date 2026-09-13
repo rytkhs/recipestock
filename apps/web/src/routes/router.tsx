@@ -1,4 +1,4 @@
-import { type RecipeListSort, recipeListSortSchema } from "@recipestock/schemas";
+import { recipeListSortSchema } from "@recipestock/schemas";
 import {
   createRootRoute,
   createRoute,
@@ -33,7 +33,7 @@ import { type ImportTextSearch } from "./import-text";
 const LoginScreen = lazyRouteComponent(() => import("./login"), "LoginRoute");
 const ImportUrlScreen = lazyRouteComponent(() => import("./import"), "ImportUrlRoute");
 const ImportTextScreen = lazyRouteComponent(() => import("./import-text"), "ImportTextRoute");
-const RecipesIndexScreen = lazyRouteComponent(() => import("./recipes-index"), "RecipesIndexRoute");
+const RecipesIndexRoute = lazyRouteComponent(() => import("./recipes-index"), "RecipesIndexRoute");
 const NewRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "NewRecipeRoute");
 const EditRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "EditRecipeRoute");
 const RecipeDetailRoute = lazyRouteComponent(() => import("./recipe-detail"), "RecipeDetailRoute");
@@ -63,11 +63,6 @@ const ImportTextRoute = withPreload(
   ({ search }: { search: ImportTextSearch }) => <ImportTextScreen search={search} />,
   ImportTextScreen.preload,
 );
-const RecipesIndexRoute = withPreload(
-  ({ sort }: { sort: RecipeListSort }) => <RecipesIndexScreen sort={sort} />,
-  RecipesIndexScreen.preload,
-);
-
 const ProtectedRouteSkeleton = () => {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
@@ -221,11 +216,7 @@ const recipesRoute = createRoute({
   path: "/recipes",
   validateSearch: recipesSearchSchema,
   search: { middlewares: [stripSearchParams({ sort: "newest" })] },
-  component: () => {
-    const search = recipesRoute.useSearch();
-
-    return <RecipesIndexRoute sort={search.sort} />;
-  },
+  component: RecipesIndexRoute,
   errorComponent: RouteChunkError,
   pendingComponent: RecipeListSkeleton,
   pendingMs: 0,
