@@ -60,21 +60,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "screenshots": [
-    {
-      "src": "/screenshots/recipes-narrow.png",
-      "sizes": "391x735",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "スマートフォンで表示したレシピの一覧"
-    },
-    {
-      "src": "/screenshots/recipes-wide.png",
-      "sizes": "1711x922",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "保存したレシピの一覧"
-    }
   ]
 }
