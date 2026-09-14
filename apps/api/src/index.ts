@@ -43,6 +43,7 @@ import { createPushSubscriptionRoutes } from "./routes/push-subscriptions";
 import { createRecipeRoutes } from "./routes/recipes";
 import { createShortcutCredentialRoutes } from "./routes/shortcut-credentials";
 import { createStripeRoutes } from "./routes/stripe";
+import { createTagRoutes } from "./routes/tags";
 import { createUsageRoutes } from "./routes/usage";
 import {
   createShortcutCredentialRepository,
@@ -50,6 +51,7 @@ import {
   type ShortcutCredentials,
 } from "./shortcut-credentials";
 import { type StripeBillingClient } from "./stripe-billing";
+import { type TagRepository } from "./tags";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
 const IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS = 4;
@@ -61,6 +63,7 @@ export type AppDependencies = {
   usageRepository?: UsageRepository;
   billingRepository?: BillingRepository;
   recipeRepository?: RecipeRepository;
+  tagRepository?: TagRepository;
   pushSubscriptionRepository?: PushSubscriptionRepository;
   importJobRepository?: ImportJobRepository;
   shortcutCredentials?: ShortcutCredentials;
@@ -176,6 +179,8 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   app.use("/recipes", csrfProtection);
   app.use("/recipes/*", csrfProtection);
   app.use("/push-subscriptions", csrfProtection);
+  app.use("/tags", csrfProtection);
+  app.use("/tags/*", csrfProtection);
 
   return app
     .route("/auth", createAuthRoutes({ auth }))
@@ -260,9 +265,17 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createRecipeRoutes({
         auth,
         recipeRepository: dependencies.recipeRepository,
+        tagRepository: dependencies.tagRepository,
         imageService: dependencies.imageService,
         createRecipeId: dependencies.createRecipeId,
         createImageId: dependencies.createImageId,
+      }),
+    )
+    .route(
+      "/tags",
+      createTagRoutes({
+        auth,
+        tagRepository: dependencies.tagRepository,
       }),
     );
 };

@@ -16,6 +16,7 @@ export const apiErrorCodeSchema = z.enum([
   "ai_schema_invalid",
   "locked_recipe",
   "invalid_recipe_list_cursor",
+  "tag_name_conflict",
   "already_subscribed",
   "rate_limit_exceeded",
   "temporarily_unavailable",

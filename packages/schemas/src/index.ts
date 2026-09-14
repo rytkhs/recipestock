@@ -7,4 +7,5 @@ export * from "./me";
 export * from "./push-subscription";
 export * from "./recipe";
 export * from "./shortcut-credential";
+export * from "./tag";
 export * from "./usage";

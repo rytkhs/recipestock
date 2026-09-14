@@ -79,6 +79,8 @@ describe("Recipe list routes", () => {
         sort: "newest",
         limit: 10,
         cursor: null,
+        tagIds: [],
+        untagged: false,
       },
     ]);
     await expect(response.json()).resolves.toEqual({
@@ -131,6 +133,8 @@ describe("Recipe list routes", () => {
         sort: "oldest",
         limit: 20,
         cursor: null,
+        tagIds: [],
+        untagged: false,
       },
     ]);
   });
@@ -263,5 +267,77 @@ describe("Recipe list routes", () => {
         message: "Recipe list cursor is invalid.",
       },
     });
+  });
+
+  it("タグの指定を繰り返したクエリで受け取り、タグなしの指定も渡す", async () => {
+    const calls: unknown[] = [];
+    const testApp = createSilentTestApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123", email: "user@example.com" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: async (params) => {
+          calls.push(params);
+          return { items: [], nextCursor: null };
+        },
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+    });
+
+    const tagResponse = await testApp.request(
+      "/api/recipes?tagId=tag_1&tagId=tag_2&tagId=tag_1",
+      undefined,
+      { APP_ENV: "development" },
+    );
+    const untaggedResponse = await testApp.request("/api/recipes?untagged=true", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(tagResponse.status).toBe(200);
+    expect(untaggedResponse.status).toBe(200);
+    expect(calls).toEqual([
+      expect.objectContaining({ tagIds: ["tag_1", "tag_2"], untagged: false }),
+      expect.objectContaining({ tagIds: [], untagged: true }),
+    ]);
+  });
+
+  it("タグとタグなしを同時に指定したり、タグを多く指定しすぎたりするとvalidation_failedを返す", async () => {
+    const testApp = createSilentTestApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123", email: "user@example.com" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+    });
+    const tooManyTags = Array.from({ length: 11 }, (_, index) => `tagId=tag_${index}`).join("&");
+
+    for (const query of ["tagId=tag_1&untagged=true", tooManyTags]) {
+      const response = await testApp.request(`/api/recipes?${query}`, undefined, {
+        APP_ENV: "development",
+      });
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "validation_failed" },
+      });
+    }
   });
 });

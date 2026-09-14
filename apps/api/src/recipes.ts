@@ -1,4 +1,4 @@
-import { type DbClient, recipes } from "@recipestock/db";
+import { type DbClient, recipes, recipeTags, tags } from "@recipestock/db";
 import {
   type LockedRecipeDetail,
   type RecipeContent,
@@ -6,17 +6,32 @@ import {
   type RecipeListItem,
   type RecipeListSort,
   type RecipeSourceDraft,
+  type RecipeTag,
   recipeContentSchema,
   recipeContentWithUrlsSchema,
 } from "@recipestock/schemas";
 import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
-import { and, asc, desc, eq, gt, ilike, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gt,
+  ilike,
+  inArray,
+  lt,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import { ulid } from "ulid";
 import {
   type AppUserPlanSyncOptions,
   deriveAppUserPlanForDb,
   syncAppUserPlanForDb,
 } from "./billing";
+import { listRecipeTags } from "./tags";
 
 export type RecipeRecord = {
   id: string;
@@ -61,6 +76,10 @@ export type CreateRecipeResult =
 export type ListRecipesParams = {
   userId: string;
   searchTerms: string[];
+  // 指定したタグがすべて付いたRecipeに絞る。
+  tagIds: string[];
+  // タグが1つも付いていないRecipeに絞る。
+  untagged: boolean;
   sort: RecipeListSort;
   limit: number;
   cursor: string | null;
@@ -85,9 +104,13 @@ type RecipeSqlRow = {
   updatedAt: Date | string;
 };
 
+export type RecipeWithTagsRecord = RecipeRecord & {
+  tags: RecipeTag[];
+};
+
 export type RecipeRepository = {
   createRecipeEnforcingPlanLimit(recipe: NewRecipeRecord): Promise<CreateRecipeResult>;
-  getRecipe(userId: string, recipeId: string): Promise<RecipeRecord | null>;
+  getRecipe(userId: string, recipeId: string): Promise<RecipeWithTagsRecord | null>;
   listRecipes(params: ListRecipesParams): Promise<ListRecipesResult>;
   updateRecipe(recipe: UpdateRecipeRecord): Promise<RecipeRecord | null>;
   deleteRecipe(userId: string, recipeId: string): Promise<boolean>;
@@ -135,7 +158,7 @@ export const toRecipeListItem = (recipe: RecipeListRecord): RecipeListItem => ({
   locked: recipe.locked ?? false,
 });
 
-export const toRecipeDetail = (recipe: RecipeRecord): RecipeDetail => ({
+export const toRecipeDetail = (recipe: RecipeRecord, tags: readonly RecipeTag[]): RecipeDetail => ({
   id: recipe.id,
   title: recipe.title,
   content: recipeContentWithUrlsSchema.parse(recipe.content),
@@ -146,6 +169,7 @@ export const toRecipeDetail = (recipe: RecipeRecord): RecipeDetail => ({
   },
   createdAt: recipe.createdAt.toISOString(),
   updatedAt: recipe.updatedAt.toISOString(),
+  tags: [...tags],
   locked: false,
 });
 
@@ -296,14 +320,15 @@ export const createRecipeRepository = (
     };
   },
   async getRecipe(userId, recipeId) {
-    // 行の取得とplanの導出は互いに独立なので同じ波で引く。
-    const [rows, plan] = await Promise.all([
+    // 行とタグの取得、planの導出は互いに独立なので同じ波で引く。
+    const [rows, plan, attachedTags] = await Promise.all([
       db
         .select()
         .from(recipes)
         .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
         .limit(1),
       deriveAppUserPlanForDb(db, userId, planSyncOptions),
+      listRecipeTags(db, userId, recipeId),
     ]);
     const [row] = rows;
 
@@ -317,18 +342,61 @@ export const createRecipeRepository = (
 
     return {
       ...recipe,
+      tags: attachedTags,
       locked: isRecipeLockedForPlan({ plan, recipeId: recipe.id, unlockedRecipeIds }),
     };
   },
-  async listRecipes({ userId, searchTerms, sort, limit, cursor }) {
+  async listRecipes({ userId, searchTerms, tagIds, untagged, sort, limit, cursor }) {
     const decodedCursor = cursor ? decodeRecipeListCursor(cursor, sort) : null;
     // 追加日で並べ、同時刻はidで同じ向きに並べてcursorの位置を一意にする。
     const order = sort === "newest" ? desc : asc;
     const isPastCursor = sort === "newest" ? lt : gt;
+    // 検索語は語ごとに、searchTextかタグ名のどちらかに当たればよい。タグ名はsearchTextへ書き込まず、
+    // 名前を変えても全Recipeを書き換えずに済むように、読み取りのたびに照合する。
     const whereConditions = [
       eq(recipes.userId, userId),
-      ...searchTerms.map((term) => ilike(recipes.searchText, `%${term}%`)),
+      ...searchTerms.map(
+        (term) =>
+          or(
+            ilike(recipes.searchText, `%${term}%`),
+            exists(
+              db
+                .select({ tagId: recipeTags.tagId })
+                .from(recipeTags)
+                .innerJoin(tags, eq(tags.id, recipeTags.tagId))
+                .where(
+                  and(eq(recipeTags.recipeId, recipes.id), ilike(tags.normalizedName, `%${term}%`)),
+                ),
+            ),
+          ) ?? sql`false`,
+      ),
     ];
+
+    if (tagIds.length > 0) {
+      // 指定したタグがすべて付いたRecipeだけを残す。tagIdsは重複を除いてあるので個数で判定できる。
+      whereConditions.push(
+        inArray(
+          recipes.id,
+          db
+            .select({ recipeId: recipeTags.recipeId })
+            .from(recipeTags)
+            .where(inArray(recipeTags.tagId, tagIds))
+            .groupBy(recipeTags.recipeId)
+            .having(sql`count(*) = ${tagIds.length}`),
+        ),
+      );
+    }
+
+    if (untagged) {
+      whereConditions.push(
+        notExists(
+          db
+            .select({ tagId: recipeTags.tagId })
+            .from(recipeTags)
+            .where(eq(recipeTags.recipeId, recipes.id)),
+        ),
+      );
+    }
 
     if (decodedCursor) {
       const cursorCreatedAt = new Date(decodedCursor.createdAt);

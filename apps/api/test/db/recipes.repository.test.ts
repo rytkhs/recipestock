@@ -55,6 +55,8 @@ describe("Recipe repository with Neon Postgres", () => {
       const page: ListRecipesResult = await repository.listRecipes({
         userId,
         searchTerms: [],
+        tagIds: [],
+        untagged: false,
         sort,
         limit,
         cursor,
@@ -109,6 +111,8 @@ describe("Recipe repository with Neon Postgres", () => {
     const { items } = await repository.listRecipes({
       userId,
       searchTerms: [],
+      tagIds: [],
+      untagged: false,
       sort: "newest",
       limit: 20,
       cursor: null,

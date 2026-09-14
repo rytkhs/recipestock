@@ -296,6 +296,7 @@ describe("createRecipeResponseSchema", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [{ id: "tag_123", name: "パスタ" }],
         locked: false,
       },
     });
@@ -331,6 +332,8 @@ describe("listRecipesSchema", () => {
       sort: "oldest",
       limit: 10,
       cursor: "cursor_123",
+      tagId: [],
+      untagged: false,
     });
 
     expect(
@@ -351,8 +354,29 @@ describe("listRecipesSchema", () => {
   });
 
   it("並び順は省略すると新しい順になり、追加日の2つ以外は受け入れない", () => {
-    expect(listRecipesQuerySchema.parse({})).toEqual({ sort: "newest", limit: 20 });
+    expect(listRecipesQuerySchema.parse({})).toEqual({
+      sort: "newest",
+      limit: 20,
+      tagId: [],
+      untagged: false,
+    });
     expect(listRecipesQuerySchema.safeParse({ sort: "updated" }).success).toBe(false);
+  });
+
+  it("タグの指定は重複を除いて受け入れ、タグなしとは同時に使えない", () => {
+    expect(listRecipesQuerySchema.parse({ tagId: ["tag_1", "tag_2", "tag_1"] }).tagId).toEqual([
+      "tag_1",
+      "tag_2",
+    ]);
+    expect(listRecipesQuerySchema.parse({ untagged: "true" }).untagged).toBe(true);
+    expect(listRecipesQuerySchema.safeParse({ tagId: ["tag_1"], untagged: "true" }).success).toBe(
+      false,
+    );
+    expect(
+      listRecipesQuerySchema.safeParse({
+        tagId: Array.from({ length: 11 }, (_, index) => `tag_${index}`),
+      }).success,
+    ).toBe(false);
   });
 });
 
