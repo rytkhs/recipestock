@@ -76,6 +76,8 @@ describe("createRecipeRepository", () => {
       repository.listRecipes({
         userId: "user_123",
         searchTerms: [],
+        tagIds: [],
+        untagged: false,
         sort: "newest",
         limit: 20,
         cursor: "not-base64",
@@ -93,6 +95,8 @@ describe("createRecipeRepository", () => {
       repository.listRecipes({
         userId: "user_123",
         searchTerms: [],
+        tagIds: [],
+        untagged: false,
         sort: "newest",
         limit: 20,
         cursor: oldestCursor,

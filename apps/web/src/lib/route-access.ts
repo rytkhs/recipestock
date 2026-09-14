@@ -3,6 +3,7 @@ export const isProtectedAppPath = (pathname: string) =>
   pathname.startsWith("/recipes/") ||
   pathname === "/import/url" ||
   pathname === "/import/text" ||
+  pathname === "/tags" ||
   pathname === "/settings" ||
   pathname.startsWith("/settings/");
 

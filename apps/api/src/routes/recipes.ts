@@ -6,6 +6,8 @@ import {
   getRecipeResponseSchema,
   listRecipesQuerySchema,
   listRecipesResponseSchema,
+  replaceRecipeTagsRequestSchema,
+  replaceRecipeTagsResponseSchema,
   updateRecipeRequestSchema,
   updateRecipeResponseSchema,
 } from "@recipestock/schemas";
@@ -13,6 +15,7 @@ import { Hono } from "hono";
 import {
   imageFinalizeFailedResponse,
   invalidRecipeListCursorResponse,
+  invalidTagNameResponse,
   lockedRecipeResponse,
   notFoundResponse,
   recipeLimitExceededResponse,
@@ -43,10 +46,12 @@ import {
   toRecipeDetail,
   toRecipeListItem,
 } from "../recipes";
+import { createTagRepository, normalizeRequestedTagNames, type TagRepository } from "../tags";
 
 type RecipeRouteDependencies = {
   auth: AuthService;
   recipeRepository?: RecipeRepository;
+  tagRepository?: TagRepository;
   imageService?: RecipeImageService;
   createRecipeId?: () => string;
   createImageId?: () => string;
@@ -55,261 +60,324 @@ type RecipeRouteDependencies = {
 export const createRecipeRoutes = ({
   auth,
   recipeRepository,
+  tagRepository,
   imageService,
   createRecipeId,
   createImageId,
 }: RecipeRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
 
-  return routes
-    .post("/", requireAuth(auth), async (c) => {
-      const userId = c.get("userId");
-      const rawBody = await c.req.json().catch(() => null);
-      const request = createRecipeRequestSchema.safeParse(rawBody);
+  return (
+    routes
+      .post("/", requireAuth(auth), async (c) => {
+        const userId = c.get("userId");
+        const rawBody = await c.req.json().catch(() => null);
+        const request = createRecipeRequestSchema.safeParse(rawBody);
 
-      if (!request.success) {
-        return validationFailedResponse(request.error.flatten());
-      }
-
-      const recipeId = createRecipeId?.() ?? createDefaultRecipeId();
-      const images = imageService ?? createRecipeImageService(c.env);
-      let finalized: Awaited<ReturnType<typeof finalizeRecipeDraftImages>>;
-
-      try {
-        finalized = await finalizeRecipeDraftImages({
-          draft: request.data.content,
-          userId,
-          recipeId,
-          imageService: images,
-          createImageId,
-        });
-      } catch (error) {
-        if (error instanceof RecipeImageFinalizeError) {
-          return imageFinalizeFailedResponse();
+        if (!request.success) {
+          return validationFailedResponse(request.error.flatten());
         }
 
-        throw error;
-      }
+        const recipeId = createRecipeId?.() ?? createDefaultRecipeId();
+        const images = imageService ?? createRecipeImageService(c.env);
+        let finalized: Awaited<ReturnType<typeof finalizeRecipeDraftImages>>;
 
-      const content = finalized.content;
-      const source = normalizeRecipeSource(request.data.source);
-      const now = new Date();
-      const repository =
-        recipeRepository ??
-        createRecipeRepository(createDb(c.env.DATABASE_URL), {
-          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          now,
-        });
-      let result: Awaited<ReturnType<RecipeRepository["createRecipeEnforcingPlanLimit"]>>;
-
-      try {
-        result = await repository.createRecipeEnforcingPlanLimit({
-          id: recipeId,
-          userId,
-          title: content.title,
-          content,
-          originType: "manual",
-          sourceUrl: source.sourceUrl,
-          normalizedSourceUrl: source.normalizedSourceUrl,
-          sourceName: source.sourceName,
-          searchText: buildRecipeSearchText({ content, sourceName: source.sourceName }),
-          createdAt: now,
-          updatedAt: now,
-        });
-      } catch (error) {
-        await deleteObjectsBestEffort(images, finalized.copiedKeys);
-        throw error;
-      }
-
-      if (result.status === "limitExceeded") {
-        await deleteObjectsBestEffort(images, finalized.copiedKeys);
-        return recipeLimitExceededResponse();
-      }
-
-      const recipe = result.recipe;
-      await deleteObjectsBestEffort(images, finalized.tmpKeys);
-
-      return c.json(createRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }), 201);
-    })
-    .get("/", requireAuth(auth), async (c) => {
-      const userId = c.get("userId");
-      const query = listRecipesQuerySchema.safeParse(c.req.query());
-
-      if (!query.success) {
-        return validationFailedResponse(query.error.flatten());
-      }
-
-      const repository =
-        recipeRepository ??
-        createRecipeRepository(createDb(c.env.DATABASE_URL), {
-          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          now: new Date(),
-        });
-      let result: ListRecipesResult;
-
-      try {
-        result = await repository.listRecipes({
-          userId,
-          searchTerms: normalizeRecipeSearchTerms(query.data.q),
-          sort: query.data.sort,
-          limit: query.data.limit,
-          cursor: query.data.cursor ?? null,
-        });
-      } catch (error) {
-        if (error instanceof InvalidRecipeListCursorError) {
-          return invalidRecipeListCursorResponse();
-        }
-
-        throw error;
-      }
-
-      const itemsWithImages = await Promise.all(
-        result.items.map((item) => {
-          const base = toRecipeListItem(item);
-          if (!item.locked && item.coverImageObjectKey) {
-            base.coverImageUrl = createRecipeThumbnailUrl({
-              objectKey: item.coverImageObjectKey,
-            });
+        try {
+          finalized = await finalizeRecipeDraftImages({
+            draft: request.data.content,
+            userId,
+            recipeId,
+            imageService: images,
+            createImageId,
+          });
+        } catch (error) {
+          if (error instanceof RecipeImageFinalizeError) {
+            return imageFinalizeFailedResponse();
           }
-          return base;
-        }),
-      );
 
-      return c.json(
-        listRecipesResponseSchema.parse({
-          items: itemsWithImages,
-          nextCursor: result.nextCursor,
-        }),
-      );
-    })
-    .get("/:recipeId", requireAuth(auth), async (c) => {
-      const userId = c.get("userId");
-      const repository =
-        recipeRepository ??
-        createRecipeRepository(createDb(c.env.DATABASE_URL), {
-          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          now: new Date(),
-        });
-      const recipe = await repository.getRecipe(userId, c.req.param("recipeId"));
-
-      if (!recipe) {
-        return notFoundResponse("Recipe was not found.");
-      }
-
-      if (recipe.locked) {
-        return c.json(getRecipeResponseSchema.parse({ recipe: toLockedRecipeDetail(recipe) }));
-      }
-
-      const detail = toRecipeDetail(recipe);
-
-      return c.json(
-        getRecipeResponseSchema.parse({
-          recipe: {
-            ...detail,
-            content: await attachRecipeImageUrls(recipe.content),
-          },
-        }),
-      );
-    })
-    .put("/:recipeId", requireAuth(auth), async (c) => {
-      const userId = c.get("userId");
-      const rawBody = await c.req.json().catch(() => null);
-      const request = updateRecipeRequestSchema.safeParse(rawBody);
-
-      if (!request.success) {
-        return validationFailedResponse(request.error.flatten());
-      }
-
-      const repository =
-        recipeRepository ??
-        createRecipeRepository(createDb(c.env.DATABASE_URL), {
-          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          now: new Date(),
-        });
-      const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
-
-      if (!existingRecipe) {
-        return notFoundResponse("Recipe was not found.");
-      }
-
-      if (existingRecipe.locked) {
-        return lockedRecipeResponse();
-      }
-
-      const images = imageService ?? createRecipeImageService(c.env);
-      let finalized: Awaited<ReturnType<typeof finalizeRecipeDraftImages>>;
-
-      try {
-        finalized = await finalizeRecipeDraftImages({
-          draft: request.data.content,
-          userId,
-          recipeId: existingRecipe.id,
-          imageService: images,
-          existingContent: existingRecipe.content,
-          createImageId,
-        });
-      } catch (error) {
-        if (error instanceof RecipeImageFinalizeError) {
-          return imageFinalizeFailedResponse();
+          throw error;
         }
 
-        throw error;
-      }
+        const content = finalized.content;
+        const source = normalizeRecipeSource(request.data.source);
+        const now = new Date();
+        const repository =
+          recipeRepository ??
+          createRecipeRepository(createDb(c.env.DATABASE_URL), {
+            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+            now,
+          });
+        let result: Awaited<ReturnType<RecipeRepository["createRecipeEnforcingPlanLimit"]>>;
 
-      const content = finalized.content;
-      let recipe: Awaited<ReturnType<RecipeRepository["updateRecipe"]>>;
+        try {
+          result = await repository.createRecipeEnforcingPlanLimit({
+            id: recipeId,
+            userId,
+            title: content.title,
+            content,
+            originType: "manual",
+            sourceUrl: source.sourceUrl,
+            normalizedSourceUrl: source.normalizedSourceUrl,
+            sourceName: source.sourceName,
+            searchText: buildRecipeSearchText({ content, sourceName: source.sourceName }),
+            createdAt: now,
+            updatedAt: now,
+          });
+        } catch (error) {
+          await deleteObjectsBestEffort(images, finalized.copiedKeys);
+          throw error;
+        }
 
-      try {
-        recipe = await repository.updateRecipe({
+        if (result.status === "limitExceeded") {
+          await deleteObjectsBestEffort(images, finalized.copiedKeys);
+          return recipeLimitExceededResponse();
+        }
+
+        const recipe = result.recipe;
+        await deleteObjectsBestEffort(images, finalized.tmpKeys);
+
+        // タグは保存した後に詳細画面で付けるので、作成したRecipeにはまだない。
+        return c.json(
+          createRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe, []) }),
+          201,
+        );
+      })
+      .get("/", requireAuth(auth), async (c) => {
+        const userId = c.get("userId");
+        // タグは繰り返したクエリで受け取るので、配列として読む。
+        const query = listRecipesQuerySchema.safeParse({
+          ...c.req.query(),
+          tagId: c.req.queries("tagId"),
+        });
+
+        if (!query.success) {
+          return validationFailedResponse(query.error.flatten());
+        }
+
+        const repository =
+          recipeRepository ??
+          createRecipeRepository(createDb(c.env.DATABASE_URL), {
+            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+            now: new Date(),
+          });
+        let result: ListRecipesResult;
+
+        try {
+          result = await repository.listRecipes({
+            userId,
+            searchTerms: normalizeRecipeSearchTerms(query.data.q),
+            tagIds: query.data.tagId,
+            untagged: query.data.untagged,
+            sort: query.data.sort,
+            limit: query.data.limit,
+            cursor: query.data.cursor ?? null,
+          });
+        } catch (error) {
+          if (error instanceof InvalidRecipeListCursorError) {
+            return invalidRecipeListCursorResponse();
+          }
+
+          throw error;
+        }
+
+        const itemsWithImages = await Promise.all(
+          result.items.map((item) => {
+            const base = toRecipeListItem(item);
+            if (!item.locked && item.coverImageObjectKey) {
+              base.coverImageUrl = createRecipeThumbnailUrl({
+                objectKey: item.coverImageObjectKey,
+              });
+            }
+            return base;
+          }),
+        );
+
+        return c.json(
+          listRecipesResponseSchema.parse({
+            items: itemsWithImages,
+            nextCursor: result.nextCursor,
+          }),
+        );
+      })
+      .get("/:recipeId", requireAuth(auth), async (c) => {
+        const userId = c.get("userId");
+        const repository =
+          recipeRepository ??
+          createRecipeRepository(createDb(c.env.DATABASE_URL), {
+            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+            now: new Date(),
+          });
+        const recipe = await repository.getRecipe(userId, c.req.param("recipeId"));
+
+        if (!recipe) {
+          return notFoundResponse("Recipe was not found.");
+        }
+
+        if (recipe.locked) {
+          return c.json(getRecipeResponseSchema.parse({ recipe: toLockedRecipeDetail(recipe) }));
+        }
+
+        const detail = toRecipeDetail(recipe, recipe.tags);
+
+        return c.json(
+          getRecipeResponseSchema.parse({
+            recipe: {
+              ...detail,
+              content: await attachRecipeImageUrls(recipe.content),
+            },
+          }),
+        );
+      })
+      .put("/:recipeId", requireAuth(auth), async (c) => {
+        const userId = c.get("userId");
+        const rawBody = await c.req.json().catch(() => null);
+        const request = updateRecipeRequestSchema.safeParse(rawBody);
+
+        if (!request.success) {
+          return validationFailedResponse(request.error.flatten());
+        }
+
+        const repository =
+          recipeRepository ??
+          createRecipeRepository(createDb(c.env.DATABASE_URL), {
+            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+            now: new Date(),
+          });
+        const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
+
+        if (!existingRecipe) {
+          return notFoundResponse("Recipe was not found.");
+        }
+
+        if (existingRecipe.locked) {
+          return lockedRecipeResponse();
+        }
+
+        const images = imageService ?? createRecipeImageService(c.env);
+        let finalized: Awaited<ReturnType<typeof finalizeRecipeDraftImages>>;
+
+        try {
+          finalized = await finalizeRecipeDraftImages({
+            draft: request.data.content,
+            userId,
+            recipeId: existingRecipe.id,
+            imageService: images,
+            existingContent: existingRecipe.content,
+            createImageId,
+          });
+        } catch (error) {
+          if (error instanceof RecipeImageFinalizeError) {
+            return imageFinalizeFailedResponse();
+          }
+
+          throw error;
+        }
+
+        const content = finalized.content;
+        let recipe: Awaited<ReturnType<RecipeRepository["updateRecipe"]>>;
+
+        try {
+          recipe = await repository.updateRecipe({
+            userId,
+            recipeId: existingRecipe.id,
+            title: content.title,
+            content,
+            searchText: buildRecipeSearchText({
+              content,
+              sourceName: existingRecipe.sourceName,
+            }),
+            updatedAt: new Date(),
+          });
+        } catch (error) {
+          await deleteObjectsBestEffort(images, finalized.copiedKeys);
+          throw error;
+        }
+
+        if (!recipe) {
+          await deleteObjectsBestEffort(images, finalized.copiedKeys);
+          return notFoundResponse("Recipe was not found.");
+        }
+
+        await deleteObjectsBestEffort(images, finalized.tmpKeys);
+        await deleteObjectsBestEffort(
+          images,
+          getRemovedRecipeImageKeys(existingRecipe.content, content),
+        );
+
+        // 本文の更新ではタグは変わらないので、更新前に読んだタグを返す。
+        return c.json(
+          updateRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe, existingRecipe.tags) }),
+        );
+      })
+      // タグの付け外しは整理であって本文の編集ではないので、updatedAtは変えない。
+      .put("/:recipeId/tags", requireAuth(auth), async (c) => {
+        const userId = c.get("userId");
+        const rawBody = await c.req.json().catch(() => null);
+        const request = replaceRecipeTagsRequestSchema.safeParse(rawBody);
+
+        if (!request.success) {
+          return validationFailedResponse(request.error.flatten());
+        }
+
+        const names = normalizeRequestedTagNames(request.data.names);
+
+        if (!names) {
+          return invalidTagNameResponse("names");
+        }
+
+        const repository =
+          recipeRepository ??
+          createRecipeRepository(createDb(c.env.DATABASE_URL), {
+            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+            now: new Date(),
+          });
+        const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
+
+        if (!existingRecipe) {
+          return notFoundResponse("Recipe was not found.");
+        }
+
+        if (existingRecipe.locked) {
+          return lockedRecipeResponse();
+        }
+
+        const tags = await (
+          tagRepository ?? createTagRepository(createDb(c.env.DATABASE_URL))
+        ).replaceRecipeTags({
           userId,
           recipeId: existingRecipe.id,
-          title: content.title,
-          content,
-          searchText: buildRecipeSearchText({
-            content,
-            sourceName: existingRecipe.sourceName,
-          }),
-          updatedAt: new Date(),
-        });
-      } catch (error) {
-        await deleteObjectsBestEffort(images, finalized.copiedKeys);
-        throw error;
-      }
-
-      if (!recipe) {
-        await deleteObjectsBestEffort(images, finalized.copiedKeys);
-        return notFoundResponse("Recipe was not found.");
-      }
-
-      await deleteObjectsBestEffort(images, finalized.tmpKeys);
-      await deleteObjectsBestEffort(
-        images,
-        getRemovedRecipeImageKeys(existingRecipe.content, content),
-      );
-
-      return c.json(updateRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe) }));
-    })
-    .delete("/:recipeId", requireAuth(auth), async (c) => {
-      const userId = c.get("userId");
-      const repository =
-        recipeRepository ??
-        createRecipeRepository(createDb(c.env.DATABASE_URL), {
-          proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+          names,
           now: new Date(),
         });
-      const deleted = await repository.deleteRecipe(userId, c.req.param("recipeId"));
 
-      if (!deleted) {
-        return notFoundResponse("Recipe was not found.");
-      }
+        if (!tags) {
+          return notFoundResponse("Recipe was not found.");
+        }
 
-      const images = imageService ?? createRecipeImageService(c.env);
-      try {
-        await images.deletePrefixBestEffort(`recipes/${userId}/${c.req.param("recipeId")}/`);
-      } catch {
-        // Best-effort cleanup must not affect the recipe deletion result.
-      }
+        return c.json(replaceRecipeTagsResponseSchema.parse({ tags }));
+      })
+      .delete("/:recipeId", requireAuth(auth), async (c) => {
+        const userId = c.get("userId");
+        const repository =
+          recipeRepository ??
+          createRecipeRepository(createDb(c.env.DATABASE_URL), {
+            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+            now: new Date(),
+          });
+        const deleted = await repository.deleteRecipe(userId, c.req.param("recipeId"));
 
-      return c.json(deleteRecipeResponseSchema.parse({ ok: true }));
-    });
+        if (!deleted) {
+          return notFoundResponse("Recipe was not found.");
+        }
+
+        const images = imageService ?? createRecipeImageService(c.env);
+        try {
+          await images.deletePrefixBestEffort(`recipes/${userId}/${c.req.param("recipeId")}/`);
+        } catch {
+          // Best-effort cleanup must not affect the recipe deletion result.
+        }
+
+        return c.json(deleteRecipeResponseSchema.parse({ ok: true }));
+      })
+  );
 };

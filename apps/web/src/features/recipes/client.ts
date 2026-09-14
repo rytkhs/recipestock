@@ -51,10 +51,14 @@ export const listRecipes = async ({
   cursor,
   query,
   sort,
+  tagIds = [],
+  untagged = false,
 }: {
   cursor?: string | null;
   query?: string;
   sort: RecipeListSort;
+  tagIds?: readonly string[];
+  untagged?: boolean;
 }) => {
   return parseApiResponse<ListRecipesResponse>(
     api.api.recipes.$get({
@@ -63,6 +67,8 @@ export const listRecipes = async ({
         ...(query ? { q: query } : {}),
         // 画面のURLと同じく、既定の新しい順は送らない。
         ...(sort === "oldest" ? { sort } : {}),
+        ...(tagIds.length > 0 ? { tagId: [...tagIds] } : {}),
+        ...(untagged ? { untagged: "true" } : {}),
         ...(cursor ? { cursor } : {}),
       },
     }),

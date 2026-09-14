@@ -78,6 +78,7 @@ const lightboxRecipeResponse = {
     },
     createdAt: "2026-05-26T00:00:00.000Z",
     updatedAt: "2026-05-26T00:00:00.000Z",
+    tags: [],
     locked: false,
   },
 };
@@ -99,6 +100,7 @@ const tomatoPastaDetailResponse = {
     source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
     createdAt: "2026-05-25T00:00:00.000Z",
     updatedAt: "2026-05-25T00:00:00.000Z",
+    tags: [],
     locked: false,
   },
 };
@@ -176,24 +178,27 @@ describe("RecipesRoute", () => {
     );
 
     await renderApp("/recipes", (queryClient) => {
-      queryClient.setQueryData(["recipes", { query: "", sort: "newest" }], {
-        pages: [
-          {
-            items: [
-              {
-                id: "recipe_123",
-                title: "Tomato pasta",
-                coverImageUrl: null,
-                sourceName: "Example Kitchen",
-                createdAt: "2026-05-25T00:00:00.000Z",
-                locked: false,
-              },
-            ],
-            nextCursor: null,
-          },
-        ],
-        pageParams: [null],
-      });
+      queryClient.setQueryData(
+        ["recipes", { query: "", sort: "newest", tagIds: [], untagged: false }],
+        {
+          pages: [
+            {
+              items: [
+                {
+                  id: "recipe_123",
+                  title: "Tomato pasta",
+                  coverImageUrl: null,
+                  sourceName: "Example Kitchen",
+                  createdAt: "2026-05-25T00:00:00.000Z",
+                  locked: false,
+                },
+              ],
+              nextCursor: null,
+            },
+          ],
+          pageParams: [null],
+        },
+      );
     });
 
     await expect(
@@ -583,6 +588,7 @@ describe("RecipesRoute", () => {
               source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
               createdAt: "2026-03-10T00:00:00.000Z",
               updatedAt: "2026-03-10T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -649,6 +655,7 @@ describe("RecipesRoute", () => {
               source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
               createdAt: "2026-05-25T00:00:00.000Z",
               updatedAt: "2026-05-25T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -1681,6 +1688,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -1798,6 +1806,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -1917,6 +1926,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -2063,6 +2073,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -2274,6 +2285,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -2295,6 +2307,7 @@ describe("RecipesRoute", () => {
           note: "仕上げにオリーブオイル。",
         },
         updatedAt: "2026-05-27T00:00:00.000Z",
+        tags: [],
       },
     };
     const updatedRecipeDetailResponse = {
@@ -2307,6 +2320,7 @@ describe("RecipesRoute", () => {
           yieldText: "3人分",
         },
         updatedAt: "2026-05-27T00:00:00.000Z",
+        tags: [],
       },
     };
     let currentRecipeResponse = recipeResponse;
@@ -2428,6 +2442,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -2492,6 +2507,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -2580,6 +2596,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -2621,6 +2638,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -2667,6 +2685,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -2713,6 +2732,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -2790,6 +2810,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -2806,6 +2827,7 @@ describe("RecipesRoute", () => {
                 title: "Potato salad",
               },
               updatedAt: "2026-05-27T00:00:00.000Z",
+              tags: [],
             },
           });
         }
@@ -2864,6 +2886,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };

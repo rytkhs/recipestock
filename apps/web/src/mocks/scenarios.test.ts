@@ -5,6 +5,7 @@ import {
   getRecipeResponseSchema,
   listRecipesResponseSchema,
   listShortcutCredentialsResponseSchema,
+  listTagsResponseSchema,
   recentImportJobsResponseSchema,
 } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
@@ -47,6 +48,22 @@ describe.each(
 
   it("shortcutCredentialsがListShortcutCredentialsResponseの形をしている", () => {
     expectValid(listShortcutCredentialsResponseSchema, state.shortcutCredentials);
+  });
+
+  it("tagsがListTagsResponseのタグの形をしている", () => {
+    expectValid(listTagsResponseSchema, {
+      tags: state.tags.map((tag) => ({ ...tag, recipeCount: 0 })),
+    });
+  });
+
+  it("recipeTagsは一覧にあるRecipeと、語彙にあるタグだけを指している", () => {
+    const recipeIds = new Set(state.recipes.map((recipe) => recipe.id));
+    const tagIds = new Set(state.tags.map((tag) => tag.id));
+
+    for (const [recipeId, attachedTagIds] of Object.entries(state.recipeTags)) {
+      expect(recipeIds.has(recipeId)).toBe(true);
+      expect(attachedTagIds.filter((tagId) => !tagIds.has(tagId))).toEqual([]);
+    }
   });
 
   it("importJobSourceTextsはテキストの取り込みjobだけを指している", () => {

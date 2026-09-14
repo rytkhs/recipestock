@@ -132,8 +132,9 @@ pnpm dev:mock
 
 | id | 内容 |
 | --- | --- |
-| `default` | Pro・26件(2ページ目あり) |
+| `default` | Pro・26件(2ページ目あり)・タグあり |
 | `empty` | レシピなし |
+| `no-tags` | タグを持たない(チップ列なし・詳細で定番候補) |
 | `free-locked` | フリープランで末尾がロック |
 | `limit-reached` | フリープランで保存上限ちょうど |
 | `list-error` | 一覧の取得失敗 |

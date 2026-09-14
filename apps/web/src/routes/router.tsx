@@ -1,4 +1,4 @@
-import { recipeListSortSchema } from "@recipestock/schemas";
+import { MAX_RECIPE_TAGS, recipeListSortSchema } from "@recipestock/schemas";
 import {
   createRootRoute,
   createRoute,
@@ -38,6 +38,7 @@ const RecipesIndexRoute = lazyRouteComponent(() => import("./recipes-index"), "R
 const NewRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "NewRecipeRoute");
 const EditRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "EditRecipeRoute");
 const RecipeDetailRoute = lazyRouteComponent(() => import("./recipe-detail"), "RecipeDetailRoute");
+const TagsRoute = lazyRouteComponent(() => import("./tags"), "TagsRoute");
 const SettingsIndexRoute = lazyRouteComponent(
   () => import("./settings-index"),
   "SettingsIndexRoute",
@@ -85,6 +86,10 @@ const ProtectedRouteSkeleton = () => {
 
   if (pathname === "/import/text") {
     return <ImportTextSkeleton />;
+  }
+
+  if (pathname === "/tags") {
+    return <LoadingStatus label="タグを読み込み中" />;
   }
 
   if (pathname === "/settings" || pathname.startsWith("/settings/")) {
@@ -217,6 +222,14 @@ const recipesSearchSchema = z.object({
     .transform((value) => String(value).trim() || undefined)
     .optional()
     .catch(undefined),
+  // 絞り込むタグのid。重複は除き、空なら載せない。読めない値は絞り込みなしに戻す。
+  tags: z
+    .array(z.string().min(1))
+    .max(MAX_RECIPE_TAGS)
+    .transform((tagIds) => (tagIds.length > 0 ? [...new Set(tagIds)] : undefined))
+    .optional()
+    .catch(undefined),
+  untagged: z.literal(true).optional().catch(undefined),
 });
 
 const recipesRoute = createRoute({
@@ -347,6 +360,15 @@ const settingsBillingRoute = createRoute({
   pendingMs: 0,
 });
 
+const tagsRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/tags",
+  component: TagsRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: () => <LoadingStatus label="タグを読み込み中" />,
+  pendingMs: 0,
+});
+
 const routeTree = rootRoute.addChildren([
   publicLayoutRoute.addChildren([indexRoute, loginRoute]),
   protectedLayoutRoute.addChildren([
@@ -356,6 +378,7 @@ const routeTree = rootRoute.addChildren([
     editRecipeRoute,
     importUrlRoute,
     importTextRoute,
+    tagsRoute,
     settingsRoute,
     settingsBillingRoute,
   ]),

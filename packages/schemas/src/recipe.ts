@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_RECIPE_TAGS, recipeTagSchema } from "./tag";
 
 export const MAX_RECIPE_REFERENCE_IMAGES = 20;
 export const MAX_RECIPE_STEP_IMAGES = 10;
@@ -128,6 +129,8 @@ export const recipeDetailSchema = z.object({
   source: recipeSourceSchema,
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
+  // 付けた順に並べる。
+  tags: z.array(recipeTagSchema),
   locked: z.literal(false),
 });
 
@@ -160,12 +163,25 @@ export const deleteRecipeResponseSchema = z.object({
 // 一覧は追加日（createdAt）で並べる。Freeのロック判定も同じ軸なので、どちらの向きでもロック中は一続きになる。
 export const recipeListSortSchema = z.enum(["newest", "oldest"]);
 
-export const listRecipesQuerySchema = z.object({
-  q: z.string().optional(),
-  sort: recipeListSortSchema.default("newest"),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
-  cursor: z.string().optional(),
-});
+export const listRecipesQuerySchema = z
+  .object({
+    q: z.string().optional(),
+    sort: recipeListSortSchema.default("newest"),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+    cursor: z.string().optional(),
+    // 指定したタグがすべて付いたRecipeに絞る。付いている個数で判定するので重複は除く。
+    tagId: z
+      .array(z.string().min(1))
+      .max(MAX_RECIPE_TAGS)
+      .default([])
+      .transform((tagIds) => [...new Set(tagIds)]),
+    // タグが1つも付いていないRecipeに絞る。タグの指定とは同時に使えない。
+    untagged: z.stringbool().default(false),
+  })
+  .refine((query) => !(query.untagged && query.tagId.length > 0), {
+    path: ["untagged"],
+    message: "untagged cannot be combined with tagId.",
+  });
 
 export const recipeListItemSchema = z.object({
   id: z.string().min(1),
