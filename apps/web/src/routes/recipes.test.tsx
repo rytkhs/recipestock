@@ -82,6 +82,27 @@ const lightboxRecipeResponse = {
   },
 };
 
+const tomatoPastaListItem = {
+  id: "recipe_123",
+  title: "Tomato pasta",
+  coverImageUrl: null,
+  sourceName: null,
+  createdAt: "2026-05-25T00:00:00.000Z",
+  locked: false,
+};
+
+const tomatoPastaDetailResponse = {
+  recipe: {
+    id: "recipe_123",
+    title: "Tomato pasta",
+    content: { title: "Tomato pasta", ingredientGroups: [], steps: [] },
+    source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
+    createdAt: "2026-05-25T00:00:00.000Z",
+    updatedAt: "2026-05-25T00:00:00.000Z",
+    locked: false,
+  },
+};
+
 const mockLightboxRecipeFetch = () =>
   mockFetch(
     async (input) => {
@@ -741,6 +762,202 @@ describe("RecipesRoute", () => {
       screen.findByRole("heading", { name: "Tomato pasta" }),
     ).resolves.toBeInTheDocument();
     expect(appRouter.state.location.searchStr).toBe("");
+  });
+
+  it("検索するとURLに検索語を残し、検索を消すとURLから外す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20" || input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.type(screen.getByLabelText("検索"), "tomato");
+    await userEvent.click(screen.getByRole("button", { name: "検索" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.searchStr).toBe("?q=tomato");
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "検索を消す" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.searchStr).toBe("");
+    });
+    expect(screen.getByLabelText("検索")).toHaveValue("");
+  });
+
+  it("URLで検索語を指定して開くと検索結果を読み込む", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes?q=tomato");
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("検索")).toHaveValue("tomato");
+    expect(findFetchCall(fetchMock, "/api/recipes?limit=20")).toBeUndefined();
+  });
+
+  it("数字だけの検索語もURLから文字列として読み込む", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&q=123") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes?q=123");
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("検索")).toHaveValue("123");
+    expect(findFetchCall(fetchMock, "/api/recipes?limit=20&q=123")).toBeDefined();
+  });
+
+  it("検索した一覧から詳細を開き、一覧へ戻るボタンで戻っても検索語を保つ", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?q=tomato");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
+    await screen.findByRole("button", { name: "操作メニュー" });
+    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("?q=tomato");
+    expect(screen.getByLabelText("検索")).toHaveValue("tomato");
+  });
+
+  it("検索した一覧から開いた詳細で削除すると、検索語を保って一覧に戻る", async () => {
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "DELETE") {
+          return jsonResponse({ ok: true });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        if (input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?q=tomato");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "操作メニュー" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /削除/ }));
+    const deleteDialog = await screen.findByRole("alertdialog", {
+      name: "レシピを削除しますか？",
+    });
+    await userEvent.click(within(deleteDialog).getByRole("button", { name: "削除" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/recipes");
+    });
+    expect(appRouter.state.location.searchStr).toBe("?q=tomato");
+  });
+
+  it("ヘッダーの一覧リンクで開き直すと検索語を外し、並び順は保つ", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (
+          input === "/api/recipes?limit=20&q=tomato&sort=oldest" ||
+          input === "/api/recipes?limit=20&sort=oldest"
+        ) {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?sort=oldest&q=tomato");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.click(screen.getByRole("link", { name: "レシピ一覧" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.searchStr).toBe("?sort=oldest");
+    });
+    expect(screen.getByLabelText("検索")).toHaveValue("");
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/recipes?limit=20&sort=oldest")).toBeDefined();
+    });
+  });
+
+  it("並び順を変えても検索語を保つ", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (
+          input === "/api/recipes?limit=20&q=tomato" ||
+          input === "/api/recipes?limit=20&q=tomato&sort=oldest"
+        ) {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?q=tomato");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.click(screen.getByRole("button", { name: "表示の設定" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "古い順" }));
+    await userEvent.keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(appRouter.state.location.search).toEqual({ q: "tomato", sort: "oldest" });
+    });
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/recipes?limit=20&q=tomato&sort=oldest")).toBeDefined();
+    });
   });
 
   it("表示メニューからリスト表示に切り替えられる", async () => {

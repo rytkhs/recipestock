@@ -39,6 +39,7 @@ import {
   recipesQueryKeys,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
+import { readRecipeListFilters } from "../features/recipes/list-search";
 
 const recipeDetailCoverImageProps = {
   decoding: "async",
@@ -113,7 +114,7 @@ export const RecipeDetailRoute = () => {
     mutationFn: () => deleteRecipe(recipeId),
     onSuccess: async () => {
       await syncDeletedRecipeCaches(queryClient, recipeId);
-      await navigate({ to: "/recipes" });
+      await navigate({ to: "/recipes", search: readRecipeListFilters() });
     },
   });
   const {
@@ -207,7 +208,7 @@ export const RecipeDetailRoute = () => {
             <ScreenTopBarIconButton
               aria-label="レシピ一覧へ戻る"
               onPress={() => {
-                void navigate({ to: "/recipes" });
+                void navigate({ to: "/recipes", search: readRecipeListFilters() });
               }}
             >
               <CaretLeft size={21} weight="bold" />
@@ -248,7 +249,7 @@ export const RecipeDetailRoute = () => {
           <ScreenTopBarIconButton
             aria-label="レシピ一覧へ戻る"
             onPress={() => {
-              void navigate({ to: "/recipes" });
+              void navigate({ to: "/recipes", search: readRecipeListFilters() });
             }}
           >
             <CaretLeft size={21} weight="bold" />

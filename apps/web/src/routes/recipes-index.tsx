@@ -59,7 +59,7 @@ import {
   recipesQueryKeys,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
-import { writeRecipeListSort } from "../features/recipes/list-sort";
+import { writeRecipeListFilters, writeRecipeListSort } from "../features/recipes/list-search";
 import { LockedShelfNotice, RecipeCard } from "../features/recipes/recipe-card";
 import { groupRecipesByPeriod, recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
 import {
@@ -298,12 +298,11 @@ const ImportJobIsland = () => {
 
 export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
-  const { sort = "newest" } = recipesRouteApi.useSearch();
+  const { sort = "newest", q: query = "" } = recipesRouteApi.useSearch();
   const navigate = recipesRouteApi.useNavigate();
-  const [searchInput, setSearchInput] = useState("");
+  const [searchInput, setSearchInput] = useState(query);
   const searchId = useId();
   const shelfId = useId();
-  const [query, setQuery] = useState("");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<RecipeViewMode>(readRecipeViewMode);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -316,6 +315,12 @@ export const RecipesIndexRoute = () => {
   useEffect(() => {
     writeRecipeListSort(sort);
   }, [sort]);
+
+  // 検索語は戻る操作で引き継ぐ。ヘッダーのリンクなどでURLから外れたら入力欄も合わせる。
+  useEffect(() => {
+    writeRecipeListFilters({ q: query || undefined });
+    setSearchInput(query);
+  }, [query]);
 
   const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage } =
     useInfiniteQuery({
@@ -360,19 +365,28 @@ export const RecipesIndexRoute = () => {
   const isSearchMiss = !isFetching && !error && recipes.length === 0 && query !== "";
   const isShelfEmpty = !isFetching && !error && recipes.length === 0 && query === "";
 
+  // 検索語も並び順もURLに持つ。戻る操作で条件が行き来しないようにreplaceし、別の条件の結果は先頭から見せる。
+  // ほかの条件は残したまま、変えたものだけを差し替える。
+  const changeQuery = (nextQuery: string) => {
+    if (nextQuery === query) {
+      return;
+    }
+
+    void navigate({ search: (prev) => ({ ...prev, q: nextQuery || undefined }), replace: true });
+    window.scrollTo({ top: 0 });
+  };
   const submitSearch = (event: { preventDefault: () => void }) => {
     event.preventDefault();
-    setQuery(searchInput.trim());
+    changeQuery(searchInput.trim());
   };
   const clearSearch = () => {
     setSearchInput("");
-    setQuery("");
+    changeQuery("");
   };
-  // 並び順はURLに持つ。戻る操作で並びが行き来しないようにreplaceし、別の並びは先頭から見せる。
   // 遷移より先に覚え、この遷移で描き直すヘッダーのリンクにも選んだ並び順を使わせる。
   const changeSort = (nextSort: RecipeListSort) => {
     writeRecipeListSort(nextSort);
-    void navigate({ search: { sort: nextSort }, replace: true });
+    void navigate({ search: (prev) => ({ ...prev, sort: nextSort }), replace: true });
     window.scrollTo({ top: 0 });
   };
   const loadNextPage = useCallback(() => {
