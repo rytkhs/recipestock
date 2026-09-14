@@ -21,6 +21,10 @@ _Avoid_: Draft, saved draft, temporary recipe
 Metadata describing where a **Recipe** came from, such as the source URL, normalized source URL, and source name. **Source** is stored outside **RecipeContent**.
 _Avoid_: Origin, reference, citation
 
+**Tag**:
+A user-owned label attached to **Recipes** to narrow the recipe list. Tags form the user's vocabulary: a **Tag** exists independently of any **Recipe** and is renamed, merged, or deleted as a whole. A **Tag** is not part of **RecipeContent** or **Source**.
+_Avoid_: Category, Folder, Label
+
 **Import Job**:
 A user-requested attempt to create one **Recipe** from an external source, such as a URL or pasted text. An **Import Job** may finish successfully, fail, or be canceled before producing a **Recipe**.
 _Avoid_: Import task, background import

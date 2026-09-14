@@ -70,6 +70,7 @@ apps/api/src/
     auth.ts
     import.ts
     recipes.ts
+    tags.ts
     images.ts
     billing.ts
     stripe.ts
