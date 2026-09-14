@@ -14,6 +14,7 @@ import {
   supportsPushNotifications,
 } from "../features/push-notifications/browser";
 import { PushNotificationSettingsCard } from "../features/push-notifications/settings-card";
+import { readRecipeListFilters } from "../features/recipes/list-search";
 import { changeEmail, changePassword, signOut, useAuthSession } from "../lib/auth";
 import { clearUserScopedCache } from "../lib/query-cache";
 import { useViewer } from "../lib/viewer";
@@ -113,7 +114,7 @@ export const SettingsIndexRoute = () => {
           <ScreenTopBarIconButton
             aria-label="レシピ一覧へ戻る"
             onPress={() => {
-              void navigate({ to: "/recipes" });
+              void navigate({ to: "/recipes", search: readRecipeListFilters() });
             }}
           >
             <CaretLeft size={21} weight="bold" />

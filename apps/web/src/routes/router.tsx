@@ -24,7 +24,7 @@ import {
   SettingsSkeleton,
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
-import { readRecipeListSort } from "../features/recipes/list-sort";
+import { readRecipeListSort } from "../features/recipes/list-search";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { useProtectedAccess } from "../lib/protected-access";
 import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
@@ -211,6 +211,12 @@ const recipesSearchSchema = z.object({
   // 既定の新しい順はURLに載せない。読めない値はエラーにせず新しい順に戻す。
   // 未指定には既定値を埋めず、遷移先で並び順を指定したかを下のmiddlewareで見分ける。
   sort: recipeListSortSchema.optional().catch("newest"),
+  // URLの読み取りは値をJSONとして読むので、数字だけの検索語は数値で届く。文字列に戻して受け、空は載せない。
+  q: z
+    .union([z.string(), z.number(), z.boolean()])
+    .transform((value) => String(value).trim() || undefined)
+    .optional()
+    .catch(undefined),
 });
 
 const recipesRoute = createRoute({
@@ -221,6 +227,7 @@ const recipesRoute = createRoute({
     middlewares: [
       stripSearchParams({ sort: "newest" }),
       // 並び順を指定せずに一覧へ移るときは、一覧で最後に使った並び順を引き継ぐ。
+      // 絞り込み条件はここでは埋めず、戻る操作だけがsearchで渡す（ADR 0021）。
       // stripSearchParamsより内側に置き、指定された新しい順が消される前に判定する。
       ({ search, next }) => {
         const result = next(search);

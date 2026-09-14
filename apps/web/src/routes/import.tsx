@@ -7,6 +7,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
+import { readRecipeListFilters } from "../features/recipes/list-search";
 
 export type ImportUrlSearch = {
   text?: string;
@@ -72,7 +73,7 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
           <ScreenTopBarIconButton
             aria-label="レシピ一覧へ戻る"
             onPress={() => {
-              void navigate({ to: "/recipes" });
+              void navigate({ to: "/recipes", search: readRecipeListFilters() });
             }}
           >
             <CaretLeft size={21} weight="bold" />

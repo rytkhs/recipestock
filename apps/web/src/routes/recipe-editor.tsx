@@ -21,6 +21,7 @@ import {
   removeRecipeDetail,
   updateRecipe,
 } from "../features/recipes";
+import { readRecipeListFilters } from "../features/recipes/list-search";
 
 export const NewRecipeRoute = () => {
   const navigate = useNavigate();
@@ -45,7 +46,7 @@ export const NewRecipeRoute = () => {
       submitError={submitError}
       submitLabel="保存"
       title="新しいレシピを追加"
-      onClose={() => void navigate({ to: "/recipes" })}
+      onClose={() => void navigate({ to: "/recipes", search: readRecipeListFilters() })}
       onSubmit={onSubmit}
     />
   );

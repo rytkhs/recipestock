@@ -321,6 +321,69 @@ describe("Import routes", () => {
     ]);
   });
 
+  it("戻るボタンは一覧の検索語を保ち、取り込みを送信した後の一覧は検索語を外す", async () => {
+    mockFetch(
+      async (input) => {
+        const path = getRequestPath(input);
+
+        if (path === "/api/import/url/jobs") {
+          return jsonResponse(
+            {
+              kind: "created",
+              job: {
+                id: "job_123",
+                kind: "url",
+                status: "queued",
+                url: "https://example.com/recipes/tomato",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: null,
+                finishedAt: null,
+              },
+            },
+            { status: 202 },
+          );
+        }
+
+        if (path === "/api/recipes?limit=20" || path === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (path === "/api/import/jobs/recent") {
+          return jsonResponse({ jobs: [] });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?q=tomato");
+    await screen.findByText("「tomato」に一致するレシピはありません");
+
+    await act(async () => {
+      await appRouter.navigate({ href: "/import/url" });
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await vi.waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/recipes");
+    });
+    expect(appRouter.state.location.searchStr).toBe("?q=tomato");
+
+    await act(async () => {
+      await appRouter.navigate({ href: "/import/url" });
+    });
+    await userEvent.type(await screen.findByLabelText("URL"), "https://example.com/recipes/tomato");
+    await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
+
+    await vi.waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/recipes");
+    });
+    expect(appRouter.state.location.searchStr).toBe("");
+  });
+
   it("URL import job作成に失敗したら入力画面にエラーを表示する", async () => {
     mockFetch(
       async (input) => {

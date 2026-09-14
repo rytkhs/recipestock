@@ -17,6 +17,7 @@ import {
   importJobQueryKeys,
   retryImportTextJob,
 } from "../features/import-jobs";
+import { readRecipeListFilters } from "../features/recipes/list-search";
 
 export type ImportTextSearch = {
   fromJob?: string;
@@ -122,7 +123,7 @@ const ImportTextForm = ({
           <ScreenTopBarIconButton
             aria-label="レシピ一覧へ戻る"
             onPress={() => {
-              void navigate({ to: "/recipes" });
+              void navigate({ to: "/recipes", search: readRecipeListFilters() });
             }}
           >
             <CaretLeft size={21} weight="bold" />
