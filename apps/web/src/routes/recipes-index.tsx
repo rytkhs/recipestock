@@ -352,17 +352,20 @@ export const RecipesIndexRoute = () => {
   const untagged = untaggedInUrl === true;
   const requestedTagIds = untagged ? noTagIds : requestedTagIdsInUrl;
   // 削除や統合で消えたタグのidが、URLや戻る操作で残ることがある。タグ一覧を読んだところで外す。
+  // 読み直している間のキャッシュには作ったばかりのタグがないことがあるので、読み終えた一覧でだけ判定する。
+  const isTagsSettled = tagsQuery.isSuccess && !tagsQuery.isFetching;
   const tagIds = useMemo(() => {
-    if (!tagsQuery.data) {
+    if (!isTagsSettled || !tagsQuery.data) {
       return requestedTagIds;
     }
 
     const knownTagIds = new Set(tagsQuery.data.map((tag) => tag.id));
     return requestedTagIds.filter((tagId) => knownTagIds.has(tagId));
-  }, [requestedTagIds, tagsQuery.data]);
+  }, [isTagsSettled, requestedTagIds, tagsQuery.data]);
   const hasUnknownTagIds = tagIds.length !== requestedTagIds.length;
-  // 消えたidかどうかはタグ一覧を読むまで分からないので、それまでは絞った一覧を取りに行かない。
-  const isWaitingForTags = requestedTagIds.length > 0 && tagsQuery.isPending;
+  // 消えたidかどうかはタグ一覧を読み終えるまで分からないので、それまでは絞った一覧を取りに行かない。
+  // タグ一覧を読めなかったときは、URLのidのまま取りに行く。
+  const isWaitingForTags = requestedTagIds.length > 0 && !isTagsSettled && !tagsQuery.isError;
 
   useEffect(() => {
     writeRecipeViewMode(viewMode);

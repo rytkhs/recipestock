@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { tagsQueryKeys } from "../features/tags";
 import {
   findFetchCall,
   getRequestPath,
@@ -186,6 +187,46 @@ describe("タグ", () => {
       expect(
         fetchMock.mock.calls.some(([input]) => getRequestPath(input).includes("tag_gone")),
       ).toBe(false);
+    });
+
+    it("古いタグ一覧がキャッシュにあっても、読み直してから新しいタグのidで絞り込む", async () => {
+      const fetchMock = mockFetch(
+        async (input) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/tags") {
+            return jsonResponse({
+              tags: [
+                { id: "tag_1", name: "鶏肉", recipeCount: 1 },
+                { id: "tag_new", name: "作り置き", recipeCount: 1 },
+              ],
+            });
+          }
+
+          if (path === "/api/recipes?limit=20&tagId=tag_new") {
+            return jsonResponse({
+              items: [listItem("recipe_1", "Tomato pasta")],
+              nextCursor: null,
+            });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      // 詳細で新しいタグを付け、そのタグから一覧を開いたときは、キャッシュにそのタグがまだない。
+      const { appRouter } = await renderApp(recipesPathWithTags(["tag_new"]), (queryClient) => {
+        queryClient.setQueryData<TagFixture[]>(tagsQueryKeys.all(), [
+          { id: "tag_1", name: "鶏肉", recipeCount: 1 },
+        ]);
+      });
+
+      await expect(
+        screen.findByRole("heading", { name: "Tomato pasta" }),
+      ).resolves.toBeInTheDocument();
+      expect(appRouter.state.location.search).toEqual({ tags: ["tag_new"] });
+      expect(findFetchCall(fetchMock, "/api/recipes?limit=20")).toBeUndefined();
     });
 
     it("タグを1つも持たない利用者にはチップ列を出さない", async () => {
