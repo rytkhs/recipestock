@@ -69,132 +69,132 @@ type RecipeSeed = {
   title: string;
   sourceName: string | null;
   sourceUrl: string | null;
-  /** 更新日を「今日から何日前か」で置く。棚の期間見出しが複数出るようにばらけさせている。 */
-  updatedDaysAgo: number;
+  /** 追加日を「今日から何日前か」で置く。棚の期間見出しが複数出るようにばらけさせている。 */
+  createdDaysAgo: number;
 };
 
-// 1ページ20件なので、既定の取得でも2ページ目が出る件数を用意する。
+// APIの既定と同じく追加が新しい順に並べる。1ページ20件なので、既定の取得でも2ページ目が出る件数を用意する。
 const recipeSeeds: RecipeSeed[] = [
   {
     title: "鶏むね肉のみぞれ煮",
     sourceName: "クックパッド",
     sourceUrl: "https://cookpad.com/recipe/mock0001",
-    updatedDaysAgo: 0,
+    createdDaysAgo: 0,
   },
   {
     title: "基本のポテトサラダ",
     sourceName: "白ごはん.com",
     sourceUrl: "https://www.sirogohan.com/recipe/potesara/",
-    updatedDaysAgo: 0,
+    createdDaysAgo: 0,
   },
   {
     title: "台湾まぜそば",
     sourceName: "YouTube",
     sourceUrl: "https://www.youtube.com/watch?v=mock0003",
-    updatedDaysAgo: 1,
+    createdDaysAgo: 1,
   },
   {
     title: "トマトとモッツァレラの冷製パスタ",
     sourceName: "Instagram",
     sourceUrl: "https://www.instagram.com/p/mock0004/",
-    updatedDaysAgo: 2,
+    createdDaysAgo: 2,
   },
   {
     title: "豚バラ大根",
     sourceName: "クラシル",
     sourceUrl: "https://www.kurashiru.com/recipes/mock0005",
-    updatedDaysAgo: 3,
+    createdDaysAgo: 3,
   },
-  { title: "きのこたっぷりクリームリゾット", sourceName: null, sourceUrl: null, updatedDaysAgo: 9 },
-  { title: "さばの味噌煮", sourceName: "『和食の基本』", sourceUrl: null, updatedDaysAgo: 11 },
+  { title: "きのこたっぷりクリームリゾット", sourceName: null, sourceUrl: null, createdDaysAgo: 9 },
+  { title: "さばの味噌煮", sourceName: "『和食の基本』", sourceUrl: null, createdDaysAgo: 11 },
   {
     title: "ガパオライス",
     sourceName: "YouTube",
     sourceUrl: "https://www.youtube.com/watch?v=mock0008",
-    updatedDaysAgo: 13,
+    createdDaysAgo: 13,
   },
-  { title: "キャロットラペ", sourceName: null, sourceUrl: null, updatedDaysAgo: 15 },
+  { title: "キャロットラペ", sourceName: null, sourceUrl: null, createdDaysAgo: 15 },
   {
     title: "牛すじ煮込み",
     sourceName: "デリッシュキッチン",
     sourceUrl: "https://delishkitchen.tv/recipes/mock0010",
-    updatedDaysAgo: 18,
+    createdDaysAgo: 18,
   },
   {
     title: "あさりの酒蒸し",
     sourceName: "白ごはん.com",
     sourceUrl: "https://www.sirogohan.com/recipe/asari/",
-    updatedDaysAgo: 21,
+    createdDaysAgo: 21,
   },
   {
     title: "抹茶のパウンドケーキ",
     sourceName: "Instagram",
     sourceUrl: "https://www.instagram.com/p/mock0012/",
-    updatedDaysAgo: 24,
+    createdDaysAgo: 24,
   },
   {
     title: "麻婆豆腐",
     sourceName: "YouTube",
     sourceUrl: "https://www.youtube.com/watch?v=mock0013",
-    updatedDaysAgo: 38,
+    createdDaysAgo: 38,
   },
   {
     title: "じゃがいもとベーコンのガレット",
     sourceName: null,
     sourceUrl: null,
-    updatedDaysAgo: 41,
+    createdDaysAgo: 41,
   },
   {
     title: "鮭とほうれん草のクリームパスタ",
     sourceName: "クラシル",
     sourceUrl: "https://www.kurashiru.com/recipes/mock0015",
-    updatedDaysAgo: 44,
+    createdDaysAgo: 44,
   },
-  { title: "かぼちゃの煮物", sourceName: "『和食の基本』", sourceUrl: null, updatedDaysAgo: 47 },
+  { title: "かぼちゃの煮物", sourceName: "『和食の基本』", sourceUrl: null, createdDaysAgo: 47 },
   {
     title: "スパイスチキンカレー",
     sourceName: "YouTube",
     sourceUrl: "https://www.youtube.com/watch?v=mock0017",
-    updatedDaysAgo: 51,
+    createdDaysAgo: 51,
   },
   {
     title: "ブロッコリーとエビのアヒージョ",
     sourceName: "Instagram",
     sourceUrl: "https://www.instagram.com/p/mock0018/",
-    updatedDaysAgo: 55,
+    createdDaysAgo: 55,
   },
   {
     title: "肉じゃが",
     sourceName: "白ごはん.com",
     sourceUrl: "https://www.sirogohan.com/recipe/nikujaga/",
-    updatedDaysAgo: 58,
+    createdDaysAgo: 58,
   },
-  { title: "しらすとねぎの和風ピザ", sourceName: null, sourceUrl: null, updatedDaysAgo: 62 },
+  { title: "しらすとねぎの和風ピザ", sourceName: null, sourceUrl: null, createdDaysAgo: 62 },
   {
     title: "手羽元のさっぱり煮",
     sourceName: "クックパッド",
     sourceUrl: "https://cookpad.com/recipe/mock0021",
-    updatedDaysAgo: 76,
+    createdDaysAgo: 76,
   },
-  { title: "きんぴらごぼう", sourceName: "『和食の基本』", sourceUrl: null, updatedDaysAgo: 80 },
+  { title: "きんぴらごぼう", sourceName: "『和食の基本』", sourceUrl: null, createdDaysAgo: 80 },
   {
     title: "ビーフストロガノフ",
     sourceName: "デリッシュキッチン",
     sourceUrl: "https://delishkitchen.tv/recipes/mock0023",
-    updatedDaysAgo: 84,
+    createdDaysAgo: 84,
   },
-  { title: "焼きねぎのマリネ", sourceName: null, sourceUrl: null, updatedDaysAgo: 88 },
+  { title: "焼きねぎのマリネ", sourceName: null, sourceUrl: null, createdDaysAgo: 88 },
   {
     title: "バスクチーズケーキ",
     sourceName: "Instagram",
     sourceUrl: "https://www.instagram.com/p/mock0025/",
-    updatedDaysAgo: 112,
+    createdDaysAgo: 112,
   },
   {
     title: "参鶏湯風スープ",
     sourceName: "YouTube",
     sourceUrl: "https://www.youtube.com/watch?v=mock0026",
-    updatedDaysAgo: 120,
+    createdDaysAgo: 120,
   },
 ];
 
@@ -232,8 +232,7 @@ export const recipeListFixture = ({
       title: seed.title,
       coverImageUrl: withCoverImage ? recipeThumbnailUrl(coverKey) : null,
       sourceName: seed.sourceName,
-      createdAt: daysAgoIso(seed.updatedDaysAgo + 3, now),
-      updatedAt: daysAgoIso(seed.updatedDaysAgo, now),
+      createdAt: daysAgoIso(seed.createdDaysAgo, now),
       locked: unlockedCount === undefined ? false : index >= unlockedCount,
     };
   });
@@ -304,8 +303,8 @@ export const recipeDetailFixture = (
       normalizedSourceUrl: seed.sourceUrl,
       sourceName: seed.sourceName,
     },
-    createdAt: daysAgoIso(seed.updatedDaysAgo + 3, now),
-    updatedAt: daysAgoIso(seed.updatedDaysAgo, now),
+    createdAt: daysAgoIso(seed.createdDaysAgo, now),
+    updatedAt: daysAgoIso(seed.createdDaysAgo, now),
     locked: false,
     ...overrides,
   };

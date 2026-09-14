@@ -322,11 +322,13 @@ describe("listRecipesSchema", () => {
     expect(
       listRecipesQuerySchema.parse({
         q: "tomato kitchen",
+        sort: "oldest",
         limit: "10",
         cursor: "cursor_123",
       }),
     ).toEqual({
       q: "tomato kitchen",
+      sort: "oldest",
       limit: 10,
       cursor: "cursor_123",
     });
@@ -340,13 +342,17 @@ describe("listRecipesSchema", () => {
             coverImageUrl: null,
             sourceName: "Example Kitchen",
             createdAt: "2026-05-25T00:00:00.000Z",
-            updatedAt: "2026-05-26T00:00:00.000Z",
             locked: false,
           },
         ],
         nextCursor: null,
       }).success,
     ).toBe(true);
+  });
+
+  it("並び順は省略すると新しい順になり、追加日の2つ以外は受け入れない", () => {
+    expect(listRecipesQuerySchema.parse({})).toEqual({ sort: "newest", limit: 20 });
+    expect(listRecipesQuerySchema.safeParse({ sort: "updated" }).success).toBe(false);
   });
 });
 

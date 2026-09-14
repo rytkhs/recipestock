@@ -57,7 +57,6 @@ describe("Recipe list routes", () => {
                 title: "Tomato pasta",
                 sourceName: "Example Kitchen",
                 createdAt: new Date("2026-05-25T00:00:00.000Z"),
-                updatedAt: new Date("2026-05-26T00:00:00.000Z"),
               },
             ],
             nextCursor: "next_cursor",
@@ -77,6 +76,7 @@ describe("Recipe list routes", () => {
       {
         userId: "user_123",
         searchTerms: ["tomato", "kitchen"],
+        sort: "newest",
         limit: 10,
         cursor: null,
       },
@@ -89,7 +89,6 @@ describe("Recipe list routes", () => {
           coverImageUrl: null,
           sourceName: "Example Kitchen",
           createdAt: "2026-05-25T00:00:00.000Z",
-          updatedAt: "2026-05-26T00:00:00.000Z",
           locked: false,
         },
       ],
@@ -97,7 +96,75 @@ describe("Recipe list routes", () => {
     });
   });
 
-  it("Freeユーザーは最新5件以外のレシピがlockedとして一覧に表示される", async () => {
+  it("並び順を指定してレシピ一覧を取得できる", async () => {
+    const calls: unknown[] = [];
+    const testApp = createSilentTestApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123", email: "user@example.com" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: async (params) => {
+          calls.push(params);
+          return { items: [], nextCursor: null };
+        },
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes?sort=oldest", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([
+      {
+        userId: "user_123",
+        searchTerms: [],
+        sort: "oldest",
+        limit: 20,
+        cursor: null,
+      },
+    ]);
+  });
+
+  it("並び順が不正な場合はvalidation_failedを返す", async () => {
+    const testApp = createSilentTestApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123", email: "user@example.com" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+    });
+
+    const response = await testApp.request("/api/recipes?sort=updated", undefined, {
+      APP_ENV: "development",
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "validation_failed" },
+    });
+  });
+
+  it("Freeユーザーは新しく保存した5件以外のレシピがlockedとして一覧に表示される", async () => {
     const testApp = createSilentTestApp({
       auth: {
         getSession: async () => ({
@@ -118,7 +185,6 @@ describe("Recipe list routes", () => {
               sourceName: null,
               coverImageObjectKey: "recipes/user_123/recipe_5/cover.webp",
               createdAt: new Date("2026-05-25T00:00:00.000Z"),
-              updatedAt: new Date("2026-05-30T00:00:00.000Z"),
               locked: false,
             },
             {
@@ -127,7 +193,6 @@ describe("Recipe list routes", () => {
               sourceName: "Example Kitchen",
               coverImageObjectKey: "recipes/user_123/recipe_6/cover.webp",
               createdAt: new Date("2026-05-24T00:00:00.000Z"),
-              updatedAt: new Date("2026-05-24T00:00:00.000Z"),
               locked: true,
             },
           ],
@@ -151,7 +216,6 @@ describe("Recipe list routes", () => {
           coverImageUrl: "/api/images/thumbnail/v1/recipes/user_123/recipe_5/cover.webp",
           sourceName: null,
           createdAt: "2026-05-25T00:00:00.000Z",
-          updatedAt: "2026-05-30T00:00:00.000Z",
           locked: false,
         },
         {
@@ -160,7 +224,6 @@ describe("Recipe list routes", () => {
           coverImageUrl: null,
           sourceName: "Example Kitchen",
           createdAt: "2026-05-24T00:00:00.000Z",
-          updatedAt: "2026-05-24T00:00:00.000Z",
           locked: true,
         },
       ],

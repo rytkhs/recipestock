@@ -1,3 +1,4 @@
+import { recipeListSortSchema } from "@recipestock/schemas";
 import {
   createRootRoute,
   createRoute,
@@ -5,10 +6,12 @@ import {
   lazyRouteComponent,
   Outlet,
   RouterProvider,
+  stripSearchParams,
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
+import { z } from "zod";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { Header, MobileAddRecipeFab } from "../components/header";
 import {
@@ -21,6 +24,7 @@ import {
   SettingsSkeleton,
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
+import { readRecipeListSort } from "../features/recipes/list-sort";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { useProtectedAccess } from "../lib/protected-access";
 import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
@@ -60,7 +64,6 @@ const ImportTextRoute = withPreload(
   ({ search }: { search: ImportTextSearch }) => <ImportTextScreen search={search} />,
   ImportTextScreen.preload,
 );
-
 const ProtectedRouteSkeleton = () => {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
@@ -204,9 +207,27 @@ const indexRoute = createRoute({
   ),
 });
 
+const recipesSearchSchema = z.object({
+  // 既定の新しい順はURLに載せない。読めない値はエラーにせず新しい順に戻す。
+  // 未指定には既定値を埋めず、遷移先で並び順を指定したかを下のmiddlewareで見分ける。
+  sort: recipeListSortSchema.optional().catch("newest"),
+});
+
 const recipesRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/recipes",
+  validateSearch: recipesSearchSchema,
+  search: {
+    middlewares: [
+      stripSearchParams({ sort: "newest" }),
+      // 並び順を指定せずに一覧へ移るときは、一覧で最後に使った並び順を引き継ぐ。
+      // stripSearchParamsより内側に置き、指定された新しい順が消される前に判定する。
+      ({ search, next }) => {
+        const result = next(search);
+        return { ...result, sort: result.sort ?? readRecipeListSort() };
+      },
+    ],
+  },
   component: RecipesIndexRoute,
   errorComponent: RouteChunkError,
   pendingComponent: RecipeListSkeleton,

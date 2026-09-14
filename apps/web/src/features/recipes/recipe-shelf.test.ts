@@ -1,15 +1,14 @@
 import { type RecipeListItem } from "@recipestock/schemas";
-import { formatRecipeUpdatedAt, groupRecipesByPeriod } from "./recipe-shelf";
+import { formatRecipeCreatedAt, groupRecipesByPeriod } from "./recipe-shelf";
 
 const now = new Date(2026, 4, 26, 12, 0, 0);
 
-const recipe = (id: string, updatedAt: Date): RecipeListItem => ({
+const recipe = (id: string, createdAt: Date): RecipeListItem => ({
   id,
   title: id,
   coverImageUrl: null,
   sourceName: null,
-  createdAt: updatedAt.toISOString(),
-  updatedAt: updatedAt.toISOString(),
+  createdAt: createdAt.toISOString(),
   locked: false,
 });
 
@@ -38,6 +37,24 @@ describe("groupRecipesByPeriod", () => {
     expect(sections.map((section) => section.label)).toEqual(["今週", "今月", "3月"]);
   });
 
+  it("古い順に並んでいても同じ期間のRecipeを1つの区切りにまとめる", () => {
+    const sections = groupRecipesByPeriod(
+      [
+        recipe("march", new Date(2026, 2, 10)),
+        recipe("this_month_1", new Date(2026, 4, 12)),
+        recipe("this_month_2", new Date(2026, 4, 16)),
+        recipe("this_week", now),
+      ],
+      now,
+    );
+
+    expect(sections.map((section) => [section.label, section.recipes.length])).toEqual([
+      ["3月", 1],
+      ["今月", 2],
+      ["今週", 1],
+    ]);
+  });
+
   it("前の年の区切りには年を付ける", () => {
     const sections = groupRecipesByPeriod([recipe("last_year", new Date(2025, 10, 2))], now);
 
@@ -45,22 +62,22 @@ describe("groupRecipesByPeriod", () => {
   });
 
   it("日付が読めないRecipeも区切りに載せる", () => {
-    const broken = { ...recipe("broken", now), updatedAt: "not-a-date" };
+    const broken = { ...recipe("broken", now), createdAt: "not-a-date" };
 
     expect(groupRecipesByPeriod([broken], now)[0].label).toBe("日付不明");
   });
 });
 
-describe("formatRecipeUpdatedAt", () => {
+describe("formatRecipeCreatedAt", () => {
   it("同じ年は月日だけを出す", () => {
-    expect(formatRecipeUpdatedAt(new Date(2026, 4, 26).toISOString(), now)).toBe("5月26日");
+    expect(formatRecipeCreatedAt(new Date(2026, 4, 26).toISOString(), now)).toBe("5月26日");
   });
 
   it("違う年は年から出す", () => {
-    expect(formatRecipeUpdatedAt(new Date(2025, 10, 2).toISOString(), now)).toBe("2025年11月2日");
+    expect(formatRecipeCreatedAt(new Date(2025, 10, 2).toISOString(), now)).toBe("2025年11月2日");
   });
 
   it("日付が読めないときは何も出さない", () => {
-    expect(formatRecipeUpdatedAt("not-a-date", now)).toBe("");
+    expect(formatRecipeCreatedAt("not-a-date", now)).toBe("");
   });
 });

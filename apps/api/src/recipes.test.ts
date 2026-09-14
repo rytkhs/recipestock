@@ -42,7 +42,7 @@ describe("normalizeRecipeSource", () => {
 });
 
 describe("isRecipeLockedForPlan", () => {
-  it("Freeユーザーは最新5件に含まれないRecipeをロックする", () => {
+  it("Freeユーザーは開けておく5件に含まれないRecipeをロックする", () => {
     expect(
       isRecipeLockedForPlan({
         plan: "free",
@@ -76,8 +76,26 @@ describe("createRecipeRepository", () => {
       repository.listRecipes({
         userId: "user_123",
         searchTerms: [],
+        sort: "newest",
         limit: 20,
         cursor: "not-base64",
+      }),
+    ).rejects.toThrow(InvalidRecipeListCursorError);
+  });
+
+  it("並び順の違う一覧cursorは入力エラーとして扱う", async () => {
+    const repository = createRecipeRepository({} as never, planSyncOptions);
+    const oldestCursor = btoa(
+      JSON.stringify({ sort: "oldest", createdAt: "2026-05-26T00:00:00.000Z", id: "recipe_123" }),
+    );
+
+    await expect(
+      repository.listRecipes({
+        userId: "user_123",
+        searchTerms: [],
+        sort: "newest",
+        limit: 20,
+        cursor: oldestCursor,
       }),
     ).rejects.toThrow(InvalidRecipeListCursorError);
   });

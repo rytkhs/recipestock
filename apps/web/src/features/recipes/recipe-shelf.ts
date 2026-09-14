@@ -13,8 +13,8 @@ export type RecipeShelfSection = {
   recipes: RecipeListItem[];
 };
 
-// 一覧APIはupdatedAt降順で返す。見出しも同じ軸で切らないと区切りが飛び飛びになるので、
-// createdAtではなくupdatedAtで期間を決める。
+// 一覧APIは追加日（createdAt）で並べて返す。見出しも同じ軸で切るので、
+// 新しい順でも古い順でも同じ期間のRecipeは一続きになる。
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
 const startOfWeek = (now: Date) => {
@@ -25,26 +25,26 @@ const startOfWeek = (now: Date) => {
   return start;
 };
 
-const resolvePeriod = (updatedAt: Date, now: Date) => {
-  if (Number.isNaN(updatedAt.getTime())) {
+const resolvePeriod = (createdAt: Date, now: Date) => {
+  if (Number.isNaN(createdAt.getTime())) {
     return { key: "unknown", label: "日付不明" };
   }
 
-  if (updatedAt.getTime() >= startOfWeek(now).getTime()) {
+  if (createdAt.getTime() >= startOfWeek(now).getTime()) {
     return { key: "this-week", label: "今週" };
   }
 
-  const isSameYear = updatedAt.getFullYear() === now.getFullYear();
+  const isSameYear = createdAt.getFullYear() === now.getFullYear();
 
-  if (isSameYear && updatedAt.getMonth() === now.getMonth()) {
+  if (isSameYear && createdAt.getMonth() === now.getMonth()) {
     return { key: "this-month", label: "今月" };
   }
 
-  const month = updatedAt.getMonth() + 1;
+  const month = createdAt.getMonth() + 1;
 
   return {
-    key: `${updatedAt.getFullYear()}-${month}`,
-    label: isSameYear ? `${month}月` : `${updatedAt.getFullYear()}年${month}月`,
+    key: `${createdAt.getFullYear()}-${month}`,
+    label: isSameYear ? `${month}月` : `${createdAt.getFullYear()}年${month}月`,
   };
 };
 
@@ -55,7 +55,7 @@ export const groupRecipesByPeriod = (
   const sections: RecipeShelfSection[] = [];
 
   for (const recipe of recipes) {
-    const { key, label } = resolvePeriod(new Date(recipe.updatedAt), now);
+    const { key, label } = resolvePeriod(new Date(recipe.createdAt), now);
     const currentSection = sections.at(-1);
 
     if (currentSection?.key === key) {
@@ -69,8 +69,8 @@ export const groupRecipesByPeriod = (
   return sections;
 };
 
-export const formatRecipeUpdatedAt = (updatedAt: string, now = new Date()) => {
-  const date = new Date(updatedAt);
+export const formatRecipeCreatedAt = (createdAt: string, now = new Date()) => {
+  const date = new Date(createdAt);
 
   if (Number.isNaN(date.getTime())) {
     return "";

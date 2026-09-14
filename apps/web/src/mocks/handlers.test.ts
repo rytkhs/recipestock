@@ -83,7 +83,7 @@ describe("mock handlers", () => {
     });
   });
 
-  it("更新したRecipeは既存画像を保ったまま詳細と一覧に反映され、一覧の先頭に来る", async () => {
+  it("更新したRecipeは既存画像を保ったまま詳細と一覧に反映され、一覧での位置は変わらない", async () => {
     const handlers = setup();
     const before = await getRecipe(handlers, "recipe_003");
     const coverKey = before.content.coverImage?.objectKey;
@@ -109,8 +109,13 @@ describe("mock handlers", () => {
     expect(after.content.steps).toEqual([{ text: "混ぜる。", images: [] }]);
     expect(after.createdAt).toBe(before.createdAt);
 
-    const [first] = (await listFirstPage(handlers)).items;
-    expect(first).toMatchObject({ id: "recipe_003", title: "編集したタイトル" });
+    const { items } = await listFirstPage(handlers);
+    expect(items.map((item) => item.id).slice(0, 3)).toEqual([
+      "recipe_001",
+      "recipe_002",
+      "recipe_003",
+    ]);
+    expect(items[2]).toMatchObject({ title: "編集したタイトル" });
   });
 
   it("保存済みにない既存画像キーでの更新は422になる", async () => {

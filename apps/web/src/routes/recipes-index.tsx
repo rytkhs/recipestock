@@ -4,14 +4,15 @@ import {
   CookingPot,
   List,
   MagnifyingGlass,
+  SlidersHorizontal,
   SquaresFour,
   UserCircle,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { type RecentImportJobsResponse } from "@recipestock/schemas";
+import { type RecentImportJobsResponse, type RecipeListSort } from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -24,6 +25,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   InputGroup,
@@ -32,7 +42,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { RecipeCardSkeleton } from "../components/loading";
 import {
@@ -50,6 +59,7 @@ import {
   recipesQueryKeys,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
+import { writeRecipeListSort } from "../features/recipes/list-sort";
 import { LockedShelfNotice, RecipeCard } from "../features/recipes/recipe-card";
 import { groupRecipesByPeriod, recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
 import {
@@ -58,6 +68,9 @@ import {
   writeRecipeViewMode,
 } from "../features/recipes/view-mode";
 
+// routeには遅延読み込みのcomponentをそのまま渡し、routerに画面のコードを先読みさせる。
+// そのため並び順はpropsではなく、ここでrouteから読む。
+const recipesRouteApi = getRouteApi("/_protected/recipes");
 const importJobSuccessDismissDelayMs = 4000;
 const nextPageRootMargin = "480px 0px";
 const gridRecipeSkeletonKeys = [
@@ -285,6 +298,8 @@ const ImportJobIsland = () => {
 
 export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
+  const { sort = "newest" } = recipesRouteApi.useSearch();
+  const navigate = recipesRouteApi.useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const searchId = useId();
   const shelfId = useId();
@@ -297,11 +312,16 @@ export const RecipesIndexRoute = () => {
     writeRecipeViewMode(viewMode);
   }, [viewMode]);
 
+  // URLで開いた並び順も、詳細などから一覧へ戻るときに引き継ぐ。
+  useEffect(() => {
+    writeRecipeListSort(sort);
+  }, [sort]);
+
   const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage } =
     useInfiniteQuery({
-      queryKey: recipesQueryKeys.list(query),
+      queryKey: recipesQueryKeys.list(query, sort),
       initialPageParam: null as string | null,
-      queryFn: ({ pageParam }) => listRecipes({ query, cursor: pageParam }),
+      queryFn: ({ pageParam }) => listRecipes({ query, sort, cursor: pageParam }),
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     });
   const deleteMutation = useMutation({
@@ -314,8 +334,8 @@ export const RecipesIndexRoute = () => {
   const isInitialRecipesLoading = isFetching && recipes.length === 0 && !error;
   const recipeSkeletonKeys = viewMode === "grid" ? gridRecipeSkeletonKeys : listRecipeSkeletonKeys;
   const containerClass = recipeShelfContainerClass(viewMode);
-  // 一覧は最近使った順なので、freeプランでロックされるRecipeは必ず末尾にまとまる。
-  // 案内は境目に一度だけ出す。
+  // 一覧もfreeプランのロック判定も追加日が軸なので、ロック中のRecipeは並び順によらず一続きになる。
+  // 案内は最初のロック中Recipeの前に一度だけ出す。
   const firstLockedRecipeId = recipes.find((recipe) => recipe.locked)?.id ?? null;
   const shelf = useMemo(() => {
     const sections = query
@@ -347,6 +367,13 @@ export const RecipesIndexRoute = () => {
   const clearSearch = () => {
     setSearchInput("");
     setQuery("");
+  };
+  // 並び順はURLに持つ。戻る操作で並びが行き来しないようにreplaceし、別の並びは先頭から見せる。
+  // 遷移より先に覚え、この遷移で描き直すヘッダーのリンクにも選んだ並び順を使わせる。
+  const changeSort = (nextSort: RecipeListSort) => {
+    writeRecipeListSort(nextSort);
+    void navigate({ search: { sort: nextSort }, replace: true });
+    window.scrollTo({ top: 0 });
   };
   const loadNextPage = useCallback(() => {
     if (hasNextPage && !isFetching) {
@@ -425,26 +452,53 @@ export const RecipesIndexRoute = () => {
                 {shelfSummary}
               </p>
             ) : null}
-            <ToggleGroup
-              aria-label="レシピ一覧の表示形式"
-              className="shrink-0"
-              variant="outline"
-              value={[viewMode]}
-              onValueChange={(groupValue) => {
-                const [selectedKey] = groupValue;
-
-                if (selectedKey === "grid" || selectedKey === "list") {
-                  setViewMode(selectedKey);
-                }
-              }}
-            >
-              <ToggleGroupItem aria-label="グリッド表示" value="grid">
-                <SquaresFour weight={viewMode === "grid" ? "fill" : "bold"} />
-              </ToggleGroupItem>
-              <ToggleGroupItem aria-label="リスト表示" value="list">
-                <List weight={viewMode === "list" ? "fill" : "bold"} />
-              </ToggleGroupItem>
-            </ToggleGroup>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label={sort === "oldest" ? "表示の設定（古い順）" : "表示の設定"}
+                render={<Button className="relative shrink-0" size="icon-lg" variant="outline" />}
+              >
+                <SlidersHorizontal weight="bold" />
+                {sort === "oldest" ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand-orange"
+                  />
+                ) : null}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-auto min-w-40">
+                <DropdownMenuRadioGroup
+                  value={sort}
+                  onValueChange={(value) => {
+                    if (value === "newest" || value === "oldest") {
+                      changeSort(value);
+                    }
+                  }}
+                >
+                  <DropdownMenuLabel>並び順</DropdownMenuLabel>
+                  <DropdownMenuRadioItem value="newest">新しい順</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="oldest">古い順</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={viewMode}
+                  onValueChange={(value) => {
+                    if (value === "grid" || value === "list") {
+                      setViewMode(value);
+                    }
+                  }}
+                >
+                  <DropdownMenuLabel>表示</DropdownMenuLabel>
+                  <DropdownMenuRadioItem value="grid">
+                    <SquaresFour weight="bold" />
+                    グリッド
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="list">
+                    <List weight="bold" />
+                    リスト
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         ) : null}
         <Link

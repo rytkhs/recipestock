@@ -157,8 +157,12 @@ export const deleteRecipeResponseSchema = z.object({
   ok: z.literal(true),
 });
 
+// 一覧は追加日（createdAt）で並べる。Freeのロック判定も同じ軸なので、どちらの向きでもロック中は一続きになる。
+export const recipeListSortSchema = z.enum(["newest", "oldest"]);
+
 export const listRecipesQuerySchema = z.object({
   q: z.string().optional(),
+  sort: recipeListSortSchema.default("newest"),
   limit: z.coerce.number().int().min(1).max(50).default(20),
   cursor: z.string().optional(),
 });
@@ -169,7 +173,6 @@ export const recipeListItemSchema = z.object({
   coverImageUrl: z.string().nullable(),
   sourceName: z.string().nullable(),
   createdAt: z.string().min(1),
-  updatedAt: z.string().min(1),
   locked: z.boolean(),
 });
 
@@ -202,6 +205,7 @@ export type CreateRecipeResponse = z.infer<typeof createRecipeResponseSchema>;
 export type UpdateRecipeRequest = z.infer<typeof updateRecipeRequestSchema>;
 export type UpdateRecipeResponse = z.infer<typeof updateRecipeResponseSchema>;
 export type DeleteRecipeResponse = z.infer<typeof deleteRecipeResponseSchema>;
+export type RecipeListSort = z.infer<typeof recipeListSortSchema>;
 export type ListRecipesQuery = z.infer<typeof listRecipesQuerySchema>;
 export type RecipeListItem = z.infer<typeof recipeListItemSchema>;
 export type ListRecipesResponse = z.infer<typeof listRecipesResponseSchema>;

@@ -9,15 +9,14 @@ const recipeListItem = (id: string, title: string) => ({
   coverImageUrl: null,
   sourceName: null,
   createdAt: "2026-05-25T00:00:00.000Z",
-  updatedAt: "2026-05-26T00:00:00.000Z",
   locked: false,
 });
 
 describe("recipe cache", () => {
   it("削除済みRecipeをすべての一覧と詳細キャッシュから除去する", async () => {
     const queryClient = new QueryClient();
-    const defaultListKey = recipesQueryKeys.list("");
-    const searchListKey = recipesQueryKeys.list("tomato");
+    const defaultListKey = recipesQueryKeys.list("", "newest");
+    const searchListKey = recipesQueryKeys.list("tomato", "oldest");
     const pageParams = [null, "cursor_2"];
 
     queryClient.setQueryData(defaultListKey, {

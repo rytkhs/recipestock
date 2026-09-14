@@ -62,7 +62,6 @@ const toListItem = (detail: RecipeDetail): RecipeListItem => ({
     : null,
   sourceName: detail.source.sourceName ?? null,
   createdAt: detail.createdAt,
-  updatedAt: detail.updatedAt,
   locked: false,
 });
 
@@ -170,7 +169,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       },
       source: { ...fixture.source, sourceName: listed.sourceName },
       createdAt: listed.createdAt,
-      updatedAt: listed.updatedAt,
+      updatedAt: listed.createdAt,
     };
 
     recipeDetails.set(listed.id, detail);
@@ -202,7 +201,6 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
             : null,
         sourceName: job.kind === "url" ? "モック" : null,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
         locked: false,
       };
 
@@ -298,12 +296,14 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       const limit = Number(url.searchParams.get("limit") ?? "20");
       const offset = cursor ? Number(cursor) : 0;
       const matched = query ? recipes.filter((recipe) => matchesQuery(recipe, query)) : recipes;
-      const items = matched.slice(offset, offset + limit);
+      // recipesはAPIの既定と同じく追加が新しい順に持っている。
+      const sorted = url.searchParams.get("sort") === "oldest" ? [...matched].reverse() : matched;
+      const items = sorted.slice(offset, offset + limit);
       const nextOffset = offset + items.length;
 
       return HttpResponse.json({
         items,
-        nextCursor: nextOffset < matched.length ? String(nextOffset) : null,
+        nextCursor: nextOffset < sorted.length ? String(nextOffset) : null,
       });
     }),
     http.post("/api/recipes", async ({ request }) => {
@@ -400,8 +400,8 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       };
 
       recipeDetails.set(recipeId, detail);
-      // APIの一覧は更新日時の新しい順なので、更新したRecipeを先頭に移す。
-      recipes = [toListItem(detail), ...recipes.filter((recipe) => recipe.id !== recipeId)];
+      // 一覧は追加日で並ぶので、更新しても位置は変わらない。
+      recipes = recipes.map((recipe) => (recipe.id === recipeId ? toListItem(detail) : recipe));
 
       return HttpResponse.json({ recipe: detail });
     }),
