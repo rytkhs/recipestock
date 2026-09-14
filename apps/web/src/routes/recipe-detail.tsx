@@ -1,15 +1,26 @@
 import {
+  ArrowUpRight,
   CaretLeft,
   DotsThreeVertical,
-  Globe,
   LockSimple,
   PencilSimple,
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
+import { type RecipeDetail } from "@recipestock/schemas";
+import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Lightbox from "yet-another-react-lightbox";
 import Counter from "yet-another-react-lightbox/plugins/counter";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
@@ -23,7 +34,7 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,34 +42,41 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { RecipeDetailSkeleton } from "../components/loading";
-import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
+import {
+  ScreenTopBar,
+  ScreenTopBarFrame,
+  ScreenTopBarIconButton,
+  screenTopBarIconButtonClass,
+  screenTopBarTitleClass,
+} from "../components/screen-top-bar";
 import {
   deleteRecipe,
   getRecipe,
   recipesQueryKeys,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
+import { KeepScreenOnToggle } from "../features/recipes/keep-screen-on";
 import { readRecipeListFilters } from "../features/recipes/list-search";
+import {
+  type RecipeDetailImage,
+  RecipeHero,
+  RecipeImageStrip,
+  RecipeSingleImage,
+} from "../features/recipes/recipe-detail-image";
+import {
+  RecipeNote,
+  RecipeSectionHeader,
+  RecipeSource,
+} from "../features/recipes/recipe-detail-section";
+import { RecipeIngredients } from "../features/recipes/recipe-ingredients";
+import { formatRecipeCreatedAt } from "../features/recipes/recipe-shelf";
+import { RecipeSteps } from "../features/recipes/recipe-steps";
 import { tagsQueryKeys } from "../features/tags";
 import { RecipeTags } from "../features/tags/recipe-tags";
 
-const recipeDetailCoverImageProps = {
-  decoding: "async",
-  fetchPriority: "high",
-} as const;
-const deferredRecipeContentImageProps = {
-  decoding: "async",
-  loading: "lazy",
-} as const;
-
-type RecipeLightboxImage = {
-  alt: string;
-  height: number;
-  id: string;
-  src: string;
-  width: number;
-};
+const detailPageClass = "mx-auto w-full max-w-5xl pb-12 sm:px-6 lg:px-10";
 
 const recipeLightboxLabels = {
   Carousel: "画像ギャラリー",
@@ -81,205 +99,337 @@ const recipeLightboxStyles = {
   },
 } as const;
 
-const RecipeImageZoomButton = ({
-  alt,
+type RecipeImages = {
+  cover: RecipeDetailImage | null;
+  references: RecipeDetailImage[];
+  /** 手順ごとの画像。手順と同じ順に並ぶ。 */
+  steps: RecipeDetailImage[][];
+};
+
+// 表示もライトボックスも同じidで画像を指す。URLのない画像は出さない。
+const collectRecipeImages = ({ content, title }: RecipeDetail): RecipeImages => ({
+  cover: content.coverImage?.url
+    ? {
+        alt: title,
+        height: content.coverImage.height,
+        id: `cover:${content.coverImage.objectKey}`,
+        src: content.coverImage.url,
+        width: content.coverImage.width,
+      }
+    : null,
+  references: (content.referenceImages ?? []).flatMap((image, imageIndex) =>
+    image.url
+      ? [
+          {
+            alt: `レシピ画像${imageIndex + 1}`,
+            height: image.height,
+            id: `reference:${image.objectKey}`,
+            src: image.url,
+            width: image.width,
+          },
+        ]
+      : [],
+  ),
+  steps: content.steps.map((step, stepIndex) =>
+    step.images.flatMap((image, imageIndex) =>
+      image.url
+        ? [
+            {
+              alt: `手順${stepIndex + 1}の画像${imageIndex + 1}`,
+              height: image.height,
+              id: `step:${image.objectKey}`,
+              src: image.url,
+              width: image.width,
+            },
+          ]
+        : [],
+    ),
+  ),
+});
+
+const readSourceHost = (sourceUrl: string | null | undefined) => {
+  if (!sourceUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(sourceUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+};
+
+// 本文のタイトルが上部バーの下に隠れたら、バーにタイトルを出す。
+const useIsHiddenBehind = (
+  targetRef: RefObject<HTMLElement | null>,
+  barRef: RefObject<HTMLElement | null>,
+) => {
+  const [isHidden, setIsHidden] = useState(false);
+
+  useEffect(() => {
+    const update = () => {
+      const target = targetRef.current;
+      const bar = barRef.current;
+
+      if (!target || !bar) {
+        return;
+      }
+
+      setIsHidden(target.getBoundingClientRect().bottom <= bar.getBoundingClientRect().bottom);
+    };
+
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [barRef, targetRef]);
+
+  return isHidden;
+};
+
+const RecipeDetailNotice = ({
   children,
-  className,
-  onOpen,
-  style,
+  icon,
+  message,
 }: {
-  alt: string;
   children: ReactNode;
-  className: string;
-  onOpen: () => void;
-  style?: CSSProperties;
+  icon: ReactNode;
+  message: string;
 }) => (
-  <button
-    aria-label={`${alt}を拡大`}
-    className={`${className} cursor-zoom-in border-0 bg-transparent p-0 text-left transition-transform duration-200 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-orange`}
-    style={style}
-    type="button"
-    onClick={onOpen}
-  >
-    {children}
-  </button>
+  <div className="mt-16 flex flex-col items-center px-4 text-center">
+    <div className="flex size-16 items-center justify-center rounded-full bg-brand-paper-muted text-brand-walnut">
+      {icon}
+    </div>
+    <p className="mt-5 max-w-xs text-balance text-brand-muted text-sm leading-relaxed">{message}</p>
+    <div className="mt-6">{children}</div>
+  </div>
 );
 
 export const RecipeDetailRoute = () => {
   const { recipeId } = useParams({ from: "/_protected/recipes/$recipeId" });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteRecipe(recipeId),
-    // 付いていたタグの件数が減るので、タグ一覧も読み直させる。
-    onSuccess: async () => {
-      await Promise.all([
-        syncDeletedRecipeCaches(queryClient, recipeId),
-        queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() }),
-      ]);
-      await navigate({ to: "/recipes", search: readRecipeListFilters() });
-    },
-  });
   const {
     data: recipe,
-    error,
+    isFetching,
     isLoading,
+    refetch,
   } = useQuery({
     queryKey: recipesQueryKeys.detail(recipeId),
     queryFn: () => getRecipe(recipeId),
   });
-  const lightboxImages = useMemo<RecipeLightboxImage[]>(() => {
-    if (!recipe || recipe.locked) {
-      return [];
-    }
-
-    const images: RecipeLightboxImage[] = [];
-
-    if (recipe.content.coverImage?.url) {
-      images.push({
-        alt: recipe.title,
-        height: recipe.content.coverImage.height,
-        id: `cover:${recipe.content.coverImage.objectKey}`,
-        src: recipe.content.coverImage.url,
-        width: recipe.content.coverImage.width,
-      });
-    }
-
-    recipe.content.referenceImages?.forEach((image, imageIndex) => {
-      if (!image.url) {
-        return;
-      }
-
-      images.push({
-        alt: `レシピ画像${imageIndex + 1}`,
-        height: image.height,
-        id: `reference:${image.objectKey}`,
-        src: image.url,
-        width: image.width,
-      });
-    });
-
-    recipe.content.steps.forEach((step, stepIndex) => {
-      step.images.forEach((image, imageIndex) => {
-        if (!image.url) {
-          return;
-        }
-
-        images.push({
-          alt: `手順${stepIndex + 1}の画像${imageIndex + 1}`,
-          height: image.height,
-          id: `step:${image.objectKey}`,
-          src: image.url,
-          width: image.width,
-        });
-      });
-    });
-
-    return images;
-  }, [recipe]);
-
-  const confirmDelete = () => {
-    setIsDeleteDialogOpen(false);
-    deleteMutation.mutate();
-  };
-  const openLightbox = (imageId: string) => {
-    const nextLightboxIndex = lightboxImages.findIndex((image) => image.id === imageId);
-
-    if (nextLightboxIndex >= 0) {
-      setLightboxIndex(nextLightboxIndex);
-      setIsLightboxOpen(true);
-    }
-  };
-
-  useEffect(() => {
-    if (isLightboxOpen && lightboxIndex >= lightboxImages.length) {
-      setIsLightboxOpen(false);
-    }
-  }, [isLightboxOpen, lightboxImages.length, lightboxIndex]);
+  const backButton = (
+    <ScreenTopBarIconButton
+      aria-label="レシピ一覧へ戻る"
+      onPress={() => {
+        void navigate({ to: "/recipes", search: readRecipeListFilters() });
+      }}
+    >
+      <CaretLeft size={21} weight="bold" />
+    </ScreenTopBarIconButton>
+  );
 
   if (isLoading) {
     return <RecipeDetailSkeleton />;
   }
 
-  if (error || !recipe || recipe.locked) {
-    const isLocked = Boolean(recipe?.locked);
-
+  if (recipe?.locked) {
     return (
-      <article className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10">
-        <ScreenTopBar
-          leading={
-            <ScreenTopBarIconButton
-              aria-label="レシピ一覧へ戻る"
-              onPress={() => {
-                void navigate({ to: "/recipes", search: readRecipeListFilters() });
-              }}
-            >
-              <CaretLeft size={21} weight="bold" />
-            </ScreenTopBarIconButton>
-          }
-          title={isLocked ? "ロック中のレシピ" : "レシピを表示できません"}
-        />
-        <div className="px-4 pt-6 sm:px-0">
-          {isLocked ? (
-            <div className="flex items-start gap-2 text-brand-muted">
-              <LockSimple className="mt-0.5 shrink-0" size={20} weight="bold" />
-              <p>このレシピの詳細は現在表示できません。</p>
-            </div>
-          ) : (
-            <p className="text-brand-muted">レシピの取得に失敗しました。</p>
-          )}
-        </div>
+      <article className={detailPageClass}>
+        <ScreenTopBar leading={backButton} title="ロック中のレシピ" />
+        <RecipeDetailNotice
+          icon={<LockSimple size={26} weight="bold" />}
+          message={`フリープランで開けるのは、新しく保存した${FREE_RECIPE_LIMIT}件までです。`}
+        >
+          <Link className={cn(buttonVariants(), "no-underline")} to="/settings/billing">
+            プランを見る
+          </Link>
+        </RecipeDetailNotice>
       </article>
     );
   }
 
-  const referenceImages = recipe.content.referenceImages ?? [];
-  const shouldShowIngredientsSection =
-    Boolean(recipe.content.yieldText) || recipe.content.ingredientGroups.length > 0;
-  const coverImageId = recipe.content.coverImage
-    ? `cover:${recipe.content.coverImage.objectKey}`
-    : null;
-  const coverImageStyle = recipe.content.coverImage
-    ? ({
-        "--cover-aspect": recipe.content.coverImage.width / recipe.content.coverImage.height,
-      } as CSSProperties)
-    : undefined;
+  // 読み直しに失敗しても、手元にある内容は出したままにする。
+  if (!recipe) {
+    return (
+      <article className={detailPageClass}>
+        <ScreenTopBar leading={backButton} title="レシピを表示できません" />
+        <RecipeDetailNotice
+          icon={<WarningCircle size={26} weight="bold" />}
+          message="レシピを読み込めませんでした。"
+        >
+          <Button disabled={isFetching} variant="outline" onClick={() => void refetch()}>
+            再読み込み
+          </Button>
+        </RecipeDetailNotice>
+      </article>
+    );
+  }
+
+  return <RecipeDetailView backButton={backButton} recipe={recipe} />;
+};
+
+const RecipeDetailView = ({
+  backButton,
+  recipe,
+}: {
+  backButton: ReactNode;
+  recipe: RecipeDetail;
+}) => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const barRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const referenceHeadingId = useId();
+  const isTitleInBar = useIsHiddenBehind(titleRef, barRef);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [failedImageIds, setFailedImageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteRecipe(recipe.id),
+    // 付いていたタグの件数が減るので、タグ一覧も読み直させる。
+    onSuccess: async () => {
+      await Promise.all([
+        syncDeletedRecipeCaches(queryClient, recipe.id),
+        queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() }),
+      ]);
+      await navigate({ to: "/recipes", search: readRecipeListFilters() });
+    },
+  });
+  const images = useMemo(() => collectRecipeImages(recipe), [recipe]);
+  // 読み込めなかった画像はライトボックスにも出さない。
+  const lightboxImages = useMemo(
+    () =>
+      [images.cover, ...images.references, ...images.steps.flat()].filter(
+        (image): image is RecipeDetailImage => image !== null && !failedImageIds.has(image.id),
+      ),
+    [failedImageIds, images],
+  );
+  const markImageFailed = useCallback((imageId: string) => {
+    setFailedImageIds((current) =>
+      current.has(imageId) ? current : new Set(current).add(imageId),
+    );
+  }, []);
+  const openLightbox = (imageId: string) => {
+    const index = lightboxImages.findIndex((image) => image.id === imageId);
+
+    if (index >= 0) {
+      setLightboxIndex(index);
+    }
+  };
+  const confirmDelete = () => {
+    setIsDeleteDialogOpen(false);
+    deleteMutation.mutate();
+  };
+
+  useEffect(() => {
+    if (lightboxIndex !== null && lightboxIndex >= lightboxImages.length) {
+      setLightboxIndex(null);
+    }
+  }, [lightboxImages.length, lightboxIndex]);
+
+  const { content, source } = recipe;
+  const hasIngredients = Boolean(content.yieldText) || content.ingredientGroups.length > 0;
+  const hasSteps = content.steps.length > 0;
+  // 画像だけの投稿から取り込んだRecipeは材料も手順もない。画像そのものが本文なので大きく並べる。
+  const areImagesTheBody = !hasIngredients && !hasSteps;
+  const sourceHost = readSourceHost(source.sourceUrl);
+  const sourceName = source.sourceName || sourceHost;
+  const createdAtLabel = formatRecipeCreatedAt(recipe.createdAt);
+  const keepScreenOn = <KeepScreenOnToggle />;
+
+  const renderStepImages = (stepIndex: number) => {
+    const stepImages = images.steps[stepIndex] ?? [];
+    const onlyImage = stepImages.length === 1 ? stepImages[0] : undefined;
+
+    if (onlyImage) {
+      return (
+        <RecipeSingleImage
+          image={onlyImage}
+          isFailed={failedImageIds.has(onlyImage.id)}
+          sizeClassName="max-w-[min(100%,calc(22rem*var(--image-ratio)))]"
+          onError={markImageFailed}
+          onOpen={openLightbox}
+        />
+      );
+    }
+
+    return stepImages.length > 0 ? (
+      <RecipeImageStrip
+        failedImageIds={failedImageIds}
+        images={stepImages}
+        onError={markImageFailed}
+        onOpen={openLightbox}
+      />
+    ) : null;
+  };
+
+  const referenceImagesSection =
+    images.references.length > 0 ? (
+      <section aria-labelledby={referenceHeadingId}>
+        <RecipeSectionHeader
+          id={referenceHeadingId}
+          meta={`${images.references.length}枚`}
+          title="レシピ画像"
+        />
+        {areImagesTheBody ? (
+          <div className="mt-4 flex flex-col gap-4">
+            {images.references.map((image) => (
+              <RecipeSingleImage
+                image={image}
+                isFailed={failedImageIds.has(image.id)}
+                key={image.id}
+                sizeClassName="max-w-[min(100%,calc(85svh*var(--image-ratio)))]"
+                onError={markImageFailed}
+                onOpen={openLightbox}
+              />
+            ))}
+          </div>
+        ) : (
+          <RecipeImageStrip
+            className="-mx-4 mt-4 scroll-px-4 px-4 sm:mx-0 sm:scroll-px-0 sm:px-0"
+            failedImageIds={failedImageIds}
+            images={images.references}
+            onError={markImageFailed}
+            onOpen={openLightbox}
+          />
+        )}
+      </section>
+    ) : null;
 
   return (
-    <article className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10">
-      <ScreenTopBar
-        leading={
-          <ScreenTopBarIconButton
-            aria-label="レシピ一覧へ戻る"
-            onPress={() => {
-              void navigate({ to: "/recipes", search: readRecipeListFilters() });
-            }}
+    <article className={detailPageClass}>
+      <ScreenTopBarFrame ref={barRef}>
+        {backButton}
+        {/* 本文の見出しと同じ名前なので、読み上げでは重ねない。 */}
+        <p
+          aria-hidden="true"
+          className={cn(
+            screenTopBarTitleClass,
+            "transition-opacity duration-200",
+            isTitleInBar ? "opacity-100" : "opacity-0",
+          )}
+        >
+          {recipe.title}
+        </p>
+        <div className="flex items-center gap-2">
+          <Link
+            aria-label="編集"
+            className={screenTopBarIconButtonClass}
+            params={{ recipeId: recipe.id }}
+            to="/recipes/$recipeId/edit"
           >
-            <CaretLeft size={21} weight="bold" />
-          </ScreenTopBarIconButton>
-        }
-        title={recipe.title}
-        trailing={
+            <PencilSimple size={19} weight="bold" />
+          </Link>
           <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="操作メニュー"
-              render={<Button size="icon" variant="outline" />}
-            >
-              <DotsThreeVertical weight="bold" />
+            <DropdownMenuTrigger aria-label="操作メニュー" className={screenTopBarIconButtonClass}>
+              <DotsThreeVertical size={20} weight="bold" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="min-w-36">
+            <DropdownMenuContent align="end" className="min-w-36">
               <DropdownMenuGroup>
-                <DropdownMenuItem
-                  onClick={() => {
-                    void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
-                  }}
-                >
-                  <PencilSimple weight="bold" />
-                  <span>編集</span>
-                </DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() => {
@@ -292,47 +442,93 @@ export const RecipeDetailRoute = () => {
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-        }
-      />
+        </div>
+      </ScreenTopBarFrame>
 
-      <div className="px-3 pt-4 sm:px-0 sm:pt-6">
-        {recipe.content.coverImage?.url ? (
-          <RecipeImageZoomButton
-            alt={recipe.title}
-            className="relative mx-auto block w-fit max-w-[min(100%,640px,calc(30svh*var(--cover-aspect)))] overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:max-w-[min(100%,640px,calc(360px*var(--cover-aspect)))] sm:rounded-[18px]"
-            onOpen={() => {
-              if (coverImageId) {
-                openLightbox(coverImageId);
-              }
-            }}
-            style={coverImageStyle}
+      <header className="sm:pt-2 lg:grid lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-center lg:gap-12 lg:pt-4">
+        <RecipeHero
+          cover={images.cover}
+          isCoverFailed={images.cover ? failedImageIds.has(images.cover.id) : false}
+          recipeId={recipe.id}
+          title={recipe.title}
+          onError={markImageFailed}
+          onOpen={openLightbox}
+        />
+        <div className="px-4 pt-5 sm:px-0 sm:pt-6 lg:pt-0">
+          <h1
+            className="font-bold text-[1.625rem] text-brand-ink leading-[1.35] sm:text-3xl"
+            ref={titleRef}
           >
-            <img
-              alt={recipe.title}
-              className="block h-auto max-h-[30svh] w-full rounded-[16px] object-contain sm:max-h-[360px] sm:rounded-[18px]"
-              height={recipe.content.coverImage.height}
-              src={recipe.content.coverImage.url}
-              style={{
-                aspectRatio: `${recipe.content.coverImage.width} / ${recipe.content.coverImage.height}`,
-              }}
-              width={recipe.content.coverImage.width}
-              {...recipeDetailCoverImageProps}
-            />
-          </RecipeImageZoomButton>
-        ) : null}
-        <p className="mx-auto mt-5 max-w-3xl font-bold text-xl text-brand-ink leading-tight sm:mt-5 sm:text-2xl">
-          {recipe.title}
-        </p>
-        <RecipeTags recipeId={recipe.id} tags={recipe.tags} />
-      </div>
+            {recipe.title}
+          </h1>
+          {sourceName || createdAtLabel ? (
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-brand-muted text-sm">
+              {sourceName && source.sourceUrl ? (
+                <a
+                  className="inline-flex items-center gap-0.5 font-medium text-brand-sage-dark underline-offset-4 hover:underline"
+                  href={source.sourceUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {sourceName}
+                  <ArrowUpRight aria-hidden="true" size={14} weight="bold" />
+                  <span className="sr-only">（元のページを開く）</span>
+                </a>
+              ) : null}
+              {sourceName && !source.sourceUrl ? <span>{sourceName}</span> : null}
+              {sourceName && createdAtLabel ? <span aria-hidden="true">·</span> : null}
+              {createdAtLabel ? <span>{createdAtLabel}に保存</span> : null}
+            </p>
+          ) : null}
+          <RecipeTags recipeId={recipe.id} tags={recipe.tags} />
+        </div>
+      </header>
 
       {deleteMutation.error ? (
-        <div className="mx-4 mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3 sm:mx-0">
+        <div className="mx-4 mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3 sm:mx-0">
           <p className="text-brand-danger text-sm" role="alert">
             レシピを削除できませんでした。
           </p>
         </div>
       ) : null}
+
+      <div
+        className={cn(
+          "mt-8 px-4 sm:mt-10 sm:px-0 lg:mt-14",
+          hasIngredients &&
+            "lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-x-14",
+        )}
+      >
+        {hasIngredients ? (
+          // 広い画面では材料を手順の横に残し、手順を読み進めても分量を見返せるようにする。
+          <div className="lg:sticky lg:top-40 lg:max-h-[calc(100svh-11rem)] lg:overflow-y-auto lg:pr-2 lg:pb-6">
+            <RecipeIngredients
+              action={keepScreenOn}
+              groups={content.ingredientGroups}
+              key={recipe.updatedAt}
+              yieldText={content.yieldText}
+            />
+          </div>
+        ) : null}
+        <div
+          className={cn("flex flex-col gap-10", hasIngredients ? "mt-10 lg:mt-0" : "lg:max-w-3xl")}
+        >
+          {areImagesTheBody ? referenceImagesSection : null}
+          {hasSteps ? (
+            <RecipeSteps
+              action={hasIngredients ? undefined : keepScreenOn}
+              key={recipe.updatedAt}
+              renderImages={renderStepImages}
+              steps={content.steps}
+            />
+          ) : null}
+          {content.note ? <RecipeNote note={content.note} /> : null}
+          {areImagesTheBody ? null : referenceImagesSection}
+          {sourceName ? (
+            <RecipeSource host={sourceHost} name={sourceName} url={source.sourceUrl ?? null} />
+          ) : null}
+        </div>
+      </div>
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent size="sm">
@@ -355,180 +551,15 @@ export const RecipeDetailRoute = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {referenceImages.some((image) => image.url) ? (
-        <section className="mx-4 mt-7 sm:mx-0">
-          <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-base">
-            レシピ画像
-          </h2>
-          <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2">
-            {referenceImages.map((image, imageIndex) =>
-              image.url ? (
-                <RecipeImageZoomButton
-                  alt={`レシピ画像${imageIndex + 1}`}
-                  className="grid aspect-[4/5] w-[min(40vw,160px)] shrink-0 snap-start place-items-center overflow-hidden rounded-[14px] bg-brand-paper-muted shadow-pantry-sm sm:w-[128px]"
-                  key={image.objectKey}
-                  onOpen={() => openLightbox(`reference:${image.objectKey}`)}
-                >
-                  <img
-                    alt={`レシピ画像${imageIndex + 1}`}
-                    className="h-full w-full object-contain"
-                    height={image.height}
-                    src={image.url}
-                    width={image.width}
-                    {...deferredRecipeContentImageProps}
-                  />
-                </RecipeImageZoomButton>
-              ) : null,
-            )}
-          </div>
-        </section>
-      ) : null}
-
-      {shouldShowIngredientsSection ? (
-        <section className="mx-3 mt-6 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:mx-0 sm:mt-7 sm:rounded-[18px]">
-          <div className="flex items-baseline justify-between gap-3 border-brand-line-soft border-b bg-brand-paper-muted/70 px-3.5 py-3 sm:gap-4 sm:px-5">
-            <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-base">
-              材料
-            </h2>
-            {recipe.content.yieldText ? (
-              <p className="shrink-0 text-brand-ink text-sm font-medium sm:text-base">
-                {recipe.content.yieldText}
-              </p>
-            ) : null}
-          </div>
-          <div className="px-3.5 py-3 sm:px-5">
-            {recipe.content.ingredientGroups.map((group) => (
-              <div
-                className="mt-4 first:mt-0"
-                key={
-                  group.label ??
-                  group.ingredients
-                    .map((ingredient) => `${ingredient.name}:${ingredient.amount}`)
-                    .join("|")
-                }
-              >
-                {group.label ? (
-                  <h3 className="font-medium text-brand-walnut text-sm">{group.label}</h3>
-                ) : null}
-                <ul className="mt-2 space-y-2">
-                  {group.ingredients.map((ingredient) => (
-                    <li
-                      className="grid grid-cols-[minmax(0,1fr)_minmax(3rem,max-content)] items-end gap-2 text-sm sm:gap-3 sm:text-base"
-                      key={`${ingredient.name}:${ingredient.amount}`}
-                    >
-                      <span className="flex min-w-0 items-baseline gap-3 text-brand-ink">
-                        <span className="min-w-0">{ingredient.name}</span>
-                        <span className="mb-1 h-px min-w-6 flex-1 border-brand-line-soft border-b border-dashed" />
-                      </span>
-                      <span className="text-right text-brand-ink font-medium">
-                        {ingredient.amount || ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {recipe.content.steps.length > 0 ? (
-        <section className="mx-3 mt-5 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:mx-0 sm:rounded-[18px]">
-          <div className="border-brand-line-soft border-b bg-brand-paper-muted/70 px-3.5 py-3 sm:px-5">
-            <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-base">
-              手順
-            </h2>
-          </div>
-          <ol className="divide-y divide-brand-line-soft px-3.5 sm:px-5">
-            {recipe.content.steps.map((step, stepIndex) => (
-              <li
-                className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-2.5 py-3.5 sm:grid-cols-[3.5rem_minmax(0,1fr)] sm:gap-4 sm:py-4"
-                key={step.images.map((image) => image.objectKey).join(":") || step.text}
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brand-orange-soft bg-brand-orange-soft/30 text-brand-orange text-sm font-bold sm:h-11 sm:w-11 sm:text-base">
-                  {stepIndex + 1}
-                </div>
-                <div className="min-w-0 pt-1">
-                  {step.text ? (
-                    <p className="whitespace-pre-wrap text-brand-ink text-sm leading-6 sm:text-base">
-                      {step.text}
-                    </p>
-                  ) : null}
-                </div>
-                {step.images.some((image) => image.url) ? (
-                  <div className="col-span-2 flex snap-x gap-3 overflow-x-auto pb-2 pl-[calc(2.25rem+0.625rem)] sm:pl-[calc(3.5rem+1rem)]">
-                    {step.images.map((image, imageIndex) =>
-                      image.url ? (
-                        <RecipeImageZoomButton
-                          alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
-                          className="block w-[min(38vw,160px)] shrink-0 snap-start rounded-[14px] sm:w-[144px]"
-                          key={image.objectKey}
-                          onOpen={() => openLightbox(`step:${image.objectKey}`)}
-                        >
-                          <img
-                            alt={`手順${stepIndex + 1}の画像${imageIndex + 1}`}
-                            className="block max-h-[160px] w-full rounded-[14px] object-contain"
-                            height={image.height}
-                            src={image.url}
-                            style={{ aspectRatio: `${image.width} / ${image.height}` }}
-                            width={image.width}
-                            {...deferredRecipeContentImageProps}
-                          />
-                        </RecipeImageZoomButton>
-                      ) : null,
-                    )}
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
-
-      {recipe.content.note ? (
-        <section className="mx-4 mt-5 overflow-hidden rounded-[18px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:mx-0">
-          <div className="border-brand-line-soft border-b bg-brand-paper-muted/70 px-4 py-3 sm:px-5">
-            <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-base">
-              メモ
-            </h2>
-          </div>
-          <p className="whitespace-pre-wrap px-4 py-3 text-brand-ink text-sm leading-6 sm:px-5 sm:text-base">
-            {recipe.content.note}
-          </p>
-        </section>
-      ) : null}
-
-      {recipe.source.sourceName || recipe.source.sourceUrl ? (
-        <section className="mx-4 mt-7 sm:mx-0">
-          <h2 className="text-brand-walnut font-semibold text-sm sm:font-bold sm:text-lg">出典</h2>
-          <div className="mt-3 flex items-center gap-2">
-            <Globe size={16} className="text-brand-wheat" weight="bold" />
-            <div>
-              {recipe.source.sourceName ? (
-                <p className="text-brand-ink text-sm font-medium">{recipe.source.sourceName}</p>
-              ) : null}
-              {recipe.source.sourceUrl ? (
-                <a
-                  className="break-all text-brand-sage text-sm hover:text-brand-sage-dark transition-colors"
-                  href={recipe.source.sourceUrl}
-                >
-                  {recipe.source.sourceUrl}
-                </a>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : null}
-
       <Lightbox
         animation={{ fade: 200, swipe: 220 }}
         carousel={{ finite: true, imageProps: { decoding: "async" } }}
-        close={() => setIsLightboxOpen(false)}
+        close={() => setLightboxIndex(null)}
         controller={{ closeOnBackdropClick: true, closeOnPullDown: true }}
-        index={lightboxIndex}
+        index={lightboxIndex ?? 0}
         labels={recipeLightboxLabels}
         on={{ view: ({ index }) => setLightboxIndex(index) }}
-        open={isLightboxOpen}
+        open={lightboxIndex !== null}
         plugins={[Counter, Zoom]}
         slides={lightboxImages}
         styles={recipeLightboxStyles}

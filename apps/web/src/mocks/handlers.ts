@@ -210,13 +210,14 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     if (stored) return stored;
 
     const fixture = recipeDetailFixture(listed.id);
+    const content = { ...fixture.content, ...state.recipeContents[listed.id] };
     const detail: RecipeDetail = {
       ...fixture,
       title: listed.title,
       content: {
-        ...fixture.content,
+        ...content,
         title: listed.title,
-        coverImage: listed.coverImageUrl ? fixture.content.coverImage : undefined,
+        coverImage: listed.coverImageUrl ? content.coverImage : undefined,
       },
       source: { ...fixture.source, sourceName: listed.sourceName },
       createdAt: listed.createdAt,
