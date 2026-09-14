@@ -59,6 +59,7 @@ import {
   recipesQueryKeys,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
+import { writeRecipeListSort } from "../features/recipes/list-sort";
 import { LockedShelfNotice, RecipeCard } from "../features/recipes/recipe-card";
 import { groupRecipesByPeriod, recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
 import {
@@ -297,7 +298,7 @@ const ImportJobIsland = () => {
 
 export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
-  const { sort } = recipesRouteApi.useSearch();
+  const { sort = "newest" } = recipesRouteApi.useSearch();
   const navigate = recipesRouteApi.useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const searchId = useId();
@@ -310,6 +311,11 @@ export const RecipesIndexRoute = () => {
   useEffect(() => {
     writeRecipeViewMode(viewMode);
   }, [viewMode]);
+
+  // URLで開いた並び順も、詳細などから一覧へ戻るときに引き継ぐ。
+  useEffect(() => {
+    writeRecipeListSort(sort);
+  }, [sort]);
 
   const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage } =
     useInfiniteQuery({
@@ -363,7 +369,9 @@ export const RecipesIndexRoute = () => {
     setQuery("");
   };
   // 並び順はURLに持つ。戻る操作で並びが行き来しないようにreplaceし、別の並びは先頭から見せる。
+  // 遷移より先に覚え、この遷移で描き直すヘッダーのリンクにも選んだ並び順を使わせる。
   const changeSort = (nextSort: RecipeListSort) => {
+    writeRecipeListSort(nextSort);
     void navigate({ search: { sort: nextSort }, replace: true });
     window.scrollTo({ top: 0 });
   };

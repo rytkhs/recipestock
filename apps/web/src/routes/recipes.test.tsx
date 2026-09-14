@@ -534,6 +534,125 @@ describe("RecipesRoute", () => {
     expect(screen.getByRole("button", { name: "表示の設定（古い順）" })).toBeInTheDocument();
   });
 
+  it("古い順の一覧から詳細を開き、一覧へ戻るボタンで戻っても古い順のまま", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&sort=oldest") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_old",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-03-10T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_old") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_old",
+              title: "Potato salad",
+              content: { title: "Potato salad", ingredientGroups: [], steps: [] },
+              source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
+              createdAt: "2026-03-10T00:00:00.000Z",
+              updatedAt: "2026-03-10T00:00:00.000Z",
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?sort=oldest");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Potato salad/ }));
+    await screen.findByRole("button", { name: "操作メニュー" });
+    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await expect(
+      screen.findByRole("button", { name: "表示の設定（古い順）" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("?sort=oldest");
+  });
+
+  it("古い順から新しい順に戻すと、詳細から一覧へ戻っても新しい順のまま", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&sort=oldest") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_old",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-03-10T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_new",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_new") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_new",
+              title: "Tomato pasta",
+              content: { title: "Tomato pasta", ingredientGroups: [], steps: [] },
+              source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
+              createdAt: "2026-05-25T00:00:00.000Z",
+              updatedAt: "2026-05-25T00:00:00.000Z",
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?sort=oldest");
+    await screen.findByRole("heading", { name: "Potato salad" });
+
+    await userEvent.click(screen.getByRole("button", { name: "表示の設定（古い順）" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "新しい順" }));
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
+    await screen.findByRole("button", { name: "操作メニュー" });
+    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await expect(screen.findByRole("button", { name: "表示の設定" })).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("");
+  });
+
   it("読めない並び順のURLは新しい順で開く", async () => {
     mockFetch(
       async (input) => {
@@ -564,6 +683,64 @@ describe("RecipesRoute", () => {
       screen.findByRole("heading", { name: "Tomato pasta" }),
     ).resolves.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "表示の設定" })).toBeInTheDocument();
+  });
+
+  it("古い順を選んだ後でも、読めない並び順への遷移は新しい順に戻す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_new",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (input === "/api/recipes?limit=20&sort=oldest") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_old",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-03-10T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.click(screen.getByRole("button", { name: "表示の設定" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "古い順" }));
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("heading", { name: "Potato salad" });
+
+    await act(async () => {
+      await appRouter.navigate({ href: "/recipes?sort=invalid" });
+    });
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("");
   });
 
   it("表示メニューからリスト表示に切り替えられる", async () => {
