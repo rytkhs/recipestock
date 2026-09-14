@@ -324,7 +324,7 @@ describe("Tag repository with Neon Postgres", () => {
     ).resolves.toEqual({ status: "notFound" });
   });
 
-  it("統合すると付与を統合先へ移し、両方付いていたRecipeでは重複させない", async () => {
+  it("統合すると付与を統合先へ移し、両方付いていたRecipeでは重複させず早い方の付けた日時を残す", async () => {
     const runId = crypto.randomUUID();
     const userId = `dbtest_tags_merge_user_${runId}`;
     const both = `dbtest_tags_merge_both_${runId}`;
@@ -334,11 +334,15 @@ describe("Tag repository with Neon Postgres", () => {
       { id: both, createdAt: minutesAfterBase(0) },
       { id: sourceOnly, createdAt: minutesAfterBase(1) },
     ]);
-    await replaceTags(userId, both, ["とり肉", "鶏肉"], 10);
-    await replaceTags(userId, sourceOnly, ["とり肉"], 11);
+    // 統合元を先に付け、統合先はその間に付けた「作り置き」より後に付ける。
+    await replaceTags(userId, both, ["とり肉"], 10);
+    await replaceTags(userId, both, ["とり肉", "作り置き"], 11);
+    await replaceTags(userId, both, ["とり肉", "作り置き", "鶏肉"], 12);
+    await replaceTags(userId, sourceOnly, ["とり肉"], 13);
 
     const source = await tagIdOf(userId, "とり肉");
     const target = await tagIdOf(userId, "鶏肉");
+    const mealPrep = await tagIdOf(userId, "作り置き");
 
     await expect(
       tagRepository.mergeTag({ userId, tagId: source, intoTagId: source }),
@@ -348,13 +352,17 @@ describe("Tag repository with Neon Postgres", () => {
     ).resolves.toEqual({ status: "merged", tag: { id: target, name: "鶏肉" } });
 
     await expect(recipeRepository.getRecipe(userId, both)).resolves.toMatchObject({
-      tags: [{ id: target, name: "鶏肉" }],
+      tags: [
+        { id: target, name: "鶏肉" },
+        { id: mealPrep, name: "作り置き" },
+      ],
     });
     await expect(recipeRepository.getRecipe(userId, sourceOnly)).resolves.toMatchObject({
       tags: [{ id: target, name: "鶏肉" }],
     });
     await expect(tagRepository.listTags(userId)).resolves.toEqual([
       { id: target, name: "鶏肉", recipeCount: 2 },
+      { id: mealPrep, name: "作り置き", recipeCount: 1 },
     ]);
     await expect(
       tagRepository.mergeTag({ userId, tagId: source, intoTagId: target }),

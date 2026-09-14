@@ -105,6 +105,8 @@ export const createTagRepository = (db: DbClient): TagRepository => ({
     const nowIso = now.toISOString();
     // 自分のRecipeでなければタグも作らない。既存のタグはon conflictで同じ行を返させ、組の置き換えに使う。
     // CTEは文の開始時点のスナップショットを見るので、並びは既存の付与日時と今回の時刻から組み立てる。
+    // 別のタブや端末から同じRecipeへ同時に送られると、後から始まった文は先の文が足した付与を見られず外せないことがある。
+    // 画面は同じRecipeの要求を順に送るので、ここでは直列化しない。
     const result = await db.execute<{ id: string | null; name: string | null }>(sql`
       with target as (
         select id
@@ -201,7 +203,7 @@ export const createTagRepository = (db: DbClient): TagRepository => ({
   },
   async mergeTag({ userId, tagId, intoTagId }) {
     // 付与を統合先へ移し、元のタグを消す（元の付与はcascadeで消える）。
-    // 両方が付いていたRecipeは統合先の付与を残し、付けた順を保つため移す付与は元の日時のままにする。
+    // 付けた順を保つため、移す付与は元の日時のままにし、両方が付いていたRecipeは早い方の日時を残す。
     const result = await db.execute<{ id: string; name: string }>(sql`
       with source as (
         select id
@@ -222,7 +224,8 @@ export const createTagRepository = (db: DbClient): TagRepository => ({
         select attached.recipe_id, target.id, attached.created_at
         from recipe_tags attached, source, target
         where attached.tag_id = source.id
-        on conflict (recipe_id, tag_id) do nothing
+        on conflict (recipe_id, tag_id) do update
+          set created_at = least(recipe_tags.created_at, excluded.created_at)
       ),
       deleted as (
         delete from tags
