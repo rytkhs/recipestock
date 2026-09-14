@@ -110,6 +110,64 @@ describe("タグ", () => {
       ).toBeDefined();
     });
 
+    it("一覧でRecipeを削除すると、付いていたRecipeがなくなったタグのチップを外す", async () => {
+      let deleted = false;
+      mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/tags") {
+            return jsonResponse({
+              tags: [
+                { id: "tag_1", name: "鶏肉", recipeCount: deleted ? 0 : 1 },
+                { id: "tag_2", name: "作り置き", recipeCount: 1 },
+              ],
+            });
+          }
+
+          if (path === "/api/recipes?limit=20") {
+            return jsonResponse({
+              items: deleted
+                ? [listItem("recipe_2", "Potato salad")]
+                : [listItem("recipe_1", "Tomato pasta"), listItem("recipe_2", "Potato salad")],
+              nextCursor: null,
+            });
+          }
+
+          if (path === "/api/recipes/recipe_1" && init?.method === "DELETE") {
+            deleted = true;
+            return jsonResponse({ ok: true });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      await renderApp("/recipes");
+      const filterBar = await screen.findByRole("group", { name: "タグで絞り込む" });
+      expect(within(filterBar).getByRole("button", { name: "鶏肉" })).toBeInTheDocument();
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Tomato pastaの操作メニュー" }),
+      );
+      await userEvent.click(await screen.findByRole("menuitem", { name: "削除" }));
+      const deleteDialog = await screen.findByRole("alertdialog", {
+        name: "レシピを削除しますか？",
+      });
+      await userEvent.click(within(deleteDialog).getByRole("button", { name: "削除" }));
+
+      await waitFor(() => {
+        const refreshedFilterBar = screen.getByRole("group", { name: "タグで絞り込む" });
+        expect(
+          within(refreshedFilterBar).queryByRole("button", { name: "鶏肉" }),
+        ).not.toBeInTheDocument();
+        expect(
+          within(refreshedFilterBar).getByRole("button", { name: "作り置き" }),
+        ).toBeInTheDocument();
+      });
+    });
+
     it("タグなしを選ぶとタグの選択を外し、0件ならすべてのレシピに戻れる", async () => {
       mockFetch(
         async (input) => {

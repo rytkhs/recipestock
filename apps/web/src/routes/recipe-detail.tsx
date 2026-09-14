@@ -40,6 +40,7 @@ import {
   syncDeletedRecipeCaches,
 } from "../features/recipes";
 import { readRecipeListFilters } from "../features/recipes/list-search";
+import { tagsQueryKeys } from "../features/tags";
 import { RecipeTags } from "../features/tags/recipe-tags";
 
 const recipeDetailCoverImageProps = {
@@ -113,8 +114,12 @@ export const RecipeDetailRoute = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const deleteMutation = useMutation({
     mutationFn: () => deleteRecipe(recipeId),
+    // 付いていたタグの件数が減るので、タグ一覧も読み直させる。
     onSuccess: async () => {
-      await syncDeletedRecipeCaches(queryClient, recipeId);
+      await Promise.all([
+        syncDeletedRecipeCaches(queryClient, recipeId),
+        queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() }),
+      ]);
       await navigate({ to: "/recipes", search: readRecipeListFilters() });
     },
   });

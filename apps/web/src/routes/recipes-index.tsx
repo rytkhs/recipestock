@@ -416,8 +416,12 @@ export const RecipesIndexRoute = () => {
   });
   const deleteMutation = useMutation({
     mutationFn: (recipeId: string) => deleteRecipe(recipeId),
+    // 付いていたタグの件数が減るので、チップ列のためにタグ一覧も読み直す。
     onSuccess: async (_response, recipeId) => {
-      await syncDeletedRecipeCaches(queryClient, recipeId);
+      await Promise.all([
+        syncDeletedRecipeCaches(queryClient, recipeId),
+        queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() }),
+      ]);
     },
   });
   const recipes = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
