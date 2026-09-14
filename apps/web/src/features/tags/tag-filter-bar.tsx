@@ -6,6 +6,7 @@ import { tagChipClass } from "./tag-chip";
 
 // 一覧のツールバーの2行目。チップを押すたびに条件を切り替え、並びは押しても動かさない。
 // fieldsetは既定で中身の幅より縮まないので、min-w-0で横スクロールできるようにする。
+// fieldsetの既定のmarginはpreflightが消す。m-0を足すとcnが-mx-4を落とし、モバイルでチップ列がずれる。
 export const TagFilterBar = ({
   className,
   onToggleTag,
@@ -24,7 +25,7 @@ export const TagFilterBar = ({
   <fieldset
     aria-label="タグで絞り込む"
     className={cn(
-      "-mx-4 m-0 flex min-w-0 gap-2 overflow-x-auto border-0 px-4 py-0 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10 [&::-webkit-scrollbar]:hidden",
+      "-mx-4 flex min-w-0 gap-2 overflow-x-auto border-0 px-4 py-0 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10 [&::-webkit-scrollbar]:hidden",
       className,
     )}
   >

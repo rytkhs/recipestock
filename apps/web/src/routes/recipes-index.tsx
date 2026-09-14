@@ -560,108 +560,115 @@ export const RecipesIndexRoute = () => {
 
   return (
     <section className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10">
-      <div className="-mx-4 sticky top-0 z-30 flex min-w-0 flex-wrap items-center gap-2 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:gap-3 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
-        <form className="flex min-w-0 flex-1 items-end gap-3" onSubmit={submitSearch}>
-          <FieldGroup className="min-w-0 flex-1">
-            <Field className="min-w-0">
-              <FieldLabel className="sr-only" htmlFor={searchId}>
-                検索
-              </FieldLabel>
-              <InputGroup>
-                <InputGroupAddon>
-                  <MagnifyingGlass weight="bold" />
-                </InputGroupAddon>
-                <InputGroupInput
-                  enterKeyHint="search"
-                  id={searchId}
-                  placeholder="レシピを検索..."
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                />
-                {searchInput ? (
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton aria-label="検索を消す" size="icon-xs" onClick={clearSearch}>
-                      <X weight="bold" />
-                    </InputGroupButton>
+      <div className="-mx-4 sticky top-0 z-30 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <form className="flex min-w-0 flex-1 items-end gap-3" onSubmit={submitSearch}>
+            <FieldGroup className="min-w-0 flex-1">
+              <Field className="min-w-0">
+                <FieldLabel className="sr-only" htmlFor={searchId}>
+                  検索
+                </FieldLabel>
+                <InputGroup>
+                  <InputGroupAddon>
+                    <MagnifyingGlass weight="bold" />
                   </InputGroupAddon>
-                ) : null}
-              </InputGroup>
-            </Field>
-          </FieldGroup>
-          <Button className="hidden shrink-0 sm:inline-flex" type="submit" variant="outline">
-            検索
-          </Button>
-        </form>
-        {hasShelfToolbar ? (
-          <>
-            {shelfSummary ? (
-              <p className="hidden shrink-0 truncate text-brand-muted text-sm sm:block sm:max-w-56">
-                {shelfSummary}
-              </p>
-            ) : null}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label={sort === "oldest" ? "表示の設定（古い順）" : "表示の設定"}
-                render={<Button className="relative shrink-0" size="icon-lg" variant="outline" />}
-              >
-                <SlidersHorizontal weight="bold" />
-                {sort === "oldest" ? (
-                  <span
-                    aria-hidden="true"
-                    className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand-orange"
+                  <InputGroupInput
+                    enterKeyHint="search"
+                    id={searchId}
+                    placeholder="レシピを検索..."
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
                   />
-                ) : null}
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-auto min-w-40">
-                <DropdownMenuRadioGroup
-                  value={sort}
-                  onValueChange={(value) => {
-                    if (value === "newest" || value === "oldest") {
-                      changeSort(value);
-                    }
-                  }}
+                  {searchInput ? (
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton
+                        aria-label="検索を消す"
+                        size="icon-xs"
+                        onClick={clearSearch}
+                      >
+                        <X weight="bold" />
+                      </InputGroupButton>
+                    </InputGroupAddon>
+                  ) : null}
+                </InputGroup>
+              </Field>
+            </FieldGroup>
+            <Button className="hidden shrink-0 sm:inline-flex" type="submit" variant="outline">
+              検索
+            </Button>
+          </form>
+          {hasShelfToolbar ? (
+            <>
+              {shelfSummary ? (
+                <p className="hidden shrink-0 truncate text-brand-muted text-sm sm:block sm:max-w-56">
+                  {shelfSummary}
+                </p>
+              ) : null}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label={sort === "oldest" ? "表示の設定（古い順）" : "表示の設定"}
+                  render={<Button className="relative shrink-0" size="icon-lg" variant="outline" />}
                 >
-                  <DropdownMenuLabel>並び順</DropdownMenuLabel>
-                  <DropdownMenuRadioItem value="newest">新しい順</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="oldest">古い順</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuRadioGroup
-                  value={viewMode}
-                  onValueChange={(value) => {
-                    if (value === "grid" || value === "list") {
-                      setViewMode(value);
-                    }
-                  }}
-                >
-                  <DropdownMenuLabel>表示</DropdownMenuLabel>
-                  <DropdownMenuRadioItem value="grid">
-                    <SquaresFour weight="bold" />
-                    グリッド
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="list">
-                    <List weight="bold" />
-                    リスト
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        ) : null}
-        <Link
-          aria-label="アカウント"
-          className={cn(
-            buttonVariants({ size: "icon-lg", variant: "outline" }),
-            "shrink-0 no-underline sm:hidden",
-          )}
-          to="/settings"
-        >
-          <UserCircle weight="bold" />
-        </Link>
-        {/* ツールバーと一緒に固定し、スクロールしても絞り込み中の条件が見えるようにする。 */}
+                  <SlidersHorizontal weight="bold" />
+                  {sort === "oldest" ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand-orange"
+                    />
+                  ) : null}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-auto min-w-40">
+                  <DropdownMenuRadioGroup
+                    value={sort}
+                    onValueChange={(value) => {
+                      if (value === "newest" || value === "oldest") {
+                        changeSort(value);
+                      }
+                    }}
+                  >
+                    <DropdownMenuLabel>並び順</DropdownMenuLabel>
+                    <DropdownMenuRadioItem value="newest">新しい順</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="oldest">古い順</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup
+                    value={viewMode}
+                    onValueChange={(value) => {
+                      if (value === "grid" || value === "list") {
+                        setViewMode(value);
+                      }
+                    }}
+                  >
+                    <DropdownMenuLabel>表示</DropdownMenuLabel>
+                    <DropdownMenuRadioItem value="grid">
+                      <SquaresFour weight="bold" />
+                      グリッド
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="list">
+                      <List weight="bold" />
+                      リスト
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : null}
+          <Link
+            aria-label="アカウント"
+            className={cn(
+              buttonVariants({ size: "icon-lg", variant: "outline" }),
+              "shrink-0 no-underline sm:hidden",
+            )}
+            to="/settings"
+          >
+            <UserCircle weight="bold" />
+          </Link>
+        </div>
+        {/* ツールバーと一緒に固定し、スクロールしても絞り込み中の条件が見えるようにする。
+            検索の行と同じflexに入れると、チップ列の負のmarginで折り返しの判定が狂い、検索欄が潰れる。 */}
         {hasTagFilterBar ? (
           <TagFilterBar
-            className="basis-full"
+            className="mt-2 sm:mt-3"
             onToggleTag={toggleTag}
             onToggleUntagged={toggleUntagged}
             selectedTagIds={tagIds}
