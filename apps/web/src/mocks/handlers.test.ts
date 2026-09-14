@@ -4,7 +4,9 @@ import {
   getImportJobResponseSchema,
   getRecipeResponseSchema,
   listRecipesResponseSchema,
+  listTagsResponseSchema,
   type RecipeDetail,
+  replaceRecipeTagsResponseSchema,
   updateRecipeResponseSchema,
 } from "@recipestock/schemas";
 import { getResponse } from "msw";
@@ -42,6 +44,9 @@ const getRecipe = async (handlers: Handlers, recipeId: string) =>
   getRecipeResponseSchema.parse(
     await (await send(handlers, "GET", `/api/recipes/${recipeId}`)).json(),
   ).recipe as RecipeDetail;
+
+const listTags = async (handlers: Handlers) =>
+  listTagsResponseSchema.parse(await (await send(handlers, "GET", "/api/tags")).json()).tags;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -260,5 +265,77 @@ describe("mock handlers", () => {
       job: { status: "succeeded", textPreview: "今日の夕飯" },
       sourceText: "今日の夕飯\n鶏むね肉を焼いただけ。おいしかった。",
     });
+  });
+
+  it("タグは揃えた名前で既存のタグを使い、付けた順を保って詳細と語彙に反映される", async () => {
+    const handlers = setup("no-tags");
+
+    const first = await send(handlers, "PUT", "/api/recipes/recipe_001/tags", {
+      names: ["#作り置き", "ＢＢＱ"],
+    });
+    expect(first.status).toBe(200);
+    const { tags: attached } = replaceRecipeTagsResponseSchema.parse(await first.json());
+    expect(attached.map((tag) => tag.name)).toEqual(["作り置き", "BBQ"]);
+
+    await send(handlers, "PUT", "/api/recipes/recipe_002/tags", { names: ["bbq"] });
+    expect((await getRecipe(handlers, "recipe_002")).tags).toEqual([attached[1]]);
+    expect(await listTags(handlers)).toEqual([
+      { ...attached[1], recipeCount: 2 },
+      { ...attached[0], recipeCount: 1 },
+    ]);
+  });
+
+  it("一覧はタグをANDで絞り込み、タグなしと検索語のタグ名一致にも対応する", async () => {
+    const handlers = setup("no-tags");
+    await send(handlers, "PUT", "/api/recipes/recipe_001/tags", { names: ["鶏肉", "作り置き"] });
+    await send(handlers, "PUT", "/api/recipes/recipe_002/tags", { names: ["鶏肉"] });
+    const tags = await listTags(handlers);
+    const idOf = (name: string) => tags.find((tag) => tag.name === name)?.id ?? "";
+    const listIds = async (query: string) =>
+      listRecipesResponseSchema
+        .parse(await (await send(handlers, "GET", `/api/recipes?${query}`)).json())
+        .items.map((item) => item.id);
+
+    await expect(listIds(`tagId=${idOf("鶏肉")}&tagId=${idOf("作り置き")}`)).resolves.toEqual([
+      "recipe_001",
+    ]);
+    const untaggedIds = await listIds("untagged=true&limit=50");
+    expect(untaggedIds).not.toContain("recipe_001");
+    expect(untaggedIds).not.toContain("recipe_002");
+    await expect(listIds("q=作り置き")).resolves.toEqual(["recipe_001"]);
+  });
+
+  it("既存のタグと同じ名前への変更は409で相手を返し、統合すると付与を移す", async () => {
+    const handlers = setup("no-tags");
+    await send(handlers, "PUT", "/api/recipes/recipe_001/tags", { names: ["とり肉", "鶏肉"] });
+    await send(handlers, "PUT", "/api/recipes/recipe_002/tags", { names: ["とり肉"] });
+    const tags = await listTags(handlers);
+    const source = tags.find((tag) => tag.name === "とり肉");
+    const target = tags.find((tag) => tag.name === "鶏肉");
+
+    if (!source || !target) {
+      throw new Error("Tags were not created.");
+    }
+
+    const renamed = await send(handlers, "PATCH", `/api/tags/${source.id}`, { name: "鶏肉" });
+    expect(renamed.status).toBe(409);
+    expect(await renamed.json()).toMatchObject({
+      error: { code: "tag_name_conflict", details: { tag: { id: target.id, name: "鶏肉" } } },
+    });
+
+    const merged = await send(handlers, "POST", `/api/tags/${source.id}/merge`, {
+      intoTagId: target.id,
+    });
+    expect(merged.status).toBe(200);
+    expect((await getRecipe(handlers, "recipe_001")).tags).toEqual([
+      { id: target.id, name: "鶏肉" },
+    ]);
+    expect((await getRecipe(handlers, "recipe_002")).tags).toEqual([
+      { id: target.id, name: "鶏肉" },
+    ]);
+
+    expect((await send(handlers, "DELETE", `/api/tags/${target.id}`)).status).toBe(200);
+    expect((await getRecipe(handlers, "recipe_001")).tags).toEqual([]);
+    expect(await listTags(handlers)).toEqual([]);
   });
 });

@@ -15,8 +15,18 @@ const recipeListItem = (id: string, title: string) => ({
 describe("recipe cache", () => {
   it("削除済みRecipeをすべての一覧と詳細キャッシュから除去する", async () => {
     const queryClient = new QueryClient();
-    const defaultListKey = recipesQueryKeys.list("", "newest");
-    const searchListKey = recipesQueryKeys.list("tomato", "oldest");
+    const defaultListKey = recipesQueryKeys.list({
+      query: "",
+      sort: "newest",
+      tagIds: [],
+      untagged: false,
+    });
+    const searchListKey = recipesQueryKeys.list({
+      query: "tomato",
+      sort: "oldest",
+      tagIds: ["tag_1"],
+      untagged: false,
+    });
     const pageParams = [null, "cursor_2"];
 
     queryClient.setQueryData(defaultListKey, {

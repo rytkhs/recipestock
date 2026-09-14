@@ -2,6 +2,10 @@ import { type RecipeListSort } from "@recipestock/schemas";
 
 export type RecipeListFilters = {
   q?: string;
+  // 指定したタグがすべて付いたRecipeに絞る。
+  tags?: string[];
+  // タグが1つも付いていないRecipeに絞る。tagsとは同時に使わない。
+  untagged?: true;
 };
 
 // 一覧で最後に使った並び順と絞り込み条件。アプリを開き直したら既定に戻すので、保存せずメモリにだけ持つ。

@@ -5,15 +5,21 @@ import {
   type ImportJobSummary,
   importTextRequestSchema,
   importUrlRequestSchema,
+  MAX_TAG_NAME_LENGTH,
+  mergeTagRequestSchema,
   type PushSubscriptionRequest,
   type RecipeDetail,
   type RecipeListItem,
+  renameTagRequestSchema,
+  replaceRecipeTagsRequestSchema,
   type ShortcutCredential,
   updateRecipeRequestSchema,
 } from "@recipestock/schemas";
+import { countTagNameLength, normalizeTagName } from "@recipestock/shared";
 import { delay, HttpResponse, http } from "msw";
 import {
   MOCK_USER_ID,
+  type MockTag,
   recipeDetailFixture,
   recipeImageUrl,
   recipeThumbnailUrl,
@@ -26,8 +32,11 @@ import { type MockState } from "./scenarios";
 const MOCK_UPLOAD_ORIGIN = "https://mock-r2.invalid";
 const IMPORT_JOB_DURATION_MS = 6000;
 
-const apiError = (status: number, code: ApiErrorCode, message: string) =>
-  HttpResponse.json({ error: { code, message } }, { status });
+const apiError = (status: number, code: ApiErrorCode, message: string, details?: unknown) =>
+  HttpResponse.json(
+    { error: { code, message, ...(details === undefined ? {} : { details }) } },
+    { status },
+  );
 
 const svgResponse = (seed: string) =>
   HttpResponse.text(imagePlaceholderSvg(seed), {
@@ -37,11 +46,31 @@ const svgResponse = (seed: string) =>
 const objectKeyFromPath = (url: string, prefix: string) =>
   decodeURIComponent(new URL(url).pathname.slice(prefix.length));
 
-const matchesQuery = (recipe: RecipeListItem, query: string) => {
+// APIと同じく、語ごとにタイトル・出典かタグ名のどちらかに当たればよい。
+const matchesQuery = (recipe: RecipeListItem, tagNames: readonly string[], query: string) => {
   const haystack = `${recipe.title} ${recipe.sourceName ?? ""}`.toLowerCase();
 
-  return haystack.includes(query.toLowerCase());
+  return query
+    .toLowerCase()
+    .normalize("NFKC")
+    .split(/\s+/)
+    .filter(Boolean)
+    .every(
+      (term) =>
+        haystack.includes(term) || tagNames.some((name) => name.toLowerCase().includes(term)),
+    );
 };
+
+// APIの名前の揃え方と上限をそのまま使う。
+const normalizeMockTagName = (name: string) => {
+  const normalized = normalizeTagName(name);
+
+  return normalized && countTagNameLength(normalized.name) <= MAX_TAG_NAME_LENGTH
+    ? normalized
+    : null;
+};
+
+const tagsInvalid = () => apiError(400, "validation_failed", "Request validation failed.");
 
 type RecipeContent = RecipeDetail["content"];
 type RecipeImage = NonNullable<RecipeContent["coverImage"]>;
@@ -140,6 +169,28 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
   let credentials: ShortcutCredential[] = [...state.shortcutCredentials.credentials];
   const jobCompletions = new Map<string, number>();
   let nextId = 1;
+  let tags: MockTag[] = [...state.tags];
+  // Recipeのidごとに、付けたタグのidを付けた順に持つ。
+  const recipeTags = new Map(
+    Object.entries(state.recipeTags).map(([recipeId, tagIds]) => [recipeId, [...tagIds]]),
+  );
+
+  const tagsOf = (recipeId: string) =>
+    (recipeTags.get(recipeId) ?? []).flatMap((tagId) => {
+      const tag = tags.find((candidate) => candidate.id === tagId);
+      return tag ? [{ id: tag.id, name: tag.name }] : [];
+    });
+
+  // APIと同じく件数の多い順、同数なら作った順（配列の順）に並べる。
+  const tagsWithCount = () =>
+    tags
+      .map((tag, order) => ({
+        ...tag,
+        order,
+        recipeCount: recipes.filter((recipe) => recipeTags.get(recipe.id)?.includes(tag.id)).length,
+      }))
+      .sort((a, b) => b.recipeCount - a.recipeCount || a.order - b.order)
+      .map(({ id, name, recipeCount }) => ({ id, name, recipeCount }));
 
   const requireSession = () =>
     session ? null : apiError(401, "unauthorized", "Sign in is required.");
@@ -293,9 +344,20 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       const query = url.searchParams.get("q") ?? "";
+      const tagIds = [...new Set(url.searchParams.getAll("tagId"))];
+      const untagged = url.searchParams.get("untagged") === "true";
       const limit = Number(url.searchParams.get("limit") ?? "20");
       const offset = cursor ? Number(cursor) : 0;
-      const matched = query ? recipes.filter((recipe) => matchesQuery(recipe, query)) : recipes;
+      const matched = recipes.filter((recipe) => {
+        const attachedTagIds = recipeTags.get(recipe.id) ?? [];
+        const tagNames = tagsOf(recipe.id).map((tag) => tag.name);
+
+        return (
+          (!query || matchesQuery(recipe, tagNames, query)) &&
+          tagIds.every((tagId) => attachedTagIds.includes(tagId)) &&
+          (!untagged || attachedTagIds.length === 0)
+        );
+      });
       // recipesはAPIの既定と同じく追加が新しい順に持っている。
       const sorted = url.searchParams.get("sort") === "oldest" ? [...matched].reverse() : matched;
       const items = sorted.slice(offset, offset + limit);
@@ -342,6 +404,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         },
         createdAt: now,
         updatedAt: now,
+        tags: [],
         locked: false,
       };
 
@@ -362,7 +425,9 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       return HttpResponse.json({
-        recipe: listed.locked ? { id: recipeId, locked: true } : detailOf(listed),
+        recipe: listed.locked
+          ? { id: recipeId, locked: true }
+          : { ...detailOf(listed), tags: tagsOf(recipeId) },
       });
     }),
     http.put("/api/recipes/:recipeId", async ({ params, request }) => {
@@ -397,6 +462,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         title: content.title,
         content,
         updatedAt: new Date().toISOString(),
+        tags: tagsOf(recipeId),
       };
 
       recipeDetails.set(recipeId, detail);
@@ -412,6 +478,145 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       const recipeId = String(params.recipeId);
       recipes = recipes.filter((recipe) => recipe.id !== recipeId);
       recipeDetails.delete(recipeId);
+      recipeTags.delete(recipeId);
+
+      return HttpResponse.json({ ok: true });
+    }),
+    http.put("/api/recipes/:recipeId/tags", async ({ params, request }) => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      const recipeId = String(params.recipeId);
+      const listed = recipes.find((recipe) => recipe.id === recipeId);
+
+      if (!listed) {
+        return apiError(404, "not_found", "Recipe was not found.");
+      }
+
+      const body = replaceRecipeTagsRequestSchema.safeParse(await request.json());
+      const names = body.success ? body.data.names.map(normalizeMockTagName) : [null];
+
+      if (names.some((name) => name === null)) {
+        return tagsInvalid();
+      }
+
+      if (listed.locked) {
+        return apiError(403, "locked_recipe", "Recipe is locked.");
+      }
+
+      // 揃えた名前が同じなら既存のタグを使い、なければ作る。
+      const selectedTagIds: string[] = [];
+
+      for (const name of names) {
+        if (!name) continue;
+
+        let tag = tags.find((candidate) => candidate.name.toLowerCase() === name.normalizedName);
+
+        if (!tag) {
+          tag = { id: `tag_mock_${nextId++}`, name: name.name };
+          tags = [...tags, tag];
+        }
+
+        if (!selectedTagIds.includes(tag.id)) {
+          selectedTagIds.push(tag.id);
+        }
+      }
+
+      // 残したタグは付けた順を保ち、新しく付けたタグを後ろに足す。
+      const currentTagIds = recipeTags.get(recipeId) ?? [];
+      recipeTags.set(recipeId, [
+        ...currentTagIds.filter((tagId) => selectedTagIds.includes(tagId)),
+        ...selectedTagIds.filter((tagId) => !currentTagIds.includes(tagId)),
+      ]);
+
+      return HttpResponse.json({ tags: tagsOf(recipeId) });
+    }),
+
+    // --- tags ---
+    http.get("/api/tags", () => requireSession() ?? HttpResponse.json({ tags: tagsWithCount() })),
+    http.patch("/api/tags/:tagId", async ({ params, request }) => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      const tagId = String(params.tagId);
+
+      if (!tags.some((tag) => tag.id === tagId)) {
+        return apiError(404, "not_found", "Tag was not found.");
+      }
+
+      const body = renameTagRequestSchema.safeParse(await request.json());
+      const name = body.success ? normalizeMockTagName(body.data.name) : null;
+
+      if (!name) {
+        return tagsInvalid();
+      }
+
+      const conflicting = tags.find(
+        (tag) => tag.id !== tagId && tag.name.toLowerCase() === name.normalizedName,
+      );
+
+      if (conflicting) {
+        return apiError(409, "tag_name_conflict", "Tag name is already used.", {
+          tag: conflicting,
+        });
+      }
+
+      tags = tags.map((tag) => (tag.id === tagId ? { ...tag, name: name.name } : tag));
+
+      return HttpResponse.json({ tag: { id: tagId, name: name.name } });
+    }),
+    http.post("/api/tags/:tagId/merge", async ({ params, request }) => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      const tagId = String(params.tagId);
+      const body = mergeTagRequestSchema.safeParse(await request.json());
+
+      if (!body.success || body.data.intoTagId === tagId) {
+        return tagsInvalid();
+      }
+
+      const source = tags.find((tag) => tag.id === tagId);
+      const target = tags.find((tag) => tag.id === body.data.intoTagId);
+
+      if (!source || !target) {
+        return apiError(404, "not_found", "Tag was not found.");
+      }
+
+      // 付けた位置のまま統合先に置き換え、両方付いていたRecipeでは元のタグを外すだけにする。
+      for (const [recipeId, tagIds] of recipeTags) {
+        if (!tagIds.includes(source.id)) continue;
+
+        recipeTags.set(
+          recipeId,
+          tagIds.includes(target.id)
+            ? tagIds.filter((id) => id !== source.id)
+            : tagIds.map((id) => (id === source.id ? target.id : id)),
+        );
+      }
+
+      tags = tags.filter((tag) => tag.id !== source.id);
+
+      return HttpResponse.json({ tag: target });
+    }),
+    http.delete("/api/tags/:tagId", ({ params }) => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      const tagId = String(params.tagId);
+
+      if (!tags.some((tag) => tag.id === tagId)) {
+        return apiError(404, "not_found", "Tag was not found.");
+      }
+
+      tags = tags.filter((tag) => tag.id !== tagId);
+
+      for (const [recipeId, tagIds] of recipeTags) {
+        recipeTags.set(
+          recipeId,
+          tagIds.filter((id) => id !== tagId),
+        );
+      }
 
       return HttpResponse.json({ ok: true });
     }),

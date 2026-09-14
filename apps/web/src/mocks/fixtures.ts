@@ -205,6 +205,58 @@ const daysAgoIso = (days: number, now: Date) =>
 
 export const mockRecipeId = (index: number) => `recipe_${String(index + 1).padStart(3, "0")}`;
 
+export type MockTag = {
+  id: string;
+  name: string;
+};
+
+// seedのタイトルごとに付けておくタグ。チップ列の件数順とANDの絞り込みを確かめられるよう、件数に差をつけている。
+const recipeSeedTagNames: Record<string, string[]> = {
+  鶏むね肉のみぞれ煮: ["主菜", "鶏肉"],
+  基本のポテトサラダ: ["副菜", "作り置き"],
+  台湾まぜそば: ["麺・丼"],
+  豚バラ大根: ["主菜", "作り置き"],
+  さばの味噌煮: ["主菜"],
+  ガパオライス: ["麺・丼", "鶏肉"],
+  キャロットラペ: ["副菜", "作り置き", "お弁当"],
+  牛すじ煮込み: ["主菜", "作り置き"],
+  あさりの酒蒸し: ["おつまみ"],
+  抹茶のパウンドケーキ: ["お菓子"],
+  麻婆豆腐: ["主菜"],
+  かぼちゃの煮物: ["副菜", "作り置き", "お弁当"],
+  スパイスチキンカレー: ["主菜", "鶏肉"],
+  肉じゃが: ["主菜", "作り置き"],
+  手羽元のさっぱり煮: ["主菜", "鶏肉", "作り置き"],
+  きんぴらごぼう: ["副菜", "作り置き", "お弁当"],
+  焼きねぎのマリネ: ["副菜", "おつまみ"],
+  バスクチーズケーキ: ["お菓子"],
+};
+
+// seedに付けたタグを、初めて出てきた順に語彙として並べる。
+const mockTagNames = [
+  ...new Set(recipeSeeds.flatMap((seed) => recipeSeedTagNames[seed.title] ?? [])),
+];
+
+const mockTagId = (index: number) => `tag_${String(index + 1).padStart(3, "0")}`;
+
+export const tagsFixture = (): MockTag[] =>
+  mockTagNames.map((name, index) => ({ id: mockTagId(index), name }));
+
+// Recipeのidごとに、付けたタグのidを付けた順に持つ。
+export const recipeTagsFixture = ({
+  count = recipeSeeds.length,
+}: {
+  count?: number;
+} = {}): Record<string, string[]> =>
+  Object.fromEntries(
+    recipeSeeds
+      .slice(0, count)
+      .map((seed, index) => [
+        mockRecipeId(index),
+        (recipeSeedTagNames[seed.title] ?? []).map((name) => mockTagId(mockTagNames.indexOf(name))),
+      ]),
+  );
+
 export type RecipeListFixtureOptions = {
   count?: number;
   /** この件数を超えたRecipeを locked: true にする。free棚の確認用。 */
@@ -305,6 +357,7 @@ export const recipeDetailFixture = (
     },
     createdAt: daysAgoIso(seed.createdDaysAgo, now),
     updatedAt: daysAgoIso(seed.createdDaysAgo, now),
+    tags: [],
     locked: false,
     ...overrides,
   };

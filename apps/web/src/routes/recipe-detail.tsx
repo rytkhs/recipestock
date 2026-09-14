@@ -40,6 +40,7 @@ import {
   syncDeletedRecipeCaches,
 } from "../features/recipes";
 import { readRecipeListFilters } from "../features/recipes/list-search";
+import { RecipeTags } from "../features/tags/recipe-tags";
 
 const recipeDetailCoverImageProps = {
   decoding: "async",
@@ -317,6 +318,7 @@ export const RecipeDetailRoute = () => {
         <p className="mx-auto mt-5 max-w-3xl font-bold text-xl text-brand-ink leading-tight sm:mt-5 sm:text-2xl">
           {recipe.title}
         </p>
+        <RecipeTags recipeId={recipe.id} tags={recipe.tags} />
       </div>
 
       {deleteMutation.error ? (

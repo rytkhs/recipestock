@@ -11,17 +11,20 @@ import {
   billingStatusFixture,
   importJobFixture,
   MOCK_RECIPE_SEED_COUNT,
+  type MockTag,
   pushSubscriptionsFixture,
   recipeListFixture,
+  recipeTagsFixture,
   type SessionFixture,
   sessionFixture,
   shortcutCredentialsFixture,
+  tagsFixture,
   viewerFixture,
 } from "./fixtures";
 
 /**
  * シナリオが宣言するのは「サーバが持っている状態」だけ。
- * 検索・ページング・ロック判定はハンドラ側が1箇所で処理する。
+ * 検索・ページング・ロック判定・タグの絞り込みはハンドラ側が1箇所で処理する。
  */
 export type MockState = {
   /** null なら未ログイン。get-session が 200 null を返す。 */
@@ -31,6 +34,10 @@ export type MockState = {
   viewer: GetMeResponse;
   billing: GetBillingStatusResponse;
   recipes: RecipeListItem[];
+  /** 利用者のタグ。並びは作った順。 */
+  tags: MockTag[];
+  /** Recipeのidごとに、付けたタグのidを付けた順に持つ。 */
+  recipeTags: Record<string, string[]>;
   importJobs: ImportJobSummary[];
   /** テキスト取り込みのjobが保持し、本人向けの詳細APIから返す原文。 */
   importJobSourceTexts: Record<string, string>;
@@ -62,6 +69,8 @@ const baseState = (): MockState => ({
     },
   }),
   recipes: recipeListFixture(),
+  tags: tagsFixture(),
+  recipeTags: recipeTagsFixture(),
   importJobs: [],
   importJobSourceTexts: {},
   pushSubscriptions: pushSubscriptionsFixture(),
@@ -82,6 +91,7 @@ const freeState = (recipeCount: number): MockState => {
     }),
     billing: billingStatusFixture(),
     recipes,
+    recipeTags: recipeTagsFixture({ count: recipeCount }),
   };
 };
 
@@ -99,7 +109,14 @@ export const scenarios: Scenario[] = [
       viewer: viewerFixture({ plan: "free", recipeCount: 0 }),
       billing: billingStatusFixture(),
       recipes: [],
+      tags: [],
+      recipeTags: {},
     }),
+  },
+  {
+    id: "no-tags",
+    label: "タグを持たない(チップ列なし・定番候補)",
+    build: () => ({ ...baseState(), tags: [], recipeTags: {} }),
   },
   {
     id: "free-locked",

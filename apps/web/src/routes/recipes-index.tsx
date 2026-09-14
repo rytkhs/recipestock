@@ -10,7 +10,11 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { type RecentImportJobsResponse, type RecipeListSort } from "@recipestock/schemas";
+import {
+  MAX_RECIPE_TAGS,
+  type RecentImportJobsResponse,
+  type RecipeListSort,
+} from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -67,6 +71,8 @@ import {
   readRecipeViewMode,
   writeRecipeViewMode,
 } from "../features/recipes/view-mode";
+import { listTags, tagsQueryKeys } from "../features/tags";
+import { TagFilterBar } from "../features/tags/tag-filter-bar";
 
 // routeには遅延読み込みのcomponentをそのまま渡し、routerに画面のコードを先読みさせる。
 // そのため並び順はpropsではなく、ここでrouteから読む。
@@ -296,9 +302,44 @@ const ImportJobIsland = () => {
   );
 };
 
+// URLにタグの指定がないときに使う。描画のたびに新しい配列にすると、条件が変わったと見なされる。
+const noTagIds: string[] = [];
+
+// 絞り込んで0件になったときの見出し。どの条件で絞っているかを言葉にする。
+const describeFilterMiss = ({
+  query,
+  tagNames,
+  untagged,
+}: {
+  query: string;
+  tagNames: readonly string[];
+  untagged: boolean;
+}) => {
+  const tagLabel = tagNames.map((name) => `「${name}」`).join("");
+
+  if (untagged) {
+    return query
+      ? `「${query}」に一致する、タグのないレシピはありません`
+      : "すべてのレシピにタグが付いています";
+  }
+
+  if (tagLabel) {
+    return query
+      ? `「${query}」に一致し、${tagLabel}が付いたレシピはありません`
+      : `${tagLabel}が付いたレシピはありません`;
+  }
+
+  return query ? `「${query}」に一致するレシピはありません` : "条件に合うレシピはありません";
+};
+
 export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
-  const { sort = "newest", q: query = "" } = recipesRouteApi.useSearch();
+  const {
+    sort = "newest",
+    q: query = "",
+    tags: requestedTagIdsInUrl = noTagIds,
+    untagged: untaggedInUrl,
+  } = recipesRouteApi.useSearch();
   const navigate = recipesRouteApi.useNavigate();
   const [searchInput, setSearchInput] = useState(query);
   const searchId = useId();
@@ -306,6 +347,22 @@ export const RecipesIndexRoute = () => {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<RecipeViewMode>(readRecipeViewMode);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const tagsQuery = useQuery({ queryKey: tagsQueryKeys.all(), queryFn: listTags });
+  // 「タグなし」はタグの指定と同時に使わない。URLで両方来たら「タグなし」を採る。
+  const untagged = untaggedInUrl === true;
+  const requestedTagIds = untagged ? noTagIds : requestedTagIdsInUrl;
+  // 削除や統合で消えたタグのidが、URLや戻る操作で残ることがある。タグ一覧を読んだところで外す。
+  const tagIds = useMemo(() => {
+    if (!tagsQuery.data) {
+      return requestedTagIds;
+    }
+
+    const knownTagIds = new Set(tagsQuery.data.map((tag) => tag.id));
+    return requestedTagIds.filter((tagId) => knownTagIds.has(tagId));
+  }, [requestedTagIds, tagsQuery.data]);
+  const hasUnknownTagIds = tagIds.length !== requestedTagIds.length;
+  // 消えたidかどうかはタグ一覧を読むまで分からないので、それまでは絞った一覧を取りに行かない。
+  const isWaitingForTags = requestedTagIds.length > 0 && tagsQuery.isPending;
 
   useEffect(() => {
     writeRecipeViewMode(viewMode);
@@ -316,19 +373,44 @@ export const RecipesIndexRoute = () => {
     writeRecipeListSort(sort);
   }, [sort]);
 
-  // 検索語は戻る操作で引き継ぐ。ヘッダーのリンクなどでURLから外れたら入力欄も合わせる。
+  // 検索語とタグの条件は戻る操作で引き継ぐ。
   useEffect(() => {
-    writeRecipeListFilters({ q: query || undefined });
+    writeRecipeListFilters({
+      q: query || undefined,
+      tags: tagIds.length > 0 ? tagIds : undefined,
+      untagged: untagged || undefined,
+    });
+  }, [query, tagIds, untagged]);
+
+  // ヘッダーのリンクなどでURLから検索語が外れたら、入力欄も合わせる。
+  useEffect(() => {
     setSearchInput(query);
   }, [query]);
 
-  const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage } =
-    useInfiniteQuery({
-      queryKey: recipesQueryKeys.list(query, sort),
-      initialPageParam: null as string | null,
-      queryFn: ({ pageParam }) => listRecipes({ query, sort, cursor: pageParam }),
-      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    });
+  useEffect(() => {
+    if (hasUnknownTagIds) {
+      void navigate({
+        search: (prev) => ({ ...prev, tags: tagIds.length > 0 ? tagIds : undefined }),
+        replace: true,
+      });
+    }
+  }, [hasUnknownTagIds, navigate, tagIds]);
+
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    isPending: isListPending,
+  } = useInfiniteQuery({
+    queryKey: recipesQueryKeys.list({ query, sort, tagIds, untagged }),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => listRecipes({ query, sort, tagIds, untagged, cursor: pageParam }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: !isWaitingForTags && !hasUnknownTagIds,
+  });
   const deleteMutation = useMutation({
     mutationFn: (recipeId: string) => deleteRecipe(recipeId),
     onSuccess: async (_response, recipeId) => {
@@ -336,10 +418,11 @@ export const RecipesIndexRoute = () => {
     },
   });
   const recipes = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
-  const isInitialRecipesLoading = isFetching && recipes.length === 0 && !error;
+  // 絞った一覧を取りに行くのを待っている間も、取得中と同じに扱う。
+  const isInitialRecipesLoading = (isFetching || isListPending) && recipes.length === 0 && !error;
   const recipeSkeletonKeys = viewMode === "grid" ? gridRecipeSkeletonKeys : listRecipeSkeletonKeys;
   const containerClass = recipeShelfContainerClass(viewMode);
-  // 一覧もfreeプランのロック判定も追加日が軸なので、ロック中のRecipeは並び順によらず一続きになる。
+  // 一覧もfreeプランのロック判定も追加日が軸なので、ロック中のRecipeは並び順や絞り込みによらず一続きになる。
   // 案内は最初のロック中Recipeの前に一度だけ出す。
   const firstLockedRecipeId = recipes.find((recipe) => recipe.locked)?.id ?? null;
   const shelf = useMemo(() => {
@@ -356,17 +439,33 @@ export const RecipesIndexRoute = () => {
 
     return { offsets, sections };
   }, [query, recipes]);
+  const selectedTags = useMemo(
+    () => tagIds.flatMap((tagId) => tagsQuery.data?.find((tag) => tag.id === tagId) ?? []),
+    [tagIds, tagsQuery.data],
+  );
+  // 付いているRecipeがあるタグだけを並べる。選んでいるタグは0件になっても外せるように残す。
+  const filterBarTags = (tagsQuery.data ?? []).filter(
+    (tag) => tag.recipeCount > 0 || tagIds.includes(tag.id),
+  );
+  const hasTagFilterBar = filterBarTags.length > 0 || untagged;
+  const hasFilter = query !== "" || tagIds.length > 0 || untagged;
   // 取得前はdataが無く、hasNextPageもfalseになる。dataを見ないと「0件」が一瞬出る。
   const loadedCountLabel = data && !hasNextPage ? `${recipes.length}件` : null;
-  const shelfSummary = query
-    ? [`「${query}」の検索結果`, loadedCountLabel].filter(Boolean).join(" · ")
-    : (loadedCountLabel ?? "");
-  const hasShelfToolbar = isInitialRecipesLoading || recipes.length > 0 || query !== "";
-  const isSearchMiss = !isFetching && !error && recipes.length === 0 && query !== "";
-  const isShelfEmpty = !isFetching && !error && recipes.length === 0 && query === "";
+  const shelfSummary = [
+    query ? `「${query}」の検索結果` : null,
+    selectedTags.length > 0 ? selectedTags.map((tag) => `「${tag.name}」`).join("") : null,
+    untagged ? "タグなし" : null,
+    loadedCountLabel,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const hasShelfToolbar = isInitialRecipesLoading || recipes.length > 0 || hasFilter;
+  const isListEmpty = !isFetching && !isListPending && !error && recipes.length === 0;
+  const isFilterMiss = isListEmpty && hasFilter;
+  const isShelfEmpty = isListEmpty && !hasFilter;
 
-  // 検索語も並び順もURLに持つ。戻る操作で条件が行き来しないようにreplaceし、別の条件の結果は先頭から見せる。
-  // ほかの条件は残したまま、変えたものだけを差し替える。
+  // 検索語もタグの条件も並び順もURLに持つ。戻る操作で条件が行き来しないようにreplaceし、
+  // 別の条件の結果は先頭から見せる。ほかの条件は残したまま、変えたものだけを差し替える。
   const changeQuery = (nextQuery: string) => {
     if (nextQuery === query) {
       return;
@@ -382,6 +481,40 @@ export const RecipesIndexRoute = () => {
   const clearSearch = () => {
     setSearchInput("");
     changeQuery("");
+  };
+  const changeTagFilter = (nextTagIds: readonly string[], nextUntagged: boolean) => {
+    void navigate({
+      search: (prev) => ({
+        ...prev,
+        tags: nextTagIds.length > 0 ? [...nextTagIds] : undefined,
+        untagged: nextUntagged ? true : undefined,
+      }),
+      replace: true,
+    });
+    window.scrollTo({ top: 0 });
+  };
+  const toggleTag = (tagId: string) => {
+    if (tagIds.includes(tagId)) {
+      changeTagFilter(
+        tagIds.filter((id) => id !== tagId),
+        false,
+      );
+      return;
+    }
+
+    // APIが受け付ける個数を超えては選ばせない。
+    if (tagIds.length < MAX_RECIPE_TAGS) {
+      changeTagFilter([...tagIds, tagId], false);
+    }
+  };
+  const toggleUntagged = () => changeTagFilter([], !untagged);
+  const clearFilters = () => {
+    setSearchInput("");
+    void navigate({
+      search: (prev) => ({ ...prev, q: undefined, tags: undefined, untagged: undefined }),
+      replace: true,
+    });
+    window.scrollTo({ top: 0 });
   };
   // 遷移より先に覚え、この遷移で描き直すヘッダーのリンクにも選んだ並び順を使わせる。
   const changeSort = (nextSort: RecipeListSort) => {
@@ -427,7 +560,7 @@ export const RecipesIndexRoute = () => {
 
   return (
     <section className="mx-auto w-full max-w-[1120px] px-4 pb-3 sm:pb-8 sm:px-6 lg:px-10">
-      <div className="-mx-4 sticky top-0 z-30 flex min-w-0 items-center gap-2 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:gap-3 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
+      <div className="-mx-4 sticky top-0 z-30 flex min-w-0 flex-wrap items-center gap-2 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:gap-3 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
         <form className="flex min-w-0 flex-1 items-end gap-3" onSubmit={submitSearch}>
           <FieldGroup className="min-w-0 flex-1">
             <Field className="min-w-0">
@@ -525,6 +658,17 @@ export const RecipesIndexRoute = () => {
         >
           <UserCircle weight="bold" />
         </Link>
+        {/* ツールバーと一緒に固定し、スクロールしても絞り込み中の条件が見えるようにする。 */}
+        {hasTagFilterBar ? (
+          <TagFilterBar
+            className="basis-full"
+            onToggleTag={toggleTag}
+            onToggleUntagged={toggleUntagged}
+            selectedTagIds={tagIds}
+            tags={filterBarTags}
+            untagged={untagged}
+          />
+        ) : null}
       </div>
 
       <ImportJobIsland />
@@ -563,13 +707,19 @@ export const RecipesIndexRoute = () => {
           </Link>
         </div>
       ) : null}
-      {isSearchMiss ? (
+      {isFilterMiss ? (
         <div className="mt-14 flex flex-col items-center justify-center text-center">
           <p className="max-w-sm font-semibold text-brand-walnut text-lg">
-            「{query}」に一致するレシピはありません
+            {describeFilterMiss({
+              query,
+              tagNames: selectedTags.map((tag) => tag.name),
+              untagged,
+            })}
           </p>
-          <p className="mt-2 text-brand-muted text-sm">材料名や出典でも探せます。</p>
-          <Button className="mt-6" variant="outline" onClick={clearSearch}>
+          {query ? (
+            <p className="mt-2 text-brand-muted text-sm">材料名・出典・タグでも探せます。</p>
+          ) : null}
+          <Button className="mt-6" variant="outline" onClick={clearFilters}>
             すべてのレシピを表示
           </Button>
         </div>
