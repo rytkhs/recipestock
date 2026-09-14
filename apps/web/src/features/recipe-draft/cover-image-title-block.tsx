@@ -1,8 +1,11 @@
-import { Button, Input, Label, TextField } from "@heroui/react";
-import { Camera, CircleNotch, X } from "@phosphor-icons/react";
+import { Camera, X } from "@phosphor-icons/react";
 import { type DraftImageRef } from "@recipestock/schemas";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useController } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   createLocalPreviewUrl,
   imageInputAccept,
@@ -31,6 +34,7 @@ export const CoverImageTitleBlock = ({
   });
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const titleId = useId();
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
@@ -86,7 +90,7 @@ export const CoverImageTitleBlock = ({
     <section className="min-w-0 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:rounded-[18px]">
       <div className="grid min-w-0 gap-4 p-3.5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:p-5">
         <div className="grid min-w-0 gap-2">
-          <Label className="text-sm font-bold text-brand-walnut">カバー画像</Label>
+          <span className="text-sm font-bold text-brand-walnut">カバー画像</span>
           <div className="relative w-full max-w-[15rem] shrink-0 sm:w-fit">
             <input
               ref={inputRef}
@@ -119,38 +123,40 @@ export const CoverImageTitleBlock = ({
             </button>
 
             {isUploading ? (
-              <div className="absolute inset-0 grid place-items-center rounded-[14px] bg-black/30">
-                <CircleNotch className="animate-spin text-white" size={24} />
+              <div className="absolute inset-0 grid place-items-center rounded-[14px] bg-black/30 text-primary-foreground">
+                <Spinner aria-label="カバー画像アップロード中" />
               </div>
             ) : null}
 
             {currentPreviewUrl && !isUploading ? (
               <Button
                 aria-label="カバー画像を削除"
-                className="absolute -right-1.5 -top-1.5 h-7 min-w-7 rounded-full px-0 text-xs leading-none shadow-pantry-sm"
-                isIconOnly
-                variant="danger"
-                onPress={handleRemove}
+                className="absolute -right-1.5 -top-1.5"
+                size="icon-sm"
+                variant="destructive"
+                onClick={handleRemove}
               >
-                <X size={14} weight="bold" />
+                <X weight="bold" />
               </Button>
             ) : null}
           </div>
         </div>
 
-        <TextField aria-label="レシピ名" className="grid min-w-0 content-start gap-2" isRequired>
-          <Label className="text-sm font-bold text-brand-walnut">レシピ名</Label>
-          <Input
-            className="w-full rounded-[14px] bg-brand-paper-raised px-3.5 text-base leading-tight placeholder:text-brand-wheat"
-            name={titleField.name}
-            placeholder="レシピ名を入力"
-            ref={titleField.ref}
-            variant="secondary"
-            value={titleField.value ?? ""}
-            onBlur={titleField.onBlur}
-            onChange={(event) => titleField.onChange(event.target.value)}
-          />
-        </TextField>
+        <FieldGroup>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={titleId}>レシピ名</FieldLabel>
+            <Input
+              id={titleId}
+              name={titleField.name}
+              placeholder="レシピ名を入力"
+              ref={titleField.ref}
+              required
+              value={titleField.value ?? ""}
+              onBlur={titleField.onBlur}
+              onChange={(event) => titleField.onChange(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
       </div>
 
       {error ? (

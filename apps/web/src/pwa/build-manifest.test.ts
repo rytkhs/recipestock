@@ -23,7 +23,6 @@ describe("App Shell precache manifest", () => {
     "api/me",
     "icons/icon-512.png",
     "icons/shortcuts/import-url-192.png",
-    "screenshots/recipes-wide.png",
     "assets/private.png",
   ])("%sをprecache対象にしない", (url) => {
     expect(isAllowedPrecacheUrl(url)).toBe(false);

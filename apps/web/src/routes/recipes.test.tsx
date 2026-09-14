@@ -38,6 +38,85 @@ const savedStepsWithImages = (imageCount: number, prefix: string) =>
     ),
   }));
 
+const lightboxRecipeResponse = {
+  recipe: {
+    id: "recipe_123",
+    title: "Tomato pasta",
+    content: {
+      title: "Tomato pasta",
+      coverImage: savedImage(
+        "recipes/user_123/recipe_123/cover.webp",
+        "https://images.example/cover.webp",
+      ),
+      referenceImages: [
+        savedImage(
+          "recipes/user_123/recipe_123/source-1.webp",
+          "https://images.example/source-1.webp",
+          1080,
+          1080,
+        ),
+      ],
+      ingredientGroups: [],
+      steps: [
+        {
+          text: "煮詰める",
+          images: [
+            savedImage(
+              "recipes/user_123/recipe_123/step.webp",
+              "https://images.example/step.webp",
+              800,
+              1200,
+            ),
+          ],
+        },
+      ],
+    },
+    source: {
+      sourceUrl: null,
+      normalizedSourceUrl: null,
+      sourceName: null,
+    },
+    createdAt: "2026-05-26T00:00:00.000Z",
+    updatedAt: "2026-05-26T00:00:00.000Z",
+    tags: [],
+    locked: false,
+  },
+};
+
+const tomatoPastaListItem = {
+  id: "recipe_123",
+  title: "Tomato pasta",
+  coverImageUrl: null,
+  sourceName: null,
+  createdAt: "2026-05-25T00:00:00.000Z",
+  locked: false,
+};
+
+const tomatoPastaDetailResponse = {
+  recipe: {
+    id: "recipe_123",
+    title: "Tomato pasta",
+    content: { title: "Tomato pasta", ingredientGroups: [], steps: [] },
+    source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
+    createdAt: "2026-05-25T00:00:00.000Z",
+    updatedAt: "2026-05-25T00:00:00.000Z",
+    tags: [],
+    locked: false,
+  },
+};
+
+const mockLightboxRecipeFetch = () =>
+  mockFetch(
+    async (input) => {
+      if (getRequestPath(input) === "/api/recipes/recipe_123") {
+        return jsonResponse(lightboxRecipeResponse);
+      }
+
+      return new Response(null, { status: 404 });
+    },
+    { authenticated: true },
+  );
+
 const getReferenceImageInput = () => {
   const input = screen
     .getAllByLabelText("レシピ画像を追加")
@@ -53,6 +132,7 @@ const getReferenceImageInput = () => {
 describe("RecipesRoute", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -98,25 +178,27 @@ describe("RecipesRoute", () => {
     );
 
     await renderApp("/recipes", (queryClient) => {
-      queryClient.setQueryData(["recipes", { query: "" }], {
-        pages: [
-          {
-            items: [
-              {
-                id: "recipe_123",
-                title: "Tomato pasta",
-                coverImageUrl: null,
-                sourceName: "Example Kitchen",
-                createdAt: "2026-05-25T00:00:00.000Z",
-                updatedAt: "2026-05-26T00:00:00.000Z",
-                locked: false,
-              },
-            ],
-            nextCursor: null,
-          },
-        ],
-        pageParams: [null],
-      });
+      queryClient.setQueryData(
+        ["recipes", { query: "", sort: "newest", tagIds: [], untagged: false }],
+        {
+          pages: [
+            {
+              items: [
+                {
+                  id: "recipe_123",
+                  title: "Tomato pasta",
+                  coverImageUrl: null,
+                  sourceName: "Example Kitchen",
+                  createdAt: "2026-05-25T00:00:00.000Z",
+                  locked: false,
+                },
+              ],
+              nextCursor: null,
+            },
+          ],
+          pageParams: [null],
+        },
+      );
     });
 
     await expect(
@@ -137,7 +219,6 @@ describe("RecipesRoute", () => {
                 coverImageUrl: null,
                 sourceName: "Example Kitchen",
                 createdAt: "2026-05-25T00:00:00.000Z",
-                updatedAt: "2026-05-26T00:00:00.000Z",
                 locked: false,
               },
             ],
@@ -154,7 +235,6 @@ describe("RecipesRoute", () => {
                 coverImageUrl: null,
                 sourceName: "Example Kitchen",
                 createdAt: "2026-05-25T00:00:00.000Z",
-                updatedAt: "2026-05-26T00:00:00.000Z",
                 locked: false,
               },
             ],
@@ -203,7 +283,6 @@ describe("RecipesRoute", () => {
                 coverImageUrl: null,
                 sourceName: "Example Kitchen",
                 createdAt: "2026-05-20T00:00:00.000Z",
-                updatedAt: "2026-05-20T00:00:00.000Z",
                 locked: true,
               },
             ],
@@ -223,6 +302,787 @@ describe("RecipesRoute", () => {
     ).resolves.toBeInTheDocument();
     expect(screen.getByText("ロック中")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Locked pasta" })).not.toBeInTheDocument();
+  });
+
+  it("追加した時期で見出しを分けて並べる", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: new Date().toISOString(),
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    const thisWeek = await screen.findByRole("region", { name: "今週" });
+
+    expect(within(thisWeek).getByRole("heading", { name: "Tomato pasta" })).toBeInTheDocument();
+    expect(screen.getByText("1件")).toBeInTheDocument();
+  });
+
+  it("読み込みが終わるまで件数を出さない", async () => {
+    let releaseRecipes = () => {};
+    const recipesGate = new Promise<void>((resolve) => {
+      releaseRecipes = resolve;
+    });
+
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          await recipesGate;
+
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: new Date().toISOString(),
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    expect(screen.getByRole("status", { name: "レシピ一覧を読み込み中" })).toBeInTheDocument();
+    expect(screen.queryByText("0件")).not.toBeInTheDocument();
+
+    releaseRecipes();
+
+    await expect(screen.findByText("1件")).resolves.toBeInTheDocument();
+  });
+
+  it("検索が0件のときは検索を消して一覧に戻れる", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: "Example Kitchen",
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (input === "/api/recipes?limit=20&q=zzz") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.type(screen.getByLabelText("検索"), "zzz");
+    await userEvent.click(screen.getByRole("button", { name: "検索" }));
+
+    await expect(
+      screen.findByText("「zzz」に一致するレシピはありません"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByText("レシピはまだありません")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "すべてのレシピを表示" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("検索")).toHaveValue("");
+  });
+
+  it("最初のロック中Recipeの前にプラン導線を1つだけ出す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_open",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+              {
+                id: "recipe_locked_1",
+                title: "Locked pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-20T00:00:00.000Z",
+                locked: true,
+              },
+              {
+                id: "recipe_locked_2",
+                title: "Locked salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-19T00:00:00.000Z",
+                locked: true,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await expect(screen.findByText("ロック中のレシピ")).resolves.toBeInTheDocument();
+    expect(screen.getAllByText("ロック中のレシピ")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
+      "href",
+      "/settings/billing",
+    );
+  });
+
+  it("表示メニューで古い順を選ぶと古い順で読み込み、URLに残す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_new",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (input === "/api/recipes?limit=20&sort=oldest") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_old",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-03-10T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.click(screen.getByRole("button", { name: "表示の設定" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "古い順" }));
+    await userEvent.keyboard("{Escape}");
+
+    await expect(
+      screen.findByRole("heading", { name: "Potato salad" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("?sort=oldest");
+    expect(screen.getByRole("button", { name: "表示の設定（古い順）" })).toBeInTheDocument();
+  });
+
+  it("URLで古い順を指定して開くと古い順で読み込む", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&sort=oldest") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_old",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-03-10T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes?sort=oldest");
+
+    await expect(
+      screen.findByRole("heading", { name: "Potato salad" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "表示の設定（古い順）" })).toBeInTheDocument();
+  });
+
+  it("古い順の一覧から詳細を開き、一覧へ戻るボタンで戻っても古い順のまま", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&sort=oldest") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_old",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-03-10T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_old") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_old",
+              title: "Potato salad",
+              content: { title: "Potato salad", ingredientGroups: [], steps: [] },
+              source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
+              createdAt: "2026-03-10T00:00:00.000Z",
+              updatedAt: "2026-03-10T00:00:00.000Z",
+              tags: [],
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?sort=oldest");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Potato salad/ }));
+    await screen.findByRole("button", { name: "操作メニュー" });
+    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await expect(
+      screen.findByRole("button", { name: "表示の設定（古い順）" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("?sort=oldest");
+  });
+
+  it("古い順から新しい順に戻すと、詳細から一覧へ戻っても新しい順のまま", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&sort=oldest") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_old",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-03-10T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_new",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_new") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_new",
+              title: "Tomato pasta",
+              content: { title: "Tomato pasta", ingredientGroups: [], steps: [] },
+              source: { sourceUrl: null, normalizedSourceUrl: null, sourceName: null },
+              createdAt: "2026-05-25T00:00:00.000Z",
+              updatedAt: "2026-05-25T00:00:00.000Z",
+              tags: [],
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?sort=oldest");
+    await screen.findByRole("heading", { name: "Potato salad" });
+
+    await userEvent.click(screen.getByRole("button", { name: "表示の設定（古い順）" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "新しい順" }));
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
+    await screen.findByRole("button", { name: "操作メニュー" });
+    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await expect(screen.findByRole("button", { name: "表示の設定" })).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("");
+  });
+
+  it("読めない並び順のURLは新しい順で開く", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_new",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes?sort=updated");
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "表示の設定" })).toBeInTheDocument();
+  });
+
+  it("古い順を選んだ後でも、読めない並び順への遷移は新しい順に戻す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_new",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        if (input === "/api/recipes?limit=20&sort=oldest") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_old",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-03-10T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.click(screen.getByRole("button", { name: "表示の設定" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "古い順" }));
+    await userEvent.keyboard("{Escape}");
+    await screen.findByRole("heading", { name: "Potato salad" });
+
+    await act(async () => {
+      await appRouter.navigate({ href: "/recipes?sort=invalid" });
+    });
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("");
+  });
+
+  it("検索するとURLに検索語を残し、検索を消すとURLから外す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20" || input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.type(screen.getByLabelText("検索"), "tomato");
+    await userEvent.click(screen.getByRole("button", { name: "検索" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.searchStr).toBe("?q=tomato");
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "検索を消す" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.searchStr).toBe("");
+    });
+    expect(screen.getByLabelText("検索")).toHaveValue("");
+  });
+
+  it("URLで検索語を指定して開くと検索結果を読み込む", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes?q=tomato");
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("検索")).toHaveValue("tomato");
+    expect(findFetchCall(fetchMock, "/api/recipes?limit=20")).toBeUndefined();
+  });
+
+  it("数字だけの検索語もURLから文字列として読み込む", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&q=123") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes?q=123");
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("検索")).toHaveValue("123");
+    expect(findFetchCall(fetchMock, "/api/recipes?limit=20&q=123")).toBeDefined();
+  });
+
+  it("検索した一覧から詳細を開き、一覧へ戻るボタンで戻っても検索語を保つ", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?q=tomato");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
+    await screen.findByRole("button", { name: "操作メニュー" });
+    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.searchStr).toBe("?q=tomato");
+    expect(screen.getByLabelText("検索")).toHaveValue("tomato");
+  });
+
+  it("検索した一覧から開いた詳細で削除すると、検索語を保って一覧に戻る", async () => {
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "DELETE") {
+          return jsonResponse({ ok: true });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        if (input === "/api/recipes?limit=20&q=tomato") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?q=tomato");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "操作メニュー" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /削除/ }));
+    const deleteDialog = await screen.findByRole("alertdialog", {
+      name: "レシピを削除しますか？",
+    });
+    await userEvent.click(within(deleteDialog).getByRole("button", { name: "削除" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/recipes");
+    });
+    expect(appRouter.state.location.searchStr).toBe("?q=tomato");
+  });
+
+  it("ヘッダーの一覧リンクで開き直すと検索語を外し、並び順は保つ", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (
+          input === "/api/recipes?limit=20&q=tomato&sort=oldest" ||
+          input === "/api/recipes?limit=20&sort=oldest"
+        ) {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?sort=oldest&q=tomato");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.click(screen.getByRole("link", { name: "レシピ一覧" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.searchStr).toBe("?sort=oldest");
+    });
+    expect(screen.getByLabelText("検索")).toHaveValue("");
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/recipes?limit=20&sort=oldest")).toBeDefined();
+    });
+  });
+
+  it("並び順を変えても検索語を保つ", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (
+          input === "/api/recipes?limit=20&q=tomato" ||
+          input === "/api/recipes?limit=20&q=tomato&sort=oldest"
+        ) {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes?q=tomato");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    await userEvent.click(screen.getByRole("button", { name: "表示の設定" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "古い順" }));
+    await userEvent.keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(appRouter.state.location.search).toEqual({ q: "tomato", sort: "oldest" });
+    });
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/recipes?limit=20&q=tomato&sort=oldest")).toBeDefined();
+    });
+  });
+
+  it("表示メニューからリスト表示に切り替えられる", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_new",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    try {
+      await renderApp("/recipes");
+      await screen.findByRole("heading", { name: "Tomato pasta" });
+
+      await userEvent.click(screen.getByRole("button", { name: "表示の設定" }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: "リスト" }));
+
+      expect(screen.getByRole("menuitemradio", { name: "リスト" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+      expect(localStorage.getItem("recipeViewMode")).toBe("list");
+    } finally {
+      localStorage.removeItem("recipeViewMode");
+    }
+  });
+
+  it("一覧の末尾が見えたら次ページを自動で読み込む", async () => {
+    const observerCallbacks: IntersectionObserverCallback[] = [];
+
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class IntersectionObserverStub {
+        constructor(callback: IntersectionObserverCallback) {
+          observerCallbacks.push(callback);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return [];
+        }
+      },
+    );
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_123",
+                title: "Tomato pasta",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-25T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: "cursor_2",
+          });
+        }
+
+        if (getRequestPath(input) === "/api/recipes?limit=20&cursor=cursor_2") {
+          return jsonResponse({
+            items: [
+              {
+                id: "recipe_456",
+                title: "Potato salad",
+                coverImageUrl: null,
+                sourceName: null,
+                createdAt: "2026-05-24T00:00:00.000Z",
+                locked: false,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    const notifyIntersection = observerCallbacks.at(-1);
+
+    if (!notifyIntersection) {
+      throw new Error("Sentinel observer was not created");
+    }
+
+    act(() => {
+      notifyIntersection(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+
+    await expect(
+      screen.findByRole("heading", { name: "Potato salad" }),
+    ).resolves.toBeInTheDocument();
   });
 
   it("複数のactive import jobを集約して個別表示する", async () => {
@@ -538,6 +1398,64 @@ describe("RecipesRoute", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("1件取り込めませんでした");
   });
 
+  it("テキスト取り込みは原文の最初の行を表示し、失敗したら原文を直す画面から再試行する", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_running",
+                kind: "text",
+                status: "running",
+                url: null,
+                textPreview: "豚の生姜焼き",
+                recipeId: null,
+                errorCode: null,
+                createdAt: "2026-06-01T00:00:20.000Z",
+                startedAt: "2026-06-01T00:00:21.000Z",
+                finishedAt: null,
+              },
+              {
+                id: "job_failed",
+                kind: "text",
+                status: "failed",
+                url: null,
+                textPreview: "今日の夕飯",
+                recipeId: null,
+                errorCode: "extraction_failed",
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: "2026-06-01T00:00:10.000Z",
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("1件取り込めませんでした");
+    });
+    await userEvent.click(screen.getByRole("button", { name: /1件取り込めませんでした/ }));
+
+    expect(screen.getByText("豚の生姜焼き")).toBeInTheDocument();
+    expect(screen.getByText("テキストからレシピを読み取れませんでした。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "再試行" })).toHaveAttribute(
+      "href",
+      "/import/text?fromJob=job_failed",
+    );
+  });
+
   it("次ページの読み込みに失敗した後でももっと見るから再試行できる", async () => {
     let nextPageRequests = 0;
     const fetchMock = mockFetch(
@@ -551,7 +1469,6 @@ describe("RecipesRoute", () => {
                 coverImageUrl: null,
                 sourceName: "Example Kitchen",
                 createdAt: "2026-05-25T00:00:00.000Z",
-                updatedAt: "2026-05-26T00:00:00.000Z",
                 locked: false,
               },
             ],
@@ -574,7 +1491,6 @@ describe("RecipesRoute", () => {
                 coverImageUrl: null,
                 sourceName: null,
                 createdAt: "2026-05-25T00:00:00.000Z",
-                updatedAt: "2026-05-26T00:00:00.000Z",
                 locked: false,
               },
             ],
@@ -630,7 +1546,6 @@ describe("RecipesRoute", () => {
                     coverImageUrl: null,
                     sourceName: null,
                     createdAt: "2026-05-25T00:00:00.000Z",
-                    updatedAt: "2026-05-26T00:00:00.000Z",
                     locked: false,
                   },
                 ]
@@ -641,7 +1556,6 @@ describe("RecipesRoute", () => {
                     coverImageUrl: null,
                     sourceName: null,
                     createdAt: "2026-05-25T00:00:00.000Z",
-                    updatedAt: "2026-05-26T00:00:00.000Z",
                     locked: false,
                   },
                 ],
@@ -658,7 +1572,6 @@ describe("RecipesRoute", () => {
                 coverImageUrl: null,
                 sourceName: null,
                 createdAt: "2026-05-25T00:00:00.000Z",
-                updatedAt: "2026-05-26T00:00:00.000Z",
                 locked: false,
               },
             ],
@@ -709,7 +1622,6 @@ describe("RecipesRoute", () => {
                 coverImageUrl: null,
                 sourceName: null,
                 createdAt: "2026-05-25T00:00:00.000Z",
-                updatedAt: "2026-05-26T00:00:00.000Z",
                 locked: false,
               },
             ],
@@ -776,6 +1688,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -893,6 +1806,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -1012,6 +1926,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -1158,6 +2073,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -1199,6 +2115,64 @@ describe("RecipesRoute", () => {
     expect(stepImage).toHaveAttribute("decoding", "async");
     expect(stepImage).toHaveStyle({ aspectRatio: "800 / 1200" });
     expect(screen.queryByAltText("手順2の画像1")).not.toBeInTheDocument();
+  });
+
+  it("詳細画面の画像を拡大するとライトボックスを開いて前後の画像に移動できる", async () => {
+    mockLightboxRecipeFetch();
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Tomato pastaを拡大" }));
+
+    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
+    expect(within(lightbox).getByText("1 / 3")).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "前の画像" })).toBeDisabled();
+    expect(within(lightbox).getByRole("button", { name: "拡大" })).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "縮小" })).toBeInTheDocument();
+    expect(within(lightbox).getByAltText("Tomato pasta")).toHaveAttribute(
+      "src",
+      "https://images.example/cover.webp",
+    );
+
+    await user.click(within(lightbox).getByRole("button", { name: "次の画像" }));
+
+    expect(await within(lightbox).findByText("2 / 3")).toBeInTheDocument();
+    expect(within(lightbox).getByAltText("レシピ画像1")).toHaveAttribute(
+      "src",
+      "https://images.example/source-1.webp",
+    );
+
+    await user.click(within(lightbox).getByRole("button", { name: "次の画像" }));
+
+    expect(await within(lightbox).findByText("3 / 3")).toBeInTheDocument();
+    expect(within(lightbox).getByRole("button", { name: "次の画像" })).toBeDisabled();
+
+    await user.click(within(lightbox).getByRole("button", { name: "前の画像" }));
+
+    expect(await within(lightbox).findByText("2 / 3")).toBeInTheDocument();
+  });
+
+  it("ライトボックスを閉じると拡大ボタンにフォーカスが戻る", async () => {
+    mockLightboxRecipeFetch();
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    const zoomButton = await screen.findByRole("button", { name: "手順1の画像1を拡大" });
+    await user.click(zoomButton);
+
+    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
+    expect(within(lightbox).getByText("3 / 3")).toBeInTheDocument();
+
+    await user.click(within(lightbox).getByRole("button", { name: "閉じる" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "画像プレビュー" })).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(zoomButton).toHaveFocus();
+    });
   });
 
   it("ロック中Recipe詳細に直接アクセスしても本文と編集リンクを表示しない", async () => {
@@ -1311,6 +2285,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -1332,6 +2307,7 @@ describe("RecipesRoute", () => {
           note: "仕上げにオリーブオイル。",
         },
         updatedAt: "2026-05-27T00:00:00.000Z",
+        tags: [],
       },
     };
     const updatedRecipeDetailResponse = {
@@ -1344,6 +2320,7 @@ describe("RecipesRoute", () => {
           yieldText: "3人分",
         },
         updatedAt: "2026-05-27T00:00:00.000Z",
+        tags: [],
       },
     };
     let currentRecipeResponse = recipeResponse;
@@ -1465,6 +2442,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -1529,6 +2507,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -1617,6 +2596,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -1658,6 +2638,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -1704,6 +2685,7 @@ describe("RecipesRoute", () => {
               },
               createdAt: "2026-05-26T00:00:00.000Z",
               updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
               locked: false,
             },
           });
@@ -1750,6 +2732,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -1827,6 +2810,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };
@@ -1843,6 +2827,7 @@ describe("RecipesRoute", () => {
                 title: "Potato salad",
               },
               updatedAt: "2026-05-27T00:00:00.000Z",
+              tags: [],
             },
           });
         }
@@ -1901,6 +2886,7 @@ describe("RecipesRoute", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       },
     };

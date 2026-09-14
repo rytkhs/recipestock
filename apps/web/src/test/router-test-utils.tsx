@@ -2,40 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { act, render } from "@testing-library/react";
 import { vi } from "vitest";
+import { writeRecipeListFilters, writeRecipeListSort } from "../features/recipes/list-search";
 import { authClient } from "../lib/auth";
+import { billingStatusFixture, sessionFixture, viewerFixture } from "../mocks/fixtures";
 import { AppRouter, createAppRouter } from "../routes/router";
 
-const authenticatedSession = {
-  session: {
-    id: "session_123",
-    userId: "user_123",
-  },
-  user: {
-    id: "user_123",
-    email: "chef@example.com",
-    name: "chef",
-  },
-};
+const authenticatedSession = sessionFixture();
 
-export const viewerResponse = {
-  userId: "user_123",
-  email: "chef@example.com",
-  plan: "free",
-  recipeCount: 0,
-  recipeLimit: 5,
-  isRecipeLimitReached: false,
-  aiUsage: {
-    month: "2026-05",
-    used: 0,
-    limit: 10,
-    resetAt: "2026-05-31T15:00:00.000Z",
-  },
-};
+export const viewerResponse = viewerFixture();
 
-export const billingStatusResponse = {
-  plan: "free",
-  subscription: null,
-};
+export const billingStatusResponse = billingStatusFixture();
 
 export const getRequestPath = (input: RequestInfo | URL) => {
   const toPath = (urlValue: string) => {
@@ -121,6 +97,9 @@ export const renderApp = async (
   setupQueryClient?: (queryClient: QueryClient) => void,
 ) => {
   resetAuthSessionStore();
+  // 一覧の並び順と絞り込み条件はモジュールに覚えるので、アプリを開き直した状態に戻す。
+  writeRecipeListSort("newest");
+  writeRecipeListFilters({});
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },

@@ -1,6 +1,6 @@
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
-import { type RecipeRecord } from "../recipes";
+import { type RecipeWithTagsRecord } from "../recipes";
 import { createSilentTestApp } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
@@ -10,7 +10,7 @@ const recipeImage = (objectKey: string, width = 1200, height = 800) => ({
   height,
 });
 
-const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
+const baseRecipe = (overrides: Partial<RecipeWithTagsRecord> = {}): RecipeWithTagsRecord => ({
   id: "recipe_123",
   userId: "user_123",
   title: "Tomato pasta",
@@ -27,6 +27,7 @@ const baseRecipe = (overrides: Partial<RecipeRecord> = {}): RecipeRecord => ({
   searchText: "tomato pasta example kitchen トマト缶",
   createdAt: new Date("2026-05-26T00:00:00.000Z"),
   updatedAt: new Date("2026-05-26T00:00:00.000Z"),
+  tags: [],
   ...overrides,
 });
 

@@ -5,6 +5,7 @@ import {
   type GetRecipeResponse,
   type ListRecipesResponse,
   type RecipeDraftContent,
+  type RecipeListSort,
   type UpdateRecipeResponse,
 } from "@recipestock/schemas";
 import { api, parseApiResponse } from "../../lib/api";
@@ -49,15 +50,25 @@ export const getRecipe = async (recipeId: string) => {
 export const listRecipes = async ({
   cursor,
   query,
+  sort,
+  tagIds = [],
+  untagged = false,
 }: {
   cursor?: string | null;
   query?: string;
+  sort: RecipeListSort;
+  tagIds?: readonly string[];
+  untagged?: boolean;
 }) => {
   return parseApiResponse<ListRecipesResponse>(
     api.api.recipes.$get({
       query: {
         limit: "20",
         ...(query ? { q: query } : {}),
+        // 画面のURLと同じく、既定の新しい順は送らない。
+        ...(sort === "oldest" ? { sort } : {}),
+        ...(tagIds.length > 0 ? { tagId: [...tagIds] } : {}),
+        ...(untagged ? { untagged: "true" } : {}),
         ...(cursor ? { cursor } : {}),
       },
     }),

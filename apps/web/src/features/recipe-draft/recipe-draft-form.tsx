@@ -1,4 +1,3 @@
-import { Button } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { X } from "@phosphor-icons/react";
 import {
@@ -8,6 +7,7 @@ import {
 } from "@recipestock/schemas";
 import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
+import { Button } from "@/components/ui/button";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../../components/screen-top-bar";
 import { CoverImageTitleBlock } from "./cover-image-title-block";
 import {
@@ -102,10 +102,9 @@ export const RecipeDraftForm = ({
         title={title}
         trailing={
           <Button
-            className="h-10 rounded-full bg-brand-sage px-5 font-semibold text-white shadow-pantry-sm hover:bg-brand-sage-dark sm:h-11"
-            isDisabled={formState.isSubmitting || uploadingImageCount > 0}
+            disabled={formState.isSubmitting || uploadingImageCount > 0}
+            size="lg"
             type="submit"
-            variant="primary"
           >
             {submitLabel}
           </Button>

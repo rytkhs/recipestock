@@ -24,6 +24,11 @@ Browser / PWA
 | Area | Choice |
 | --- | --- |
 | Frontend | Vite + React + TypeScript |
+| Styling | Tailwind CSS v4 |
+| UI components | shadcn/ui — Base UI base, `base-nova` style.`apps/web/src/components/ui/` にベンダリング |
+| Icons | `@phosphor-icons/react` |
+| Fonts | Google Fonts。本文・UI・見出しとも Noto Sans JP。`apps/web/index.html` から `media="print"` + `onload` で描画を止めずに読み込む |
+| Image lightbox | `yet-another-react-lightbox`（Counter / Zoom プラグイン）。アイコンは既定のまま使い、配色・z-index・safe-areaは `--yarl__*` CSS変数で上書きする。`render.icon*` で差し替えると `yarl__icon` クラスが付かずタップ領域が縮む |
 | Routing | TanStack Router |
 | Server state | TanStack Query |
 | Forms | React Hook Form + Zod |
@@ -34,6 +39,7 @@ Browser / PWA
 | ORM | Drizzle ORM |
 | Database connection | `@neondatabase/serverless` |
 | Image storage | Cloudflare R2 |
+| Recipe thumbnails | Cloudflare Images binding (`IMAGES`) で初回取得時に変換し、R2へ保存（ADR 0018） |
 | Auth | Better Auth |
 | Email | Resend Email API（SDKは使わずHTTPを直接呼ぶ。ADR 0015） |
 | Billing | Stripe |
@@ -42,6 +48,7 @@ Browser / PWA
 | Monorepo | pnpm workspace + Turborepo |
 | Lint / Format | Biome |
 | Unit / Component / Request tests | Vitest + Testing Library |
+| Dev API mocking | MSW。`pnpm dev:mock`(`vite --mode mock`)のときだけ有効。ハンドラ・フィクスチャ・シナリオは `apps/web/src/mocks/` |
 | E2E tests | Deferred for the initial setup |
 
 ## Dependency Guidance
@@ -53,8 +60,10 @@ Browser / PWA
 - Use Drizzle for database schema and migrations.
 - Use TanStack Query for server state in the frontend.
 - Use React Hook Form + Zod for forms.
+- Add UI primitives with `npx shadcn@latest add <name> -c apps/web` instead of hand-rolling them. Files under `apps/web/src/components/ui/` are registry output and are excluded from Biome linting.
 - Use Biome for repository-wide formatting and baseline linting.
 - Use Vitest for unit tests, component tests, and request-level API tests.
+- Use MSW to inspect state-dependent screens during development. Declare the server state as a scenario in `apps/web/src/mocks/scenarios.ts` instead of hand-crafting data through the real API. Keep fixtures typed with `@recipestock/schemas` so `pnpm typecheck` and `src/mocks/scenarios.test.ts` catch contract drift. Do not enable MSW outside `--mode mock`.
 - Use Testing Library with Vitest for React component behavior tests.
 - Do not set up E2E testing in the initial project setup. Add Playwright later only when end-to-end coverage becomes necessary.
 - Add ESLint only if a concrete rule need appears that Biome does not cover, such as advanced React Hooks or type-aware linting.

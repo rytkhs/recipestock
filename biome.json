@@ -19,7 +19,8 @@
       "!**/.env",
       "!**/.env.*",
       "!**/.dev.vars",
-      "!pnpm-lock.yaml"
+      "!pnpm-lock.yaml",
+      "!apps/web/public/mockServiceWorker.js"
     ]
   },
   "formatter": {
@@ -47,6 +48,14 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["apps/web/src/components/ui/**"],
+      "linter": {
+        "enabled": false
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": {

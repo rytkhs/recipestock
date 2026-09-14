@@ -50,7 +50,7 @@ Put server-side behavior here:
 - auth middleware and current-user resolution
 - Zod request / response validation
 - recipe CRUD route handlers
-- URL import route handlers
+- URL and text import route handlers
 - image import route handlers
 - AI usage-limit checks
 - Free / Pro save limits
@@ -70,6 +70,7 @@ apps/api/src/
     auth.ts
     import.ts
     recipes.ts
+    tags.ts
     images.ts
     billing.ts
     stripe.ts

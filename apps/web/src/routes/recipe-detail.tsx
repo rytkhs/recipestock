@@ -1,27 +1,36 @@
-import { AlertDialog, Button, Dropdown } from "@heroui/react";
 import {
   CaretLeft,
-  CaretRight,
   DotsThreeVertical,
   Globe,
   LockSimple,
   PencilSimple,
   Trash,
-  X,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import Lightbox from "yet-another-react-lightbox";
+import Counter from "yet-another-react-lightbox/plugins/counter";
+import Zoom from "yet-another-react-lightbox/plugins/zoom";
 import {
-  type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode,
-  type PointerEvent as ReactPointerEvent,
-  type TransitionEvent as ReactTransitionEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { RecipeDetailSkeleton } from "../components/loading";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import {
@@ -30,6 +39,9 @@ import {
   recipesQueryKeys,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
+import { readRecipeListFilters } from "../features/recipes/list-search";
+import { tagsQueryKeys } from "../features/tags";
+import { RecipeTags } from "../features/tags/recipe-tags";
 
 const recipeDetailCoverImageProps = {
   decoding: "async",
@@ -44,46 +56,30 @@ type RecipeLightboxImage = {
   alt: string;
   height: number;
   id: string;
-  url: string;
+  src: string;
   width: number;
 };
 
-const lightboxSlideEasing = "cubic-bezier(0.22, 1, 0.36, 1)";
-const lightboxRestEasing = "cubic-bezier(0.2, 0, 0, 1)";
+const recipeLightboxLabels = {
+  Carousel: "画像ギャラリー",
+  Close: "閉じる",
+  Lightbox: "画像プレビュー",
+  Next: "次の画像",
+  "Photo gallery": "レシピ画像",
+  Previous: "前の画像",
+  Slide: "画像",
+  "Zoom in": "拡大",
+  "Zoom out": "縮小",
+  "{index} of {total}": "{total}枚中{index}枚目",
+} as const;
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
-const getResistedDragOffset = (deltaX: number, stageWidth: number) => {
-  const sign = Math.sign(deltaX);
-  const edgeLimit = Math.max(104, stageWidth * 0.32);
-
-  return sign * edgeLimit * (1 - Math.exp(-Math.abs(deltaX) / edgeLimit));
-};
-
-const getSwipeTransition = ({
-  dragOffsetPx,
-  isReturning,
-  stageWidth,
-  velocityX,
-}: {
-  dragOffsetPx: number;
-  isReturning: boolean;
-  stageWidth: number;
-  velocityX: number;
-}) => {
-  if (isReturning) {
-    const dragProgress = stageWidth > 0 ? Math.abs(dragOffsetPx) / stageWidth : 0;
-    const durationMs = Math.round(clamp(170 + dragProgress * 20, 170, 190));
-
-    return `transform ${durationMs}ms ${lightboxRestEasing}`;
-  }
-
-  const remainingDistance = Math.max(0, stageWidth - Math.abs(dragOffsetPx));
-  const effectiveVelocity = Math.max(Math.abs(velocityX), 0.72);
-  const durationMs = Math.round(clamp(remainingDistance / effectiveVelocity, 160, 240));
-
-  return `transform ${durationMs}ms ${lightboxSlideEasing}`;
-};
+const recipeLightboxStyles = {
+  root: {
+    "--yarl__color_backdrop": "rgba(0, 0, 0, 0.85)",
+    "--yarl__portal_zindex": "60",
+    "--yarl__toolbar_padding": "calc(0.5rem + env(safe-area-inset-top)) 0.5rem 0.5rem",
+  },
+} as const;
 
 const RecipeImageZoomButton = ({
   alt,
@@ -109,421 +105,22 @@ const RecipeImageZoomButton = ({
   </button>
 );
 
-const RecipeImageLightbox = ({
-  images,
-  index,
-  onChangeIndex,
-  onClose,
-}: {
-  images: RecipeLightboxImage[];
-  index: number;
-  onChangeIndex: (index: number) => void;
-  onClose: () => void;
-}) => {
-  const image = images[index];
-  const hasMultipleImages = images.length > 1;
-  const hasPreviousImage = index > 0;
-  const hasNextImage = index < images.length - 1;
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const swipeGestureRef = useRef<{
-    isHorizontal: boolean | null;
-    lastTime: number;
-    lastX: number;
-    pointerId: number;
-    stageWidth: number;
-    startTime: number;
-    startX: number;
-    startY: number;
-    velocityX: number;
-  } | null>(null);
-  const dragAnimationFrameRef = useRef<number | null>(null);
-  const pendingDragOffsetRef = useRef(0);
-  const currentDragOffsetRef = useRef(0);
-  const didDragRef = useRef(false);
-  const [dragOffsetPx, setDragOffsetPx] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [trackTransition, setTrackTransition] = useState(`transform 220ms ${lightboxSlideEasing}`);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (dragAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(dragAnimationFrameRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!image) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-        return;
-      }
-
-      if (event.key === "ArrowLeft" && hasPreviousImage) {
-        requestSlide(-1);
-        return;
-      }
-
-      if (event.key === "ArrowRight" && hasNextImage) {
-        requestSlide(1);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  });
-
-  if (!image) {
-    return null;
-  }
-
-  function updateDragOffset(nextOffset: number) {
-    if (dragAnimationFrameRef.current !== null) {
-      window.cancelAnimationFrame(dragAnimationFrameRef.current);
-      dragAnimationFrameRef.current = null;
-    }
-
-    pendingDragOffsetRef.current = nextOffset;
-    currentDragOffsetRef.current = nextOffset;
-    setDragOffsetPx(nextOffset);
-  }
-
-  function scheduleDragOffset(nextOffset: number) {
-    currentDragOffsetRef.current = nextOffset;
-    pendingDragOffsetRef.current = nextOffset;
-
-    if (dragAnimationFrameRef.current !== null) {
-      return;
-    }
-
-    dragAnimationFrameRef.current = window.requestAnimationFrame(() => {
-      dragAnimationFrameRef.current = null;
-      setDragOffsetPx(pendingDragOffsetRef.current);
-    });
-  }
-
-  function startSlide(direction: -1 | 1, velocityX = 0) {
-    if (isAnimating) {
-      return;
-    }
-
-    if ((direction === -1 && !hasPreviousImage) || (direction === 1 && !hasNextImage)) {
-      return;
-    }
-
-    setIsDragging(false);
-    setIsAnimating(true);
-    setTrackTransition(
-      getSwipeTransition({
-        dragOffsetPx: currentDragOffsetRef.current,
-        isReturning: false,
-        stageWidth: stageRef.current?.clientWidth ?? window.innerWidth,
-        velocityX,
-      }),
-    );
-    updateDragOffset(0);
-    onChangeIndex(index + direction);
-  }
-
-  function requestSlide(direction: -1 | 1) {
-    if (isDragging) {
-      return;
-    }
-
-    startSlide(direction);
-  }
-
-  function settleToRest() {
-    setIsDragging(false);
-    setTrackTransition(
-      getSwipeTransition({
-        dragOffsetPx: currentDragOffsetRef.current,
-        isReturning: true,
-        stageWidth: stageRef.current?.clientWidth ?? window.innerWidth,
-        velocityX: 0,
-      }),
-    );
-    setIsAnimating(Math.abs(currentDragOffsetRef.current) >= 1);
-    updateDragOffset(0);
-  }
-
-  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!hasMultipleImages || isAnimating || event.pointerType !== "touch") {
-      return;
-    }
-
-    swipeGestureRef.current = {
-      isHorizontal: null,
-      lastTime: event.timeStamp,
-      lastX: event.clientX,
-      pointerId: event.pointerId,
-      stageWidth: event.currentTarget.clientWidth,
-      startTime: event.timeStamp,
-      startX: event.clientX,
-      startY: event.clientY,
-      velocityX: 0,
-    };
-    didDragRef.current = false;
-    setIsDragging(true);
-    updateDragOffset(0);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    const gesture = swipeGestureRef.current;
-
-    if (!gesture || gesture.pointerId !== event.pointerId || isAnimating) {
-      return;
-    }
-
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
-    const absDeltaX = Math.abs(deltaX);
-    const absDeltaY = Math.abs(deltaY);
-
-    if (gesture.isHorizontal === null) {
-      if (Math.max(absDeltaX, absDeltaY) < 4) {
-        return;
-      }
-
-      gesture.isHorizontal = absDeltaX > absDeltaY * 1.05;
-
-      if (!gesture.isHorizontal) {
-        setIsDragging(false);
-        return;
-      }
-    }
-
-    if (!gesture.isHorizontal) {
-      return;
-    }
-
-    didDragRef.current = true;
-    event.preventDefault();
-
-    const elapsedMs = Math.max(1, event.timeStamp - gesture.lastTime);
-    const instantVelocityX = (event.clientX - gesture.lastX) / elapsedMs;
-    gesture.velocityX = gesture.velocityX * 0.65 + instantVelocityX * 0.35;
-    gesture.lastX = event.clientX;
-    gesture.lastTime = event.timeStamp;
-
-    const isBlockedDirection = (deltaX > 0 && !hasPreviousImage) || (deltaX < 0 && !hasNextImage);
-    scheduleDragOffset(
-      isBlockedDirection ? getResistedDragOffset(deltaX, gesture.stageWidth) : deltaX,
-    );
-  }
-
-  function handlePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
-    const gesture = swipeGestureRef.current;
-
-    if (!gesture || gesture.pointerId !== event.pointerId) {
-      return;
-    }
-
-    swipeGestureRef.current = null;
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-
-    if (!gesture.isHorizontal) {
-      setIsDragging(false);
-      updateDragOffset(0);
-      return;
-    }
-
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
-    const absDeltaX = Math.abs(deltaX);
-    const absDeltaY = Math.abs(deltaY);
-    const elapsedMs = Math.max(1, event.timeStamp - gesture.startTime);
-    const releaseVelocityX =
-      (event.clientX - gesture.lastX) / Math.max(1, event.timeStamp - gesture.lastTime);
-    const velocityX = gesture.velocityX * 0.7 + releaseVelocityX * 0.3;
-    const distanceThreshold = Math.max(40, gesture.stageWidth * 0.1);
-    const isDirectionIntentional = absDeltaX > absDeltaY * 1.2;
-    const isDistanceSwipe = absDeltaX >= distanceThreshold;
-    const isFlickSwipe = Math.abs(velocityX) >= 0.38 && elapsedMs <= 420 && absDeltaX >= 18;
-    const isSwipe = isDirectionIntentional && (isDistanceSwipe || isFlickSwipe);
-
-    if (isSwipe && deltaX < 0 && hasNextImage) {
-      setIsDragging(false);
-      startSlide(1, velocityX);
-      return;
-    }
-
-    if (isSwipe && deltaX > 0 && hasPreviousImage) {
-      setIsDragging(false);
-      startSlide(-1, velocityX);
-      return;
-    }
-
-    settleToRest();
-  }
-
-  function handlePointerCancel(event: ReactPointerEvent<HTMLDivElement>) {
-    const gesture = swipeGestureRef.current;
-
-    if (gesture?.pointerId !== event.pointerId) {
-      return;
-    }
-
-    swipeGestureRef.current = null;
-    settleToRest();
-  }
-
-  function handleTransitionEnd(event: ReactTransitionEvent<HTMLElement>) {
-    if (event.propertyName !== "transform" || !isAnimating) {
-      return;
-    }
-
-    setIsAnimating(false);
-    updateDragOffset(0);
-  }
-
-  function handleSlideClick(event: ReactMouseEvent<HTMLElement>) {
-    if (didDragRef.current) {
-      didDragRef.current = false;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
-  }
-
-  const shouldTransitionTrack = !isDragging && isAnimating;
-
-  return (
-    <div
-      aria-label="画像プレビュー"
-      aria-modal="true"
-      className="fixed inset-0 z-[60] isolate flex items-center justify-center bg-black/85 px-4 py-[calc(1rem+env(safe-area-inset-top))] text-white"
-      role="dialog"
-    >
-      <button
-        aria-label="背景を閉じる"
-        className="absolute inset-0 z-0 cursor-default border-0 bg-transparent p-0"
-        tabIndex={-1}
-        type="button"
-        onClick={onClose}
-      />
-      <div className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))] z-20 flex items-center gap-2">
-        {hasMultipleImages ? (
-          <span
-            aria-live="polite"
-            className="rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white"
-          >
-            {index + 1} / {images.length}
-          </span>
-        ) : null}
-        <Button
-          aria-label="閉じる"
-          className="rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper"
-          isIconOnly
-          variant="secondary"
-          onPress={onClose}
-        >
-          <X size={20} weight="bold" />
-        </Button>
-      </div>
-
-      {hasMultipleImages ? (
-        <Button
-          aria-label="前の画像"
-          className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper sm:left-6"
-          isDisabled={!hasPreviousImage}
-          isIconOnly
-          variant="secondary"
-          onPress={() => requestSlide(-1)}
-        >
-          <CaretLeft size={24} weight="bold" />
-        </Button>
-      ) : null}
-
-      <div
-        className="relative z-10 h-[86vh] w-[92vw] touch-pan-y overflow-hidden"
-        ref={stageRef}
-        onPointerCancel={handlePointerCancel}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-      >
-        <div
-          className="absolute inset-0"
-          style={{
-            transform: `translateX(calc(${-index * 100}% + ${dragOffsetPx}px))`,
-            transition: shouldTransitionTrack ? trackTransition : "none",
-            willChange: isDragging || isAnimating ? "transform" : undefined,
-          }}
-          onTransitionEnd={handleTransitionEnd}
-        >
-          {images.map((slideImage, slideIndex) => (
-            <button
-              className="absolute inset-0 flex items-center justify-center border-0 bg-transparent p-0 text-white"
-              key={slideImage.id}
-              style={{ transform: `translateX(${slideIndex * 100}%)` }}
-              tabIndex={-1}
-              type="button"
-              onClick={handleSlideClick}
-            >
-              <img
-                alt={`${slideImage.alt} 拡大`}
-                className="max-h-full max-w-full select-none rounded-[14px] object-contain shadow-pantry-lg"
-                draggable={false}
-                height={slideImage.height}
-                src={slideImage.url}
-                style={{ aspectRatio: `${slideImage.width} / ${slideImage.height}` }}
-                width={slideImage.width}
-              />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {hasMultipleImages ? (
-        <Button
-          aria-label="次の画像"
-          className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-brand-paper/95 text-brand-walnut shadow-pantry-sm hover:bg-brand-paper sm:right-6"
-          isDisabled={!hasNextImage}
-          isIconOnly
-          variant="secondary"
-          onPress={() => requestSlide(1)}
-        >
-          <CaretRight size={24} weight="bold" />
-        </Button>
-      ) : null}
-    </div>
-  );
-};
-
 export const RecipeDetailRoute = () => {
   const { recipeId } = useParams({ from: "/_protected/recipes/$recipeId" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const deleteMutation = useMutation({
     mutationFn: () => deleteRecipe(recipeId),
+    // 付いていたタグの件数が減るので、タグ一覧も読み直させる。
     onSuccess: async () => {
-      await syncDeletedRecipeCaches(queryClient, recipeId);
-      await navigate({ to: "/recipes" });
+      await Promise.all([
+        syncDeletedRecipeCaches(queryClient, recipeId),
+        queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() }),
+      ]);
+      await navigate({ to: "/recipes", search: readRecipeListFilters() });
     },
   });
   const {
@@ -546,7 +143,7 @@ export const RecipeDetailRoute = () => {
         alt: recipe.title,
         height: recipe.content.coverImage.height,
         id: `cover:${recipe.content.coverImage.objectKey}`,
-        url: recipe.content.coverImage.url,
+        src: recipe.content.coverImage.url,
         width: recipe.content.coverImage.width,
       });
     }
@@ -560,7 +157,7 @@ export const RecipeDetailRoute = () => {
         alt: `レシピ画像${imageIndex + 1}`,
         height: image.height,
         id: `reference:${image.objectKey}`,
-        url: image.url,
+        src: image.url,
         width: image.width,
       });
     });
@@ -575,7 +172,7 @@ export const RecipeDetailRoute = () => {
           alt: `手順${stepIndex + 1}の画像${imageIndex + 1}`,
           height: image.height,
           id: `step:${image.objectKey}`,
-          url: image.url,
+          src: image.url,
           width: image.width,
         });
       });
@@ -593,14 +190,15 @@ export const RecipeDetailRoute = () => {
 
     if (nextLightboxIndex >= 0) {
       setLightboxIndex(nextLightboxIndex);
+      setIsLightboxOpen(true);
     }
   };
 
   useEffect(() => {
-    if (lightboxIndex !== null && lightboxIndex >= lightboxImages.length) {
-      setLightboxIndex(null);
+    if (isLightboxOpen && lightboxIndex >= lightboxImages.length) {
+      setIsLightboxOpen(false);
     }
-  }, [lightboxImages.length, lightboxIndex]);
+  }, [isLightboxOpen, lightboxImages.length, lightboxIndex]);
 
   if (isLoading) {
     return <RecipeDetailSkeleton />;
@@ -616,7 +214,7 @@ export const RecipeDetailRoute = () => {
             <ScreenTopBarIconButton
               aria-label="レシピ一覧へ戻る"
               onPress={() => {
-                void navigate({ to: "/recipes" });
+                void navigate({ to: "/recipes", search: readRecipeListFilters() });
               }}
             >
               <CaretLeft size={21} weight="bold" />
@@ -657,7 +255,7 @@ export const RecipeDetailRoute = () => {
           <ScreenTopBarIconButton
             aria-label="レシピ一覧へ戻る"
             onPress={() => {
-              void navigate({ to: "/recipes" });
+              void navigate({ to: "/recipes", search: readRecipeListFilters() });
             }}
           >
             <CaretLeft size={21} weight="bold" />
@@ -665,38 +263,35 @@ export const RecipeDetailRoute = () => {
         }
         title={recipe.title}
         trailing={
-          <Dropdown>
-            <Dropdown.Trigger
+          <DropdownMenu>
+            <DropdownMenuTrigger
               aria-label="操作メニュー"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut hover:bg-brand-paper-muted sm:h-11 sm:w-11"
+              render={<Button size="icon" variant="outline" />}
             >
-              <DotsThreeVertical size={20} weight="bold" />
-            </Dropdown.Trigger>
-            <Dropdown.Popover className="min-w-[140px] rounded-[20px] border border-brand-line-soft bg-brand-paper shadow-pantry">
-              <Dropdown.Menu
-                onAction={(key) => {
-                  if (key === "edit") {
+              <DotsThreeVertical weight="bold" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="min-w-36">
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  onClick={() => {
                     void navigate({ to: "/recipes/$recipeId/edit", params: { recipeId } });
-                  } else if (key === "delete") {
+                  }}
+                >
+                  <PencilSimple weight="bold" />
+                  <span>編集</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => {
                     setIsDeleteDialogOpen(true);
-                  }
-                }}
-              >
-                <Dropdown.Item id="edit" textValue="編集">
-                  <div className="flex items-center gap-2 text-brand-walnut">
-                    <PencilSimple size={16} weight="bold" />
-                    <span className="text-sm font-semibold">編集</span>
-                  </div>
-                </Dropdown.Item>
-                <Dropdown.Item id="delete" textValue="削除">
-                  <div className="flex items-center gap-2 text-brand-danger">
-                    <Trash size={16} weight="bold" />
-                    <span className="text-sm font-semibold">削除</span>
-                  </div>
-                </Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown>
+                  }}
+                >
+                  <Trash weight="bold" />
+                  <span>削除</span>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
       />
 
@@ -728,6 +323,7 @@ export const RecipeDetailRoute = () => {
         <p className="mx-auto mt-5 max-w-3xl font-bold text-xl text-brand-ink leading-tight sm:mt-5 sm:text-2xl">
           {recipe.title}
         </p>
+        <RecipeTags recipeId={recipe.id} tags={recipe.tags} />
       </div>
 
       {deleteMutation.error ? (
@@ -738,32 +334,26 @@ export const RecipeDetailRoute = () => {
         </div>
       ) : null}
 
-      <AlertDialog.Backdrop isOpen={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog>
-            <AlertDialog.Header>
-              <AlertDialog.Icon status="danger" />
-              <AlertDialog.Heading>レシピを削除しますか？</AlertDialog.Heading>
-            </AlertDialog.Header>
-            <AlertDialog.Footer>
-              <Button
-                isDisabled={deleteMutation.isPending}
-                variant="tertiary"
-                onPress={() => setIsDeleteDialogOpen(false)}
-              >
-                キャンセル
-              </Button>
-              <Button
-                isDisabled={deleteMutation.isPending}
-                variant="danger"
-                onPress={confirmDelete}
-              >
-                削除
-              </Button>
-            </AlertDialog.Footer>
-          </AlertDialog.Dialog>
-        </AlertDialog.Container>
-      </AlertDialog.Backdrop>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <WarningCircle weight="fill" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>レシピを削除しますか？</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteMutation.isPending}
+              variant="destructive"
+              onClick={confirmDelete}
+            >
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {referenceImages.some((image) => image.url) ? (
         <section className="mx-4 mt-7 sm:mx-0">
@@ -930,14 +520,20 @@ export const RecipeDetailRoute = () => {
         </section>
       ) : null}
 
-      {lightboxIndex !== null ? (
-        <RecipeImageLightbox
-          images={lightboxImages}
-          index={lightboxIndex}
-          onChangeIndex={setLightboxIndex}
-          onClose={() => setLightboxIndex(null)}
-        />
-      ) : null}
+      <Lightbox
+        animation={{ fade: 200, swipe: 220 }}
+        carousel={{ finite: true, imageProps: { decoding: "async" } }}
+        close={() => setIsLightboxOpen(false)}
+        controller={{ closeOnBackdropClick: true, closeOnPullDown: true }}
+        index={lightboxIndex}
+        labels={recipeLightboxLabels}
+        on={{ view: ({ index }) => setLightboxIndex(index) }}
+        open={isLightboxOpen}
+        plugins={[Counter, Zoom]}
+        slides={lightboxImages}
+        styles={recipeLightboxStyles}
+        zoom={{ maxZoomPixelRatio: 2 }}
+      />
     </article>
   );
 };

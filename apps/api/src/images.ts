@@ -7,6 +7,7 @@ import {
 import { AwsClient } from "aws4fetch";
 import { type Bindings } from "./env";
 import { getImageDimensions, type ImageDimensions } from "./image-dimensions";
+import { recipeThumbnailPrefix } from "./recipe-image-keys";
 import { isHttpFetchUrlAllowed } from "./url-safety";
 
 export type { ImageDimensions };
@@ -59,7 +60,7 @@ export const createRecipeImageDisplayUrl = ({ objectKey }: { objectKey: string }
 const hasR2ObjectBody = (object: R2Object | R2ObjectBody): object is R2ObjectBody =>
   "body" in object;
 
-const createRecipeImageResponseHeaders = (object: R2Object) => {
+export const createRecipeImageResponseHeaders = (object: R2Object) => {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("cache-control", RECIPE_IMAGE_CACHE_CONTROL);
@@ -74,6 +75,15 @@ const createRecipeImageResponseHeaders = (object: R2Object) => {
   return headers;
 };
 
+export const createImageCacheRevalidationHeaders = (requestHeaders: Headers) => {
+  const headers = new Headers();
+  for (const name of ["if-none-match", "if-modified-since"]) {
+    const value = requestHeaders.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  return headers;
+};
+
 export const createRecipeImageObjectResponse = async ({
   bucket,
   objectKey,
@@ -83,7 +93,9 @@ export const createRecipeImageObjectResponse = async ({
   objectKey: string;
   requestHeaders: Headers;
 }) => {
-  const object = await bucket.get(objectKey, { onlyIf: requestHeaders });
+  const object = await bucket.get(objectKey, {
+    onlyIf: createImageCacheRevalidationHeaders(requestHeaders),
+  });
 
   if (!object) {
     return null;
@@ -288,17 +300,23 @@ export const createRecipeImageService = (env: Bindings): RecipeImageService => (
   },
   async deleteObject(objectKey) {
     await env.RECIPE_IMAGES.delete(objectKey);
+    const prefix = recipeThumbnailPrefix(objectKey);
+    if (prefix) await deleteImagePrefix(env.RECIPE_IMAGES, prefix);
   },
   async deletePrefixBestEffort(prefix) {
-    let cursor: string | undefined;
-
-    do {
-      const result = await env.RECIPE_IMAGES.list({ prefix, cursor });
-      await Promise.all(result.objects.map((object) => env.RECIPE_IMAGES.delete(object.key)));
-      cursor = result.truncated ? result.cursor : undefined;
-    } while (cursor);
+    await deleteImagePrefix(env.RECIPE_IMAGES, prefix);
   },
 });
+
+const deleteImagePrefix = async (bucket: R2Bucket, prefix: string) => {
+  let cursor: string | undefined;
+  do {
+    const result = await bucket.list({ prefix, cursor });
+    const keys = result.objects.map((object) => object.key);
+    if (keys.length > 0) await bucket.delete(keys);
+    cursor = result.truncated ? result.cursor : undefined;
+  } while (cursor);
+};
 
 export const imageExtensionFromContentType = (contentType: ImageContentType) => {
   switch (contentType) {

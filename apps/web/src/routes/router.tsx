@@ -1,3 +1,4 @@
+import { MAX_RECIPE_TAGS, recipeListSortSchema } from "@recipestock/schemas";
 import {
   createRootRoute,
   createRoute,
@@ -5,13 +6,16 @@ import {
   lazyRouteComponent,
   Outlet,
   RouterProvider,
+  stripSearchParams,
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
+import { z } from "zod";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { Header, MobileAddRecipeFab } from "../components/header";
 import {
+  ImportTextSkeleton,
   ImportUrlSkeleton,
   LoadingStatus,
   RecipeDetailSkeleton,
@@ -20,17 +24,21 @@ import {
   SettingsSkeleton,
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
+import { readRecipeListSort } from "../features/recipes/list-search";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { useProtectedAccess } from "../lib/protected-access";
 import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
 import { type ImportUrlSearch } from "./import";
+import { type ImportTextSearch } from "./import-text";
 
 const LoginScreen = lazyRouteComponent(() => import("./login"), "LoginRoute");
 const ImportUrlScreen = lazyRouteComponent(() => import("./import"), "ImportUrlRoute");
+const ImportTextScreen = lazyRouteComponent(() => import("./import-text"), "ImportTextRoute");
 const RecipesIndexRoute = lazyRouteComponent(() => import("./recipes-index"), "RecipesIndexRoute");
 const NewRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "NewRecipeRoute");
 const EditRecipeRoute = lazyRouteComponent(() => import("./recipe-editor"), "EditRecipeRoute");
 const RecipeDetailRoute = lazyRouteComponent(() => import("./recipe-detail"), "RecipeDetailRoute");
+const TagsRoute = lazyRouteComponent(() => import("./tags"), "TagsRoute");
 const SettingsIndexRoute = lazyRouteComponent(
   () => import("./settings-index"),
   "SettingsIndexRoute",
@@ -53,7 +61,10 @@ const ImportUrlRoute = withPreload(
   ({ search }: { search: ImportUrlSearch }) => <ImportUrlScreen search={search} />,
   ImportUrlScreen.preload,
 );
-
+const ImportTextRoute = withPreload(
+  ({ search }: { search: ImportTextSearch }) => <ImportTextScreen search={search} />,
+  ImportTextScreen.preload,
+);
 const ProtectedRouteSkeleton = () => {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
@@ -71,6 +82,14 @@ const ProtectedRouteSkeleton = () => {
 
   if (pathname === "/import/url") {
     return <ImportUrlSkeleton />;
+  }
+
+  if (pathname === "/import/text") {
+    return <ImportTextSkeleton />;
+  }
+
+  if (pathname === "/tags") {
+    return <LoadingStatus label="タグを読み込み中" />;
   }
 
   if (pathname === "/settings" || pathname.startsWith("/settings/")) {
@@ -155,7 +174,7 @@ const PublicLayout = () => {
 };
 
 const RootLayout = () => (
-  <div className="min-h-screen bg-brand-cream text-brand-ink">
+  <div className="min-h-screen bg-background text-foreground">
     <Outlet />
   </div>
 );
@@ -193,9 +212,42 @@ const indexRoute = createRoute({
   ),
 });
 
+const recipesSearchSchema = z.object({
+  // 既定の新しい順はURLに載せない。読めない値はエラーにせず新しい順に戻す。
+  // 未指定には既定値を埋めず、遷移先で並び順を指定したかを下のmiddlewareで見分ける。
+  sort: recipeListSortSchema.optional().catch("newest"),
+  // URLの読み取りは値をJSONとして読むので、数字だけの検索語は数値で届く。文字列に戻して受け、空は載せない。
+  q: z
+    .union([z.string(), z.number(), z.boolean()])
+    .transform((value) => String(value).trim() || undefined)
+    .optional()
+    .catch(undefined),
+  // 絞り込むタグのid。重複は除き、空なら載せない。読めない値は絞り込みなしに戻す。
+  tags: z
+    .array(z.string().min(1))
+    .max(MAX_RECIPE_TAGS)
+    .transform((tagIds) => (tagIds.length > 0 ? [...new Set(tagIds)] : undefined))
+    .optional()
+    .catch(undefined),
+  untagged: z.literal(true).optional().catch(undefined),
+});
+
 const recipesRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/recipes",
+  validateSearch: recipesSearchSchema,
+  search: {
+    middlewares: [
+      stripSearchParams({ sort: "newest" }),
+      // 並び順を指定せずに一覧へ移るときは、一覧で最後に使った並び順を引き継ぐ。
+      // 絞り込み条件はここでは埋めず、戻る操作だけがsearchで渡す（ADR 0021）。
+      // stripSearchParamsより内側に置き、指定された新しい順が消される前に判定する。
+      ({ search, next }) => {
+        const result = next(search);
+        return { ...result, sort: result.sort ?? readRecipeListSort() };
+      },
+    ],
+  },
   component: RecipesIndexRoute,
   errorComponent: RouteChunkError,
   pendingComponent: RecipeListSkeleton,
@@ -274,6 +326,22 @@ const importUrlRoute = createRoute({
   pendingMs: 0,
 });
 
+const importTextRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/import/text",
+  validateSearch: (search): ImportTextSearch => ({
+    fromJob: stringSearchParam(search.fromJob),
+  }),
+  component: () => {
+    const search = importTextRoute.useSearch();
+
+    return <ImportTextRoute key={search.fromJob ?? ""} search={search} />;
+  },
+  errorComponent: RouteChunkError,
+  pendingComponent: ImportTextSkeleton,
+  pendingMs: 0,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings",
@@ -292,6 +360,15 @@ const settingsBillingRoute = createRoute({
   pendingMs: 0,
 });
 
+const tagsRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/tags",
+  component: TagsRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: () => <LoadingStatus label="タグを読み込み中" />,
+  pendingMs: 0,
+});
+
 const routeTree = rootRoute.addChildren([
   publicLayoutRoute.addChildren([indexRoute, loginRoute]),
   protectedLayoutRoute.addChildren([
@@ -300,6 +377,8 @@ const routeTree = rootRoute.addChildren([
     recipeDetailRoute,
     editRecipeRoute,
     importUrlRoute,
+    importTextRoute,
+    tagsRoute,
     settingsRoute,
     settingsBillingRoute,
   ]),

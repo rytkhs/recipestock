@@ -1,4 +1,9 @@
-import { type ApiErrorCode, apiErrorResponseSchema } from "@recipestock/schemas";
+import {
+  type ApiErrorCode,
+  apiErrorResponseSchema,
+  MAX_TAG_NAME_LENGTH,
+  type RecipeTag,
+} from "@recipestock/schemas";
 
 type ApiErrorOptions = {
   status: number;
@@ -32,6 +37,22 @@ export const validationFailedResponse = (details: unknown) =>
     code: "validation_failed",
     message: "Request validation failed.",
     details,
+  });
+
+export const invalidTagNameResponse = (field: "name" | "names") =>
+  validationFailedResponse({
+    formErrors: [],
+    fieldErrors: {
+      [field]: [`Tag names must be 1 to ${MAX_TAG_NAME_LENGTH} characters after normalization.`],
+    },
+  });
+
+export const tagNameConflictResponse = (tag: RecipeTag) =>
+  apiErrorResponse({
+    status: 409,
+    code: "tag_name_conflict",
+    message: "Tag name is already used.",
+    details: { tag },
   });
 
 export const invalidRecipeListCursorResponse = () =>

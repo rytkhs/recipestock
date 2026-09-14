@@ -8,6 +8,12 @@ describe("resolveAuthRedirect", () => {
     ).toBe("/import/url?url=https%3A%2F%2Fexample.com%2Frecipes%2Ftomato#content");
   });
 
+  it("テキスト取り込みの送り直し画面を保護ルートとして返す", () => {
+    expect(resolveAuthRedirect("/import/text?fromJob=job_123")).toBe(
+      "/import/text?fromJob=job_123",
+    );
+  });
+
   it.each([
     undefined,
     "",

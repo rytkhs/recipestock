@@ -141,6 +141,7 @@ describe("formValuesToCreateRecipeRequest", () => {
         },
         createdAt: "2026-05-26T00:00:00.000Z",
         updatedAt: "2026-05-26T00:00:00.000Z",
+        tags: [],
         locked: false,
       }),
     ).toEqual({

@@ -117,11 +117,64 @@ pnpm --filter @recipestock/web dev
 - Web: http://localhost:5173/
 - API: http://localhost:8787/
 
+### モックモード
+
+画面の状態(レシピなし、フリープランのロック、取り込み失敗、接続不可など)を目視で確認するときは、
+API を MSW に差し替えて起動します。wrangler も Neon も R2 も不要です。
+
+```bash
+pnpm dev:mock
+```
+
+シナリオは画面左下のセレクタか、`?scenario=<id>` で切り替えます。
+一度指定すると sessionStorage に残るので、画面遷移しても維持されます。
+`?delay=2000` を付けると全 API レスポンスが遅くなり、スケルトンを観察できます。
+
+| id | 内容 |
+| --- | --- |
+| `default` | Pro・26件(2ページ目あり)・タグあり |
+| `empty` | レシピなし |
+| `no-tags` | タグを持たない(チップ列なし・詳細で定番候補) |
+| `free-locked` | フリープランで末尾がロック |
+| `limit-reached` | フリープランで保存上限ちょうど |
+| `list-error` | 一覧の取得失敗 |
+| `next-page-error` | 2ページ目の取得失敗 |
+| `importing` | 取り込み中 |
+| `import-failed` | 取り込み失敗 |
+| `text-import-failed` | テキストの取り込み失敗(原文を直して再試行) |
+| `no-cover` | カバー画像なし |
+| `broken-image` | カバー画像の読み込み失敗 |
+| `signed-out` | 未ログイン |
+| `offline` | 接続不可 |
+
+検索ヒットなしの表示は、`default` で一致しない語を検索すると出ます。
+取り込みは URL やテキストを送信してから数秒で成功に変わるので、島の一連の流れをそのまま追えます。
+レシピの作成・編集・削除も、リロードするまでは入力した内容で詳細と一覧に反映されます。
+フリープランで保存上限に達しているシナリオ(`limit-reached` / `free-locked`)では、作成と URL・テキストの取り込みが本番と同じく `recipe_limit_exceeded` で失敗します。
+`signed-out` でメールアドレスによるログインや新規登録(OTP 検証)をすると、そのままログイン状態になります。
+Google ログインはリロードを伴うので、戻り先で `default` シナリオに切り替わります。
+
+ハンドラのない API は実 API に流さず、`501` を返してコンソールにエラーを出します。
+API を追加したら `apps/web/src/mocks/handlers.ts` にハンドラを足してください。
+
+設定画面の通知の有効化は、モックモードでは試せません(失敗の表示になります)。
+Service Worker の scope `/` を MSW が使っているためです。
+
+シナリオとフィクスチャは `apps/web/src/mocks/` にあります。
+フィクスチャは `@recipestock/schemas` の型で縛ってあり、`src/mocks/scenarios.test.ts` が
+Zod スキーマとの整合を検証するので、API 契約が変わればテストが落ちます。
+
+`http://<LAN-IP>:5173` のように localhost 以外を http で開くと Service Worker が使えません。
+この場合 MSW はページ内の `fetch` だけを差し替えるフォールバックで動くので、API のモックは効きますが、
+`<img>` で読む画像は差し替わらず、すべて読み込み失敗の表示になります。
+スマートフォンで画像まで確認するときは、trycloudflare などの HTTPS トンネル越しに開いてください。
+
 ## Commands
 
 | コマンド | 内容 |
 | --- | --- |
 | `pnpm dev` | Turborepo 経由で開発サーバーを起動 |
+| `pnpm dev:mock` | API を MSW に差し替えた Web のみの開発サーバーを起動 |
 | `pnpm build` | 全 package/app を build |
 | `pnpm typecheck` | TypeScript の型チェック |
 | `pnpm lint` | Biome による lint / format check |
@@ -132,6 +185,22 @@ pnpm --filter @recipestock/web dev
 | `pnpm db:generate` | Drizzle migration を生成 |
 | `pnpm db:migrate` | Drizzle migration を適用 |
 | `pnpm deploy` | Web build 後に Cloudflare Worker へ deploy |
+
+### Continuous integration
+
+GitHub Actionsの`CI` workflowは、PRの作成・更新・再オープン、`main`へのpush、手動実行で起動する。forkからのPRも同じチェックの対象とする。
+
+`checks` jobはUbuntu 24.04、Node.js 22系、`package.json`に指定したpnpmで次を順に実行する。
+
+```bash
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm test
+```
+
+ビルドではPWA生成物も検証する。APIテストが参照するWebの静的アセットを生成するため、ビルドをテストより先に実行する。通常テストのCloudflare bindingsはローカルで実行し、CIにSecretsやローカル環境ファイルは不要。同じPR・ブランチへの更新では古い実行をキャンセルする。
 
 ### Database integration tests
 
@@ -150,7 +219,7 @@ cp .env.example .env.test.local
 pnpm test:db
 ```
 
-日常の高速テストには`pnpm test`を使用し、Databaseまたはrepositoryを変更した場合は`pnpm test:all`を実行する。
+日常の高速テストには`pnpm test`を使用し、Databaseまたはrepositoryを変更した場合は、CIに加えて必要に応じてローカルでも`pnpm test:all`を実行する。
 
 Cloudflare Worker の deploy 前検証:
 

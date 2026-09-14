@@ -27,6 +27,7 @@ export type Bindings = {
   DATABASE_URL: string;
   APP_ORIGIN: string;
   RECIPE_IMAGES: R2Bucket;
+  IMAGES: ImagesBinding;
   BETTER_AUTH_SECRET: string;
   AUTH_EMAIL_FROM: string;
   GOOGLE_CLIENT_ID?: string;

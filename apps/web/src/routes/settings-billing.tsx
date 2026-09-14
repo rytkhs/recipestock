@@ -1,4 +1,3 @@
-import { Button } from "@heroui/react";
 import { CaretLeft } from "@phosphor-icons/react";
 import {
   type CreateBillingPortalResponse,
@@ -8,6 +7,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { SettingsSkeleton } from "../components/loading";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
@@ -191,22 +191,20 @@ export const SettingsBillingRoute = () => {
                   {cancellationMessage ? "Proは請求期間終了まで利用できます。" : "Pro契約中です。"}
                 </p>
                 <Button
-                  className="mt-4 rounded-full bg-brand-sage text-white font-semibold hover:bg-brand-sage-dark"
-                  isDisabled={isPortalSubmitting}
+                  className="mt-4"
+                  disabled={isPortalSubmitting}
                   type="button"
-                  variant="primary"
-                  onPress={() => void openBillingPortal()}
+                  onClick={() => void openBillingPortal()}
                 >
                   請求管理
                 </Button>
               </div>
             ) : (
               <Button
-                className="mt-4 rounded-full bg-brand-orange text-white font-semibold hover:bg-brand-orange-dark"
-                isDisabled={isSubmitting}
+                className="mt-4"
+                disabled={isSubmitting}
                 type="button"
-                variant="primary"
-                onPress={() => void startCheckout()}
+                onClick={() => void startCheckout()}
               >
                 Proにアップグレード
               </Button>
