@@ -139,9 +139,9 @@ export const RecipeDetailSkeleton = () => (
       </div>
     </ScreenTopBarFrame>
 
-    <div className="sm:pt-2 lg:grid lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-center lg:gap-12 lg:pt-4">
-      <SkeletonBlock className="aspect-square w-full rounded-none border-0 sm:aspect-[8/5] sm:rounded-[20px] lg:aspect-[4/3]" />
-      <div className="px-4 pt-5 sm:px-0 sm:pt-6 lg:pt-0">
+    <div className="sm:pt-2 md:grid md:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] md:items-center md:gap-12 md:pt-4">
+      <SkeletonBlock className="aspect-square w-full rounded-none border-0 sm:rounded-[20px] md:aspect-[4/3]" />
+      <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
         <SkeletonBlock className="h-8 w-4/5" />
         <SkeletonBlock className="mt-3 h-4 w-40" />
         <div className="mt-4 flex gap-1.5">
