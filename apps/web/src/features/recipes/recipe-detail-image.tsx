@@ -82,9 +82,7 @@ const heroFrameClass =
   "relative block w-full overflow-hidden bg-brand-paper-muted sm:rounded-[20px]";
 
 const RecipeHeroPlate = ({ recipeId, title }: { recipeId: string; title: string }) => (
-  <span
-    className={cn(heroFrameClass, "@container-size aspect-[12/5] sm:aspect-[4/1] lg:aspect-[4/3]")}
-  >
+  <span className={cn(heroFrameClass, "@container-size aspect-[12/5] md:aspect-[4/3]")}>
     <RecipeTitlePlate
       initialSizeClassName="text-[length:60cqh]"
       paddingClassName="p-[12cqh]"
@@ -126,15 +124,11 @@ export const RecipeHero = ({
   return (
     <RecipeImageZoomButton
       alt={title}
-      className={cn(
-        heroFrameClass,
-        "aspect-(--hero-ratio) sm:aspect-(--hero-ratio-sm) lg:aspect-(--hero-ratio-lg)",
-      )}
+      className={cn(heroFrameClass, "aspect-(--hero-ratio) md:aspect-(--hero-ratio-md)")}
       style={
         {
           "--hero-ratio": clampRatio(ratio, 1, 2),
-          "--hero-ratio-sm": clampRatio(ratio, 1.6, 2.4),
-          "--hero-ratio-lg": clampRatio(ratio, 1, 1.6),
+          "--hero-ratio-md": clampRatio(ratio, 1, 1.6),
         } as CSSProperties
       }
       onOpen={() => onOpen(cover.id)}

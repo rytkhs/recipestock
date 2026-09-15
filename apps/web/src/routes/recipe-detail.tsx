@@ -428,7 +428,7 @@ const RecipeDetailView = ({
         </div>
       </ScreenTopBarFrame>
 
-      <header className="sm:pt-2 lg:grid lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-center lg:gap-12 lg:pt-4">
+      <header className="sm:pt-2 md:grid md:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] md:items-center md:gap-12 md:pt-4">
         <RecipeHero
           cover={images.cover}
           isCoverFailed={images.cover ? failedImageIds.has(images.cover.id) : false}
@@ -437,7 +437,7 @@ const RecipeDetailView = ({
           onError={markImageFailed}
           onOpen={openLightbox}
         />
-        <div className="px-4 pt-5 sm:px-0 sm:pt-6 lg:pt-0">
+        <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
           <h1
             className="font-bold text-[1.625rem] text-brand-ink leading-[1.35] sm:text-3xl"
             ref={titleRef}
