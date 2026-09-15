@@ -106,13 +106,14 @@ type RecipeImages = {
   steps: RecipeDetailImage[][];
 };
 
-// 表示もライトボックスも同じidで画像を指す。URLのない画像は出さない。
+// 表示もライトボックスも、画像をobjectKeyで指す。URLのない画像は出さない。
+// SNSの取り込みでは表紙とレシピ画像の1枚目が同じ画像なので、どこに出ていても1枚の画像として扱う。
 const collectRecipeImages = ({ content, title }: RecipeDetail): RecipeImages => ({
   cover: content.coverImage?.url
     ? {
         alt: title,
         height: content.coverImage.height,
-        id: `cover:${content.coverImage.objectKey}`,
+        id: content.coverImage.objectKey,
         src: content.coverImage.url,
         width: content.coverImage.width,
       }
@@ -123,7 +124,7 @@ const collectRecipeImages = ({ content, title }: RecipeDetail): RecipeImages => 
           {
             alt: `レシピ画像${imageIndex + 1}`,
             height: image.height,
-            id: `reference:${image.objectKey}`,
+            id: image.objectKey,
             src: image.url,
             width: image.width,
           },
@@ -137,7 +138,7 @@ const collectRecipeImages = ({ content, title }: RecipeDetail): RecipeImages => 
             {
               alt: `手順${stepIndex + 1}の画像${imageIndex + 1}`,
               height: image.height,
-              id: `step:${image.objectKey}`,
+              id: image.objectKey,
               src: image.url,
               width: image.width,
             },
@@ -300,14 +301,26 @@ const RecipeDetailView = ({
     },
   });
   const images = useMemo(() => collectRecipeImages(recipe), [recipe]);
+  // ライトボックスは同じ画像を1回だけ並べる。表紙がレシピ画像にも入っていれば、投稿の順番のままその位置で開く。
   // 読み込めなかった画像はライトボックスにも出さない。
-  const lightboxImages = useMemo(
-    () =>
-      [images.cover, ...images.references, ...images.steps.flat()].filter(
-        (image): image is RecipeDetailImage => image !== null && !failedImageIds.has(image.id),
-      ),
-    [failedImageIds, images],
-  );
+  const lightboxImages = useMemo(() => {
+    const { cover, references, steps } = images;
+    const isCoverInReferences = references.some((image) => image.id === cover?.id);
+    const listedIds = new Set<string>();
+
+    return [
+      ...(cover && !isCoverInReferences ? [cover] : []),
+      ...references,
+      ...steps.flat(),
+    ].filter((image) => {
+      if (listedIds.has(image.id) || failedImageIds.has(image.id)) {
+        return false;
+      }
+
+      listedIds.add(image.id);
+      return true;
+    });
+  }, [failedImageIds, images]);
   const markImageFailed = useCallback((imageId: string) => {
     setFailedImageIds((current) =>
       current.has(imageId) ? current : new Set(current).add(imageId),
@@ -334,11 +347,14 @@ const RecipeDetailView = ({
   const { content, source } = recipe;
   const hasIngredients = Boolean(content.yieldText) || content.ingredientGroups.length > 0;
   const hasSteps = content.steps.length > 0;
-  // 画像だけの投稿から取り込んだRecipeは材料も手順もない。画像そのものが本文なので大きく並べる。
-  const areImagesTheBody = !hasIngredients && !hasSteps;
+  // レシピ画像が表紙と同じ画像だけなら、表紙を拡大すれば見られるので段を出さない。
+  const hasReferenceImagesBesidesCover = images.references.some(
+    (image) => image.id !== images.cover?.id,
+  );
   const sourceHost = readSourceHost(source.sourceUrl);
   const sourceName = source.sourceName || sourceHost;
   const createdAtLabel = formatRecipeCreatedAt(recipe.createdAt);
+  // 画面を消さないは、料理中に最初に見る段の見出しに1つだけ付ける。
   const keepScreenOn = <KeepScreenOnToggle />;
 
   const renderStepImages = (stepIndex: number) => {
@@ -366,39 +382,6 @@ const RecipeDetailView = ({
       />
     ) : null;
   };
-
-  const referenceImagesSection =
-    images.references.length > 0 ? (
-      <section aria-labelledby={referenceHeadingId}>
-        <RecipeSectionHeader
-          id={referenceHeadingId}
-          meta={`${images.references.length}枚`}
-          title="レシピ画像"
-        />
-        {areImagesTheBody ? (
-          <div className="mt-4 flex flex-col gap-4">
-            {images.references.map((image) => (
-              <RecipeSingleImage
-                image={image}
-                isFailed={failedImageIds.has(image.id)}
-                key={image.id}
-                sizeClassName="max-w-[min(100%,calc(85svh*var(--image-ratio)))]"
-                onError={markImageFailed}
-                onOpen={openLightbox}
-              />
-            ))}
-          </div>
-        ) : (
-          <RecipeImageStrip
-            className="-mx-4 mt-4 scroll-px-4 px-4 sm:mx-0 sm:scroll-px-0 sm:px-0"
-            failedImageIds={failedImageIds}
-            images={images.references}
-            onError={markImageFailed}
-            onOpen={openLightbox}
-          />
-        )}
-      </section>
-    ) : null;
 
   return (
     <article className={detailPageClass}>
@@ -513,7 +496,6 @@ const RecipeDetailView = ({
         <div
           className={cn("flex flex-col gap-10", hasIngredients ? "mt-10 lg:mt-0" : "lg:max-w-3xl")}
         >
-          {areImagesTheBody ? referenceImagesSection : null}
           {hasSteps ? (
             <RecipeSteps
               action={hasIngredients ? undefined : keepScreenOn}
@@ -523,7 +505,23 @@ const RecipeDetailView = ({
             />
           ) : null}
           {content.note ? <RecipeNote note={content.note} /> : null}
-          {areImagesTheBody ? null : referenceImagesSection}
+          {hasReferenceImagesBesidesCover ? (
+            <section aria-labelledby={referenceHeadingId}>
+              <RecipeSectionHeader
+                action={hasIngredients || hasSteps ? undefined : keepScreenOn}
+                id={referenceHeadingId}
+                meta={`${images.references.length}枚`}
+                title="レシピ画像"
+              />
+              <RecipeImageStrip
+                className="-mx-4 mt-4 scroll-px-4 px-4 sm:mx-0 sm:scroll-px-0 sm:px-0"
+                failedImageIds={failedImageIds}
+                images={images.references}
+                onError={markImageFailed}
+                onOpen={openLightbox}
+              />
+            </section>
+          ) : null}
           {sourceName ? (
             <RecipeSource host={sourceHost} name={sourceName} url={source.sourceUrl ?? null} />
           ) : null}
@@ -555,7 +553,11 @@ const RecipeDetailView = ({
         animation={{ fade: 200, swipe: 220 }}
         carousel={{ finite: true, imageProps: { decoding: "async" } }}
         close={() => setLightboxIndex(null)}
-        controller={{ closeOnBackdropClick: true, closeOnPullDown: true }}
+        controller={{
+          // 料理中に画像の外へ触れて閉じないよう、閉じるのは下へ引く操作と閉じるボタンだけにする。
+          closeOnBackdropClick: false,
+          closeOnPullDown: true,
+        }}
         index={lightboxIndex ?? 0}
         labels={recipeLightboxLabels}
         on={{ view: ({ index }) => setLightboxIndex(index) }}

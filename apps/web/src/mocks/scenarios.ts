@@ -208,7 +208,11 @@ export const scenarios: Scenario[] = [
       return {
         ...state,
         recipeContents: Object.fromEntries(
-          state.recipes.map((recipe) => [recipe.id, imageOnlyRecipeContentFixture(recipe.id)]),
+          // 2件目は表紙と同じ1枚だけの投稿にして、レシピ画像の段を出さない表示も確かめられるようにする。
+          state.recipes.map((recipe, index) => [
+            recipe.id,
+            imageOnlyRecipeContentFixture(recipe.id, index === 1 ? 1 : 4),
+          ]),
         ),
       };
     },

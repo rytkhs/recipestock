@@ -372,10 +372,18 @@ export const recipeDetailFixture = (
 
 export type RecipeContentOverride = Partial<RecipeDetail["content"]>;
 
-/** SNSの画像だけの投稿から取り込んだ本文(ADR 0017)。表紙とレシピ画像だけを持つ。 */
-export const imageOnlyRecipeContentFixture = (recipeId: string): RecipeContentOverride => ({
+/**
+ * SNSの画像だけの投稿から取り込んだ本文(ADR 0017)。表紙とレシピ画像だけを持つ。
+ * 取り込みと同じく、表紙は投稿の1枚目で、レシピ画像にも1枚目から投稿の順に入る。
+ */
+export const imageOnlyRecipeContentFixture = (
+  recipeId: string,
+  imageCount: number,
+): RecipeContentOverride => ({
   yieldText: undefined,
-  referenceImages: ["post-2", "post-3", "post-4"].map((name) => recipeImageFixture(recipeId, name)),
+  referenceImages: Array.from({ length: imageCount }, (_, index) =>
+    recipeImageFixture(recipeId, index === 0 ? "cover" : `post-${index + 1}`),
+  ),
   ingredientGroups: [],
   steps: [],
   note: undefined,

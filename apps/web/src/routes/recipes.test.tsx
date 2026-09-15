@@ -118,6 +118,40 @@ const mockLightboxRecipeFetch = () =>
     { authenticated: true },
   );
 
+// SNSの画像だけの投稿から取り込んだRecipe。取り込みと同じく、表紙は投稿の1枚目で、レシピ画像にも1枚目から入る。
+const mockImageOnlyRecipeFetch = (imageCount: number) => {
+  const postImages = Array.from({ length: imageCount }, (_, index) =>
+    savedImage(
+      `recipes/user_123/recipe_123/post-${index + 1}.webp`,
+      `https://images.example/post-${index + 1}.webp`,
+      1080,
+      1350,
+    ),
+  );
+
+  return mockFetch(
+    async (input) => {
+      if (getRequestPath(input) === "/api/recipes/recipe_123") {
+        return jsonResponse({
+          recipe: {
+            ...tomatoPastaDetailResponse.recipe,
+            content: {
+              title: "Tomato pasta",
+              coverImage: postImages[0],
+              referenceImages: postImages,
+              ingredientGroups: [],
+              steps: [],
+            },
+          },
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    },
+    { authenticated: true },
+  );
+};
+
 const getReferenceImageInput = () => {
   const input = screen
     .getAllByLabelText("レシピ画像を追加")
@@ -2174,6 +2208,88 @@ describe("RecipesRoute", () => {
     await waitFor(() => {
       expect(zoomButton).toHaveFocus();
     });
+  });
+
+  it("ライトボックスは料理中に触れても閉じないよう、画像の外を押しても閉じない", async () => {
+    mockLightboxRecipeFetch();
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Tomato pastaを拡大" }));
+
+    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
+    // 画像の周りの余白は、スライドの要素そのものを押したことになる。
+    const slide = lightbox.querySelector(".yarl__slide");
+
+    if (!(slide instanceof HTMLElement)) {
+      throw new Error("Lightbox slide not found");
+    }
+
+    await user.click(slide);
+
+    // 閉じ始めると、閉じるアニメーションを待たずにopenのクラスが外れる。
+    expect(lightbox).toHaveClass("yarl__portal_open");
+  });
+
+  it("表紙がレシピ画像の1枚目と同じなら、段には並べたままライトボックスでは1回だけ出す", async () => {
+    mockImageOnlyRecipeFetch(3);
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    const referenceImages = await screen.findByRole("region", { name: "レシピ画像" });
+    expect(within(referenceImages).getByText("3枚")).toBeInTheDocument();
+    expect(within(referenceImages).getByAltText("レシピ画像1")).toHaveAttribute(
+      "src",
+      "https://images.example/post-1.webp",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Tomato pastaを拡大" }));
+
+    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
+    expect(within(lightbox).getByText("1 / 3")).toBeInTheDocument();
+
+    await user.click(within(lightbox).getByRole("button", { name: "次の画像" }));
+
+    expect(await within(lightbox).findByText("2 / 3")).toBeInTheDocument();
+    expect(within(lightbox).getByAltText("レシピ画像2")).toHaveAttribute(
+      "src",
+      "https://images.example/post-2.webp",
+    );
+  });
+
+  it("レシピ画像が表紙と同じ1枚だけなら、レシピ画像の段を出さない", async () => {
+    mockImageOnlyRecipeFetch(1);
+
+    await renderApp("/recipes/recipe_123");
+
+    await expect(
+      screen.findByRole("button", { name: "Tomato pastaを拡大" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "レシピ画像" })).not.toBeInTheDocument();
+    expect(screen.queryByAltText("レシピ画像1")).not.toBeInTheDocument();
+  });
+
+  it("材料も手順もないレシピでは、レシピ画像の見出しに画面を消さないを出す", async () => {
+    Object.defineProperty(navigator, "wakeLock", {
+      configurable: true,
+      value: { request: vi.fn() },
+    });
+
+    try {
+      mockImageOnlyRecipeFetch(2);
+
+      await renderApp("/recipes/recipe_123");
+
+      const referenceImages = await screen.findByRole("region", { name: "レシピ画像" });
+      expect(
+        within(referenceImages).getByRole("button", { name: "画面を消さない" }),
+      ).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "画面を消さない" })).toHaveLength(1);
+    } finally {
+      Reflect.deleteProperty(navigator, "wakeLock");
+    }
   });
 
   it("詳細画面ではタイトルを見出しとして一度だけ出し、出典から元のページを別のタブで開ける", async () => {
