@@ -2210,28 +2210,6 @@ describe("RecipesRoute", () => {
     });
   });
 
-  it("ライトボックスは料理中に触れても閉じないよう、画像の外を押しても閉じない", async () => {
-    mockLightboxRecipeFetch();
-
-    await renderApp("/recipes/recipe_123");
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Tomato pastaを拡大" }));
-
-    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
-    // 画像の周りの余白は、スライドの要素そのものを押したことになる。
-    const slide = lightbox.querySelector(".yarl__slide");
-
-    if (!(slide instanceof HTMLElement)) {
-      throw new Error("Lightbox slide not found");
-    }
-
-    await user.click(slide);
-
-    // 閉じ始めると、閉じるアニメーションを待たずにopenのクラスが外れる。
-    expect(lightbox).toHaveClass("yarl__portal_open");
-  });
-
   it("表紙がレシピ画像の1枚目と同じなら、段には並べたままライトボックスでは1回だけ出す", async () => {
     mockImageOnlyRecipeFetch(3);
 

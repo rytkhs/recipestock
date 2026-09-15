@@ -554,8 +554,7 @@ const RecipeDetailView = ({
         carousel={{ finite: true, imageProps: { decoding: "async" } }}
         close={() => setLightboxIndex(null)}
         controller={{
-          // 料理中に画像の外へ触れて閉じないよう、閉じるのは下へ引く操作と閉じるボタンだけにする。
-          closeOnBackdropClick: false,
+          closeOnBackdropClick: true,
           closeOnPullDown: true,
         }}
         index={lightboxIndex ?? 0}
