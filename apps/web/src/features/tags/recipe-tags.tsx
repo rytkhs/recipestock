@@ -18,7 +18,7 @@ export const RecipeTags = ({
 
   return (
     <>
-      <div className="mx-auto mt-3 flex max-w-3xl flex-wrap items-center gap-1.5">
+      <div className="mt-4 flex flex-wrap items-center gap-1.5">
         {tags.map((tag) =>
           isPendingTagId(tag.id) ? (
             <span className={tagChipClass()} key={tag.id}>

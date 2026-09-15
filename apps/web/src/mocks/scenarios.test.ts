@@ -72,11 +72,20 @@ describe.each(
     }
   });
 
+  it("recipeContentsは一覧にあるRecipeだけを指している", () => {
+    const recipeIds = new Set(state.recipes.map((recipe) => recipe.id));
+
+    expect(
+      Object.keys(state.recipeContents).filter((recipeId) => !recipeIds.has(recipeId)),
+    ).toEqual([]);
+  });
+
   it("各Recipeの詳細がGetRecipeResponseの形をしている", () => {
     for (const recipe of state.recipes) {
+      const fixture = recipeDetailFixture(recipe.id);
       const detail = recipe.locked
         ? { id: recipe.id, locked: true as const }
-        : recipeDetailFixture(recipe.id);
+        : { ...fixture, content: { ...fixture.content, ...state.recipeContents[recipe.id] } };
 
       expectValid(getRecipeResponseSchema, { recipe: detail });
     }

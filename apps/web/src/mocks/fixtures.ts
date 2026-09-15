@@ -8,6 +8,7 @@ import {
   type RecipeListItem,
 } from "@recipestock/schemas";
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
+import { imagePlaceholderSize } from "./images";
 
 // モックの世界の住人。router-test-utilsが使っている値と同じにしておく。
 export const MOCK_USER_ID = "user_123";
@@ -297,6 +298,8 @@ const ingredientGroups = [
       { name: "大根", amount: "1/4本" },
       { name: "片栗粉", amount: "大さじ2" },
       { name: "サラダ油", amount: "大さじ1" },
+      // 取り込みで名前と分量を分けられなかった行は、分量を空にして行全体を名前に入れる。
+      { name: "青ねぎ(小口切り) 適量", amount: "" },
     ],
   },
   {
@@ -310,6 +313,13 @@ const ingredientGroups = [
   },
 ];
 
+// APIが保存する画像と同じく、縦横は配信するプレースホルダ画像の実寸に揃える。
+const recipeImageFixture = (recipeId: string, name: string) => {
+  const objectKey = objectKeyFor(recipeId, name);
+
+  return { objectKey, ...imagePlaceholderSize(objectKey), url: recipeImageUrl(objectKey) };
+};
+
 export const recipeDetailFixture = (
   recipeId: string,
   overrides: Partial<RecipeDetail> = {},
@@ -319,9 +329,6 @@ export const recipeDetailFixture = (
     recipeSeeds.findIndex((_, index) => mockRecipeId(index) === recipeId),
   );
   const seed = recipeSeeds[seedIndex];
-  const coverKey = objectKeyFor(recipeId, "cover");
-  const referenceKey = objectKeyFor(recipeId, "source-1");
-  const stepKey = objectKeyFor(recipeId, "step-1");
   const now = new Date();
 
   return {
@@ -330,25 +337,25 @@ export const recipeDetailFixture = (
     content: {
       title: seed.title,
       yieldText: "2人分",
-      coverImage: {
-        objectKey: coverKey,
-        width: 1200,
-        height: 900,
-        url: recipeImageUrl(coverKey),
-      },
+      coverImage: recipeImageFixture(recipeId, "cover"),
       referenceImages: [
-        { objectKey: referenceKey, width: 1080, height: 1080, url: recipeImageUrl(referenceKey) },
+        recipeImageFixture(recipeId, "source-1"),
+        recipeImageFixture(recipeId, "source-2"),
       ],
       ingredientGroups,
       steps: [
         { text: "鶏むね肉をそぎ切りにし、片栗粉をまぶす。", images: [] },
         {
           text: "フライパンに油を熱し、両面を焼き色がつくまで焼く。",
-          images: [{ objectKey: stepKey, width: 1000, height: 750, url: recipeImageUrl(stepKey) }],
+          images: [recipeImageFixture(recipeId, "step-1")],
         },
-        { text: "大根おろしと合わせ調味料を加え、5分ほど煮詰める。", images: [] },
+        {
+          text: "大根おろしと合わせ調味料を加え、5分ほど煮詰める。途中で一度返し、とろみがついたら火を止める。",
+          images: [recipeImageFixture(recipeId, "step-2"), recipeImageFixture(recipeId, "step-3")],
+        },
+        { text: "器に盛り、青ねぎを散らす。", images: [] },
       ],
-      note: "大根おろしは汁ごと入れるとやさしい味になる。",
+      note: "大根おろしは汁ごと入れるとやさしい味になる。\n片栗粉をまぶしてから焼くと、むね肉がパサつかない。",
     },
     source: {
       sourceUrl: seed.sourceUrl,
@@ -362,6 +369,37 @@ export const recipeDetailFixture = (
     ...overrides,
   };
 };
+
+export type RecipeContentOverride = Partial<RecipeDetail["content"]>;
+
+/**
+ * SNSの画像だけの投稿から取り込んだ本文(ADR 0017)。表紙とレシピ画像だけを持つ。
+ * 取り込みと同じく、表紙は投稿の1枚目で、レシピ画像にも1枚目から投稿の順に入る。
+ */
+export const imageOnlyRecipeContentFixture = (
+  recipeId: string,
+  imageCount: number,
+): RecipeContentOverride => ({
+  yieldText: undefined,
+  referenceImages: Array.from({ length: imageCount }, (_, index) =>
+    recipeImageFixture(recipeId, index === 0 ? "cover" : `post-${index + 1}`),
+  ),
+  ingredientGroups: [],
+  steps: [],
+  note: undefined,
+});
+
+/** 表紙・レシピ画像・手順画像の一部を読み込めない本文。画像の配信はキーに broken を含むと404を返す。 */
+export const brokenImageRecipeContentFixture = (recipeId: string): RecipeContentOverride => ({
+  coverImage: recipeImageFixture(recipeId, "broken-cover"),
+  referenceImages: [
+    recipeImageFixture(recipeId, "broken-source-1"),
+    recipeImageFixture(recipeId, "source-2"),
+  ],
+  steps: recipeDetailFixture(recipeId).content.steps.map((step, index) =>
+    index === 1 ? { ...step, images: [recipeImageFixture(recipeId, "broken-step-1")] } : step,
+  ),
+});
 
 export const importJobFixture = (overrides: Partial<ImportJobSummary> = {}): ImportJobSummary => {
   const now = new Date();

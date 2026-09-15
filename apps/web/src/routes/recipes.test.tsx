@@ -3,7 +3,8 @@ import {
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -116,6 +117,40 @@ const mockLightboxRecipeFetch = () =>
     },
     { authenticated: true },
   );
+
+// SNSの画像だけの投稿から取り込んだRecipe。取り込みと同じく、表紙は投稿の1枚目で、レシピ画像にも1枚目から入る。
+const mockImageOnlyRecipeFetch = (imageCount: number) => {
+  const postImages = Array.from({ length: imageCount }, (_, index) =>
+    savedImage(
+      `recipes/user_123/recipe_123/post-${index + 1}.webp`,
+      `https://images.example/post-${index + 1}.webp`,
+      1080,
+      1350,
+    ),
+  );
+
+  return mockFetch(
+    async (input) => {
+      if (getRequestPath(input) === "/api/recipes/recipe_123") {
+        return jsonResponse({
+          recipe: {
+            ...tomatoPastaDetailResponse.recipe,
+            content: {
+              title: "Tomato pasta",
+              coverImage: postImages[0],
+              referenceImages: postImages,
+              ingredientGroups: [],
+              steps: [],
+            },
+          },
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    },
+    { authenticated: true },
+  );
+};
 
 const getReferenceImageInput = () => {
   const input = screen
@@ -2088,15 +2123,15 @@ describe("RecipesRoute", () => {
 
     const title = await screen.findByRole("heading", { name: "Tomato pasta" });
     const coverImage = await screen.findByAltText("Tomato pasta");
+    // 表紙を先に大きく見せ、その下にタイトルを組む。
     expect(
-      title.compareDocumentPosition(coverImage) & Node.DOCUMENT_POSITION_FOLLOWING,
+      coverImage.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(coverImage).toHaveAttribute("src", "https://images.example/cover.webp");
     expect(coverImage).toHaveAttribute("width", "1200");
     expect(coverImage).toHaveAttribute("height", "800");
     expect(coverImage).toHaveAttribute("decoding", "async");
     expect(coverImage).toHaveAttribute("fetchpriority", "high");
-    expect(coverImage).toHaveStyle({ aspectRatio: "1200 / 800" });
     expect(screen.getByRole("button", { name: "Tomato pastaを拡大" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "レシピ画像" })).toBeInTheDocument();
     const firstReferenceImage = screen.getByAltText("レシピ画像1");
@@ -2175,6 +2210,269 @@ describe("RecipesRoute", () => {
     });
   });
 
+  it("表紙がレシピ画像の1枚目と同じなら、段には並べたままライトボックスでは1回だけ出す", async () => {
+    mockImageOnlyRecipeFetch(3);
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    const referenceImages = await screen.findByRole("region", { name: "レシピ画像" });
+    expect(within(referenceImages).getByText("3枚")).toBeInTheDocument();
+    expect(within(referenceImages).getByAltText("レシピ画像1")).toHaveAttribute(
+      "src",
+      "https://images.example/post-1.webp",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Tomato pastaを拡大" }));
+
+    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
+    expect(within(lightbox).getByText("1 / 3")).toBeInTheDocument();
+
+    await user.click(within(lightbox).getByRole("button", { name: "次の画像" }));
+
+    expect(await within(lightbox).findByText("2 / 3")).toBeInTheDocument();
+    expect(within(lightbox).getByAltText("レシピ画像2")).toHaveAttribute(
+      "src",
+      "https://images.example/post-2.webp",
+    );
+  });
+
+  it("レシピ画像が表紙と同じ1枚だけなら、レシピ画像の段を出さない", async () => {
+    mockImageOnlyRecipeFetch(1);
+
+    await renderApp("/recipes/recipe_123");
+
+    await expect(
+      screen.findByRole("button", { name: "Tomato pastaを拡大" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "レシピ画像" })).not.toBeInTheDocument();
+    expect(screen.queryByAltText("レシピ画像1")).not.toBeInTheDocument();
+  });
+
+  it("材料も手順もないレシピでは、レシピ画像の見出しに画面を消さないを出す", async () => {
+    Object.defineProperty(navigator, "wakeLock", {
+      configurable: true,
+      value: { request: vi.fn() },
+    });
+
+    try {
+      mockImageOnlyRecipeFetch(2);
+
+      await renderApp("/recipes/recipe_123");
+
+      const referenceImages = await screen.findByRole("region", { name: "レシピ画像" });
+      expect(
+        within(referenceImages).getByRole("button", { name: "画面を消さない" }),
+      ).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "画面を消さない" })).toHaveLength(1);
+    } finally {
+      Reflect.deleteProperty(navigator, "wakeLock");
+    }
+  });
+
+  it("詳細画面ではタイトルを見出しとして一度だけ出し、出典から元のページを別のタブで開ける", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              ...tomatoPastaDetailResponse.recipe,
+              source: {
+                sourceUrl: "https://www.example.com/recipes/tomato",
+                normalizedSourceUrl: "https://www.example.com/recipes/tomato",
+                sourceName: "Example Kitchen",
+              },
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123");
+
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+    expect(screen.getAllByRole("heading", { name: "Tomato pasta" })).toHaveLength(1);
+    const sourceLinks = screen.getAllByRole("link", { name: /元のページを開く/ });
+    expect(sourceLinks).toHaveLength(2);
+    for (const link of sourceLinks) {
+      expect(link).toHaveAttribute("href", "https://www.example.com/recipes/tomato");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noreferrer");
+    }
+    expect(screen.getByText("example.com")).toBeInTheDocument();
+  });
+
+  it("詳細画面で材料と手順を押すと印が付き、もう一度押すと外れる", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              ...tomatoPastaDetailResponse.recipe,
+              content: {
+                title: "Tomato pasta",
+                yieldText: "2人分",
+                ingredientGroups: [
+                  {
+                    ingredients: [
+                      { name: "トマト缶", amount: "1缶" },
+                      { name: "塩 少々", amount: "" },
+                    ],
+                  },
+                ],
+                steps: [
+                  { text: "煮詰める", images: [] },
+                  { text: "塩で味を調える", images: [] },
+                ],
+              },
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    const tomato = await screen.findByRole("button", { name: /トマト缶/ });
+    // 分量を分けられなかった行は、名前だけの行になる。
+    const salt = screen.getByRole("button", { name: "塩 少々" });
+    expect(tomato).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(tomato);
+    expect(tomato).toHaveAttribute("aria-pressed", "true");
+    expect(salt).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(tomato);
+    expect(tomato).toHaveAttribute("aria-pressed", "false");
+
+    const firstStep = screen.getByRole("button", { name: /煮詰める/ });
+    const secondStep = screen.getByRole("button", { name: /塩で味を調える/ });
+
+    await user.click(firstStep);
+    expect(firstStep).toHaveAttribute("aria-pressed", "true");
+    expect(firstStep.closest("li")).toHaveAttribute("aria-current", "step");
+
+    await user.click(secondStep);
+    expect(firstStep).toHaveAttribute("aria-pressed", "false");
+    expect(firstStep.closest("li")).not.toHaveAttribute("aria-current");
+    expect(secondStep).toHaveAttribute("aria-pressed", "true");
+    // wake lockを使えないブラウザでは切り替えを出さない。
+    expect(screen.queryByRole("button", { name: "画面を消さない" })).not.toBeInTheDocument();
+  });
+
+  it("画面を消さないを押している間だけ、画面のwake lockを持つ", async () => {
+    const release = vi.fn(async () => {});
+    const request = vi.fn(async () => ({ released: false, release }));
+    Object.defineProperty(navigator, "wakeLock", { configurable: true, value: { request } });
+
+    try {
+      mockFetch(
+        async (input) => {
+          if (getRequestPath(input) === "/api/recipes/recipe_123") {
+            return jsonResponse({
+              recipe: {
+                ...tomatoPastaDetailResponse.recipe,
+                content: {
+                  title: "Tomato pasta",
+                  ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
+                  steps: [{ text: "煮詰める", images: [] }],
+                },
+              },
+            });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      await renderApp("/recipes/recipe_123");
+
+      const toggle = await screen.findByRole("button", { name: "画面を消さない" });
+      await userEvent.click(toggle);
+
+      await waitFor(() => {
+        expect(request).toHaveBeenCalledWith("screen");
+      });
+      expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+      await userEvent.click(toggle);
+
+      await waitFor(() => {
+        expect(release).toHaveBeenCalled();
+      });
+      expect(toggle).toHaveAttribute("aria-pressed", "false");
+    } finally {
+      Reflect.deleteProperty(navigator, "wakeLock");
+    }
+  });
+
+  it("詳細画面で読み込めなかった画像は代わりの表示にし、ライトボックスにも出さない", async () => {
+    mockLightboxRecipeFetch();
+
+    await renderApp("/recipes/recipe_123");
+
+    const user = userEvent.setup();
+    fireEvent.error(await screen.findByAltText("手順1の画像1"));
+
+    await expect(
+      screen.findByRole("img", { name: "手順1の画像1を読み込めませんでした" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "手順1の画像1を拡大" })).not.toBeInTheDocument();
+
+    fireEvent.error(screen.getByAltText("Tomato pasta"));
+
+    await expect(
+      screen.findByRole("img", { name: "Tomato pastaの画像を読み込めませんでした" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tomato pastaを拡大" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "レシピ画像1を拡大" }));
+
+    const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
+    expect(within(lightbox).getByText("1 / 1")).toBeInTheDocument();
+  });
+
+  it("詳細を読み込めなかったら、再読み込みで取り直せる", async () => {
+    let detailRequests = 0;
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          detailRequests += 1;
+
+          return detailRequests === 1
+            ? jsonResponse(
+                { error: { code: "unknown", message: "Unexpected error occurred." } },
+                { status: 500 },
+              )
+            : jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123");
+
+    await expect(
+      screen.findByRole("heading", { name: "レシピを表示できません" }),
+    ).resolves.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "再読み込み" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Tomato pasta" }),
+    ).resolves.toBeInTheDocument();
+    expect(detailRequests).toBe(2);
+  });
+
   it("ロック中Recipe詳細に直接アクセスしても本文と編集リンクを表示しない", async () => {
     mockFetch(
       async (input) => {
@@ -2197,7 +2495,13 @@ describe("RecipesRoute", () => {
     await expect(
       screen.findByRole("heading", { name: "ロック中のレシピ" }),
     ).resolves.toBeInTheDocument();
-    expect(screen.getByText("このレシピの詳細は現在表示できません。")).toBeInTheDocument();
+    expect(
+      screen.getByText(`フリープランで開けるのは、新しく保存した${FREE_RECIPE_LIMIT}件までです。`),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
+      "href",
+      "/settings/billing",
+    );
     expect(screen.queryByRole("link", { name: "編集" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "材料" })).not.toBeInTheDocument();
 
@@ -2345,8 +2649,7 @@ describe("RecipesRoute", () => {
     );
 
     await renderApp("/recipes/recipe_123");
-    await userEvent.click(await screen.findByRole("button", { name: "操作メニュー" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /編集/ }));
+    await userEvent.click(await screen.findByRole("link", { name: "編集" }));
     await expect(screen.findByLabelText("レシピ名")).resolves.toBeInTheDocument();
     expect(screen.getByDisplayValue("Tomato pasta")).toBeInTheDocument();
     expect(screen.getByDisplayValue("2人分")).toBeInTheDocument();
