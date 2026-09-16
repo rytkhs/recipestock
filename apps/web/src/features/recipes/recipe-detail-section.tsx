@@ -12,14 +12,15 @@ export const RecipeSectionHeader = ({
 }: {
   action?: ReactNode;
   id: string;
-  meta?: string;
+  /** 見出しの横に添える補足。編集画面ではできあがり量の入力欄を置く。 */
+  meta?: ReactNode;
   title: string;
 }) => (
   <div className="flex items-center gap-3 border-brand-line border-b pb-2.5">
     <h2 className="shrink-0 font-bold text-brand-walnut text-lg leading-8" id={id}>
       {title}
     </h2>
-    {meta ? <p className="min-w-0 flex-1 text-brand-muted text-sm">{meta}</p> : null}
+    {meta ? <div className="min-w-0 flex-1 text-brand-muted text-sm">{meta}</div> : null}
     {action ? <div className={cn("shrink-0", !meta && "ml-auto")}>{action}</div> : null}
   </div>
 );

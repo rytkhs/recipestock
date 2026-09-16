@@ -1,330 +1,236 @@
-import { CaretDown, CaretUp, ImageSquare, Plus, X } from "@phosphor-icons/react";
+import { Plus } from "@phosphor-icons/react";
 import { type DraftImageRef, MAX_RECIPE_STEP_IMAGES } from "@recipestock/schemas";
-import { useEffect, useRef, useState } from "react";
+import { useId, useRef } from "react";
 import { useController, useFieldArray, useWatch } from "react-hook-form";
-import { Button } from "@/components/ui/button";
-import { Field, FieldGroup } from "@/components/ui/field";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { RecipeSectionHeader } from "../recipes/recipe-detail-section";
 import {
-  createLocalPreviewUrl,
+  DraftAddImageButton,
+  DraftAddPhotoButton,
+  DraftImageTile,
+  DraftPendingImageTile,
+} from "./draft-image-tile";
+import { DraftRowMenu } from "./draft-row-menu";
+import {
+  draftAddRowButtonClass,
+  draftInlineFieldClass,
   type ImagePreviewUrlsByImageId,
   imageInputAccept,
   imageLimitReachedText,
   imageRefId,
   type RecipeDraftFormControl,
-  revokeLocalPreviewUrl,
 } from "./form-internals";
-import { RecipeImageUploadError } from "./image-upload";
 import { createEmptyStep } from "./recipe-draft-form-values";
+import { useDraftImageList } from "./use-draft-image-list";
 
-type StepsSectionProps = {
+type StepImageProps = {
   control: RecipeDraftFormControl;
-  isTotalImageLimitReached: boolean;
   onUploadStateChange(isUploading: boolean): void;
   previewUrlsByImageId?: ImagePreviewUrlsByImageId;
   uploadImage: (file: File) => Promise<DraftImageRef>;
-  uploadingImageCount: number;
+};
+
+type StepsSectionProps = StepImageProps & {
+  // 手順画像の書き戻し先は steps.N.images の N で決まる。上げている途中で行が動くと
+  // 別の手順に画像が入るので、どこか1枚でもアップロード中の間は行を動かさない。
+  // 表紙の分も含めて受け取るのは、止める範囲を画面全体で揃えるため。
+  isUploadingImage: boolean;
+  remainingTotalImages: number;
 };
 
 const StepImages = ({
   control,
-  isAddDisabled,
+  maxAddable,
   onUploadStateChange,
   previewUrlsByImageId,
   stepIndex,
   uploadImage,
-}: {
-  control: RecipeDraftFormControl;
-  isAddDisabled: boolean;
-  onUploadStateChange(isUploading: boolean): void;
-  previewUrlsByImageId?: ImagePreviewUrlsByImageId;
+}: StepImageProps & {
+  maxAddable: number;
   stepIndex: number;
-  uploadImage: (file: File) => Promise<DraftImageRef>;
 }) => {
-  const { field } = useController({
-    control,
-    name: `steps.${stepIndex}.images`,
-  });
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [localPreviewUrlsByImageId, setLocalPreviewUrlsByImageId] = useState<
-    Record<string, string>
-  >({});
-  const localPreviewUrlsByImageIdRef = useRef(localPreviewUrlsByImageId);
-  const images = field.value ?? [];
-
-  localPreviewUrlsByImageIdRef.current = localPreviewUrlsByImageId;
-
-  useEffect(
-    () => () => {
-      Object.values(localPreviewUrlsByImageIdRef.current).forEach(revokeLocalPreviewUrl);
-    },
-    [],
-  );
-
-  const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file) {
-      return;
-    }
-
-    setError(null);
-    const nextPreviewUrl = createLocalPreviewUrl(file);
-    setIsUploading(true);
-    onUploadStateChange(true);
-
-    try {
-      const uploadedImage = await uploadImage(file);
-      const uploadedImageId = imageRefId(uploadedImage);
-      setLocalPreviewUrlsByImageId((currentUrls) => ({
-        ...currentUrls,
-        [uploadedImageId]: nextPreviewUrl,
-      }));
-      field.onChange([...images, uploadedImage]);
-    } catch (uploadError) {
-      revokeLocalPreviewUrl(nextPreviewUrl);
-      setError(
-        uploadError instanceof RecipeImageUploadError && uploadError.code === "image_too_large"
-          ? "画像は5MB以下にしてください。"
-          : "画像をアップロードできませんでした。",
-      );
-    } finally {
-      setIsUploading(false);
-      onUploadStateChange(false);
-    }
-  };
-
-  const handleRemove = (imageIndex: number) => {
-    const image = images[imageIndex];
-    if (!image) {
-      return;
-    }
-
-    const removedImageId = imageRefId(image);
-    setLocalPreviewUrlsByImageId((currentUrls) => {
-      const nextUrls = { ...currentUrls };
-      revokeLocalPreviewUrl(nextUrls[removedImageId]);
-      delete nextUrls[removedImageId];
-      return nextUrls;
+  const stepLabel = `手順${stepIndex + 1}`;
+  const { addFiles, error, images, isUploading, pendingImages, previewUrlFor, removeImage } =
+    useDraftImageList({
+      control,
+      maxAddable,
+      name: `steps.${stepIndex}.images`,
+      onUploadStateChange,
+      previewUrlsByImageId,
+      uploadImage,
     });
-    field.onChange(images.filter((_, currentIndex) => currentIndex !== imageIndex));
-  };
-
-  const stepLabel = `手順${stepIndex + 1}の画像`;
+  const isAddDisabled = maxAddable <= 0;
+  const openPicker = () => inputRef.current?.click();
 
   return (
-    <div className="grid gap-2">
+    <div className="px-2">
       <input
         ref={inputRef}
         accept={imageInputAccept}
-        aria-label={stepLabel}
+        aria-label={`${stepLabel}の画像`}
         className="sr-only"
         disabled={isUploading || isAddDisabled}
+        multiple
         type="file"
-        onChange={(event) => void handleChange(event)}
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          event.target.value = "";
+          void addFiles(files);
+        }}
       />
-      <div className="flex snap-x gap-2 overflow-x-auto pb-1">
-        {images.map((image, imageIndex) => {
-          const imageId = imageRefId(image);
-          const imagePreviewUrl =
-            localPreviewUrlsByImageId[imageId] ?? previewUrlsByImageId?.[imageId];
 
-          return (
-            <div
-              className="group relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-[14px] border border-brand-line-soft bg-brand-paper-muted shadow-pantry-sm"
-              key={imageId}
-            >
-              <div className="grid h-full place-items-center">
-                {imagePreviewUrl ? (
-                  <img
-                    alt={`${stepLabel}${imageIndex + 1}プレビュー`}
-                    className="h-full w-full object-cover"
-                    src={imagePreviewUrl}
-                  />
-                ) : (
-                  <ImageSquare className="text-brand-muted" size={20} />
-                )}
-              </div>
-              <Button
-                aria-label={`${stepLabel}${imageIndex + 1}を削除`}
-                className="absolute top-1 right-1 opacity-0 transition-opacity group-hover:opacity-100"
-                disabled={isUploading}
-                size="icon-xs"
-                variant="secondary"
-                onClick={() => handleRemove(imageIndex)}
-              >
-                <X weight="bold" />
-              </Button>
-            </div>
-          );
-        })}
-        {!isAddDisabled ? (
-          <button
-            aria-label="画像を追加"
-            className="grid aspect-square w-20 shrink-0 place-items-center rounded-[14px] border border-dashed border-brand-line bg-brand-paper-muted text-brand-muted transition-colors hover:border-brand-sage hover:bg-brand-paper-raised hover:text-brand-sage disabled:opacity-50"
-            disabled={isUploading}
-            type="button"
-            onClick={() => inputRef.current?.click()}
-          >
-            <Plus size={20} weight="bold" />
-          </button>
-        ) : null}
-      </div>
-      {isUploading ? <Spinner aria-label={`${stepLabel}アップロード中`} /> : null}
+      {images.length > 0 || pendingImages.length > 0 ? (
+        <div className="flex snap-x gap-2 overflow-x-auto pt-1 pb-2">
+          {images.map((image, imageIndex) => (
+            <DraftImageTile
+              className="size-20"
+              disabled={isUploading}
+              key={imageRefId(image)}
+              label={`${stepLabel}の画像${imageIndex + 1}`}
+              src={previewUrlFor(image)}
+              onRemove={() => removeImage(imageIndex)}
+            />
+          ))}
+          {pendingImages.map((pendingImage) => (
+            <DraftPendingImageTile
+              className="size-20"
+              key={pendingImage.id}
+              label={`${stepLabel}の画像をアップロード中`}
+              previewUrl={pendingImage.previewUrl}
+            />
+          ))}
+          {isAddDisabled ? null : (
+            <DraftAddImageButton
+              className="size-20"
+              disabled={isUploading}
+              label={`${stepLabel}に写真を追加`}
+              onClick={openPicker}
+            />
+          )}
+        </div>
+      ) : null}
+      {images.length === 0 && pendingImages.length === 0 && !isAddDisabled ? (
+        <div className="-mx-2 pb-1">
+          <DraftAddPhotoButton label={`${stepLabel}に写真を追加`} onClick={openPicker} />
+        </div>
+      ) : null}
+
       {isAddDisabled ? (
-        <span className="text-brand-muted text-xs">{imageLimitReachedText}</span>
+        <p className="pb-2 text-brand-muted text-xs">{imageLimitReachedText}</p>
       ) : null}
       {error ? (
-        <div className="rounded-[10px] bg-brand-danger/5 border border-brand-danger/20 px-3 py-2">
-          <p className="text-brand-danger text-xs" role="alert">
-            {error}
-          </p>
-        </div>
+        <p className="pb-2 text-brand-danger text-sm" role="alert">
+          {error}
+        </p>
       ) : null}
     </div>
   );
 };
 
-const StepTextField = ({
-  control,
+const StepRow = ({
+  isFirst,
+  isLast,
+  isUploading,
+  maxAddableImages,
   stepIndex,
-}: {
-  control: RecipeDraftFormControl;
+  onMoveDown,
+  onMoveUp,
+  onRemove,
+  ...imageProps
+}: StepImageProps & {
+  isFirst: boolean;
+  isLast: boolean;
+  isUploading: boolean;
+  maxAddableImages: number;
   stepIndex: number;
+  onMoveDown: () => void;
+  onMoveUp: () => void;
+  onRemove: () => void;
 }) => {
-  const { field } = useController({
-    control,
-    name: `steps.${stepIndex}.text`,
-  });
+  const { field } = useController({ control: imageProps.control, name: `steps.${stepIndex}.text` });
+  const stepLabel = `手順${stepIndex + 1}`;
+
   return (
-    <FieldGroup>
-      <Field>
-        <Textarea
-          aria-label={`手順${stepIndex + 1}`}
-          className="min-h-20 sm:min-h-24"
-          name={field.name}
-          placeholder="手順を入力"
-          ref={field.ref}
-          rows={2}
-          value={field.value ?? ""}
-          onBlur={field.onBlur}
-          onChange={(event) => field.onChange(event.target.value)}
-        />
-      </Field>
-    </FieldGroup>
+    <li className="grid grid-cols-[1.5rem_minmax(0,1fr)_2.5rem] gap-x-1 border-brand-line-soft border-b py-1.5 last:border-b-0">
+      <span
+        aria-hidden="true"
+        className="py-2 font-bold text-brand-orange-dark text-lg leading-7 tabular-nums"
+      >
+        {stepIndex + 1}
+      </span>
+      <textarea
+        aria-label={stepLabel}
+        className={cn(draftInlineFieldClass, "field-sizing-content min-h-[4.5rem] leading-7")}
+        name={field.name}
+        placeholder="手順を入力"
+        ref={field.ref}
+        rows={2}
+        value={field.value ?? ""}
+        onBlur={field.onBlur}
+        onChange={(event) => field.onChange(event.target.value)}
+      />
+      <DraftRowMenu
+        disabled={isUploading}
+        isFirst={isFirst}
+        isLast={isLast}
+        label={`${stepLabel}の操作`}
+        onMoveDown={onMoveDown}
+        onMoveUp={onMoveUp}
+        onRemove={onRemove}
+      />
+      <div className="col-start-2 col-end-4">
+        <StepImages {...imageProps} maxAddable={maxAddableImages} stepIndex={stepIndex} />
+      </div>
+    </li>
   );
 };
 
 export const StepsSection = ({
   control,
-  isTotalImageLimitReached,
+  isUploadingImage,
   onUploadStateChange,
   previewUrlsByImageId,
+  remainingTotalImages,
   uploadImage,
-  uploadingImageCount,
 }: StepsSectionProps) => {
-  const { fields, append, remove, swap } = useFieldArray({
-    control,
-    name: "steps",
-  });
+  const headingId = useId();
+  const { append, fields, remove, swap } = useFieldArray({ control, name: "steps" });
   const watchedSteps = useWatch({ control, name: "steps" });
 
   return (
-    <section
-      className="min-w-0 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:rounded-[18px]"
-      aria-labelledby="recipe-draft-steps-title"
-    >
-      <div className="border-brand-line-soft border-b bg-brand-paper-muted/70 px-3.5 py-3 sm:px-5">
-        <h2
-          className="font-semibold text-brand-walnut text-sm sm:font-bold sm:text-base"
-          id="recipe-draft-steps-title"
-        >
-          手順
-        </h2>
-      </div>
-
-      <div className="grid gap-0 px-3.5 sm:px-5">
-        {fields.map((field, stepIndex) => {
-          const isFirst = stepIndex === 0;
-          const isLast = stepIndex === fields.length - 1;
-
-          return (
-            <div
-              className="grid gap-3 border-b border-brand-line-soft py-3.5 last:border-b-0 sm:py-4"
-              key={field.id}
-            >
-              <div className="grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-start gap-2.5 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:gap-4">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brand-orange-soft bg-brand-orange-soft/30 text-brand-orange text-sm font-bold sm:h-11 sm:w-11 sm:text-base">
-                  {stepIndex + 1}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <StepTextField control={control} stepIndex={stepIndex} />
-                </div>
-
-                <div className="flex shrink-0 flex-col rounded-full border border-brand-line-soft bg-brand-paper">
-                  <Button
-                    aria-label="上に移動"
-                    disabled={isFirst || uploadingImageCount > 0}
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => swap(stepIndex, stepIndex - 1)}
-                  >
-                    <CaretUp weight="bold" />
-                  </Button>
-                  <Button
-                    aria-label="下に移動"
-                    disabled={isLast || uploadingImageCount > 0}
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => swap(stepIndex, stepIndex + 1)}
-                  >
-                    <CaretDown weight="bold" />
-                  </Button>
-                  <Button
-                    aria-label={`手順${stepIndex + 1}を削除`}
-                    disabled={uploadingImageCount > 0}
-                    size="icon-sm"
-                    variant="destructive"
-                    onClick={() => remove(stepIndex)}
-                  >
-                    <X weight="bold" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="pl-[calc(2.25rem+0.625rem)] sm:pl-[calc(3.5rem+1rem)]">
-                <div className="min-w-0 flex-1">
-                  <StepImages
-                    control={control}
-                    isAddDisabled={
-                      isTotalImageLimitReached ||
-                      (watchedSteps?.[stepIndex]?.images?.length ?? 0) >= MAX_RECIPE_STEP_IMAGES
-                    }
-                    onUploadStateChange={onUploadStateChange}
-                    previewUrlsByImageId={previewUrlsByImageId}
-                    stepIndex={stepIndex}
-                    uploadImage={uploadImage}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        <Button
-          className="my-3 justify-self-center sm:my-4"
-          variant="secondary"
-          onClick={() => append(createEmptyStep())}
-        >
-          <Plus data-icon="inline-start" weight="bold" />
-          手順を追加
-        </Button>
-      </div>
+    <section aria-labelledby={headingId}>
+      <RecipeSectionHeader id={headingId} title="手順" />
+      <ol className="mt-1">
+        {fields.map((field, stepIndex) => (
+          <StepRow
+            control={control}
+            isFirst={stepIndex === 0}
+            isLast={stepIndex === fields.length - 1}
+            isUploading={isUploadingImage}
+            key={field.id}
+            maxAddableImages={Math.min(
+              MAX_RECIPE_STEP_IMAGES - (watchedSteps?.[stepIndex]?.images?.length ?? 0),
+              remainingTotalImages,
+            )}
+            previewUrlsByImageId={previewUrlsByImageId}
+            stepIndex={stepIndex}
+            uploadImage={uploadImage}
+            onMoveDown={() => swap(stepIndex, stepIndex + 1)}
+            onMoveUp={() => swap(stepIndex, stepIndex - 1)}
+            onRemove={() => remove(stepIndex)}
+            onUploadStateChange={onUploadStateChange}
+          />
+        ))}
+      </ol>
+      <button
+        className={draftAddRowButtonClass}
+        type="button"
+        onClick={() => append(createEmptyStep())}
+      >
+        <Plus aria-hidden="true" size={16} weight="bold" />
+        手順を追加
+      </button>
     </section>
   );
 };

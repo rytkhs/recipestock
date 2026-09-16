@@ -1,12 +1,24 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { X } from "@phosphor-icons/react";
+import { WarningCircle, X } from "@phosphor-icons/react";
 import {
   type DraftImageRef,
   MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
-import { useMemo, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useBlocker } from "@tanstack/react-router";
+import { useMemo, useRef, useState } from "react";
+import { type FieldErrors, useForm, useWatch } from "react-hook-form";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../../components/screen-top-bar";
 import { CoverImageTitleBlock } from "./cover-image-title-block";
@@ -31,10 +43,34 @@ type RecipeDraftFormProps = {
   referenceImagePreviewUrls?: string[];
   stepImagePreviewUrls?: string[][];
   uploadImage?: (file: File) => Promise<DraftImageRef>;
-  onSubmit(values: RecipeDraftFormValues): Promise<void> | void;
+  // markSaved は保存が成功したときだけ呼ぶ。呼ぶと離脱の確認をやめる。
+  onSubmit(values: RecipeDraftFormValues, markSaved: () => void): Promise<void> | void;
   onClose(): void;
 };
 
+// 材料や手順のように配列で持つ欄は、欄そのもののエラーをreact-hook-formがrootに寄せる。
+const fieldErrorMessage = (error: unknown) => {
+  const { message, root } = (error ?? {}) as { message?: unknown; root?: { message?: unknown } };
+  const text = typeof message === "string" && message !== "" ? message : root?.message;
+
+  return typeof text === "string" && text !== "" ? text : null;
+};
+
+// レシピ名のように欄の下に出せるものは、その欄で知らせる。それ以外の検証エラーは出す場所がなく、
+// 拾わないと保存を押しても何も起きないように見えるので、保存エラーと同じ帯に回す。
+const formLevelErrorMessage = (errors: FieldErrors<RecipeDraftFormValues>) => {
+  for (const [name, error] of Object.entries(errors)) {
+    const message = name === "title" ? null : fieldErrorMessage(error);
+
+    if (message) {
+      return message;
+    }
+  }
+
+  return null;
+};
+
+// 詳細ページと同じ並び・同じ組み方のまま、その場で書き換えられるようにする。
 export const RecipeDraftForm = ({
   defaultValues,
   title,
@@ -51,17 +87,35 @@ export const RecipeDraftForm = ({
     resolver: zodResolver(recipeDraftFormSchema),
     defaultValues,
   });
+  const { errors, isDirty, isSubmitting } = formState;
   const watchedReferenceImages = useWatch({ control, name: "referenceImages" });
   const watchedSteps = useWatch({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
-
-  const totalImageCount = countFormImages({
-    referenceImages: watchedReferenceImages,
-    steps: watchedSteps,
+  const [isErrorDismissed, setIsErrorDismissed] = useState(false);
+  const isUploadingImage = uploadingImageCount > 0;
+  // 検証で止まったならまだ保存を試していないので、前回の保存エラーより今の理由を出す。
+  const blockingError = formLevelErrorMessage(errors) ?? submitError;
+  // 選んだ画像はアップロードが終わってからフォームの値になる。その間はisDirtyが立たないので、
+  // 選んだ直後に離れると確認なしで消える。未保存かどうかはこの形でだけ判定する。
+  const hasUnsavedWork = isDirty || isUploadingImage;
+  // 保存に成功すると詳細へ移る。その移動では破棄の確認を出さない。
+  // 通信の途中はまだ失う変更があるので、成功するまでは下ろさない。
+  const isSavedRef = useRef(false);
+  // 閉じるボタンだけでなく、ブラウザの戻る・スワイプで離れるときも確認する。
+  // タブを閉じる・再読み込みは画面内の移動ではないので、保存できたかどうかは見ない。
+  const blocker = useBlocker({
+    enableBeforeUnload: () => hasUnsavedWork,
+    shouldBlockFn: () => hasUnsavedWork && !isSavedRef.current,
+    withResolver: true,
   });
-  const isTotalImageLimitReached = totalImageCount >= MAX_RECIPE_TOTAL_IMAGES;
-  const isReferenceImagesLimitReached =
-    (watchedReferenceImages?.length ?? 0) >= MAX_RECIPE_REFERENCE_IMAGES;
+
+  const remainingTotalImages =
+    MAX_RECIPE_TOTAL_IMAGES -
+    countFormImages({ referenceImages: watchedReferenceImages, steps: watchedSteps });
+  const remainingReferenceImages = Math.min(
+    MAX_RECIPE_REFERENCE_IMAGES - (watchedReferenceImages?.length ?? 0),
+    remainingTotalImages,
+  );
 
   const imagePreviewUrlsByImageId: ImagePreviewUrlsByImageId = useMemo(
     () =>
@@ -73,45 +127,40 @@ export const RecipeDraftForm = ({
     [defaultValues, referenceImagePreviewUrls, stepImagePreviewUrls],
   );
 
-  const handleFormSubmit = handleSubmit(onSubmit);
+  const handleFormSubmit = handleSubmit(async (values) => {
+    await onSubmit(values, () => {
+      isSavedRef.current = true;
+    });
+  });
   const handleUploadStateChange = (isUploading: boolean) => {
     setUploadingImageCount((count) => Math.max(0, count + (isUploading ? 1 : -1)));
   };
 
-  const handleClose = () => {
-    if (formState.isDirty) {
-      if (window.confirm("変更を破棄しますか？")) {
-        onClose();
-      }
-    } else {
-      onClose();
-    }
-  };
-
   return (
-    <form
-      className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10"
-      onSubmit={(event) => void handleFormSubmit(event)}
-    >
-      <ScreenTopBar
-        leading={
-          <ScreenTopBarIconButton aria-label="閉じる" onPress={handleClose}>
-            <X size={20} weight="bold" />
-          </ScreenTopBarIconButton>
-        }
-        title={title}
-        trailing={
-          <Button
-            disabled={formState.isSubmitting || uploadingImageCount > 0}
-            size="lg"
-            type="submit"
-          >
-            {submitLabel}
-          </Button>
-        }
-      />
+    <>
+      <form
+        className="mx-auto w-full max-w-5xl pb-16 sm:px-6 lg:px-10"
+        onSubmit={(event) => {
+          // 検証で止まったときも知らせ直したいので、成立したときだけでなく押すたびに戻す。
+          setIsErrorDismissed(false);
+          void handleFormSubmit(event);
+        }}
+      >
+        <ScreenTopBar
+          leading={
+            // 通信の途中で離れると、保存に失敗しても知らせる先がなく変更が消える。
+            <ScreenTopBarIconButton aria-label="閉じる" disabled={isSubmitting} onPress={onClose}>
+              <X size={20} weight="bold" />
+            </ScreenTopBarIconButton>
+          }
+          title={title}
+          trailing={
+            <Button disabled={isSubmitting || isUploadingImage} size="lg" type="submit">
+              {submitLabel}
+            </Button>
+          }
+        />
 
-      <div className="mt-4 grid gap-5 px-3 sm:mt-6 sm:px-0">
         <CoverImageTitleBlock
           control={control}
           coverImagePreviewUrl={coverImagePreviewUrl}
@@ -119,40 +168,78 @@ export const RecipeDraftForm = ({
           uploadImage={uploadImage}
         />
 
-        <ReferenceImagesSection
-          control={control}
-          isAddDisabled={isReferenceImagesLimitReached || isTotalImageLimitReached}
-          addDisabledReason={
-            isReferenceImagesLimitReached || isTotalImageLimitReached
-              ? "上限に達しました"
-              : undefined
-          }
-          onUploadStateChange={handleUploadStateChange}
-          previewUrlsByImageId={imagePreviewUrlsByImageId}
-          uploadImage={uploadImage}
-        />
-
-        <IngredientsSection control={control} />
-
-        <StepsSection
-          control={control}
-          isTotalImageLimitReached={isTotalImageLimitReached}
-          onUploadStateChange={handleUploadStateChange}
-          previewUrlsByImageId={imagePreviewUrlsByImageId}
-          uploadImage={uploadImage}
-          uploadingImageCount={uploadingImageCount}
-        />
-
-        <NoteSection control={control} />
-      </div>
-
-      {submitError ? (
-        <div className="mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
-          <p className="text-brand-danger text-sm" role="alert">
-            {submitError}
-          </p>
+        <div className="mt-8 px-4 sm:mt-10 sm:px-0 lg:mt-14 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-x-14">
+          <IngredientsSection control={control} />
+          <div className="mt-10 flex flex-col gap-10 lg:mt-0">
+            <StepsSection
+              control={control}
+              isUploadingImage={isUploadingImage}
+              onUploadStateChange={handleUploadStateChange}
+              previewUrlsByImageId={imagePreviewUrlsByImageId}
+              remainingTotalImages={remainingTotalImages}
+              uploadImage={uploadImage}
+            />
+            <NoteSection control={control} />
+            <ReferenceImagesSection
+              control={control}
+              maxAddable={remainingReferenceImages}
+              onUploadStateChange={handleUploadStateChange}
+              previewUrlsByImageId={imagePreviewUrlsByImageId}
+              uploadImage={uploadImage}
+            />
+          </div>
         </div>
-      ) : null}
-    </form>
+
+        {/* 保存ボタンは上部バーにあるので、どこまでスクロールしていても見える位置に出す。 */}
+        {blockingError && !isErrorDismissed ? (
+          <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            <div className="mx-auto flex max-w-lg items-start gap-3 rounded-[14px] border border-brand-danger/25 bg-brand-paper py-2 pr-2 pl-4 shadow-pantry-lg">
+              <WarningCircle
+                aria-hidden="true"
+                className="mt-2 shrink-0 text-brand-danger"
+                size={20}
+                weight="fill"
+              />
+              <p className="min-w-0 flex-1 py-2 text-brand-ink text-sm" role="alert">
+                {blockingError}
+              </p>
+              <button
+                aria-label="エラーを閉じる"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-brand-muted transition-colors hover:bg-brand-paper-muted"
+                type="button"
+                onClick={() => setIsErrorDismissed(true)}
+              >
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </form>
+
+      <AlertDialog
+        open={blocker.status === "blocked"}
+        onOpenChange={(open) => {
+          if (!open) {
+            blocker.reset?.();
+          }
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <WarningCircle weight="fill" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>変更を破棄しますか？</AlertDialogTitle>
+            <AlertDialogDescription>保存していない変更は残りません。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>編集を続ける</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => blocker.proceed?.()}>
+              破棄する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };

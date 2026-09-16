@@ -2,7 +2,7 @@ import { type ReactNode, type Ref } from "react";
 
 // 上部バーの丸いボタン。button以外（リンクやメニューの開閉）にも同じ形を使えるようにclassで配る。
 export const screenTopBarIconButtonClass =
-  "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut no-underline transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-orange aria-expanded:bg-brand-paper-muted sm:h-11 sm:w-11";
+  "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut no-underline transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-orange aria-expanded:bg-brand-paper-muted disabled:opacity-50 sm:h-11 sm:w-11";
 
 export const screenTopBarTitleClass =
   "min-w-0 truncate text-center font-bold text-brand-ink text-md leading-tight sm:text-left sm:text-xl";
@@ -27,15 +27,18 @@ export const ScreenTopBarFrame = ({
 export const ScreenTopBarIconButton = ({
   "aria-label": ariaLabel,
   children,
+  disabled,
   onPress,
 }: {
   "aria-label": string;
   children: ReactNode;
+  disabled?: boolean;
   onPress: () => void;
 }) => (
   <button
     aria-label={ariaLabel}
     className={screenTopBarIconButtonClass}
+    disabled={disabled}
     type="button"
     onClick={onPress}
   >
