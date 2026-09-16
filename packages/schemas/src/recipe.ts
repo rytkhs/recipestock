@@ -5,6 +5,34 @@ export const MAX_RECIPE_REFERENCE_IMAGES = 20;
 export const MAX_RECIPE_STEP_IMAGES = 10;
 export const MAX_RECIPE_TOTAL_IMAGES = 100;
 
+/**
+ * 本文の長さと件数の上限。AIの出力予算(8,192トークン)に収まる大きさを基準にしていて、
+ * 手入力でこれを超えるレシピは想定しない。
+ *
+ * 上限は書き込み経路(recipeDraftContentSchema)にだけ置く。保存済みの本文を読む
+ * recipeContentSchemaは読み取りのたびに検証するので、上限を足したり縮めたりすると
+ * 既存のRecipeが読めなくなるためである。取り込みは利用者が長さを選べないので、
+ * 拒否せずAPI側で末尾から切り詰める。
+ */
+export const MAX_RECIPE_TITLE_LENGTH = 200;
+export const MAX_RECIPE_YIELD_TEXT_LENGTH = 100;
+export const MAX_RECIPE_NOTE_LENGTH = 5000;
+export const MAX_RECIPE_STEP_TEXT_LENGTH = 2000;
+export const MAX_RECIPE_STEPS = 100;
+export const MAX_RECIPE_INGREDIENT_GROUPS = 50;
+export const MAX_INGREDIENT_GROUP_LABEL_LENGTH = 100;
+export const MAX_INGREDIENT_GROUP_INGREDIENTS = 100;
+export const MAX_INGREDIENT_NAME_LENGTH = 200;
+export const MAX_INGREDIENT_AMOUNT_LENGTH = 100;
+export const MAX_RECIPE_SOURCE_NAME_LENGTH = 200;
+export const MAX_RECIPE_SOURCE_URL_LENGTH = 4096;
+
+/**
+ * 検索語はそれぞれWHEREの条件になるので、語数がそのまま条件の数になる。
+ */
+export const MAX_RECIPE_SEARCH_QUERY_LENGTH = 200;
+export const MAX_RECIPE_SEARCH_TERMS = 8;
+
 const webUrlSchema = z.url({ protocol: /^https?$/ });
 
 export const draftImageRefSchema = z.discriminatedUnion("type", [
@@ -72,9 +100,22 @@ export const recipeStepSchema = z
   })
   .refine((step) => step.text || step.images.length > 0);
 
+export const recipeDraftIngredientSchema = z.object({
+  name: z.string().min(1).max(MAX_INGREDIENT_NAME_LENGTH),
+  amount: z.string().max(MAX_INGREDIENT_AMOUNT_LENGTH),
+});
+
+export const recipeDraftIngredientGroupSchema = z.object({
+  label: z.string().max(MAX_INGREDIENT_GROUP_LABEL_LENGTH).optional(),
+  ingredients: z
+    .array(recipeDraftIngredientSchema)
+    .max(MAX_INGREDIENT_GROUP_INGREDIENTS)
+    .default([]),
+});
+
 export const recipeDraftStepSchema = z
   .object({
-    text: z.string().min(1).optional(),
+    text: z.string().min(1).max(MAX_RECIPE_STEP_TEXT_LENGTH).optional(),
     images: z.array(draftImageRefSchema).max(MAX_RECIPE_STEP_IMAGES).default([]),
   })
   .refine((step) => step.text || step.images.length > 0);
@@ -103,13 +144,16 @@ export const recipeContentWithUrlsSchema = recipeContentSchema.safeExtend({
 
 export const recipeDraftContentSchema = z
   .object({
-    title: z.string().min(1),
-    yieldText: z.string().optional(),
+    title: z.string().min(1).max(MAX_RECIPE_TITLE_LENGTH),
+    yieldText: z.string().max(MAX_RECIPE_YIELD_TEXT_LENGTH).optional(),
     coverImage: draftImageRefSchema.optional(),
     referenceImages: z.array(draftImageRefSchema).max(MAX_RECIPE_REFERENCE_IMAGES).default([]),
-    ingredientGroups: z.array(ingredientGroupSchema).default([]),
-    steps: z.array(recipeDraftStepSchema).default([]),
-    note: z.string().optional(),
+    ingredientGroups: z
+      .array(recipeDraftIngredientGroupSchema)
+      .max(MAX_RECIPE_INGREDIENT_GROUPS)
+      .default([]),
+    steps: z.array(recipeDraftStepSchema).max(MAX_RECIPE_STEPS).default([]),
+    note: z.string().max(MAX_RECIPE_NOTE_LENGTH).optional(),
   })
   .superRefine(validateRecipeTotalImages);
 
@@ -141,7 +185,12 @@ export const lockedRecipeDetailSchema = z.strictObject({
 
 export const createRecipeRequestSchema = z.object({
   content: recipeDraftContentSchema,
-  source: recipeSourceDraftSchema,
+  // 出典の長さも書き込み経路にだけ上限を置く。取り込みの出典名はページ由来で長さを選べないので、
+  // このschemaを通らずAPI側で切り詰める。
+  source: recipeSourceDraftSchema.extend({
+    sourceUrl: webUrlSchema.max(MAX_RECIPE_SOURCE_URL_LENGTH).optional().nullable(),
+    sourceName: z.string().max(MAX_RECIPE_SOURCE_NAME_LENGTH).optional().nullable(),
+  }),
 });
 
 export const createRecipeResponseSchema = z.object({
@@ -165,7 +214,7 @@ export const recipeListSortSchema = z.enum(["newest", "oldest"]);
 
 export const listRecipesQuerySchema = z
   .object({
-    q: z.string().optional(),
+    q: z.string().max(MAX_RECIPE_SEARCH_QUERY_LENGTH).optional(),
     sort: recipeListSortSchema.default("newest"),
     limit: z.coerce.number().int().min(1).max(50).default(20),
     cursor: z.string().optional(),
@@ -207,6 +256,8 @@ export type IngredientGroup = z.infer<typeof ingredientGroupSchema>;
 export type RecipeImage = z.infer<typeof recipeImageSchema>;
 export type RecipeImageWithUrl = z.infer<typeof recipeImageWithUrlSchema>;
 export type RecipeStep = z.infer<typeof recipeStepSchema>;
+export type RecipeDraftIngredient = z.infer<typeof recipeDraftIngredientSchema>;
+export type RecipeDraftIngredientGroup = z.infer<typeof recipeDraftIngredientGroupSchema>;
 export type RecipeStepWithUrl = z.infer<typeof recipeStepWithUrlSchema>;
 export type RecipeDraftStep = z.infer<typeof recipeDraftStepSchema>;
 export type RecipeContent = z.infer<typeof recipeContentSchema>;

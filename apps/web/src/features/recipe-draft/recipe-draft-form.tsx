@@ -48,12 +48,33 @@ type RecipeDraftFormProps = {
   onClose(): void;
 };
 
-// 材料や手順のように配列で持つ欄は、欄そのもののエラーをreact-hook-formがrootに寄せる。
-const fieldErrorMessage = (error: unknown) => {
-  const { message, root } = (error ?? {}) as { message?: unknown; root?: { message?: unknown } };
-  const text = typeof message === "string" && message !== "" ? message : root?.message;
+// 材料や手順のように配列で持つ欄は、欄そのもののエラーをreact-hook-formがrootに寄せ、
+// 行ごとのエラーはさらに下の階層に入る。どの深さにあっても最初に見つかった文言を拾う。
+const fieldErrorMessage = (error: unknown): string | null => {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
 
-  return typeof text === "string" && text !== "" ? text : null;
+  const { message } = error as { message?: unknown };
+
+  if (typeof message === "string" && message !== "") {
+    return message;
+  }
+
+  for (const [name, nested] of Object.entries(error)) {
+    // refは入力欄そのもので、文言を持たない。
+    if (name === "ref") {
+      continue;
+    }
+
+    const nestedMessage = fieldErrorMessage(nested);
+
+    if (nestedMessage) {
+      return nestedMessage;
+    }
+  }
+
+  return null;
 };
 
 // レシピ名のように欄の下に出せるものは、その欄で知らせる。それ以外の検証エラーは出す場所がなく、

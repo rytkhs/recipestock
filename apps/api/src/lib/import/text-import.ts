@@ -1,10 +1,11 @@
-import { type RecipeDraftContent, recipeDraftContentSchema } from "@recipestock/schemas";
+import { type RecipeDraftContent } from "@recipestock/schemas";
 import { z } from "zod";
 import { type Bindings } from "../../env";
 import { createLogger, type Logger } from "../../logger";
 import { type AiUsageConsumptionRepository } from "../../usage";
 import { normalizeRecipeWithAi } from "./ai-normalization";
 import { assertImportJobDeadline } from "./deadline";
+import { trimRecipeDraftContent } from "./draft-limits";
 import {
   type RecipeImportAIDraftContent,
   type RecipeImportAIProvider,
@@ -79,7 +80,7 @@ const toTextRecipeDraftContent = (
   sourceText: string,
 ): RecipeDraftContent => {
   try {
-    return recipeDraftContentSchema.parse({
+    return trimRecipeDraftContent({
       title: draft.title?.trim() || firstLineOf(sourceText),
       yieldText: draft.yieldText,
       referenceImages: [],

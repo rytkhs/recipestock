@@ -33,7 +33,7 @@ describe("Recipe repository with Neon Postgres", () => {
 
   const insertRecipes = (
     userId: string,
-    rows: readonly { id: string; createdAt: Date; updatedAt?: Date }[],
+    rows: readonly { id: string; createdAt: Date; updatedAt?: Date; searchText?: string }[],
   ) =>
     db.insert(recipes).values(
       rows.map((row) => ({
@@ -41,7 +41,7 @@ describe("Recipe repository with Neon Postgres", () => {
         userId,
         title: row.id,
         content: { title: row.id, referenceImages: [], ingredientGroups: [], steps: [] },
-        searchText: row.id,
+        searchText: row.searchText ?? row.id,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt ?? row.createdAt,
       })),
@@ -67,6 +67,37 @@ describe("Recipe repository with Neon Postgres", () => {
 
     return ids;
   };
+
+  // エスケープしないと、`%`だけの検索語が全件に、`_`が任意の1文字に当たる。
+  it("検索語のILIKEワイルドカードを文字そのものとして照合する", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_recipe_search_user_${runId}`;
+    const id = (name: string) => `dbtest_recipe_search_${name}_${runId}`;
+
+    await insertRecipes(userId, [
+      { id: id("plain"), createdAt: minutesAfterBase(0), searchText: "tomato pasta" },
+      { id: id("percent"), createdAt: minutesAfterBase(1), searchText: "50% cream" },
+      { id: id("underscore"), createdAt: minutesAfterBase(2), searchText: "tomato_pasta" },
+    ]);
+
+    const search = async (term: string) => {
+      const { items } = await repository.listRecipes({
+        userId,
+        searchTerms: [term],
+        tagIds: [],
+        untagged: false,
+        sort: "newest",
+        limit: 20,
+        cursor: null,
+      });
+
+      return items.map((item) => item.id);
+    };
+
+    await expect(search("%")).resolves.toEqual([id("percent")]);
+    await expect(search("tomato_")).resolves.toEqual([id("underscore")]);
+    await expect(search("tomato")).resolves.toEqual([id("underscore"), id("plain")]);
+  });
 
   it("追加日の新しい順と古い順で、同時刻のRecipeがページをまたいでも抜けや重複なく並べる", async () => {
     const runId = crypto.randomUUID();

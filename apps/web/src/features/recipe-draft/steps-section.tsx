@@ -1,5 +1,9 @@
 import { Plus } from "@phosphor-icons/react";
-import { type DraftImageRef, MAX_RECIPE_STEP_IMAGES } from "@recipestock/schemas";
+import {
+  type DraftImageRef,
+  MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_STEP_TEXT_LENGTH,
+} from "@recipestock/schemas";
 import { useId, useRef } from "react";
 import { useController, useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
@@ -162,6 +166,7 @@ const StepRow = ({
       <textarea
         aria-label={stepLabel}
         className={cn(draftInlineFieldClass, "field-sizing-content min-h-[4.5rem] leading-7")}
+        maxLength={MAX_RECIPE_STEP_TEXT_LENGTH}
         name={field.name}
         placeholder="手順を入力"
         ref={field.ref}

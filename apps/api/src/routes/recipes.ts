@@ -12,6 +12,7 @@ import {
   updateRecipeResponseSchema,
 } from "@recipestock/schemas";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import {
   imageFinalizeFailedResponse,
   invalidRecipeListCursorResponse,
@@ -48,6 +49,12 @@ import {
 } from "../recipes";
 import { createTagRepository, normalizeRequestedTagNames, type TagRepository } from "../tags";
 
+/**
+ * 画像はR2へ直接PUTするので、本文のJSONが大きくなる理由がない。
+ * 上限を超える本文を読み込んでから弾くより、読む前に大きさで止める。
+ */
+const RECIPE_REQUEST_MAX_BYTES = 1024 * 1024;
+
 type RecipeRouteDependencies = {
   auth: AuthService;
   recipeRepository?: RecipeRepository;
@@ -66,6 +73,13 @@ export const createRecipeRoutes = ({
   createImageId,
 }: RecipeRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
+  routes.use(
+    "*",
+    bodyLimit({
+      maxSize: RECIPE_REQUEST_MAX_BYTES,
+      onError: () => validationFailedResponse(undefined),
+    }),
+  );
 
   return (
     routes

@@ -1,4 +1,10 @@
 import { Plus } from "@phosphor-icons/react";
+import {
+  MAX_INGREDIENT_AMOUNT_LENGTH,
+  MAX_INGREDIENT_GROUP_LABEL_LENGTH,
+  MAX_INGREDIENT_NAME_LENGTH,
+  MAX_RECIPE_YIELD_TEXT_LENGTH,
+} from "@recipestock/schemas";
 import { useId } from "react";
 import { useController, useFieldArray } from "react-hook-form";
 import { cn } from "@/lib/utils";
@@ -60,6 +66,7 @@ const IngredientRow = ({
         aria-label="材料名"
         className={cn(draftInlineFieldClass, "field-sizing-content")}
         enterKeyHint="next"
+        maxLength={MAX_INGREDIENT_NAME_LENGTH}
         name={nameField.name}
         placeholder="材料名"
         ref={nameField.ref}
@@ -91,6 +98,7 @@ const IngredientRow = ({
           "field-sizing-content text-right font-medium tabular-nums",
         )}
         enterKeyHint="next"
+        maxLength={MAX_INGREDIENT_AMOUNT_LENGTH}
         name={amountField.name}
         placeholder="分量"
         ref={amountField.ref}
@@ -166,6 +174,7 @@ const IngredientGroupBlock = ({
           <input
             aria-label="グループ名"
             className={cn(draftInlineFieldClass, "font-semibold text-brand-muted")}
+            maxLength={MAX_INGREDIENT_GROUP_LABEL_LENGTH}
             name={labelField.name}
             placeholder="グループ名（例：ソース）"
             ref={labelField.ref}
@@ -231,6 +240,7 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
           <input
             aria-label="できあがり量"
             className={cn(draftInlineFieldClass, "-my-1 max-w-44 py-1 text-brand-muted")}
+            maxLength={MAX_RECIPE_YIELD_TEXT_LENGTH}
             name={yieldField.name}
             placeholder="例）2人分"
             ref={yieldField.ref}
