@@ -3285,6 +3285,33 @@ describe("RecipesRoute", () => {
     });
   });
 
+  it("保存の通信中は閉じるボタンを押せない", async () => {
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes" && init?.method === "POST") {
+          return new Promise<Response>(() => {});
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes/new");
+
+    await userEvent.type(await screen.findByLabelText("レシピ名"), "Tomato pasta");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    const closeButton = screen.getByRole("button", { name: "閉じる" });
+    await waitFor(() => {
+      expect(closeButton).toBeDisabled();
+    });
+
+    await userEvent.click(closeButton);
+    expect(appRouter.state.location.pathname).toBe("/recipes/new");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
   it("編集画面で何も変えていなければ、確認せずに閉じる", async () => {
     mockFetch(
       async (input) => {

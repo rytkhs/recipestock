@@ -72,8 +72,9 @@ export const RecipeDraftForm = ({
   // 保存に成功すると詳細へ移る。その移動では破棄の確認を出さない。
   const isSavingRef = useRef(false);
   // 閉じるボタンだけでなく、ブラウザの戻る・スワイプで離れるときも確認する。
+  // タブを閉じる・再読み込みは画面内の移動ではないので、保存中かどうかは見ない。
   const blocker = useBlocker({
-    enableBeforeUnload: () => isDirty && !isSavingRef.current,
+    enableBeforeUnload: () => isDirty,
     shouldBlockFn: () => isDirty && !isSavingRef.current,
     withResolver: true,
   });
@@ -118,7 +119,8 @@ export const RecipeDraftForm = ({
       >
         <ScreenTopBar
           leading={
-            <ScreenTopBarIconButton aria-label="閉じる" onPress={onClose}>
+            // 通信の途中で離れると、保存に失敗しても知らせる先がなく変更が消える。
+            <ScreenTopBarIconButton aria-label="閉じる" disabled={isSubmitting} onPress={onClose}>
               <X size={20} weight="bold" />
             </ScreenTopBarIconButton>
           }
