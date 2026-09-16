@@ -9,7 +9,7 @@ import {
   type DeterministicImporter,
   defaultDeterministicImporter,
 } from "./lib/import/deterministic";
-import { trimRecipeDraftContentImages } from "./lib/import/image-limits";
+import { trimRecipeDraftContent } from "./lib/import/draft-limits";
 import {
   assertFetchedPageIsHtml,
   assertImportContentTypeMayBeHtml,
@@ -506,7 +506,7 @@ const resolveDraftImageUrls = (
   };
 
   return {
-    draft: trimRecipeDraftContentImages({
+    draft: trimRecipeDraftContent({
       title: draft.title,
       yieldText: draft.yieldText,
       coverImage: resolveImage(draft.coverImageUrl),
@@ -530,7 +530,7 @@ const applyDeterministicImagePlacement = (
 ): RecipeDraftContent => {
   if (!placement) return draft;
 
-  return trimRecipeDraftContentImages({
+  return trimRecipeDraftContent({
     ...draft,
     ...(placement.coverImageUrl
       ? {

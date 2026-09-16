@@ -1,9 +1,11 @@
+import { MAX_RECIPE_SEARCH_TERMS, MAX_RECIPE_SOURCE_NAME_LENGTH } from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
 import {
   createRecipeRepository,
   InvalidRecipeListCursorError,
   isRecipeLockedForPlan,
   type NewRecipeRecord,
+  normalizeRecipeSearchTerms,
   normalizeRecipeSource,
 } from "./recipes";
 
@@ -38,6 +40,29 @@ describe("normalizeRecipeSource", () => {
       normalizedSourceUrl: "https://example.com/recipes/tomato",
       sourceName: null,
     });
+  });
+
+  // 取り込みの出典名はページ由来で長さを選べないので、保存要求のschemaではなくここで収める。
+  it("長すぎる出典名を上限まで切り詰める", () => {
+    expect(
+      normalizeRecipeSource({
+        sourceUrl: "https://example.com/recipes/tomato",
+        sourceName: "あ".repeat(MAX_RECIPE_SOURCE_NAME_LENGTH + 10),
+      }).sourceName,
+    ).toHaveLength(MAX_RECIPE_SOURCE_NAME_LENGTH);
+  });
+});
+
+describe("normalizeRecipeSearchTerms", () => {
+  it("空白で区切った語を揃えて取り出す", () => {
+    expect(normalizeRecipeSearchTerms("　Tomato　 PASTA ")).toEqual(["tomato", "pasta"]);
+  });
+
+  // 語はそれぞれWHEREの条件になるので、語数だけ条件が増える。
+  it("語数を上限で止める", () => {
+    const query = Array.from({ length: MAX_RECIPE_SEARCH_TERMS + 5 }, (_, index) => `語${index}`);
+
+    expect(normalizeRecipeSearchTerms(query.join(" "))).toHaveLength(MAX_RECIPE_SEARCH_TERMS);
   });
 });
 

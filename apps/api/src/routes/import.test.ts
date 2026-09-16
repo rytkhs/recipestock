@@ -1,3 +1,4 @@
+import { MAX_RECIPE_SOURCE_URL_LENGTH } from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
 import { createSilentTestApp } from "../test-helpers";
@@ -177,7 +178,7 @@ describe("Import job routes", () => {
     });
   });
 
-  it("4096文字を超えるURLはinvalid_urlを返す", async () => {
+  it("出典として保存できる長さを超えるURLはinvalid_urlを返す", async () => {
     const createUrlJob = vi.fn(async () => ({
       status: "created" as const,
       job: createJob(),
@@ -192,7 +193,9 @@ describe("Import job routes", () => {
       {
         method: "POST",
         headers: { "content-type": "application/json", ...sameOriginHeaders },
-        body: JSON.stringify({ url: `https://example.com/${"a".repeat(4097)}` }),
+        body: JSON.stringify({
+          url: `https://example.com/${"a".repeat(MAX_RECIPE_SOURCE_URL_LENGTH)}`,
+        }),
       },
       env,
     );

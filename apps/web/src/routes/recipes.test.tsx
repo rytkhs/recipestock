@@ -1,6 +1,7 @@
 import {
   MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_STEP_TEXT_LENGTH,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
 import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
@@ -3396,6 +3397,49 @@ describe("RecipesRoute", () => {
 
     await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
       `画像は全部で${MAX_RECIPE_TOTAL_IMAGES}枚までです。`,
+    );
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
+
+  // 保存済みの本文には上限を置かないので、上限より長いRecipeも編集画面までは開ける。
+  it("上限より長い手順を持つ既存のレシピは、保存を止めて長さの理由を知らせる", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_123",
+              title: "Tomato pasta",
+              content: {
+                title: "Tomato pasta",
+                ingredientGroups: [],
+                steps: [{ text: "あ".repeat(MAX_RECIPE_STEP_TEXT_LENGTH + 1), images: [] }],
+              },
+              source: {
+                sourceUrl: null,
+                normalizedSourceUrl: null,
+                sourceName: null,
+              },
+              createdAt: "2026-05-26T00:00:00.000Z",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await screen.findByLabelText("レシピ名");
+    await userEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      `1つの手順は${MAX_RECIPE_STEP_TEXT_LENGTH}文字までです。`,
     );
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
   });

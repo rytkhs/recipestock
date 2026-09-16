@@ -1,5 +1,5 @@
 import { Camera, ImageBroken, Trash } from "@phosphor-icons/react";
-import { type DraftImageRef } from "@recipestock/schemas";
+import { type DraftImageRef, MAX_RECIPE_TITLE_LENGTH } from "@recipestock/schemas";
 import { useEffect, useId, useRef, useState } from "react";
 import { useController } from "react-hook-form";
 import { Spinner } from "@/components/ui/spinner";
@@ -185,6 +185,7 @@ export const CoverImageTitleBlock = ({
             "field-sizing-content -mx-2 w-[calc(100%+1rem)] py-1 font-bold text-[1.625rem] leading-[1.35] sm:text-3xl",
           )}
           enterKeyHint="done"
+          maxLength={MAX_RECIPE_TITLE_LENGTH}
           name={titleField.name}
           placeholder="レシピ名"
           ref={titleField.ref}

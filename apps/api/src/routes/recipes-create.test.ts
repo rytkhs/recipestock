@@ -132,6 +132,51 @@ describe("Recipe create routes", () => {
     });
   });
 
+  // 画像はR2へ直接PUTするので、本文のJSONが大きくなる理由がない。
+  it("大きすぎる保存リクエストは本文を読み取る前に断る", async () => {
+    const testApp = createSilentTestApp({
+      auth: {
+        getSession: async () => ({
+          user: { id: "user_123", email: "user@example.com" },
+        }),
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      recipeRepository: {
+        createRecipeEnforcingPlanLimit: async () => {
+          throw new Error("should not create a recipe");
+        },
+        getRecipe: async () => null,
+        listRecipes: unusedListRecipes,
+        updateRecipe: unusedUpdateRecipe,
+        deleteRecipe: unusedDeleteRecipe,
+      },
+    });
+
+    const response = await testApp.request(
+      "/api/recipes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: { title: "Tomato pasta", note: "a".repeat(1024 * 1024) },
+          source: {},
+        }),
+      },
+      {
+        APP_ENV: "development",
+      },
+    );
+
+    expect(response.status).toBe(400);
+    // 本文を読んでから弾いたのであれば、どの項目が不正かをdetailsに持つ。
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "validation_failed",
+        message: "Request validation failed.",
+      },
+    });
+  });
+
   it("任意項目と出典情報をRecipeContentとSource metadataとして保存する", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({

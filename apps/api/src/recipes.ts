@@ -1,6 +1,8 @@
 import { type DbClient, recipes, recipeTags, tags } from "@recipestock/db";
 import {
   type LockedRecipeDetail,
+  MAX_RECIPE_SEARCH_TERMS,
+  MAX_RECIPE_SOURCE_NAME_LENGTH,
   type RecipeContent,
   type RecipeDetail,
   type RecipeListItem,
@@ -10,7 +12,13 @@ import {
   recipeContentSchema,
   recipeContentWithUrlsSchema,
 } from "@recipestock/schemas";
-import { buildSearchText, normalizeUrl, PLAN_LIMITS, type Plan } from "@recipestock/shared";
+import {
+  buildSearchText,
+  normalizeUrl,
+  PLAN_LIMITS,
+  type Plan,
+  truncateText,
+} from "@recipestock/shared";
 import {
   and,
   asc,
@@ -129,7 +137,10 @@ export const normalizeRecipeSource = (source: RecipeSourceDraft): NormalizedReci
   return {
     sourceUrl,
     normalizedSourceUrl: sourceUrl ? normalizeUrl(sourceUrl) : null,
-    sourceName: source.sourceName ?? null,
+    // 取り込みの出典名はページ由来で長さを選べないので、保存要求のschemaではなくここで収める。
+    sourceName: source.sourceName
+      ? truncateText(source.sourceName, MAX_RECIPE_SOURCE_NAME_LENGTH)
+      : null,
   };
 };
 
@@ -235,13 +246,24 @@ const decodeRecipeListCursor = (cursor: string, sort: RecipeListSort): RecipeLis
   return { sort, createdAt, id };
 };
 
+/**
+ * 検索語はそれぞれWHEREの条件になるので、語数を抑えて条件の数を抑える。
+ */
 export const normalizeRecipeSearchTerms = (query?: string) =>
-  query
-    ?.toLowerCase()
-    .normalize("NFKC")
-    .split(/\s+/)
-    .map((term) => term.trim())
-    .filter(Boolean) ?? [];
+  (
+    query
+      ?.toLowerCase()
+      .normalize("NFKC")
+      .split(/\s+/)
+      .map((term) => term.trim())
+      .filter(Boolean) ?? []
+  ).slice(0, MAX_RECIPE_SEARCH_TERMS);
+
+/**
+ * ILIKEのパターンとして扱われる文字を、入力された文字そのものとして照合する。
+ * エスケープしないと`%`だけの検索語が全件に当たる。
+ */
+const likePattern = (term: string) => `%${term.replace(/[\\%_]/g, "\\$&")}%`;
 
 export const createRecipeRepository = (
   db: DbClient,
@@ -358,14 +380,17 @@ export const createRecipeRepository = (
       ...searchTerms.map(
         (term) =>
           or(
-            ilike(recipes.searchText, `%${term}%`),
+            ilike(recipes.searchText, likePattern(term)),
             exists(
               db
                 .select({ tagId: recipeTags.tagId })
                 .from(recipeTags)
                 .innerJoin(tags, eq(tags.id, recipeTags.tagId))
                 .where(
-                  and(eq(recipeTags.recipeId, recipes.id), ilike(tags.normalizedName, `%${term}%`)),
+                  and(
+                    eq(recipeTags.recipeId, recipes.id),
+                    ilike(tags.normalizedName, likePattern(term)),
+                  ),
                 ),
             ),
           ) ?? sql`false`,

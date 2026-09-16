@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_RECIPE_SOURCE_URL_LENGTH } from "./recipe";
 
 /**
  * AIは原文の言い回しをほぼそのまま写すので、出力は入力とほぼ同じ長さになる。
@@ -24,7 +25,12 @@ export const importJobKindSchema = z.enum(["url", "text"]);
 
 export const importJobStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
 
-export const importableUrlSchema = z.url({ protocol: /^https?$/ }).max(4096);
+/**
+ * 取り込んだURLはそのままRecipeの出典になるので、出典として保存できる長さだけを受け入れる。
+ */
+export const importableUrlSchema = z
+  .url({ protocol: /^https?$/ })
+  .max(MAX_RECIPE_SOURCE_URL_LENGTH);
 
 export const importUrlRequestSchema = z.object({
   url: importableUrlSchema,

@@ -1,11 +1,16 @@
+import { MAX_RECIPE_SOURCE_URL_LENGTH } from "@recipestock/schemas";
 import { isHttpFetchUrlAllowed } from "../../url-safety";
 import { type FetchedImportPage, RecipeImportError } from "./types";
 
 const HTML_SNIFF_BYTES = 4 * 1024;
 const HTML_MARKER_PATTERN = /<!doctype\s+html\b|<html\b|<head\b|<body\b/i;
 
+/**
+ * 追いかけたURLはそのままRecipeの出典として保存するので、保存できない長さのURLは追いかけない。
+ * リダイレクト先のLocationは利用者が選べないため、入口と同じ上限をここでも確かめる。
+ */
 export const assertImportUrlAllowed = (sourceUrl: string) => {
-  if (!isHttpFetchUrlAllowed(sourceUrl)) {
+  if (sourceUrl.length > MAX_RECIPE_SOURCE_URL_LENGTH || !isHttpFetchUrlAllowed(sourceUrl)) {
     throw new RecipeImportError("invalid_url", "Import URL is invalid.");
   }
 };
