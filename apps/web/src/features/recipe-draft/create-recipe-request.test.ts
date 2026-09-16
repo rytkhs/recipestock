@@ -156,19 +156,20 @@ describe("formValuesToCreateRecipeRequest", () => {
 });
 
 describe("recipeDraftFormSchema", () => {
-  it("フォーム値の全体画像枚数を制限する", () => {
+  // APIの上限と同じく、表紙は全体の枚数に数えない。
+  it("表紙を数えずにフォーム値の全体画像枚数を制限する", () => {
     const values = createValues({
       coverImage: createDraftImage("cover"),
       steps: createStepsWithImages(MAX_RECIPE_TOTAL_IMAGES),
     });
 
-    expect(recipeDraftFormSchema.safeParse(values).success).toBe(false);
+    expect(recipeDraftFormSchema.safeParse(values).success).toBe(true);
     expect(
       recipeDraftFormSchema.safeParse({
         ...values,
-        coverImage: undefined,
+        steps: createStepsWithImages(MAX_RECIPE_TOTAL_IMAGES + 1),
       }).success,
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

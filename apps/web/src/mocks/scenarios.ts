@@ -9,10 +9,14 @@ import {
 import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
 import {
   billingStatusFixture,
+  brokenImageRecipeContentFixture,
+  imageOnlyRecipeContentFixture,
   importJobFixture,
   MOCK_RECIPE_SEED_COUNT,
   type MockTag,
+  mockRecipeId,
   pushSubscriptionsFixture,
+  type RecipeContentOverride,
   recipeListFixture,
   recipeTagsFixture,
   type SessionFixture,
@@ -38,6 +42,8 @@ export type MockState = {
   tags: MockTag[];
   /** Recipeのidごとに、付けたタグのidを付けた順に持つ。 */
   recipeTags: Record<string, string[]>;
+  /** Recipeのidごとに、詳細の本文をfixtureから差し替える部分。 */
+  recipeContents: Record<string, RecipeContentOverride>;
   importJobs: ImportJobSummary[];
   /** テキスト取り込みのjobが保持し、本人向けの詳細APIから返す原文。 */
   importJobSourceTexts: Record<string, string>;
@@ -71,6 +77,7 @@ const baseState = (): MockState => ({
   recipes: recipeListFixture(),
   tags: tagsFixture(),
   recipeTags: recipeTagsFixture(),
+  recipeContents: {},
   importJobs: [],
   importJobSourceTexts: {},
   pushSubscriptions: pushSubscriptionsFixture(),
@@ -94,6 +101,9 @@ const freeState = (recipeCount: number): MockState => {
     recipeTags: recipeTagsFixture({ count: recipeCount }),
   };
 };
+
+// 一覧のサムネイルと、開いた詳細の画像がどちらも読み込めないRecipe。
+const brokenImageRecipeIndexes = [1, 4, 7];
 
 export const scenarios: Scenario[] = [
   {
@@ -190,11 +200,35 @@ export const scenarios: Scenario[] = [
     build: () => ({ ...baseState(), recipes: recipeListFixture({ withCoverImage: false }) }),
   },
   {
+    id: "image-only",
+    label: "画像だけの投稿(材料・手順なし)",
+    build: () => {
+      const state = baseState();
+
+      return {
+        ...state,
+        recipeContents: Object.fromEntries(
+          // 2件目は表紙と同じ1枚だけの投稿にして、レシピ画像の段を出さない表示も確かめられるようにする。
+          state.recipes.map((recipe, index) => [
+            recipe.id,
+            imageOnlyRecipeContentFixture(recipe.id, index === 1 ? 1 : 4),
+          ]),
+        ),
+      };
+    },
+  },
+  {
     id: "broken-image",
-    label: "カバー画像の読み込み失敗",
+    label: "画像の読み込み失敗",
     build: () => ({
       ...baseState(),
-      recipes: recipeListFixture({ brokenCoverIndexes: [1, 4, 7] }),
+      recipes: recipeListFixture({ brokenCoverIndexes: brokenImageRecipeIndexes }),
+      recipeContents: Object.fromEntries(
+        brokenImageRecipeIndexes.map((index) => [
+          mockRecipeId(index),
+          brokenImageRecipeContentFixture(mockRecipeId(index)),
+        ]),
+      ),
     }),
   },
   {

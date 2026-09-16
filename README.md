@@ -93,7 +93,11 @@ Cloudflare にログインし、開発用 R2 bucket を作成します。
 pnpm --filter @recipestock/api exec wrangler login
 pnpm --filter @recipestock/api exec wrangler r2 bucket create recipestock-images-dev
 pnpm --filter @recipestock/api exec wrangler r2 bucket cors set recipestock-images-dev --file apps/api/cors.example.json
+pnpm --filter @recipestock/api exec wrangler r2 bucket lifecycle add recipestock-images-dev expire-tmp-uploads tmp/ --expire-days 1
 ```
+
+ライフサイクルルールは、保存されないまま残る一時アップロード(`tmp/`)を消します(ADR 0024)。
+本番など別の bucket を作るときも同じ設定を適用してください。
 
 API 固有のセットアップ詳細は `apps/api/README.md` を参照してください。
 
@@ -143,7 +147,8 @@ pnpm dev:mock
 | `import-failed` | 取り込み失敗 |
 | `text-import-failed` | テキストの取り込み失敗(原文を直して再試行) |
 | `no-cover` | カバー画像なし |
-| `broken-image` | カバー画像の読み込み失敗 |
+| `image-only` | 画像だけの投稿(詳細が材料・手順なしで画像だけ。表紙はレシピ画像の1枚目と同じ。2件目は1枚だけ) |
+| `broken-image` | 画像の読み込み失敗(一覧のサムネイルと、2・5・8件目の詳細の画像) |
 | `signed-out` | 未ログイン |
 | `offline` | 接続不可 |
 

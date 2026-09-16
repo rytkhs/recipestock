@@ -1,5 +1,6 @@
 import {
   MAX_RECIPE_REFERENCE_IMAGES,
+  MAX_RECIPE_SOURCE_URL_LENGTH,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
@@ -70,6 +71,24 @@ describe("URL import fetcher", () => {
       "https://example.com/recipe",
       expect.objectContaining({ redirect: "manual" }),
     );
+  });
+
+  it("出典として保存できる長さを超えるredirect先は追跡しない", async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(null, {
+        status: 302,
+        headers: { location: `/${"a".repeat(MAX_RECIPE_SOURCE_URL_LENGTH)}` },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchImportPage("https://example.com/recipe", { timeoutMs: 1000, maxBytes: 1024 }),
+    ).rejects.toMatchObject({
+      code: "invalid_url",
+    } satisfies Partial<RecipeImportError>);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("許可されたredirectは追跡しfinalUrlへ反映する", async () => {

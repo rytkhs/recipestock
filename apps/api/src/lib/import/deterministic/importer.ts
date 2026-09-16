@@ -1,6 +1,6 @@
 import { recipeDraftContentSchema, recipeSourceDraftSchema } from "@recipestock/schemas";
 import { z } from "zod";
-import { trimRecipeDraftContentImages } from "../image-limits";
+import { trimRecipeDraftContent } from "../draft-limits";
 import { assertFetchedPageIsHtml, assertImportUrlAllowed } from "../policy";
 import { RecipeImportError, type RecipeImportFetcher, type RecipeImportResult } from "../types";
 import { type DeterministicFetchRequest, type DeterministicImportAdapter } from "./types";
@@ -40,7 +40,7 @@ export const createDeterministicImporter = (
     try {
       return deterministicImportResultSchema.parse({
         ...result,
-        recipeDraftContent: trimRecipeDraftContentImages(result.recipeDraftContent),
+        recipeDraftContent: trimRecipeDraftContent(result.recipeDraftContent),
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

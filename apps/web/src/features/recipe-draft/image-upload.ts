@@ -83,33 +83,66 @@ export const compressRecipeImage = async (file: File): Promise<File> => {
   }
 };
 
-export const uploadRecipeImage = async (file: File): Promise<DraftImageRef> => {
-  const compressedFile = await compressRecipeImage(file);
+const MAX_CONCURRENT_IMAGE_UPLOADS = 3;
 
-  if (compressedFile.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
-    throw new RecipeImageUploadError("image_too_large");
+let runningUploadCount = 0;
+const waitingUploads: (() => void)[] = [];
+
+// 圧縮は元の解像度のままデコードするので、同時に走らせるほどピークメモリが積み上がる。
+// 12MPの写真1枚でおよそ47MB、レシピ画像は一度に20枚選べるため、絞らないとタブごと落ちる。
+// 縮小と再エンコードはメインスレッドなので、同時数を増やして縮むのは通信の待ちだけ。
+// 表紙・レシピ画像・手順画像はそれぞれ別に選べるので、上限はモジュールで共有する。
+const withUploadSlot = async <T>(upload: () => Promise<T>): Promise<T> => {
+  if (runningUploadCount < MAX_CONCURRENT_IMAGE_UPLOADS) {
+    runningUploadCount += 1;
+  } else {
+    await new Promise<void>((resolve) => {
+      waitingUploads.push(resolve);
+    });
   }
 
-  const upload = await parseApiResponse<CreateImageUploadUrlResponse>(
-    fetch("/api/images/upload-url", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        contentType: compressedFile.type,
-        sizeBytes: compressedFile.size,
-      }),
-    }),
-  );
-  const putResponse = await fetch(upload.uploadUrl, {
-    method: "PUT",
-    headers: { "content-type": compressedFile.type },
-    body: compressedFile,
-  });
+  try {
+    return await upload();
+  } finally {
+    const startNextUpload = waitingUploads.shift();
 
-  if (!putResponse.ok) {
-    throw new RecipeImageUploadError("upload_failed");
+    // 空いた枠は数を戻さず、待っている次の1件へそのまま渡す。
+    if (startNextUpload) {
+      startNextUpload();
+    } else {
+      runningUploadCount -= 1;
+    }
   }
-
-  return { type: "tmpObjectKey", key: upload.objectKey };
 };
+
+export const uploadRecipeImage = (file: File): Promise<DraftImageRef> =>
+  withUploadSlot(async () => {
+    const compressedFile = await compressRecipeImage(file);
+
+    if (compressedFile.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+      throw new RecipeImageUploadError("image_too_large");
+    }
+
+    const upload = await parseApiResponse<CreateImageUploadUrlResponse>(
+      fetch("/api/images/upload-url", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          contentType: compressedFile.type,
+          sizeBytes: compressedFile.size,
+        }),
+      }),
+    );
+    const putResponse = await fetch(upload.uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": compressedFile.type },
+      body: compressedFile,
+    });
+
+    if (!putResponse.ok) {
+      throw new RecipeImageUploadError("upload_failed");
+    }
+
+    return { type: "tmpObjectKey", key: upload.objectKey };
+  });

@@ -1,16 +1,17 @@
-import { Camera, X } from "@phosphor-icons/react";
-import { type DraftImageRef } from "@recipestock/schemas";
+import { Camera, ImageBroken, Trash } from "@phosphor-icons/react";
+import { type DraftImageRef, MAX_RECIPE_TITLE_LENGTH } from "@recipestock/schemas";
 import { useEffect, useId, useRef, useState } from "react";
 import { useController } from "react-hook-form";
-import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import {
   createLocalPreviewUrl,
+  draftInlineFieldClass,
   imageInputAccept,
+  isAdvanceEnter,
   type RecipeDraftFormControl,
   revokeLocalPreviewUrl,
+  toSingleLine,
 } from "./form-internals";
 import { RecipeImageUploadError } from "./image-upload";
 
@@ -21,6 +22,13 @@ type CoverImageTitleBlockProps = {
   onUploadStateChange(isUploading: boolean): void;
 };
 
+const heroFrameClass =
+  "relative block w-full overflow-hidden bg-brand-paper-muted sm:rounded-[20px]";
+
+const heroActionClass =
+  "inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-brand-ink/60 px-3.5 font-semibold text-sm text-white outline-none backdrop-blur-md transition-colors hover:bg-brand-ink/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50";
+
+// 冒頭は詳細と同じく、表紙の写真を大きく置いてすぐ下にレシピ名を組む。見たままの場所で直せるようにする。
 export const CoverImageTitleBlock = ({
   control,
   coverImagePreviewUrl,
@@ -28,19 +36,22 @@ export const CoverImageTitleBlock = ({
   onUploadStateChange,
 }: CoverImageTitleBlockProps) => {
   const { field: coverImageField } = useController({ control, name: "coverImage" });
-  const { field: titleField } = useController({
+  const { field: titleField, fieldState: titleState } = useController({
     control,
     name: "title",
   });
 
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const titleId = useId();
+  const titleErrorId = useId();
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [failedPreviewUrl, setFailedPreviewUrl] = useState<string | null>(null);
 
-  const currentPreviewUrl =
-    localPreviewUrl ?? (coverImageField.value ? coverImagePreviewUrl : undefined);
+  const hasCover = Boolean(coverImageField.value);
+  const currentPreviewUrl = localPreviewUrl ?? (hasCover ? coverImagePreviewUrl : undefined);
+  const titleError = titleState.error?.message;
+  const openPicker = () => inputRef.current?.click();
 
   useEffect(() => () => revokeLocalPreviewUrl(localPreviewUrl), [localPreviewUrl]);
 
@@ -87,85 +98,118 @@ export const CoverImageTitleBlock = ({
   };
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm sm:rounded-[18px]">
-      <div className="grid min-w-0 gap-4 p-3.5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:p-5">
-        <div className="grid min-w-0 gap-2">
-          <span className="text-sm font-bold text-brand-walnut">カバー画像</span>
-          <div className="relative w-full max-w-[15rem] shrink-0 sm:w-fit">
-            <input
-              ref={inputRef}
-              accept={imageInputAccept}
-              aria-label="カバー画像"
-              className="sr-only"
-              disabled={isUploading}
-              type="file"
-              onChange={(event) => void handleChange(event)}
-            />
-            <button
-              aria-label="カバー画像を選択"
-              className="grid aspect-[4/3] w-full min-w-0 place-items-center overflow-hidden rounded-[14px] border border-dashed border-brand-line bg-brand-paper-muted text-brand-muted shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)] transition-colors hover:border-brand-sage/60 hover:bg-brand-paper-raised hover:text-brand-sage sm:aspect-square sm:w-36"
-              disabled={isUploading}
-              type="button"
-              onClick={() => inputRef.current?.click()}
-            >
-              {currentPreviewUrl ? (
-                <img
-                  alt="カバー画像プレビュー"
-                  className="h-full w-full object-cover"
-                  src={currentPreviewUrl}
-                />
-              ) : (
-                <span className="grid place-items-center gap-1.5 text-xs font-semibold">
-                  <Camera size={28} weight="fill" />
-                  カバーを追加
+    <header className="sm:pt-2 md:grid md:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] md:items-center md:gap-12 md:pt-4">
+      <div className="relative">
+        <input
+          ref={inputRef}
+          accept={imageInputAccept}
+          aria-label="表紙の写真"
+          className="sr-only"
+          disabled={isUploading}
+          type="file"
+          onChange={(event) => void handleChange(event)}
+        />
+
+        {hasCover ? (
+          <div className={cn(heroFrameClass, "aspect-[4/3]")}>
+            {currentPreviewUrl && failedPreviewUrl !== currentPreviewUrl ? (
+              <img
+                alt="表紙の写真プレビュー"
+                className="block size-full object-cover"
+                src={currentPreviewUrl}
+                onError={() => setFailedPreviewUrl(currentPreviewUrl)}
+              />
+            ) : (
+              <span
+                aria-label="表紙の写真を表示できません"
+                className="flex size-full flex-col items-center justify-center gap-2 text-brand-muted"
+                role="img"
+              >
+                <ImageBroken aria-hidden="true" size={28} weight="bold" />
+                <span aria-hidden="true" className="text-sm">
+                  写真を表示できません
                 </span>
-              )}
-            </button>
-
-            {isUploading ? (
-              <div className="absolute inset-0 grid place-items-center rounded-[14px] bg-black/30 text-primary-foreground">
-                <Spinner aria-label="カバー画像アップロード中" />
-              </div>
-            ) : null}
-
-            {currentPreviewUrl && !isUploading ? (
-              <Button
-                aria-label="カバー画像を削除"
-                className="absolute -right-1.5 -top-1.5"
-                size="icon-sm"
-                variant="destructive"
+              </span>
+            )}
+            <div className="absolute right-3 bottom-3 flex gap-2">
+              <button
+                aria-label="表紙の写真を変更"
+                className={heroActionClass}
+                disabled={isUploading}
+                type="button"
+                onClick={openPicker}
+              >
+                <Camera aria-hidden="true" size={16} weight="bold" />
+                写真を変更
+              </button>
+              <button
+                aria-label="表紙の写真を外す"
+                className={cn(heroActionClass, "w-10 px-0")}
+                disabled={isUploading}
+                type="button"
                 onClick={handleRemove}
               >
-                <X weight="bold" />
-              </Button>
-            ) : null}
+                <Trash aria-hidden="true" size={16} weight="bold" />
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <button
+            className={cn(
+              heroFrameClass,
+              "flex aspect-[12/5] flex-col items-center justify-center gap-2 text-brand-muted outline-none transition-colors hover:bg-brand-paper-raised hover:text-brand-sage-dark focus-visible:outline-3 focus-visible:outline-brand-orange focus-visible:outline-offset-[-3px] md:aspect-[4/3]",
+            )}
+            disabled={isUploading}
+            type="button"
+            onClick={openPicker}
+          >
+            <Camera aria-hidden="true" size={28} weight="fill" />
+            <span className="font-semibold text-sm">表紙の写真を追加</span>
+          </button>
+        )}
 
-        <FieldGroup>
-          <Field className="min-w-0">
-            <FieldLabel htmlFor={titleId}>レシピ名</FieldLabel>
-            <Input
-              id={titleId}
-              name={titleField.name}
-              placeholder="レシピ名を入力"
-              ref={titleField.ref}
-              required
-              value={titleField.value ?? ""}
-              onBlur={titleField.onBlur}
-              onChange={(event) => titleField.onChange(event.target.value)}
-            />
-          </Field>
-        </FieldGroup>
+        {isUploading ? (
+          <div className="absolute inset-0 grid place-items-center bg-black/30 text-primary-foreground sm:rounded-[20px]">
+            <Spinner aria-label="表紙の写真をアップロード中" />
+          </div>
+        ) : null}
       </div>
 
-      {error ? (
-        <div className="mt-3 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
-          <p className="text-brand-danger text-sm" role="alert">
+      <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
+        <textarea
+          aria-describedby={titleError ? titleErrorId : undefined}
+          aria-invalid={titleError ? true : undefined}
+          aria-label="レシピ名"
+          className={cn(
+            draftInlineFieldClass,
+            "field-sizing-content -mx-2 w-[calc(100%+1rem)] py-1 font-bold text-[1.625rem] leading-[1.35] sm:text-3xl",
+          )}
+          enterKeyHint="done"
+          maxLength={MAX_RECIPE_TITLE_LENGTH}
+          name={titleField.name}
+          placeholder="レシピ名"
+          ref={titleField.ref}
+          rows={1}
+          value={titleField.value ?? ""}
+          onBlur={titleField.onBlur}
+          onChange={(event) => titleField.onChange(toSingleLine(event.target.value))}
+          onKeyDown={(event) => {
+            if (isAdvanceEnter(event)) {
+              event.preventDefault();
+            }
+          }}
+        />
+        {titleError ? (
+          <p className="mt-1 font-medium text-brand-danger text-sm" id={titleErrorId}>
+            {titleError}
+          </p>
+        ) : null}
+        {error ? (
+          <p className="mt-2 text-brand-danger text-sm" role="alert">
             {error}
           </p>
-        </div>
-      ) : null}
-    </section>
+        ) : null}
+      </div>
+    </header>
   );
 };

@@ -19,13 +19,28 @@ const pickPlateTint = (seed: string) => {
 
 const readTitleInitial = (title: string) => Array.from(title.trim()).at(0) ?? "無";
 
-export const RecipeTitlePlate = ({ recipeId, title }: { recipeId: string; title: string }) => (
+// 一覧のコマは幅に合わせて字を組む。詳細の帯のような横長の枠では、呼び出し側が高さ基準の大きさを渡す。
+export const RecipeTitlePlate = ({
+  initialSizeClassName = "text-[30cqw]",
+  paddingClassName = "p-[8cqw]",
+  recipeId,
+  title,
+}: {
+  initialSizeClassName?: string;
+  paddingClassName?: string;
+  recipeId: string;
+  title: string;
+}) => (
   <span
     aria-hidden="true"
-    className={cn("flex size-full items-end justify-start p-[8cqw]", pickPlateTint(recipeId))}
+    className={cn(
+      "flex size-full items-end justify-start",
+      paddingClassName,
+      pickPlateTint(recipeId),
+    )}
     data-testid="recipe-title-plate"
   >
-    <span className="font-semibold text-[30cqw] text-brand-walnut/80 leading-none">
+    <span className={cn("font-semibold text-brand-walnut/80 leading-none", initialSizeClassName)}>
       {readTitleInitial(title)}
     </span>
   </span>
