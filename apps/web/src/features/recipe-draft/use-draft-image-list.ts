@@ -106,33 +106,64 @@ export const useDraftImageList = ({
     setPendingImages(uploads.map(({ id, previewUrl }) => ({ id, previewUrl })));
     onUploadStateChange(true);
 
-    try {
-      const results = await Promise.all(
-        uploads.map(async ({ file, previewUrl }): Promise<UploadResult> => {
-          try {
-            return { image: await uploadImage(file), previewUrl };
-          } catch (uploadError) {
-            return { error: uploadError, previewUrl };
-          }
-        }),
-      );
-      const uploadedImages: DraftImageRef[] = [];
-      const uploadedPreviewUrls: ImagePreviewUrlsByImageId = {};
-      const failures: unknown[] = [];
+    const results: (UploadResult | undefined)[] = [];
+    const failures: unknown[] = [];
+    // アップロード中は削除も並べ替えもできないので、この値だけが並びを決める。
+    let currentImages = images;
+    let settledCount = 0;
 
-      for (const result of results) {
-        if ("image" in result) {
-          uploadedImages.push(result.image);
-          uploadedPreviewUrls[imageRefId(result.image)] = result.previewUrl;
+    // 終わったものから順にフォームへ移す。後ろが先に終わったら前を待たせるので、
+    // 並びは選んだときのままで、タイルは左から順に埋まっていく。
+    const settleUpload = (uploadIndex: number, result: UploadResult) => {
+      results[uploadIndex] = result;
+
+      const readyImages: DraftImageRef[] = [];
+      const readyPreviewUrls: ImagePreviewUrlsByImageId = {};
+      const settledBefore = settledCount;
+
+      for (let settled = results[settledCount]; settled; settled = results[settledCount]) {
+        settledCount += 1;
+
+        if ("image" in settled) {
+          readyImages.push(settled.image);
+          readyPreviewUrls[imageRefId(settled.image)] = settled.previewUrl;
         } else {
-          revokeLocalPreviewUrl(result.previewUrl);
-          failures.push(result.error);
+          revokeLocalPreviewUrl(settled.previewUrl);
+          failures.push(settled.error);
         }
       }
 
-      setLocalPreviewUrlsByImageId((currentUrls) => ({ ...currentUrls, ...uploadedPreviewUrls }));
-      // アップロード中は削除も並べ替えもできないので、選んだときの並びに足せばよい。
-      field.onChange([...images, ...uploadedImages]);
+      if (settledCount === settledBefore) {
+        return;
+      }
+
+      setPendingImages(
+        uploads.slice(settledCount).map(({ id, previewUrl }) => ({ id, previewUrl })),
+      );
+
+      if (readyImages.length === 0) {
+        return;
+      }
+
+      currentImages = [...currentImages, ...readyImages];
+      setLocalPreviewUrlsByImageId((currentUrls) => ({ ...currentUrls, ...readyPreviewUrls }));
+      field.onChange(currentImages);
+    };
+
+    try {
+      await Promise.all(
+        uploads.map(async ({ file, previewUrl }, uploadIndex) => {
+          let result: UploadResult;
+
+          try {
+            result = { image: await uploadImage(file), previewUrl };
+          } catch (uploadError) {
+            result = { error: uploadError, previewUrl };
+          }
+
+          settleUpload(uploadIndex, result);
+        }),
+      );
       setError(uploadErrorMessage({ failures, skippedCount }));
     } finally {
       // ここを通りそこねるとアップロード中のままになり、保存も離脱の確認も戻らなくなる。

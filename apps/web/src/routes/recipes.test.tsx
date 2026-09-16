@@ -3313,10 +3313,17 @@ describe("RecipesRoute", () => {
   });
 
   it("画像のアップロード中に閉じると、ほかに変更がなくても破棄を確認する", async () => {
+    // アップロードの同時数はモジュールで共有する。止めたままにすると枠を握って終わり、
+    // 後続のテストで3枚同時に始められなくなるので、最後に必ず失敗させて返す。
+    let failUploadUrl!: () => void;
+    const heldUploadUrlRequest = new Promise<Response>((resolve) => {
+      failUploadUrl = () => resolve(new Response(null, { status: 500 }));
+    });
+
     mockFetch(
       async (input, init) => {
         if (getRequestPath(input) === "/api/images/upload-url" && init?.method === "POST") {
-          return new Promise<Response>(() => {});
+          return heldUploadUrlRequest;
         }
 
         return new Response(null, { status: 404 });
@@ -3344,6 +3351,11 @@ describe("RecipesRoute", () => {
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     });
     expect(appRouter.state.location.pathname).toBe("/recipes/new");
+
+    await act(async () => {
+      failUploadUrl();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
   });
 
   it("欄の下に出せない検証で保存が止まったときは、その理由を知らせる", async () => {
@@ -3499,6 +3511,92 @@ describe("RecipesRoute", () => {
         referenceImages: [
           { type: "tmpObjectKey", key: "tmp/user_123/reference-1.webp" },
           { type: "tmpObjectKey", key: "tmp/user_123/reference-2.webp" },
+        ],
+      },
+    });
+  });
+
+  it("レシピ画像はアップロードが終わったものから順に並び、前が残っている間は後ろを待たせる", async () => {
+    let uploadUrlRequests = 0;
+    const heldUploads = new Map<string, () => void>();
+    const finishUpload = async (uploadUrl: string) => {
+      await waitFor(() => {
+        expect(heldUploads.has(uploadUrl)).toBe(true);
+      });
+      heldUploads.get(uploadUrl)?.();
+      // 解放した1枚の後始末が画面に届くまで一巡させる。
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/images/upload-url" && init?.method === "POST") {
+          uploadUrlRequests += 1;
+          return jsonResponse({
+            uploadUrl: `https://upload.example/${uploadUrlRequests}`,
+            objectKey: `tmp/user_123/reference-${uploadUrlRequests}.webp`,
+            expiresAt: "2026-05-31T00:15:00.000Z",
+          });
+        }
+
+        if (typeof input === "string" && input.startsWith("https://upload.example/")) {
+          await new Promise<void>((resolve) => {
+            heldUploads.set(input, resolve);
+          });
+          return new Response(null, { status: 200 });
+        }
+
+        if (getRequestPath(input) === "/api/recipes" && init?.method === "POST") {
+          return jsonResponse(tomatoPastaDetailResponse, { status: 201 });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/new");
+
+    await userEvent.type(await screen.findByLabelText("レシピ名"), "Tomato pasta");
+    await userEvent.upload(getReferenceImageInput(), [
+      new File(["first"], "first.webp", { type: "image/webp" }),
+      new File(["second"], "second.webp", { type: "image/webp" }),
+      new File(["third"], "third.webp", { type: "image/webp" }),
+    ]);
+
+    // 1枚目が終わった時点で、残り2枚を待たずに並ぶ。
+    await finishUpload("https://upload.example/1");
+    expect(screen.getByAltText("レシピ画像1プレビュー")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("レシピ画像をアップロード中")).toHaveLength(2);
+
+    // 3枚目が先に終わっても、2枚目が残っている間は並べない。
+    await finishUpload("https://upload.example/3");
+    expect(screen.getAllByLabelText("レシピ画像をアップロード中")).toHaveLength(2);
+    expect(screen.queryByAltText("レシピ画像2プレビュー")).not.toBeInTheDocument();
+
+    // 2枚目が終わると、待たせていた3枚目も続けて並ぶ。
+    await finishUpload("https://upload.example/2");
+    expect(screen.queryAllByLabelText("レシピ画像をアップロード中")).toHaveLength(0);
+    expect(screen.getByAltText("レシピ画像3プレビュー")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/recipes")).toBeDefined();
+    });
+    const createRecipeCall = findFetchCall(fetchMock, "/api/recipes");
+    expect(JSON.parse(String(createRecipeCall?.[1]?.body))).toMatchObject({
+      content: {
+        referenceImages: [
+          { type: "tmpObjectKey", key: "tmp/user_123/reference-1.webp" },
+          { type: "tmpObjectKey", key: "tmp/user_123/reference-2.webp" },
+          { type: "tmpObjectKey", key: "tmp/user_123/reference-3.webp" },
         ],
       },
     });
