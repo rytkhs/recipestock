@@ -1,8 +1,8 @@
 import { ShareNetwork, Trash } from "@phosphor-icons/react";
+import { type ShortcutCredential } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { issueShortcutCredential, listShortcutCredentials, revokeShortcutCredential } from "./api";
@@ -10,26 +10,31 @@ import { isStandaloneWebApp } from "./display-mode";
 
 const queryKey = ["shortcut-credentials"] as const;
 
+/**
+ * 端末名は初回の共有でShortcutから届くので、発行した直後は名前がない (ADR 0025)。
+ */
+const deviceLabel = (credential: ShortcutCredential) =>
+  credential.name ?? (credential.verifiedAt ? "連携済みの端末" : "連携待ちの端末");
+
 export const IosShareSettingsCard = () => {
   const iosShareShortcutUrl = import.meta.env.VITE_IOS_SHARE_SHORTCUT_URL;
   const queryClient = useQueryClient();
   const standalone = isStandaloneWebApp();
-  const [name, setName] = useState("iPhone");
-  const deviceNameId = useId();
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  /**
+   * Shortcutsアプリから戻ってきたときにfocusでの再取得が走り、連携済みの表示へ変わる。
+   */
   const credentials = useQuery({
     queryKey,
     queryFn: listShortcutCredentials,
     enabled: standalone,
   });
   const createMutation = useMutation({
-    mutationFn: () => issueShortcutCredential(name),
+    mutationFn: issueShortcutCredential,
     onSuccess: async (result) => {
       setIssuedToken(result.token);
-      setMessage(
-        "連携トークンを発行しました。コピーしてShortcut追加時の「連携トークン」欄へ貼り付けてください。",
-      );
+      setMessage(null);
       await queryClient.invalidateQueries({ queryKey });
     },
   });
@@ -72,28 +77,13 @@ export const IosShareSettingsCard = () => {
         </div>
       ) : (
         <>
-          <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-            <FieldGroup>
-              <Field className="min-w-0">
-                <FieldLabel htmlFor={deviceNameId}>端末名</FieldLabel>
-                <Input
-                  id={deviceNameId}
-                  value={name}
-                  maxLength={60}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </Field>
-            </FieldGroup>
-            <Button
-              disabled={!name.trim() || createMutation.isPending}
-              onClick={() => createMutation.mutate()}
-            >
-              連携トークンを発行
-            </Button>
-          </div>
-
           {issuedToken ? (
             <div className="mt-4 grid min-w-0 gap-3">
+              <ol className="grid list-decimal gap-1 pl-5 text-brand-muted text-sm">
+                <li>下のボタンでShortcutを追加します。</li>
+                <li>追加画面の「連携トークン」欄に貼り付けます。</li>
+                <li>レシピのページを共有して、取り込みが始まれば連携完了です。</li>
+              </ol>
               <Input
                 className="w-full min-w-0"
                 aria-label="連携トークン"
@@ -101,20 +91,29 @@ export const IosShareSettingsCard = () => {
                 value={issuedToken}
               />
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={copyToken}>
-                  トークンをコピー
-                </Button>
                 <a
                   className={cn(buttonVariants(), "no-underline")}
                   href={iosShareShortcutUrl}
                   rel="noreferrer"
                   target="_blank"
+                  onClick={() => {
+                    void copyToken();
+                  }}
                 >
-                  Shortcutを追加
+                  トークンをコピーしてShortcutを追加
                 </a>
+                <Button variant="secondary" onClick={copyToken}>
+                  トークンをコピー
+                </Button>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="mt-4">
+              <Button disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
+                連携トークンを発行
+              </Button>
+            </div>
+          )}
 
           {message ? (
             <p className="mt-3 text-brand-muted text-sm" role="status">
@@ -129,18 +128,24 @@ export const IosShareSettingsCard = () => {
 
           {(credentials.data?.credentials.length ?? 0) > 0 ? (
             <div className="mt-5 grid gap-2">
-              <p className="font-semibold text-brand-walnut text-sm">連携済み端末</p>
+              <p className="font-semibold text-brand-walnut text-sm">連携した端末</p>
               {credentials.data?.credentials.map((credential) => (
                 <div
                   className="flex items-center justify-between gap-3 rounded-[12px] border border-brand-line-soft p-3"
                   key={credential.id}
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-brand-ink text-sm">{credential.name}</p>
-                    <p className="text-brand-muted text-xs">末尾 {credential.tokenSuffix}</p>
+                    <p className="truncate font-medium text-brand-ink text-sm">
+                      {deviceLabel(credential)}
+                    </p>
+                    <p className="text-brand-muted text-xs">
+                      {credential.verifiedAt
+                        ? `末尾 ${credential.tokenSuffix}・連携済み`
+                        : `末尾 ${credential.tokenSuffix}・共有してテストすると完了します`}
+                    </p>
                   </div>
                   <Button
-                    aria-label={`${credential.name}の連携を解除`}
+                    aria-label={`${deviceLabel(credential)}の連携を解除`}
                     size="icon-sm"
                     variant="ghost"
                     onClick={() => revokeMutation.mutate(credential.id)}

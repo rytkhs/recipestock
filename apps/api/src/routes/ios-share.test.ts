@@ -56,14 +56,20 @@ const createImportJobRepository = (
   ...overrides,
 });
 
-const createShortcutCredentialsFake = (): ShortcutCredentials => ({
+const createShortcutCredentialsFake = (
+  overrides: Partial<ShortcutCredentials> = {},
+): ShortcutCredentials => ({
   issue: async () => {
     throw new Error("Not used by this route.");
   },
   list: async () => [],
   revoke: async () => true,
   authenticate: async ({ token }) =>
-    token.startsWith("rssc_") ? { credentialId: "credential_1", userId: "user_1" } : null,
+    token.startsWith("rssc_")
+      ? { credentialId: "credential_1", userId: "user_1", verified: false }
+      : null,
+  markVerified: async () => undefined,
+  ...overrides,
 });
 
 const shortcutHeaders = {
@@ -86,10 +92,10 @@ const createShortcutTestApp = (dependencies: AppDependencies = {}) =>
     ...dependencies,
   });
 
-const shareRequest = (input = "https://example.com/recipe") => ({
+const shareRequest = (input = "https://example.com/recipe", deviceName?: string) => ({
   method: "POST",
   headers: shortcutHeaders,
-  body: JSON.stringify({ input }),
+  body: JSON.stringify(deviceName === undefined ? { input } : { input, deviceName }),
 });
 
 describe("iOS Share routes", () => {
@@ -365,6 +371,172 @@ describe("iOS Share routes", () => {
         notice: { openUrl: "https://app.example.com/settings" },
       });
     }
+  });
+
+  /**
+   * 形式に合わないトークンはhash照合まで運ばない。無効なtokenが1requestごとに
+   * DBアクセスを起こすのを、rate limitの安全弁より手前で止める (ADR 0025)。
+   */
+  it("形式に合わないtokenをhash照合へ到達させない", async () => {
+    const authenticate = vi.fn(async () => null);
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake({ authenticate }),
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const responses = await Promise.all(
+      [
+        `Bearer rssc_${"a".repeat(24)}!`,
+        `Bearer rssc_${"a".repeat(24)}`,
+        `Bearer rssc_${"a".repeat(26)}`,
+        `Bearer ${"a".repeat(30)}`,
+      ].map((authorization) =>
+        app.request(
+          "/api/shortcut/import-jobs",
+          {
+            method: "POST",
+            headers: { ...shortcutHeaders, authorization },
+            body: JSON.stringify({ input: "https://example.com/recipe" }),
+          },
+          env,
+        ),
+      ),
+    );
+
+    for (const response of responses) {
+      await expect(response.json()).resolves.toMatchObject({ reason: "unauthorized" });
+    }
+    expect(authenticate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 貼り付けたトークンの前後に空白や改行が混じっても読めるようにする。
+   */
+  it("前後に空白や改行が付いたBearerを読む", async () => {
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      urlImportJobSubmission: {
+        submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
+      },
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const response = await app.request(
+      "/api/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: { ...shortcutHeaders, authorization: `Bearer  rssc_${"a".repeat(25)}\n` },
+        body: JSON.stringify({ input: "https://example.com/recipe" }),
+      },
+      env,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({ reason: "created" });
+  });
+
+  /**
+   * 発行は連携の完了ではない。契約に合うrequestが初めて認証を通った時点で確定し、
+   * 同じ更新でデバイス名を端末名として保存する (ADR 0025)。
+   */
+  it("初回の共有でデバイス名とともに連携を確定する", async () => {
+    const markVerified = vi.fn(async () => undefined);
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake({ markVerified }),
+      urlImportJobSubmission: {
+        submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
+      },
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    await app.request(
+      "/api/shortcut/import-jobs",
+      shareRequest("https://example.com/recipe", "たかしのiPhone"),
+      env,
+    );
+
+    expect(markVerified).toHaveBeenCalledWith({
+      credentialId: "credential_1",
+      deviceName: "たかしのiPhone",
+    });
+  });
+
+  it("確定済みのcredentialでは確定の書き込みをしない", async () => {
+    const markVerified = vi.fn(async () => undefined);
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake({
+        markVerified,
+        authenticate: async () => ({
+          credentialId: "credential_1",
+          userId: "user_1",
+          verified: true,
+        }),
+      }),
+      urlImportJobSubmission: {
+        submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
+      },
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    await app.request(
+      "/api/shortcut/import-jobs",
+      shareRequest("https://example.com/recipe", "たかしのiPhone"),
+      env,
+    );
+
+    expect(markVerified).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 確定は取り込みの結果と切り離す。例外は`malformed_request`で、これは配布した
+   * Shortcutが壊れていることの検知に使うreasonであるため確定させない。
+   */
+  it("取り込みが拒否されても確定し、malformed_requestでは確定しない", async () => {
+    const markVerified = vi.fn(async () => undefined);
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake({ markVerified }),
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    await app.request("/api/shortcut/import-jobs", shareRequest("URLはありません"), env);
+    expect(markVerified).toHaveBeenCalledTimes(1);
+
+    await app.request(
+      "/api/shortcut/import-jobs",
+      { method: "POST", headers: shortcutHeaders, body: JSON.stringify({ input: "" }) },
+      env,
+    );
+    expect(markVerified).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * デバイス名は利用者の実名を含みやすい。DBには保存しても監視ログへは出さない。
+   */
+  it("デバイス名を監視ログへ出さない", async () => {
+    const entries: LogEntry[] = [];
+    const app = createShortcutTestApp({
+      auth,
+      loggerFactory: (baseFields) =>
+        createLogger(baseFields, { sink: { write: (entry) => entries.push(entry) } }),
+      shortcutCredentials: createShortcutCredentialsFake(),
+      urlImportJobSubmission: {
+        submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
+      },
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    await app.request(
+      "/api/shortcut/import-jobs",
+      shareRequest("https://example.com/recipe", "たかしのiPhone"),
+      env,
+    );
+
+    expect(entries).not.toHaveLength(0);
+    expect(JSON.stringify(entries)).not.toContain("たかしのiPhone");
   });
 
   it("active Jobを再利用すると通知要求だけを有効にしQueueへ追加しない", async () => {

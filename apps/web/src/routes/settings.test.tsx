@@ -18,6 +18,7 @@ describe("Settings routes", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
   });
 
   const installPushBrowser = ({
@@ -788,26 +789,27 @@ describe("Settings routes", () => {
     expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
   });
 
-  it("PWAからShortcut連携トークンを発行して追加導線を表示する", async () => {
+  const stubShortcutSettings = (credentials: unknown[] = []) => {
     vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", "https://www.icloud.com/shortcuts/recipe-stock-test");
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({ matches: true })),
     );
-    const fetchMock = mockFetch(
+    return mockFetch(
       async (input, init) => {
         const path = getRequestPath(input);
         if (path === "/api/shortcut-credentials" && init?.method === "GET") {
-          return jsonResponse({ credentials: [] });
+          return jsonResponse({ credentials });
         }
         if (path === "/api/shortcut-credentials" && init?.method === "POST") {
           return jsonResponse(
             {
               credential: {
                 id: "credential_1",
-                name: "iPhone",
+                name: null,
                 tokenSuffix: "aaaa",
                 createdAt: "2026-07-11T00:00:00.000Z",
+                verifiedAt: null,
               },
               token: `rssc_${"a".repeat(25)}`,
             },
@@ -818,6 +820,15 @@ describe("Settings routes", () => {
       },
       { authenticated: true },
     );
+  };
+
+  /**
+   * 端末名は初回の共有でShortcutから届くので、発行にrequest bodyを送らない (ADR 0025)。
+   */
+  it("PWAからShortcut連携トークンを発行して追加導線を表示する", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const fetchMock = stubShortcutSettings();
 
     await renderApp("/settings");
     await expect(
@@ -830,16 +841,46 @@ describe("Settings routes", () => {
     await expect(screen.findByLabelText("連携トークン")).resolves.toHaveValue(
       `rssc_${"a".repeat(25)}`,
     );
-    expect(screen.getByRole("link", { name: "Shortcutを追加" })).toHaveAttribute(
-      "href",
-      "https://www.icloud.com/shortcuts/recipe-stock-test",
+
+    const issueCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/shortcut-credentials" && init?.method === "POST",
     );
-    expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          getRequestPath(input) === "/api/shortcut-credentials" && init?.method === "POST",
-      ),
-    ).toBe(true);
+    expect(issueCall?.[1]?.body).toBeUndefined();
+
+    const addLink = screen.getByRole("link", { name: "トークンをコピーしてShortcutを追加" });
+    expect(addLink).toHaveAttribute("href", "https://www.icloud.com/shortcuts/recipe-stock-test");
+    await userEvent.click(addLink);
+    expect(writeText).toHaveBeenCalledWith(`rssc_${"a".repeat(25)}`);
+  });
+
+  /**
+   * トークンの発行は連携の完了ではない。初回の共有まで区別して見せる (ADR 0025)。
+   */
+  it("連携待ちのcredentialと連携済みのcredentialを区別して表示する", async () => {
+    stubShortcutSettings([
+      {
+        id: "credential_1",
+        name: null,
+        tokenSuffix: "aaaa",
+        createdAt: "2026-07-11T00:00:00.000Z",
+        verifiedAt: null,
+      },
+      {
+        id: "credential_2",
+        name: "たかしのiPhone",
+        tokenSuffix: "bbbb",
+        createdAt: "2026-07-11T00:00:00.000Z",
+        verifiedAt: "2026-07-11T00:01:00.000Z",
+      },
+    ]);
+
+    await renderApp("/settings");
+
+    await expect(screen.findByText("連携待ちの端末")).resolves.toBeInTheDocument();
+    expect(screen.getByText("末尾 aaaa・共有してテストすると完了します")).toBeInTheDocument();
+    expect(screen.getByText("たかしのiPhone")).toBeInTheDocument();
+    expect(screen.getByText("末尾 bbbb・連携済み")).toBeInTheDocument();
   });
 
   it("設定画面からメールアドレス変更確認メールを送信できる", async () => {

@@ -780,16 +780,19 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       "/api/shortcut-credentials",
       () => requireSession() ?? HttpResponse.json({ credentials }),
     ),
-    http.post("/api/shortcut-credentials", async ({ request }) => {
+    /**
+     * 端末名と連携日時は初回の共有でShortcutから確定するので、発行直後はどちらもない。
+     */
+    http.post("/api/shortcut-credentials", () => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
 
-      const body = (await request.json()) as { name: string };
       const credential: ShortcutCredential = {
         id: `credential_mock_${nextId++}`,
-        name: body.name,
+        name: null,
         tokenSuffix: "a1b2c3",
         createdAt: new Date().toISOString(),
+        verifiedAt: null,
       };
 
       credentials = [credential, ...credentials];

@@ -7,15 +7,33 @@ import {
 } from "./ios-share";
 
 describe("iOS Shortcut import schemas", () => {
-  it("生の共有入力だけを受け付け、未知のfieldを除去する", () => {
+  it("生の共有入力とデバイス名だけを受け付け、未知のfieldを除去する", () => {
     expect(
       iosShareShortcutImportRequestSchema.parse({
         input: "この唐揚げ美味しそう https://example.com/recipe #レシピ",
+        deviceName: "たかしのiPhone",
         url: "https://example.com/other",
       }),
     ).toEqual({
       input: "この唐揚げ美味しそう https://example.com/recipe #レシピ",
+      deviceName: "たかしのiPhone",
     });
+  });
+
+  /**
+   * deviceNameは表示のための補助情報であり、これが原因で取り込みが失敗してはならない。
+   * 想定外の値はmalformed_requestにせず、その場で捨ててinputの処理を続ける。
+   */
+  it("想定外のdeviceNameはrequestを失敗させずに捨てる", () => {
+    const parsed = iosShareShortcutImportRequestSchema.parse({
+      input: "https://example.com/recipe",
+      deviceName: { name: "iPhone" },
+    });
+    expect(parsed.deviceName).toBeUndefined();
+    expect(parsed.input).toBe("https://example.com/recipe");
+    expect(
+      iosShareShortcutImportRequestSchema.parse({ input: "https://example.com/recipe" }).deviceName,
+    ).toBeUndefined();
   });
 
   it("入力の欠落、空文字、上限超過を拒否する", () => {

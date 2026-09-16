@@ -127,6 +127,13 @@
       "when": 1789351776179,
       "tag": "0017_freezing_black_widow",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789569009559,
+      "tag": "0018_chubby_the_initiative",
+      "breakpoints": true
     }
   ]
 }

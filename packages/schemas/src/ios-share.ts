@@ -2,8 +2,13 @@ import { z } from "zod";
 
 export const IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH = 8192;
 
+/**
+ * `deviceName`は連携済み端末を見分けるための補助情報であり、取り込みを失敗させてはならない。
+ * 想定外の型や長さの値はmalformed_requestにせず、その場で捨てて`input`の処理を続ける (ADR 0025)。
+ */
 export const iosShareShortcutImportRequestSchema = z.object({
   input: z.string().min(1).max(IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH),
+  deviceName: z.string().optional().catch(undefined),
 });
 
 export const iosShareShortcutImportOutcomeSchema = z.enum(["accepted", "rejected"]);

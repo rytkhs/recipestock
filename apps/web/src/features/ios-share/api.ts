@@ -4,12 +4,8 @@ import {
 } from "@recipestock/schemas";
 import { api, parseApiResponse } from "../../lib/api";
 
-export const issueShortcutCredential = (name: string): Promise<IssueShortcutCredentialResponse> =>
-  parseApiResponse(
-    api.api["shortcut-credentials"].$post({
-      json: { name },
-    }),
-  );
+export const issueShortcutCredential = (): Promise<IssueShortcutCredentialResponse> =>
+  parseApiResponse(api.api["shortcut-credentials"].$post());
 
 export const listShortcutCredentials = (): Promise<ListShortcutCredentialsResponse> =>
   parseApiResponse(api.api["shortcut-credentials"].$get());

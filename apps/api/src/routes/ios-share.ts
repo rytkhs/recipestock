@@ -2,6 +2,7 @@ import {
   type IosShareShortcutImportReason,
   iosShareShortcutImportRequestSchema,
   iosShareShortcutImportResponseSchema,
+  shortcutCredentialTokenSchema,
 } from "@recipestock/schemas";
 import { extractFirstUrl } from "@recipestock/shared";
 import { type Context, Hono } from "hono";
@@ -11,7 +12,9 @@ import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job
 import { type ShortcutCredentials } from "../shortcut-credentials";
 
 type IosShareRouteDependencies = {
-  shortcutCredentialsFor: (env: ApiEnv["Bindings"]) => Pick<ShortcutCredentials, "authenticate">;
+  shortcutCredentialsFor: (
+    env: ApiEnv["Bindings"],
+  ) => Pick<ShortcutCredentials, "authenticate" | "markVerified">;
   urlImportJobSubmissionFor: UrlImportJobSubmissionFactory;
   shortcutClientRateLimiterFor: (env: ApiEnv["Bindings"]) => RateLimit;
   shortcutRateLimiterFor: (env: ApiEnv["Bindings"]) => RateLimit;
@@ -24,9 +27,13 @@ type ShortcutImportLogFields = {
   userId?: string;
 };
 
+/**
+ * 貼り付けたトークンの前後に空白や改行が混じっても読めるようにする。`.+`は改行の手前で
+ * 止まるため、末尾に改行が付いただけでマッチ全体が落ちて`unauthorized`になっていた。
+ */
 const bearerToken = (header: string | undefined) => {
-  const match = header?.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || null;
+  const match = header?.match(/^\s*Bearer\s+(\S+)\s*$/i);
+  return match?.[1] ?? null;
 };
 
 /**
@@ -109,12 +116,17 @@ export const createIosShareRoutes = ({
       return respondWithNotice(c, "rate_limit_exceeded", { rateLimitScope: "client" });
     }
 
+    /**
+     * 形式に合わないトークンはhash照合まで運ばない。無効なtokenが1requestごとに
+     * DBアクセスを起こすのを、rate limitの安全弁より手前で止める (ADR 0025)。
+     */
     const token = bearerToken(c.req.header("authorization"));
-    if (!token) {
+    if (!token || !shortcutCredentialTokenSchema.safeParse(token).success) {
       return respondWithNotice(c, "unauthorized");
     }
 
-    const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
+    const credentials = shortcutCredentialsFor(c.env);
+    const identity = await credentials.authenticate({ token });
     if (!identity) {
       return respondWithNotice(c, "unauthorized");
     }
@@ -138,6 +150,19 @@ export const createIosShareRoutes = ({
     );
     if (!request.success) {
       return respondWithNotice(c, "malformed_request", logFields);
+    }
+
+    /**
+     * 契約に合うrequestが認証を通った時点で、Shortcutの設定が済んだことが確定する。
+     * 取り込みの結果とは切り離す。`malformed_request`はShortcutが正しく動いている
+     * 証拠にならないため、ここより手前では確定しない (ADR 0025)。
+     * デバイス名は実名を含みやすいので、保存はしてもログには出さない。
+     */
+    if (!identity.verified) {
+      await credentials.markVerified({
+        credentialId: identity.credentialId,
+        deviceName: request.data.deviceName,
+      });
     }
 
     const url = extractFirstUrl(request.data.input);

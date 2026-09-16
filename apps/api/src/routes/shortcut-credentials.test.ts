@@ -20,48 +20,50 @@ const csrfHeaders = {
 };
 
 const createCredentials = (): ShortcutCredentials => ({
-  issue: async ({ name }) => ({
+  issue: async () => ({
     credential: {
       id: "credential_1",
-      name,
+      name: null,
       tokenSuffix: "aaaa",
       createdAt: "2026-07-11T00:00:00.000Z",
+      verifiedAt: null,
     },
     token: `rssc_${"a".repeat(25)}`,
   }),
   list: async () => [
     {
       id: "credential_1",
-      name: "iPhone",
+      name: "たかしのiPhone",
       tokenSuffix: "aaaa",
       createdAt: "2026-07-11T00:00:00.000Z",
+      verifiedAt: "2026-07-11T00:01:00.000Z",
     },
   ],
   revoke: async () => true,
   authenticate: async () => null,
+  markVerified: async () => {},
 });
 
 describe("Shortcut credential routes", () => {
-  it("credentialを発行し、平文tokenを一度返す", async () => {
+  /**
+   * 端末名は初回の共有でShortcutから届くため、発行にrequest bodyは要らない (ADR 0025)。
+   */
+  it("request bodyなしでcredentialを発行し、平文tokenを一度返す", async () => {
     const issue = vi.fn(createCredentials().issue);
     const credentials = { ...createCredentials(), issue };
     const app = createSilentTestApp({ auth, shortcutCredentials: credentials });
     const response = await app.request(
       "/api/shortcut-credentials",
-      {
-        method: "POST",
-        headers: csrfHeaders,
-        body: JSON.stringify({ name: " iPhone " }),
-      },
+      { method: "POST", headers: csrfHeaders },
       env,
     );
 
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({
-      credential: { id: "credential_1", name: "iPhone" },
+      credential: { id: "credential_1", name: null, verifiedAt: null },
       token: `rssc_${"a".repeat(25)}`,
     });
-    expect(issue).toHaveBeenCalledWith({ userId: "user_1", name: "iPhone" });
+    expect(issue).toHaveBeenCalledWith({ userId: "user_1" });
   });
 
   it("active credentialを一覧する", async () => {
@@ -70,7 +72,13 @@ describe("Shortcut credential routes", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      credentials: [{ id: "credential_1", name: "iPhone" }],
+      credentials: [
+        {
+          id: "credential_1",
+          name: "たかしのiPhone",
+          verifiedAt: "2026-07-11T00:01:00.000Z",
+        },
+      ],
     });
   });
 

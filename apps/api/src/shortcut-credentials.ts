@@ -1,5 +1,5 @@
 import { type DbClient, shortcutCredentials } from "@recipestock/db";
-import { type ShortcutCredential } from "@recipestock/schemas";
+import { SHORTCUT_CREDENTIAL_NAME_MAX_LENGTH, type ShortcutCredential } from "@recipestock/schemas";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { ulid } from "ulid";
 
@@ -11,30 +11,35 @@ const TOKEN_SUFFIX_LENGTH = 4;
 export type ShortcutCredentialRecord = {
   id: string;
   userId: string;
-  name: string;
+  name: string | null;
   tokenHash: string;
   tokenSuffix: string;
   createdAt: Date;
+  verifiedAt: Date | null;
   revokedAt: Date | null;
+};
+
+export type ShortcutCredentialIdentity = {
+  credentialId: string;
+  userId: string;
+  verified: boolean;
 };
 
 export type ShortcutCredentialRepository = {
   createCredential(credential: ShortcutCredentialRecord): Promise<ShortcutCredentialRecord>;
   listCredentials(userId: string): Promise<ShortcutCredentialRecord[]>;
   revokeCredential(params: { credentialId: string; userId: string; now: Date }): Promise<boolean>;
-  authenticate(params: {
-    tokenHash: string;
-  }): Promise<{ credentialId: string; userId: string } | null>;
+  markVerified(params: { credentialId: string; name: string | null; now: Date }): Promise<void>;
+  authenticate(params: { tokenHash: string }): Promise<ShortcutCredentialIdentity | null>;
 };
 
 export type ShortcutCredentials = {
-  issue(params: {
-    userId: string;
-    name: string;
-  }): Promise<{ credential: ShortcutCredential; token: string }>;
+  issue(params: { userId: string }): Promise<{ credential: ShortcutCredential; token: string }>;
   list(userId: string): Promise<ShortcutCredential[]>;
   revoke(params: { credentialId: string; userId: string }): Promise<boolean>;
-  authenticate(params: { token: string }): Promise<{ credentialId: string; userId: string } | null>;
+  authenticate(params: { token: string }): Promise<ShortcutCredentialIdentity | null>;
+  /** 認証が初めて成功したcredentialを連携済みとして確定する (ADR 0025)。 */
+  markVerified(params: { credentialId: string; deviceName: string | undefined }): Promise<void>;
 };
 
 const mapCredential = (credential: ShortcutCredentialRecord): ShortcutCredential => ({
@@ -42,7 +47,17 @@ const mapCredential = (credential: ShortcutCredentialRecord): ShortcutCredential
   name: credential.name,
   tokenSuffix: credential.tokenSuffix,
   createdAt: credential.createdAt.toISOString(),
+  verifiedAt: credential.verifiedAt?.toISOString() ?? null,
 });
+
+/**
+ * デバイス名はiOSが決める文字列で、長さも中身も保証がない。表示できる形へ落とし、
+ * 空になるものは名前なしとして扱う。
+ */
+const normalizeDeviceName = (deviceName: string | undefined) => {
+  const trimmed = deviceName?.trim() ?? "";
+  return trimmed ? trimmed.slice(0, SHORTCUT_CREDENTIAL_NAME_MAX_LENGTH) : null;
+};
 
 export const createShortcutCredentialToken = () =>
   `${TOKEN_PREFIX}${Array.from(
@@ -89,9 +104,20 @@ export const createShortcutCredentialRepository = (db: DbClient): ShortcutCreden
     return Boolean(row);
   },
 
+  /**
+   * 書き込みは初回の1回だけにする。`verified_at is null`の条件で、同時に届いた
+   * 2件目以降は更新を起こさない (ADR 0025)。
+   */
+  async markVerified({ credentialId, name, now }) {
+    await db
+      .update(shortcutCredentials)
+      .set({ verifiedAt: now, name })
+      .where(and(eq(shortcutCredentials.id, credentialId), isNull(shortcutCredentials.verifiedAt)));
+  },
+
   async authenticate({ tokenHash }) {
-    const result = await db.execute<{ credentialId: string; userId: string }>(sql`
-      select id as "credentialId", user_id as "userId"
+    const result = await db.execute<ShortcutCredentialIdentity>(sql`
+      select id as "credentialId", user_id as "userId", verified_at is not null as "verified"
       from shortcut_credentials
       where token_hash = ${tokenHash}
         and revoked_at is null
@@ -113,15 +139,16 @@ export const createShortcutCredentials = ({
   createToken?: () => string;
   getCurrentDate?: () => Date;
 }): ShortcutCredentials => ({
-  async issue({ userId, name }) {
+  async issue({ userId }) {
     const token = createToken();
     const credential = await repository.createCredential({
       id: createId(),
       userId,
-      name,
+      name: null,
       tokenHash: await hashShortcutCredentialToken(token),
       tokenSuffix: token.slice(-TOKEN_SUFFIX_LENGTH),
       createdAt: getCurrentDate(),
+      verifiedAt: null,
       revokedAt: null,
     });
     return { credential: mapCredential(credential), token };
@@ -138,6 +165,14 @@ export const createShortcutCredentials = ({
   async authenticate({ token }) {
     return repository.authenticate({
       tokenHash: await hashShortcutCredentialToken(token),
+    });
+  },
+
+  async markVerified({ credentialId, deviceName }) {
+    await repository.markVerified({
+      credentialId,
+      name: normalizeDeviceName(deviceName),
+      now: getCurrentDate(),
     });
   },
 });
