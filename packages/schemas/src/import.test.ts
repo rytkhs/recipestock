@@ -5,9 +5,10 @@ import {
   importTextRequestSchema,
   importUrlRequestSchema,
 } from "./import";
+import { MAX_RECIPE_SOURCE_URL_LENGTH } from "./recipe";
 
 describe("import schemas", () => {
-  it("URL取り込みはHTTP(S)かつ4096文字以下だけを受け入れる", () => {
+  it("URL取り込みはHTTP(S)かつ出典として保存できる長さだけを受け入れる", () => {
     expect(importUrlRequestSchema.safeParse({ url: "https://example.com/recipe" }).success).toBe(
       true,
     );
@@ -16,7 +17,12 @@ describe("import schemas", () => {
     );
     expect(
       importUrlRequestSchema.safeParse({
-        url: `https://example.com/${"a".repeat(4097)}`,
+        url: createUrlOfLength(MAX_RECIPE_SOURCE_URL_LENGTH),
+      }).success,
+    ).toBe(true);
+    expect(
+      importUrlRequestSchema.safeParse({
+        url: createUrlOfLength(MAX_RECIPE_SOURCE_URL_LENGTH + 1),
       }).success,
     ).toBe(false);
   });
@@ -54,3 +60,8 @@ describe("import schemas", () => {
     });
   });
 });
+
+const createUrlOfLength = (length: number) => {
+  const prefix = "https://example.com/";
+  return `${prefix}${"a".repeat(length - prefix.length)}`;
+};

@@ -25,7 +25,14 @@ export const MAX_INGREDIENT_GROUP_INGREDIENTS = 100;
 export const MAX_INGREDIENT_NAME_LENGTH = 200;
 export const MAX_INGREDIENT_AMOUNT_LENGTH = 100;
 export const MAX_RECIPE_SOURCE_NAME_LENGTH = 200;
-export const MAX_RECIPE_SOURCE_URL_LENGTH = 4096;
+
+/**
+ * 出典URLはレシピページを指すだけなので、実在するURLはこれよりはるかに短い。
+ * 上限をWeb上の事実上の限界(約2,000文字)に合わせるのは、`normalized_source_url`が
+ * btree indexに載るためである。btreeは1エントリが約2,704バイトまでしか入らないので、
+ * それより大きい上限を置くとschemaが通した値をDBが拒む。
+ */
+export const MAX_RECIPE_SOURCE_URL_LENGTH = 2048;
 
 /**
  * 検索語はそれぞれWHEREの条件になるので、語数がそのまま条件の数になる。
