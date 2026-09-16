@@ -2950,6 +2950,135 @@ describe("RecipesRoute", () => {
     expect(screen.getByText("上限に達しました")).toBeInTheDocument();
   });
 
+  it("レシピ画像の残り枠を超えて選ぶと、全件をすぐ拒否して未変更のままにする", async () => {
+    const recipeResponse = {
+      recipe: {
+        ...tomatoPastaDetailResponse.recipe,
+        content: {
+          ...tomatoPastaDetailResponse.recipe.content,
+          referenceImages: savedImages(MAX_RECIPE_REFERENCE_IMAGES - 1, "source"),
+          steps: [{ text: "煮詰める", images: [] }],
+        },
+      },
+    };
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(recipeResponse);
+        }
+
+        if (getRequestPath(input) === "/api/images/upload-url" && init?.method === "POST") {
+          return new Response(null, { status: 500 });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+    const { appRouter } = await renderApp("/recipes/recipe_123/edit");
+
+    await screen.findByLabelText("レシピ名");
+    await userEvent.upload(getReferenceImageInput(), [
+      new File(["first"], "first.webp", { type: "image/webp" }),
+      new File(["second"], "second.webp", { type: "image/webp" }),
+    ]);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "追加できる画像はあと1枚です。画像を選び直してください。",
+    );
+    expect(screen.queryByLabelText("レシピ画像をアップロード中")).not.toBeInTheDocument();
+    expect(
+      screen.queryByAltText(`レシピ画像${MAX_RECIPE_REFERENCE_IMAGES}プレビュー`),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          getRequestPath(input) === "/api/images/upload-url" && init?.method === "POST",
+      ),
+    ).toBe(false);
+
+    await userEvent.click(screen.getByRole("button", { name: "閉じる" }));
+    await waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/recipes/recipe_123");
+    });
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("手順画像の残り枠超過を全件拒否し、枚数内で選び直すとアップロードする", async () => {
+    const recipeResponse = {
+      recipe: {
+        ...tomatoPastaDetailResponse.recipe,
+        content: {
+          ...tomatoPastaDetailResponse.recipe.content,
+          steps: [
+            {
+              text: "煮詰める",
+              images: savedImages(MAX_RECIPE_STEP_IMAGES - 1, "step"),
+            },
+          ],
+        },
+      },
+    };
+    let uploadUrlRequests = 0;
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(recipeResponse);
+        }
+
+        if (getRequestPath(input) === "/api/images/upload-url" && init?.method === "POST") {
+          uploadUrlRequests += 1;
+          return jsonResponse({
+            uploadUrl: "https://upload.example/step.webp",
+            objectKey: "tmp/user_123/step.webp",
+            expiresAt: "2026-05-31T00:15:00.000Z",
+          });
+        }
+
+        if (input === "https://upload.example/step.webp") {
+          return new Response(null, { status: 200 });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    const stepImageInput = await screen.findByLabelText("手順1の画像");
+    await userEvent.upload(stepImageInput, [
+      new File(["first"], "first.webp", { type: "image/webp" }),
+      new File(["second"], "second.webp", { type: "image/webp" }),
+    ]);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "追加できる画像はあと1枚です。画像を選び直してください。",
+    );
+    expect(screen.queryByLabelText("手順1の画像をアップロード中")).not.toBeInTheDocument();
+    expect(
+      screen.queryByAltText(`手順1の画像${MAX_RECIPE_STEP_IMAGES}プレビュー`),
+    ).not.toBeInTheDocument();
+    expect(uploadUrlRequests).toBe(0);
+
+    await userEvent.upload(
+      stepImageInput,
+      new File(["retry"], "retry.webp", { type: "image/webp" }),
+    );
+
+    await expect(
+      screen.findByAltText(`手順1の画像${MAX_RECIPE_STEP_IMAGES}プレビュー`),
+    ).resolves.toBeInTheDocument();
+    expect(uploadUrlRequests).toBe(1);
+    expect(
+      screen.queryByText("追加できる画像はあと1枚です。画像を選び直してください。"),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://upload.example/step.webp",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+
   it("編集画面で全体画像上限に達したらレシピ画像と手順画像追加を無効にしカバー画像変更は許可する", async () => {
     mockFetch(
       async (input) => {
