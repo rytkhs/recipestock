@@ -106,35 +106,39 @@ export const useDraftImageList = ({
     setPendingImages(uploads.map(({ id, previewUrl }) => ({ id, previewUrl })));
     onUploadStateChange(true);
 
-    const results = await Promise.all(
-      uploads.map(async ({ file, previewUrl }): Promise<UploadResult> => {
-        try {
-          return { image: await uploadImage(file), previewUrl };
-        } catch (uploadError) {
-          return { error: uploadError, previewUrl };
+    try {
+      const results = await Promise.all(
+        uploads.map(async ({ file, previewUrl }): Promise<UploadResult> => {
+          try {
+            return { image: await uploadImage(file), previewUrl };
+          } catch (uploadError) {
+            return { error: uploadError, previewUrl };
+          }
+        }),
+      );
+      const uploadedImages: DraftImageRef[] = [];
+      const uploadedPreviewUrls: ImagePreviewUrlsByImageId = {};
+      const failures: unknown[] = [];
+
+      for (const result of results) {
+        if ("image" in result) {
+          uploadedImages.push(result.image);
+          uploadedPreviewUrls[imageRefId(result.image)] = result.previewUrl;
+        } else {
+          revokeLocalPreviewUrl(result.previewUrl);
+          failures.push(result.error);
         }
-      }),
-    );
-    const uploadedImages: DraftImageRef[] = [];
-    const uploadedPreviewUrls: ImagePreviewUrlsByImageId = {};
-    const failures: unknown[] = [];
-
-    for (const result of results) {
-      if ("image" in result) {
-        uploadedImages.push(result.image);
-        uploadedPreviewUrls[imageRefId(result.image)] = result.previewUrl;
-      } else {
-        revokeLocalPreviewUrl(result.previewUrl);
-        failures.push(result.error);
       }
-    }
 
-    setLocalPreviewUrlsByImageId((currentUrls) => ({ ...currentUrls, ...uploadedPreviewUrls }));
-    // アップロード中は削除も並べ替えもできないので、選んだときの並びに足せばよい。
-    field.onChange([...images, ...uploadedImages]);
-    setPendingImages([]);
-    onUploadStateChange(false);
-    setError(uploadErrorMessage({ failures, skippedCount }));
+      setLocalPreviewUrlsByImageId((currentUrls) => ({ ...currentUrls, ...uploadedPreviewUrls }));
+      // アップロード中は削除も並べ替えもできないので、選んだときの並びに足せばよい。
+      field.onChange([...images, ...uploadedImages]);
+      setError(uploadErrorMessage({ failures, skippedCount }));
+    } finally {
+      // ここを通りそこねるとアップロード中のままになり、保存も離脱の確認も戻らなくなる。
+      setPendingImages([]);
+      onUploadStateChange(false);
+    }
   };
 
   const removeImage = (imageIndex: number) => {

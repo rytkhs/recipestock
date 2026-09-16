@@ -31,8 +31,11 @@ type StepImageProps = {
 };
 
 type StepsSectionProps = StepImageProps & {
+  // 手順画像の書き戻し先は steps.N.images の N で決まる。上げている途中で行が動くと
+  // 別の手順に画像が入るので、どこか1枚でもアップロード中の間は行を動かさない。
+  // 表紙の分も含めて受け取るのは、止める範囲を画面全体で揃えるため。
+  isUploadingImage: boolean;
   remainingTotalImages: number;
-  uploadingImageCount: number;
 };
 
 const StepImages = ({
@@ -185,17 +188,15 @@ const StepRow = ({
 
 export const StepsSection = ({
   control,
+  isUploadingImage,
   onUploadStateChange,
   previewUrlsByImageId,
   remainingTotalImages,
   uploadImage,
-  uploadingImageCount,
 }: StepsSectionProps) => {
   const headingId = useId();
   const { append, fields, remove, swap } = useFieldArray({ control, name: "steps" });
   const watchedSteps = useWatch({ control, name: "steps" });
-  // 手順画像のプレビューは行ごとに持つので、アップロード中は行を動かさない。
-  const isUploading = uploadingImageCount > 0;
 
   return (
     <section aria-labelledby={headingId}>
@@ -206,7 +207,7 @@ export const StepsSection = ({
             control={control}
             isFirst={stepIndex === 0}
             isLast={stepIndex === fields.length - 1}
-            isUploading={isUploading}
+            isUploading={isUploadingImage}
             key={field.id}
             maxAddableImages={Math.min(
               MAX_RECIPE_STEP_IMAGES - (watchedSteps?.[stepIndex]?.images?.length ?? 0),

@@ -3312,6 +3312,40 @@ describe("RecipesRoute", () => {
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 
+  it("画像のアップロード中に閉じると、ほかに変更がなくても破棄を確認する", async () => {
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/images/upload-url" && init?.method === "POST") {
+          return new Promise<Response>(() => {});
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes/new");
+
+    await screen.findByLabelText("レシピ名");
+    await userEvent.upload(getReferenceImageInput(), [
+      new File(["reference"], "reference.webp", { type: "image/webp" }),
+    ]);
+    await screen.findByLabelText("レシピ画像をアップロード中");
+
+    await userEvent.click(screen.getByRole("button", { name: "閉じる" }));
+
+    const discardDialog = await screen.findByRole("alertdialog", {
+      name: "変更を破棄しますか？",
+    });
+    expect(appRouter.state.location.pathname).toBe("/recipes/new");
+
+    await userEvent.click(within(discardDialog).getByRole("button", { name: "編集を続ける" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(appRouter.state.location.pathname).toBe("/recipes/new");
+  });
+
   it("編集画面で何も変えていなければ、確認せずに閉じる", async () => {
     mockFetch(
       async (input) => {

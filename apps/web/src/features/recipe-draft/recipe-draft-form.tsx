@@ -70,14 +70,18 @@ export const RecipeDraftForm = ({
   const watchedSteps = useWatch({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
   const [isSubmitErrorDismissed, setIsSubmitErrorDismissed] = useState(false);
+  const isUploadingImage = uploadingImageCount > 0;
+  // 選んだ画像はアップロードが終わってからフォームの値になる。その間はisDirtyが立たないので、
+  // 選んだ直後に離れると確認なしで消える。未保存かどうかはこの形でだけ判定する。
+  const hasUnsavedWork = isDirty || isUploadingImage;
   // 保存に成功すると詳細へ移る。その移動では破棄の確認を出さない。
   // 通信の途中はまだ失う変更があるので、成功するまでは下ろさない。
   const isSavedRef = useRef(false);
   // 閉じるボタンだけでなく、ブラウザの戻る・スワイプで離れるときも確認する。
   // タブを閉じる・再読み込みは画面内の移動ではないので、保存できたかどうかは見ない。
   const blocker = useBlocker({
-    enableBeforeUnload: () => isDirty,
-    shouldBlockFn: () => isDirty && !isSavedRef.current,
+    enableBeforeUnload: () => hasUnsavedWork,
+    shouldBlockFn: () => hasUnsavedWork && !isSavedRef.current,
     withResolver: true,
   });
 
@@ -125,7 +129,7 @@ export const RecipeDraftForm = ({
           }
           title={title}
           trailing={
-            <Button disabled={isSubmitting || uploadingImageCount > 0} size="lg" type="submit">
+            <Button disabled={isSubmitting || isUploadingImage} size="lg" type="submit">
               {submitLabel}
             </Button>
           }
@@ -143,11 +147,11 @@ export const RecipeDraftForm = ({
           <div className="mt-10 flex flex-col gap-10 lg:mt-0">
             <StepsSection
               control={control}
+              isUploadingImage={isUploadingImage}
               onUploadStateChange={handleUploadStateChange}
               previewUrlsByImageId={imagePreviewUrlsByImageId}
               remainingTotalImages={remainingTotalImages}
               uploadImage={uploadImage}
-              uploadingImageCount={uploadingImageCount}
             />
             <NoteSection control={control} />
             <ReferenceImagesSection
