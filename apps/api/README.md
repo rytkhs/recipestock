@@ -61,7 +61,10 @@ Create the development R2 bucket after Cloudflare login:
 ```bash
 pnpm --filter @recipestock/api exec wrangler r2 bucket create recipestock-images-dev
 pnpm --filter @recipestock/api exec wrangler r2 bucket cors set recipestock-images-dev --file apps/api/r2-cors.dev.json
+pnpm --filter @recipestock/api exec wrangler r2 bucket lifecycle add recipestock-images-dev expire-tmp-uploads tmp/ --expire-days 1
 ```
+
+The lifecycle rule expires temporary uploads under `tmp/` that were never saved to a recipe (ADR 0024). Apply the same rule to every bucket the API writes to.
 
 The Worker binding name is `RECIPE_IMAGES`. Direct browser uploads also require R2 S3 API credentials in `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 

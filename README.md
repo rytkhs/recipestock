@@ -93,7 +93,11 @@ Cloudflare にログインし、開発用 R2 bucket を作成します。
 pnpm --filter @recipestock/api exec wrangler login
 pnpm --filter @recipestock/api exec wrangler r2 bucket create recipestock-images-dev
 pnpm --filter @recipestock/api exec wrangler r2 bucket cors set recipestock-images-dev --file apps/api/cors.example.json
+pnpm --filter @recipestock/api exec wrangler r2 bucket lifecycle add recipestock-images-dev expire-tmp-uploads tmp/ --expire-days 1
 ```
+
+ライフサイクルルールは、保存されないまま残る一時アップロード(`tmp/`)を消します(ADR 0024)。
+本番など別の bucket を作るときも同じ設定を適用してください。
 
 API 固有のセットアップ詳細は `apps/api/README.md` を参照してください。
 
