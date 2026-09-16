@@ -89,7 +89,7 @@ export const EditRecipeRoute = () => {
 
   if (error || !recipe || recipe.locked) {
     return (
-      <section className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10">
+      <section className="mx-auto w-full max-w-5xl pb-12 sm:px-6 lg:px-10">
         <ScreenTopBar
           leading={
             <ScreenTopBarIconButton

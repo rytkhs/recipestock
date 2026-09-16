@@ -5,19 +5,11 @@ import {
   MAX_RECIPE_TOTAL_IMAGES,
 } from "@recipestock/schemas";
 import { z } from "zod";
-
-const countRecipeDraftFormImages = (values: {
-  coverImage?: unknown;
-  referenceImages?: unknown[];
-  steps?: { images?: unknown[] }[];
-}) =>
-  (values.coverImage ? 1 : 0) +
-  (values.referenceImages?.length ?? 0) +
-  (values.steps ?? []).reduce((count, step) => count + (step.images?.length ?? 0), 0);
+import { countFormImages } from "./form-internals";
 
 export const recipeDraftFormSchema = z
   .object({
-    title: z.string().min(1),
+    title: z.string().trim().min(1, "レシピ名を入力してください"),
     yieldText: z.string().optional(),
     coverImage: draftImageRefSchema.optional(),
     referenceImages: z.array(draftImageRefSchema).max(MAX_RECIPE_REFERENCE_IMAGES),
@@ -41,7 +33,7 @@ export const recipeDraftFormSchema = z
     ),
   })
   .superRefine((values, ctx) => {
-    if (countRecipeDraftFormImages(values) > MAX_RECIPE_TOTAL_IMAGES) {
+    if (countFormImages(values) > MAX_RECIPE_TOTAL_IMAGES) {
       ctx.addIssue({
         code: "custom",
         path: ["steps"],
@@ -52,16 +44,21 @@ export const recipeDraftFormSchema = z
 
 export type RecipeDraftFormValues = z.infer<typeof recipeDraftFormSchema>;
 
+export const createEmptyIngredient = () => ({ name: "", amount: "" });
+
 export const createEmptyIngredientGroup = () => ({
   label: "",
-  ingredients: [{ name: "", amount: "" }],
+  ingredients: [createEmptyIngredient()],
 });
 
 export const createEmptyStep = () => ({ text: "", images: [] });
 
+// 表紙の欄もキーとして持たせる。キーがないと、欄を登録したときに値の側にだけキーが増え、
+// 何も変えていなくても変更ありと判定されて、閉じるたびに破棄の確認が出る。
 export const createEmptyRecipeDraftFormValues = (): RecipeDraftFormValues => ({
   title: "",
   yieldText: "",
+  coverImage: undefined,
   referenceImages: [],
   note: "",
   ingredientGroups: [createEmptyIngredientGroup()],

@@ -181,64 +181,65 @@ export const RecipeDetailSkeleton = () => (
   </section>
 );
 
+const formIngredientSkeletonKeys = [
+  "form-ingredient-1",
+  "form-ingredient-2",
+  "form-ingredient-3",
+  "form-ingredient-4",
+];
+
+// 編集画面と同じ骨格。詳細と同じ並びで、広い画面では材料と手順を2列にする。
 export const RecipeFormSkeleton = () => (
   <section
     aria-label="レシピ編集フォームを読み込み中"
-    className="mx-auto w-full max-w-4xl px-0 pb-10 sm:px-6 lg:px-10"
+    className="mx-auto w-full max-w-5xl pb-16 sm:px-6 lg:px-10"
     role="status"
   >
     <span className="sr-only">レシピ編集フォームを読み込み中</span>
     <ScreenTopBarFrame>
       <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
-      <SkeletonBlock className="mx-auto h-5 w-40" />
-      <SkeletonBlock className="h-10 w-20 rounded-full sm:h-11" />
+      <SkeletonBlock className="mx-auto h-5 w-32 sm:mx-0" />
+      <SkeletonBlock className="h-9 w-14 rounded-lg" />
     </ScreenTopBarFrame>
 
-    <div className="mt-4 grid gap-5 px-3 sm:mt-6 sm:px-0">
-      <section className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-4 shadow-pantry-sm sm:p-5">
-        <SkeletonBlock className="aspect-[4/3] w-full rounded-[18px] sm:aspect-video" />
-        <SkeletonBlock className="mt-4 h-12 w-full" />
-        <SkeletonBlock className="mt-3 h-10 w-44" />
-      </section>
+    <div className="sm:pt-2 md:grid md:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] md:items-center md:gap-12 md:pt-4">
+      <SkeletonBlock className="aspect-[4/3] w-full rounded-none border-0 sm:rounded-[20px]" />
+      <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
+        <SkeletonBlock className="h-9 w-4/5" />
+      </div>
+    </div>
 
-      <SectionSkeleton titleWidth="w-28">
-        <div className="grid grid-cols-3 gap-3">
-          <SkeletonBlock className="aspect-square w-full rounded-[16px]" />
-          <SkeletonBlock className="aspect-square w-full rounded-[16px]" />
-          <SkeletonBlock className="aspect-square w-full rounded-[16px]" />
-        </div>
-      </SectionSkeleton>
-
-      <SectionSkeleton titleWidth="w-16">
-        <div className="grid gap-3">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-            <SkeletonBlock className="h-11 w-full" />
-            <SkeletonBlock className="h-11 w-full" />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-            <SkeletonBlock className="h-11 w-full" />
-            <SkeletonBlock className="h-11 w-full" />
-          </div>
-        </div>
-      </SectionSkeleton>
-
-      <SectionSkeleton titleWidth="w-16">
-        <div className="grid gap-4">
-          {formStepSkeletonKeys.map((key) => (
+    <div className="mt-8 px-4 sm:mt-10 sm:px-0 lg:mt-14 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-x-14">
+      <div>
+        <SkeletonBlock className="h-7 w-32" />
+        <div className="mt-4 grid gap-4">
+          {formIngredientSkeletonKeys.map((key) => (
             <div
-              className="rounded-[16px] border border-brand-line-soft bg-brand-paper-raised p-4"
+              className="grid grid-cols-[minmax(0,1fr)_5rem_2.5rem] items-center gap-x-3"
               key={key}
             >
-              <SkeletonBlock className="h-24 w-full" />
-              <SkeletonBlock className="mt-3 h-10 w-36 rounded-full" />
+              <SkeletonBlock className="h-5 w-3/5" />
+              <SkeletonBlock className="h-5 w-full" />
+              <SkeletonBlock className="mx-auto size-5 rounded-full" />
             </div>
           ))}
         </div>
-      </SectionSkeleton>
-
-      <SectionSkeleton titleWidth="w-12">
-        <SkeletonBlock className="h-24 w-full" />
-      </SectionSkeleton>
+      </div>
+      <div className="mt-10 lg:mt-0">
+        <SkeletonBlock className="h-7 w-20" />
+        <div className="mt-4 grid gap-5">
+          {formStepSkeletonKeys.map((key) => (
+            <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_2.5rem] gap-x-3" key={key}>
+              <SkeletonBlock className="h-6 w-4" />
+              <div>
+                <SkeletonBlock className="h-5 w-full" />
+                <SkeletonBlock className="mt-2 h-5 w-4/5" />
+              </div>
+              <SkeletonBlock className="mx-auto size-5 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   </section>
 );
