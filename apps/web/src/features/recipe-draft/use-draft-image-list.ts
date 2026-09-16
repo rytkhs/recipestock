@@ -20,13 +20,7 @@ type UploadResult =
   | { image: DraftImageRef; previewUrl: string }
   | { error: unknown; previewUrl: string };
 
-const uploadErrorMessage = ({
-  failures,
-  skippedCount,
-}: {
-  failures: unknown[];
-  skippedCount: number;
-}) => {
+const uploadErrorMessage = (failures: unknown[]) => {
   const messages: string[] = [];
 
   if (
@@ -39,10 +33,6 @@ const uploadErrorMessage = ({
     messages.push(`${failures.length}枚の画像をアップロードできませんでした。`);
   } else if (failures.length === 1) {
     messages.push("画像をアップロードできませんでした。");
-  }
-
-  if (skippedCount > 0) {
-    messages.push(`上限を超える${skippedCount}枚は追加していません。`);
   }
 
   return messages.length > 0 ? messages.join("") : null;
@@ -85,17 +75,19 @@ export const useDraftImageList = ({
   );
 
   const addFiles = async (files: File[]) => {
-    const acceptedFiles = files.slice(0, Math.max(0, maxAddable));
-    const skippedCount = files.length - acceptedFiles.length;
-
+    const maxSelectable = Math.max(0, maxAddable);
     setError(null);
 
-    if (acceptedFiles.length === 0) {
-      setError(uploadErrorMessage({ failures: [], skippedCount }));
+    if (files.length > maxSelectable) {
+      setError(`追加できる画像はあと${maxSelectable}枚です。画像を選び直してください。`);
       return;
     }
 
-    const uploads = acceptedFiles.map((file) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    const uploads = files.map((file) => {
       pendingImageSequence += 1;
       return {
         file,
@@ -164,7 +156,7 @@ export const useDraftImageList = ({
           settleUpload(uploadIndex, result);
         }),
       );
-      setError(uploadErrorMessage({ failures, skippedCount }));
+      setError(uploadErrorMessage(failures));
     } finally {
       // ここを通りそこねるとアップロード中のままになり、保存も離脱の確認も戻らなくなる。
       setPendingImages([]);
