@@ -28,11 +28,12 @@ export const NewRecipeRoute = () => {
   const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const onSubmit = async (values: RecipeDraftFormValues) => {
+  const onSubmit = async (values: RecipeDraftFormValues, markSaved: () => void) => {
     setSubmitError(null);
 
     try {
       const response = await createRecipe(formValuesToCreateRecipeRequest(values));
+      markSaved();
       await invalidateRecipeLists(queryClient);
       await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
     } catch (error) {
@@ -66,13 +67,14 @@ export const EditRecipeRoute = () => {
     queryFn: () => getRecipe(recipeId),
   });
 
-  const onSubmit = async (values: RecipeDraftFormValues) => {
+  const onSubmit = async (values: RecipeDraftFormValues, markSaved: () => void) => {
     setSubmitError(null);
 
     let updatedRecipeId: string;
     try {
       const response = await updateRecipe(recipeId, formValuesToRecipeDraftContent(values));
       updatedRecipeId = response.recipe.id;
+      markSaved();
     } catch (error) {
       setSubmitError(recipeMutationErrorMessage(error, "レシピを更新できませんでした。"));
       return;

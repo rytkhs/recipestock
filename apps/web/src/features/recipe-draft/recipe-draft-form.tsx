@@ -43,7 +43,8 @@ type RecipeDraftFormProps = {
   referenceImagePreviewUrls?: string[];
   stepImagePreviewUrls?: string[][];
   uploadImage?: (file: File) => Promise<DraftImageRef>;
-  onSubmit(values: RecipeDraftFormValues): Promise<void> | void;
+  // markSaved は保存が成功したときだけ呼ぶ。呼ぶと離脱の確認をやめる。
+  onSubmit(values: RecipeDraftFormValues, markSaved: () => void): Promise<void> | void;
   onClose(): void;
 };
 
@@ -70,12 +71,13 @@ export const RecipeDraftForm = ({
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
   const [isSubmitErrorDismissed, setIsSubmitErrorDismissed] = useState(false);
   // 保存に成功すると詳細へ移る。その移動では破棄の確認を出さない。
-  const isSavingRef = useRef(false);
+  // 通信の途中はまだ失う変更があるので、成功するまでは下ろさない。
+  const isSavedRef = useRef(false);
   // 閉じるボタンだけでなく、ブラウザの戻る・スワイプで離れるときも確認する。
-  // タブを閉じる・再読み込みは画面内の移動ではないので、保存中かどうかは見ない。
+  // タブを閉じる・再読み込みは画面内の移動ではないので、保存できたかどうかは見ない。
   const blocker = useBlocker({
     enableBeforeUnload: () => isDirty,
-    shouldBlockFn: () => isDirty && !isSavingRef.current,
+    shouldBlockFn: () => isDirty && !isSavedRef.current,
     withResolver: true,
   });
 
@@ -99,13 +101,10 @@ export const RecipeDraftForm = ({
 
   const handleFormSubmit = handleSubmit(async (values) => {
     setIsSubmitErrorDismissed(false);
-    isSavingRef.current = true;
 
-    try {
-      await onSubmit(values);
-    } finally {
-      isSavingRef.current = false;
-    }
+    await onSubmit(values, () => {
+      isSavedRef.current = true;
+    });
   });
   const handleUploadStateChange = (isUploading: boolean) => {
     setUploadingImageCount((count) => Math.max(0, count + (isUploading ? 1 : -1)));
