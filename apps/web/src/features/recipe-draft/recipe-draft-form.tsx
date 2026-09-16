@@ -7,7 +7,7 @@ import {
 } from "@recipestock/schemas";
 import { useBlocker } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { type FieldErrors, useForm, useWatch } from "react-hook-form";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +48,28 @@ type RecipeDraftFormProps = {
   onClose(): void;
 };
 
+// 材料や手順のように配列で持つ欄は、欄そのもののエラーをreact-hook-formがrootに寄せる。
+const fieldErrorMessage = (error: unknown) => {
+  const { message, root } = (error ?? {}) as { message?: unknown; root?: { message?: unknown } };
+  const text = typeof message === "string" && message !== "" ? message : root?.message;
+
+  return typeof text === "string" && text !== "" ? text : null;
+};
+
+// レシピ名のように欄の下に出せるものは、その欄で知らせる。それ以外の検証エラーは出す場所がなく、
+// 拾わないと保存を押しても何も起きないように見えるので、保存エラーと同じ帯に回す。
+const formLevelErrorMessage = (errors: FieldErrors<RecipeDraftFormValues>) => {
+  for (const [name, error] of Object.entries(errors)) {
+    const message = name === "title" ? null : fieldErrorMessage(error);
+
+    if (message) {
+      return message;
+    }
+  }
+
+  return null;
+};
+
 // 詳細ページと同じ並び・同じ組み方のまま、その場で書き換えられるようにする。
 export const RecipeDraftForm = ({
   defaultValues,
@@ -65,12 +87,14 @@ export const RecipeDraftForm = ({
     resolver: zodResolver(recipeDraftFormSchema),
     defaultValues,
   });
-  const { isDirty, isSubmitting } = formState;
+  const { errors, isDirty, isSubmitting } = formState;
   const watchedReferenceImages = useWatch({ control, name: "referenceImages" });
   const watchedSteps = useWatch({ control, name: "steps" });
   const [uploadingImageCount, setUploadingImageCount] = useState(0);
-  const [isSubmitErrorDismissed, setIsSubmitErrorDismissed] = useState(false);
+  const [isErrorDismissed, setIsErrorDismissed] = useState(false);
   const isUploadingImage = uploadingImageCount > 0;
+  // 検証で止まったならまだ保存を試していないので、前回の保存エラーより今の理由を出す。
+  const blockingError = formLevelErrorMessage(errors) ?? submitError;
   // 選んだ画像はアップロードが終わってからフォームの値になる。その間はisDirtyが立たないので、
   // 選んだ直後に離れると確認なしで消える。未保存かどうかはこの形でだけ判定する。
   const hasUnsavedWork = isDirty || isUploadingImage;
@@ -104,8 +128,6 @@ export const RecipeDraftForm = ({
   );
 
   const handleFormSubmit = handleSubmit(async (values) => {
-    setIsSubmitErrorDismissed(false);
-
     await onSubmit(values, () => {
       isSavedRef.current = true;
     });
@@ -118,7 +140,11 @@ export const RecipeDraftForm = ({
     <>
       <form
         className="mx-auto w-full max-w-5xl pb-16 sm:px-6 lg:px-10"
-        onSubmit={(event) => void handleFormSubmit(event)}
+        onSubmit={(event) => {
+          // 検証で止まったときも知らせ直したいので、成立したときだけでなく押すたびに戻す。
+          setIsErrorDismissed(false);
+          void handleFormSubmit(event);
+        }}
       >
         <ScreenTopBar
           leading={
@@ -165,7 +191,7 @@ export const RecipeDraftForm = ({
         </div>
 
         {/* 保存ボタンは上部バーにあるので、どこまでスクロールしていても見える位置に出す。 */}
-        {submitError && !isSubmitErrorDismissed ? (
+        {blockingError && !isErrorDismissed ? (
           <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
             <div className="mx-auto flex max-w-lg items-start gap-3 rounded-[14px] border border-brand-danger/25 bg-brand-paper py-2 pr-2 pl-4 shadow-pantry-lg">
               <WarningCircle
@@ -175,13 +201,13 @@ export const RecipeDraftForm = ({
                 weight="fill"
               />
               <p className="min-w-0 flex-1 py-2 text-brand-ink text-sm" role="alert">
-                {submitError}
+                {blockingError}
               </p>
               <button
                 aria-label="エラーを閉じる"
                 className="grid size-9 shrink-0 place-items-center rounded-full text-brand-muted transition-colors hover:bg-brand-paper-muted"
                 type="button"
-                onClick={() => setIsSubmitErrorDismissed(true)}
+                onClick={() => setIsErrorDismissed(true)}
               >
                 <X size={16} weight="bold" />
               </button>

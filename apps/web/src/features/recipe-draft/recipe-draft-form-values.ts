@@ -12,7 +12,9 @@ export const recipeDraftFormSchema = z
     title: z.string().trim().min(1, "レシピ名を入力してください"),
     yieldText: z.string().optional(),
     coverImage: draftImageRefSchema.optional(),
-    referenceImages: z.array(draftImageRefSchema).max(MAX_RECIPE_REFERENCE_IMAGES),
+    referenceImages: z
+      .array(draftImageRefSchema)
+      .max(MAX_RECIPE_REFERENCE_IMAGES, `レシピ画像は${MAX_RECIPE_REFERENCE_IMAGES}枚までです。`),
     note: z.string().optional(),
     ingredientGroups: z.array(
       z.object({
@@ -28,7 +30,12 @@ export const recipeDraftFormSchema = z
     steps: z.array(
       z.object({
         text: z.string().optional(),
-        images: z.array(draftImageRefSchema).max(MAX_RECIPE_STEP_IMAGES),
+        images: z
+          .array(draftImageRefSchema)
+          .max(
+            MAX_RECIPE_STEP_IMAGES,
+            `1つの手順に付けられる画像は${MAX_RECIPE_STEP_IMAGES}枚までです。`,
+          ),
       }),
     ),
   })
@@ -37,7 +44,7 @@ export const recipeDraftFormSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["steps"],
-        message: `Recipe images must be at most ${MAX_RECIPE_TOTAL_IMAGES}.`,
+        message: `画像は全部で${MAX_RECIPE_TOTAL_IMAGES}枚までです。`,
       });
     }
   });

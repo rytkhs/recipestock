@@ -3346,6 +3346,48 @@ describe("RecipesRoute", () => {
     expect(appRouter.state.location.pathname).toBe("/recipes/new");
   });
 
+  it("欄の下に出せない検証で保存が止まったときは、その理由を知らせる", async () => {
+    const fetchMock = mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({
+            recipe: {
+              id: "recipe_123",
+              title: "Tomato pasta",
+              content: {
+                title: "Tomato pasta",
+                ingredientGroups: [],
+                steps: savedStepsWithImages(MAX_RECIPE_TOTAL_IMAGES + 1, "step"),
+              },
+              source: {
+                sourceUrl: null,
+                normalizedSourceUrl: null,
+                sourceName: null,
+              },
+              createdAt: "2026-05-26T00:00:00.000Z",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              tags: [],
+              locked: false,
+            },
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await screen.findByLabelText("レシピ名");
+    await userEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      `画像は全部で${MAX_RECIPE_TOTAL_IMAGES}枚までです。`,
+    );
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
+
   it("編集画面で何も変えていなければ、確認せずに閉じる", async () => {
     mockFetch(
       async (input) => {
