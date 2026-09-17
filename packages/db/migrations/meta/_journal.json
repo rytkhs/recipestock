@@ -127,6 +127,13 @@
       "when": 1789351776179,
       "tag": "0017_freezing_black_widow",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789618795139,
+      "tag": "0018_noisy_fallen_one",
+      "breakpoints": true
     }
   ]
 }

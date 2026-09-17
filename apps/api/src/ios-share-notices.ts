@@ -19,6 +19,8 @@ type IosShareNoticeTemplate = {
  * bodyのないreasonは空文字で返す。nullにすると、Shortcutが通知アクションを2本に
  * 分岐させるか、ShortcutsのJSON null解釈へ依存するかを永久に固定することになる。
  */
+const reconnectBody = "Recipe Stockの設定から、ショートカットを追加し直してください。";
+
 const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoticeTemplate> = {
   created: {
     outcome: "accepted",
@@ -37,11 +39,15 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     title: "このリンクは取り込めません",
     body: "Webページのリンクを共有してください。",
   },
+  /**
+   * 再連携の案内には遷移先を付けない。Shortcutの「URLを開く」はSafariで開き、
+   * standaloneでない設定画面は「ホーム画面へ追加してください」しか表示しないため、
+   * 導線にならない（ADR 0025）。
+   */
   malformed_request: {
     outcome: "rejected",
     title: "共有できませんでした",
-    body: "設定画面からShortcutを追加し直してください。",
-    path: "/settings",
+    body: reconnectBody,
   },
   recipe_limit_exceeded: {
     outcome: "rejected",
@@ -85,8 +91,15 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
   unauthorized: {
     outcome: "rejected",
     title: "連携が無効になっています",
-    body: "設定画面からShortcutを再連携してください。",
-    path: "/settings",
+    body: reconnectBody,
+  },
+  /**
+   * 設定画面の試し共有にだけ返す。ユーザーはPWAの設定画面から共有しており、
+   * 続きの案内はPWAが出すので、ここではtitleだけを返す。
+   */
+  setup_verified: {
+    outcome: "accepted",
+    title: "連携できました",
   },
 };
 

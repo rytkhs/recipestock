@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH = 8192;
 
+/** 設定画面の試し共有が共有するURLのpath。Shortcut向けendpointはImport Jobを作らない。 */
+export const IOS_SHARE_SHORTCUT_SETUP_TEST_PATH = "/shortcut/test";
+
 export const iosShareShortcutImportRequestSchema = z.object({
   input: z.string().min(1).max(IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH),
 });
@@ -20,6 +23,7 @@ export const iosShareShortcutImportReasonSchema = z.enum([
   "rate_limit_exceeded",
   "temporarily_unavailable",
   "unauthorized",
+  "setup_verified",
 ]);
 
 export const iosShareNoticeSchema = z.object({

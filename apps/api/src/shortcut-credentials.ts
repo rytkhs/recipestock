@@ -16,6 +16,7 @@ export type ShortcutCredentialRecord = {
   tokenSuffix: string;
   createdAt: Date;
   revokedAt: Date | null;
+  firstUsedAt: Date | null;
 };
 
 export type ShortcutCredentialRepository = {
@@ -24,6 +25,7 @@ export type ShortcutCredentialRepository = {
   revokeCredential(params: { credentialId: string; userId: string; now: Date }): Promise<boolean>;
   authenticate(params: {
     tokenHash: string;
+    now: Date;
   }): Promise<{ credentialId: string; userId: string } | null>;
 };
 
@@ -42,6 +44,7 @@ const mapCredential = (credential: ShortcutCredentialRecord): ShortcutCredential
   name: credential.name,
   tokenSuffix: credential.tokenSuffix,
   createdAt: credential.createdAt.toISOString(),
+  firstUsedAt: credential.firstUsedAt?.toISOString() ?? null,
 });
 
 export const createShortcutCredentialToken = () =>
@@ -89,13 +92,27 @@ export const createShortcutCredentialRepository = (db: DbClient): ShortcutCreden
     return Boolean(row);
   },
 
-  async authenticate({ tokenHash }) {
+  /**
+   * 初回の認証だけ`first_used_at`を書き込む。条件を`UPDATE`の`WHERE`に置くので、
+   * 2回目以降は該当行がなく書き込みが起きない（ADR 0025）。`coalesce`で書くと
+   * 値が変わらなくても毎回行を更新する。data-modifying CTEは主queryが参照しなくても実行される。
+   */
+  async authenticate({ tokenHash, now }) {
     const result = await db.execute<{ credentialId: string; userId: string }>(sql`
+      with credential as (
+        select id, user_id
+        from shortcut_credentials
+        where token_hash = ${tokenHash}
+          and revoked_at is null
+        limit 1
+      ), first_use as (
+        update shortcut_credentials
+        set first_used_at = ${now.toISOString()}::timestamptz
+        where id = (select id from credential)
+          and first_used_at is null
+      )
       select id as "credentialId", user_id as "userId"
-      from shortcut_credentials
-      where token_hash = ${tokenHash}
-        and revoked_at is null
-      limit 1
+      from credential
     `);
 
     return result.rows[0] ?? null;
@@ -123,6 +140,7 @@ export const createShortcutCredentials = ({
       tokenSuffix: token.slice(-TOKEN_SUFFIX_LENGTH),
       createdAt: getCurrentDate(),
       revokedAt: null,
+      firstUsedAt: null,
     });
     return { credential: mapCredential(credential), token };
   },
@@ -138,6 +156,7 @@ export const createShortcutCredentials = ({
   async authenticate({ token }) {
     return repository.authenticate({
       tokenHash: await hashShortcutCredentialToken(token),
+      now: getCurrentDate(),
     });
   },
 });

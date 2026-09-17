@@ -36,9 +36,10 @@ describe("Shortcut credential repository with Neon Postgres", () => {
       tokenSuffix: runId.slice(-6),
       createdAt: now,
       revokedAt: null,
+      firstUsedAt: null,
     });
 
-    await expect(repository.authenticate({ tokenHash })).resolves.toEqual({
+    await expect(repository.authenticate({ tokenHash, now })).resolves.toEqual({
       credentialId,
       userId,
     });
@@ -53,7 +54,44 @@ describe("Shortcut credential repository with Neon Postgres", () => {
         now: new Date(now.getTime() + 1000),
       }),
     ).resolves.toBe(true);
-    await expect(repository.authenticate({ tokenHash })).resolves.toBeNull();
+    await expect(repository.authenticate({ tokenHash, now })).resolves.toBeNull();
     await expect(repository.listCredentials(userId)).resolves.toEqual([]);
+  });
+
+  it("初回の認証だけfirst_used_atを書き込み、以降は上書きしない", async () => {
+    const runId = crypto.randomUUID();
+    const credentialId = `dbtest_credential_${runId}`;
+    const userId = `dbtest_user_${runId}`;
+    const tokenHash = `dbtest_token_${runId}`;
+    const firstUsedAt = new Date(now.getTime() + 60_000);
+    await repository.createCredential({
+      id: credentialId,
+      userId,
+      name: "DB test credential",
+      tokenHash,
+      tokenSuffix: runId.slice(-6),
+      createdAt: now,
+      revokedAt: null,
+      firstUsedAt: null,
+    });
+
+    await expect(repository.listCredentials(userId)).resolves.toEqual([
+      expect.objectContaining({ id: credentialId, firstUsedAt: null }),
+    ]);
+
+    await expect(repository.authenticate({ tokenHash, now: firstUsedAt })).resolves.toEqual({
+      credentialId,
+      userId,
+    });
+    await expect(
+      repository.authenticate({ tokenHash, now: new Date(firstUsedAt.getTime() + 60_000) }),
+    ).resolves.toEqual({ credentialId, userId });
+
+    await expect(repository.listCredentials(userId)).resolves.toEqual([
+      expect.objectContaining({ id: credentialId, firstUsedAt }),
+    ]);
+    await expect(
+      repository.authenticate({ tokenHash: `${tokenHash}_unknown`, now: firstUsedAt }),
+    ).resolves.toBeNull();
   });
 });

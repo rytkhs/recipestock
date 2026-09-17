@@ -1,0 +1,1 @@
+ALTER TABLE "shortcut_credentials" ADD COLUMN "first_used_at" timestamp with time zone;

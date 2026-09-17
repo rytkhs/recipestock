@@ -18,11 +18,10 @@ const titleOnlyReasons: IosShareShortcutImportReason[] = [
   "existing_active_job",
   "no_url_in_input",
   "rate_limit_exceeded",
+  "setup_verified",
 ];
 
 const openUrlByReason: Partial<Record<IosShareShortcutImportReason, string>> = {
-  malformed_request: `${APP_ORIGIN}/settings`,
-  unauthorized: `${APP_ORIGIN}/settings`,
   recipe_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=recipe_limit&from=shortcut`,
   ai_usage_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=ai_usage_limit&from=shortcut`,
 };
@@ -71,6 +70,7 @@ describe("iOS Shortcut noticeのカタログ", () => {
    * 上限到達のopenUrlは、Shortcut面から課金へ繋げる唯一の導線である。
    * proのai_usage_quota_exhaustedにopenUrlが付いていたら、すでに払っている相手を
    * 課金画面へ送ることになるため、このテストで落とす。
+   * 再連携を促すreasonに設定画面を付けると、standaloneでないSafariの設定画面へ送ることになる。
    */
   it("openUrlはユーザーの操作が必要なreasonにだけ付く", () => {
     for (const reason of allReasons) {
@@ -78,11 +78,11 @@ describe("iOS Shortcut noticeのカタログ", () => {
     }
   });
 
-  it("outcomeはacceptedがJobを作れた2件だけである", () => {
+  it("outcomeはacceptedがJobを作れた2件と試し共有の成功だけである", () => {
     const acceptedReasons = allReasons.filter(
       (reason) => buildResult(reason).outcome === "accepted",
     );
 
-    expect(acceptedReasons).toEqual(["created", "existing_active_job"]);
+    expect(acceptedReasons).toEqual(["created", "existing_active_job", "setup_verified"]);
   });
 });

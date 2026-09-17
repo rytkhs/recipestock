@@ -225,7 +225,7 @@ describe("iOS Share routes", () => {
       await expect(response.json()).resolves.toMatchObject({
         outcome: "rejected",
         reason: "malformed_request",
-        notice: { openUrl: "https://app.example.com/settings" },
+        notice: { openUrl: null },
       });
     }
     expect(createUrlJob).not.toHaveBeenCalled();
@@ -330,7 +330,7 @@ describe("iOS Share routes", () => {
     expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401]);
   });
 
-  it("Bearerがない、無効、revoke済みの場合は再連携を促すnoticeを返す", async () => {
+  it("Bearerがない、無効、revoke済みの場合は遷移先なしで再連携を促すnoticeを返す", async () => {
     const revokedService = createShortcutCredentialsFake();
     revokedService.authenticate = async () => null;
     const app = createShortcutTestApp({ auth, shortcutCredentials: revokedService });
@@ -359,12 +359,127 @@ describe("iOS Share routes", () => {
 
     expect(responses.map((response) => response.status)).toEqual([200, 200, 200]);
     for (const response of responses) {
-      await expect(response.json()).resolves.toMatchObject({
+      await expect(response.json()).resolves.toEqual({
         outcome: "rejected",
         reason: "unauthorized",
-        notice: { openUrl: "https://app.example.com/settings" },
+        notice: {
+          title: "連携が無効になっています",
+          body: "Recipe Stockの設定から、ショートカットを追加し直してください。",
+          openUrl: null,
+        },
       });
     }
+  });
+
+  /**
+   * 空欄のまま追加されたShortcutは連携トークンに辿り着かず、`first_used_at`に残らない。
+   * 貼り付けなかったのか、違う文字列を貼ったのかはログでしか分けられない。
+   */
+  it("認証失敗をtokenの欠落と不一致に分けて記録する", async () => {
+    const entries: { event: string; level: string; reason?: unknown }[] = [];
+    const sink = { write: (entry: LogEntry) => entries.push(entry) };
+    const app = createShortcutTestApp({
+      auth,
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+      shortcutCredentials: createShortcutCredentialsFake(),
+    });
+
+    await app.request(
+      "/api/shortcut/import-jobs",
+      { ...shareRequest(), headers: { ...shortcutHeaders, authorization: "Bearer " } },
+      env,
+    );
+    await app.request(
+      "/api/shortcut/import-jobs",
+      { ...shareRequest(), headers: { ...shortcutHeaders, authorization: "Bearer copied-text" } },
+      env,
+    );
+
+    const submitted = entries.filter(
+      (entry) => entry.event === "ios_share_shortcut_import_submitted",
+    );
+
+    expect(submitted).toMatchObject([
+      { reason: "unauthorized", level: "warn", authFailure: "missing_token" },
+      { reason: "unauthorized", level: "warn", authFailure: "unknown_token" },
+    ]);
+  });
+
+  it("設定画面の試し共有はImport Jobを作らずsetup_verifiedを返す", async () => {
+    const submit = vi.fn(async () => ({
+      status: "accepted" as const,
+      kind: "created" as const,
+      job: createJob(),
+    }));
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      urlImportJobSubmission: { submit },
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const responses = await Promise.all([
+      app.request(
+        "/api/shortcut/import-jobs",
+        shareRequest("https://app.example.com/shortcut/test"),
+        env,
+      ),
+      app.request(
+        "/api/shortcut/import-jobs",
+        shareRequest("Recipe Stock https://app.example.com/shortcut/test?from=settings"),
+        env,
+      ),
+    ]);
+
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        outcome: "accepted",
+        reason: "setup_verified",
+        notice: { title: "連携できました", body: "", openUrl: null },
+      });
+    }
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("試し共有のURLでも認証に失敗すればunauthorizedを返す", async () => {
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: { ...createShortcutCredentialsFake(), authenticate: async () => null },
+    });
+
+    const response = await app.request(
+      "/api/shortcut/import-jobs",
+      shareRequest("https://app.example.com/shortcut/test"),
+      env,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({ reason: "unauthorized" });
+  });
+
+  it("別のoriginの同じpathは試し共有として扱わず取り込む", async () => {
+    const submit = vi.fn(async () => ({
+      status: "accepted" as const,
+      kind: "created" as const,
+      job: createJob(),
+    }));
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      urlImportJobSubmission: { submit },
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+
+    const response = await app.request(
+      "/api/shortcut/import-jobs",
+      shareRequest("https://example.com/shortcut/test"),
+      env,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({ reason: "created" });
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.com/shortcut/test" }),
+    );
   });
 
   it("active Jobを再利用すると通知要求だけを有効にしQueueへ追加しない", async () => {

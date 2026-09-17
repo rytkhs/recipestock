@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { shortcutInstallRedirect } from "../features/ios-share/settings-card";
 import {
   billingStatusResponse,
   createSessionResponse,
@@ -788,29 +789,80 @@ describe("Settings routes", () => {
     expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
   });
 
-  it("PWAからShortcut連携トークンを発行して追加導線を表示する", async () => {
-    vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", "https://www.icloud.com/shortcuts/recipe-stock-test");
+  const shortcutUrl = "https://www.icloud.com/shortcuts/recipe-stock-test";
+  const issuedToken = `rssc_${"a".repeat(25)}`;
+
+  const shortcutCredential = (overrides: Record<string, unknown> = {}) => ({
+    id: "credential_1",
+    name: "iPhone",
+    tokenSuffix: "aaaa",
+    createdAt: "2026-07-11T00:00:00.000Z",
+    firstUsedAt: null,
+    ...overrides,
+  });
+
+  // jsdomのBlobはtext()を持たない。
+  const readBlobText = (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+
+  /**
+   * jsdomにはClipboardItemもnavigator.shareもない。Safariと同じく、ClipboardItemへ渡した
+   * Promiseの解決を待ってから書き込む形で差し替える。
+   */
+  const installShortcutBrowser = ({ copySucceeds = true } = {}) => {
+    const events: string[] = [];
+    const copiedTexts: string[] = [];
+    vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", shortcutUrl);
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({ matches: true })),
     );
+    vi.stubGlobal(
+      "ClipboardItem",
+      class {
+        constructor(readonly items: Record<string, Promise<Blob>>) {}
+      },
+    );
+    const write = vi.fn(async (items: { items: Record<string, Promise<Blob>> }[]) => {
+      const blob = await items[0]?.items["text/plain"];
+      if (!copySucceeds || !blob) throw new DOMException("Denied", "NotAllowedError");
+      copiedTexts.push(await readBlobText(blob));
+      events.push("copied");
+    });
+    const share = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { write, writeText: vi.fn(async () => undefined) },
+      maxTouchPoints: 5,
+      share,
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+    });
+    const assign = vi.spyOn(shortcutInstallRedirect, "assign").mockImplementation(() => {
+      events.push("redirected");
+    });
+
+    return { assign, copiedTexts, events, share, write };
+  };
+
+  it("1回のタップで連携トークンを発行・コピーしてからショートカットの追加へ移動する", async () => {
+    const browser = installShortcutBrowser();
+    let credentials: ReturnType<typeof shortcutCredential>[] = [];
     const fetchMock = mockFetch(
       async (input, init) => {
         const path = getRequestPath(input);
         if (path === "/api/shortcut-credentials" && init?.method === "GET") {
-          return jsonResponse({ credentials: [] });
+          return jsonResponse({ credentials });
         }
         if (path === "/api/shortcut-credentials" && init?.method === "POST") {
+          credentials = [shortcutCredential()];
           return jsonResponse(
-            {
-              credential: {
-                id: "credential_1",
-                name: "iPhone",
-                tokenSuffix: "aaaa",
-                createdAt: "2026-07-11T00:00:00.000Z",
-              },
-              token: `rssc_${"a".repeat(25)}`,
-            },
+            { credential: shortcutCredential(), token: issuedToken },
             { status: 201 },
           );
         }
@@ -820,26 +872,86 @@ describe("Settings routes", () => {
     );
 
     await renderApp("/settings");
-    await expect(
-      screen.findByText(
-        "iPhoneやiPadの共有メニューからURLを共有すると、Recipe Stockへの取り込みを直接開始します。通知を許可している場合は、完了をお知らせします。",
-      ),
-    ).resolves.toBeInTheDocument();
-    await userEvent.click(await screen.findByRole("button", { name: "連携トークンを発行" }));
+    expect(screen.queryByLabelText("端末名")).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "ショートカットを追加" }));
 
-    await expect(screen.findByLabelText("連携トークン")).resolves.toHaveValue(
-      `rssc_${"a".repeat(25)}`,
+    await waitFor(() => {
+      expect(browser.assign).toHaveBeenCalledWith(shortcutUrl);
+    });
+    expect(browser.events).toEqual(["copied", "redirected"]);
+    expect(browser.copiedTexts).toEqual([issuedToken]);
+    const issueCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/shortcut-credentials" && init?.method === "POST",
     );
-    expect(screen.getByRole("link", { name: "Shortcutを追加" })).toHaveAttribute(
+    expect(JSON.parse(String(issueCall?.[1]?.body))).toEqual({ name: "iPhone" });
+    expect(screen.queryByLabelText("連携トークン")).not.toBeInTheDocument();
+    await expect(
+      screen.findByRole("button", { name: "試しに共有する" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("未接続")).toBeInTheDocument();
+  });
+
+  it("コピーに失敗したら移動せず、トークンと追加リンクを表示する", async () => {
+    const browser = installShortcutBrowser({ copySucceeds: false });
+    mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+        if (path === "/api/shortcut-credentials" && init?.method === "GET") {
+          return jsonResponse({ credentials: [] });
+        }
+        if (path === "/api/shortcut-credentials" && init?.method === "POST") {
+          return jsonResponse(
+            { credential: shortcutCredential(), token: issuedToken },
+            { status: 201 },
+          );
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "ショートカットを追加" }));
+
+    await expect(screen.findByLabelText("連携トークン")).resolves.toHaveValue(issuedToken);
+    expect(screen.getByRole("link", { name: "ショートカットを追加" })).toHaveAttribute(
       "href",
-      "https://www.icloud.com/shortcuts/recipe-stock-test",
+      shortcutUrl,
     );
-    expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          getRequestPath(input) === "/api/shortcut-credentials" && init?.method === "POST",
-      ),
-    ).toBe(true);
+    expect(browser.assign).not.toHaveBeenCalled();
+  });
+
+  it("接続待ちでは試し共有を促し、共有で連携できたら連携済みを伝える", async () => {
+    const browser = installShortcutBrowser();
+    let credentials = [shortcutCredential()];
+    browser.share.mockImplementation(async () => {
+      credentials = [shortcutCredential({ firstUsedAt: "2026-07-11T00:05:00.000Z" })];
+    });
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/shortcut-credentials" && init?.method === "GET") {
+          return jsonResponse({ credentials });
+        }
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/settings");
+    expect(await screen.findByText("未接続")).toBeInTheDocument();
+    expect(screen.getByText("2026/07/11に追加・末尾 aaaa")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "試しに共有する" }));
+
+    expect(browser.share).toHaveBeenCalledWith({
+      url: `${window.location.origin}/shortcut/test`,
+    });
+    await expect(
+      screen.findByText("連携できました。レシピのページから同じように共有すると保存できます。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByText("未接続")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "試しに共有する" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "別の端末に追加" })).toBeInTheDocument();
   });
 
   it("設定画面からメールアドレス変更確認メールを送信できる", async () => {

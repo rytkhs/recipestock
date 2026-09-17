@@ -1,4 +1,5 @@
 import {
+  IOS_SHARE_SHORTCUT_SETUP_TEST_PATH,
   type IosShareShortcutImportReason,
   iosShareShortcutImportRequestSchema,
   iosShareShortcutImportResponseSchema,
@@ -18,6 +19,11 @@ type IosShareRouteDependencies = {
 };
 
 type ShortcutImportLogFields = {
+  /**
+   * 空欄のまま追加されたShortcutは連携トークンに辿り着かず、`first_used_at`に何も残さない。
+   * 貼り付けなかったのか、違う文字列を貼ったのかはこのfieldでしか分けられない。
+   */
+  authFailure?: "missing_token" | "unknown_token";
   credentialId?: string;
   rateLimitScope?: "client" | "credential";
   sourceHost?: string;
@@ -35,6 +41,21 @@ const bearerToken = (header: string | undefined) => {
  * IPは監視ログへ残さない。発信元の追跡はCloudflare側の分析に委ねる。
  */
 const clientRateLimitKey = (c: Context<ApiEnv>) => c.req.header("cf-connecting-ip") ?? "unknown";
+
+/**
+ * 設定画面の試し共有かどうか。認証を通過したあとにだけ判定し、Import Jobは作らない。
+ */
+const isSetupTestUrl = (url: string, appOrigin: string) => {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.origin === new URL(appOrigin).origin &&
+      parsed.pathname === IOS_SHARE_SHORTCUT_SETUP_TEST_PATH
+    );
+  } catch {
+    return false;
+  }
+};
 
 const sourceHostOf = (url: string) => {
   try {
@@ -111,12 +132,12 @@ export const createIosShareRoutes = ({
 
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
-      return respondWithNotice(c, "unauthorized");
+      return respondWithNotice(c, "unauthorized", { authFailure: "missing_token" });
     }
 
     const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
     if (!identity) {
-      return respondWithNotice(c, "unauthorized");
+      return respondWithNotice(c, "unauthorized", { authFailure: "unknown_token" });
     }
 
     const logFields: ShortcutImportLogFields = {
@@ -143,6 +164,10 @@ export const createIosShareRoutes = ({
     const url = extractFirstUrl(request.data.input);
     if (!url) {
       return respondWithNotice(c, "no_url_in_input", logFields);
+    }
+
+    if (isSetupTestUrl(url, c.env.APP_ORIGIN)) {
+      return respondWithNotice(c, "setup_verified", logFields);
     }
 
     const result = await urlImportJobSubmissionFor(c.env).submit({
