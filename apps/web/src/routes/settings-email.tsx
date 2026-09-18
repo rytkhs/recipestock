@@ -2,6 +2,8 @@ import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ConnectionUnavailable } from "../components/connection-unavailable";
+import { SettingsPageSkeleton } from "../components/loading";
 import { useLoginMethods } from "../features/settings/login-methods";
 import {
   SettingsFormMessage,
@@ -48,21 +50,62 @@ export const SettingsEmailRoute = () => {
     }
   };
 
+  const topBar = <SettingsSubpageTopBar title="メールアドレス" />;
+
+  // パスワードを持つ人かどうかで出すものが変わるので、この画面はログイン方法を待つ。
+  if (loginMethods.isPending) {
+    return <SettingsPageSkeleton />;
+  }
+
+  if (!loginMethods.data) {
+    return (
+      <section className={settingsPageClass}>
+        {topBar}
+        <ConnectionUnavailable
+          isRetrying={loginMethods.isFetching}
+          onRetry={async () => {
+            await loginMethods.refetch();
+          }}
+        />
+      </section>
+    );
+  }
+
+  const currentEmailBlock = (
+    <div className="min-w-0">
+      <p className="text-brand-muted text-sm">今のメールアドレス</p>
+      <p className="mt-1 break-all font-medium text-base text-brand-ink">{currentEmail}</p>
+    </div>
+  );
+
+  // Googleだけの人はメールアドレスをログインに使わない。Googleから写したアドレスが、
+  // どのGoogleアカウントで入ったかの手がかりになるので、変えるフォームは出さない。
+  if (!loginMethods.data.hasPassword) {
+    return (
+      <section className={settingsPageClass}>
+        {topBar}
+        <div className={`${settingsPageBodyClass} grid gap-6`}>
+          {currentEmailBlock}
+          <p className="text-brand-muted text-sm leading-6">
+            このアカウントはGoogleでログインしています。メールアドレスはGoogleアカウントのものを使うため、ここでは変更できません。
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className={settingsPageClass}>
-      <SettingsSubpageTopBar title="メールアドレス" />
+      {topBar}
 
       <div className={`${settingsPageBodyClass} grid gap-6`}>
-        <div className="min-w-0">
-          <p className="text-brand-muted text-sm">今のメールアドレス</p>
-          <p className="mt-1 break-all font-medium text-base text-brand-ink">{currentEmail}</p>
-        </div>
+        {currentEmailBlock}
 
         <div className="grid gap-2">
           <p className="text-brand-muted text-sm leading-6">
             新しいメールアドレスに確認メールを送ります。メール内のリンクを開くまで、メールアドレスは今のままです。
           </p>
-          {loginMethods.data?.hasGoogle ? (
+          {loginMethods.data.hasGoogle ? (
             <p className="text-brand-muted text-sm leading-6">
               Googleアカウントのメールアドレスは変わりません。Googleでのログインは今までどおり使えます。
             </p>

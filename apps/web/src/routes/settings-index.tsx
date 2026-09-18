@@ -52,33 +52,60 @@ const rowValue = <T,>(
 };
 
 /**
- * パスワードを持たない人にパスワードの行は出さない。開いても変更できるものがないため。
- * かわりに、何でログインしているかを見せる。
+ * パスワードを持たない人には、メールアドレスもパスワードも変更の行を出さない。
+ * パスワードは持っておらず、メールアドレスはログインに使わないため。
+ * かわりに、今のアドレスと、何でログインしているかを見せる。
  */
-const LoginMethodRow = ({ loginMethods }: { loginMethods: ReturnType<typeof useLoginMethods> }) => {
+const AccountRows = ({
+  email,
+  loginMethods,
+}: {
+  email: string | undefined;
+  loginMethods: ReturnType<typeof useLoginMethods>;
+}) => {
   if (loginMethods.isPending) {
-    return <SettingsRowSkeleton />;
+    return (
+      <>
+        <SettingsRowSkeleton />
+        <SettingsRowSkeleton />
+      </>
+    );
   }
 
-  // 読めなかったときは今までどおりパスワードの行を出す。消すと、パスワードを持つ人が変更手段を失う。
+  // 読めなかったときは今までどおり変更の行を出す。消すと、パスワードを持つ人が変更手段を失う。
   if (!loginMethods.data || loginMethods.data.hasPassword) {
     return (
-      <SettingsLinkRow
-        icon={<LockKey size={rowIconSize} weight="bold" />}
-        label="パスワード"
-        to="/settings/password"
-      />
+      <>
+        <SettingsLinkRow
+          icon={<EnvelopeSimple size={rowIconSize} weight="bold" />}
+          label="メールアドレス"
+          to="/settings/email"
+          value={email}
+        />
+        <SettingsLinkRow
+          icon={<LockKey size={rowIconSize} weight="bold" />}
+          label="パスワード"
+          to="/settings/password"
+        />
+      </>
     );
   }
 
   // このアプリのログイン方法はメールアドレスとパスワード、Googleの2つだけ。
   // パスワードを持たない人はGoogleでログインしている。
   return (
-    <SettingsValueRow
-      icon={<SignIn size={rowIconSize} weight="bold" />}
-      label="ログイン方法"
-      value="Google"
-    />
+    <>
+      <SettingsValueRow
+        icon={<EnvelopeSimple size={rowIconSize} weight="bold" />}
+        label="メールアドレス"
+        value={email ?? ""}
+      />
+      <SettingsValueRow
+        icon={<SignIn size={rowIconSize} weight="bold" />}
+        label="ログイン方法"
+        value="Google"
+      />
+    </>
   );
 };
 
@@ -151,13 +178,7 @@ export const SettingsIndexRoute = () => {
         </SettingsGroup>
 
         <SettingsGroup title="アカウント">
-          <SettingsLinkRow
-            icon={<EnvelopeSimple size={rowIconSize} weight="bold" />}
-            label="メールアドレス"
-            to="/settings/email"
-            value={session.data?.user.email}
-          />
-          <LoginMethodRow loginMethods={loginMethods} />
+          <AccountRows email={session.data?.user.email} loginMethods={loginMethods} />
         </SettingsGroup>
 
         <SettingsGroup>
