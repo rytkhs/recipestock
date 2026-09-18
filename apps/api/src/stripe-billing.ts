@@ -108,10 +108,6 @@ const getStringId = (value: string | { id: string } | null | undefined, label: s
 export const normalizeStripeSubscription = (
   subscription: Stripe.Subscription,
 ): StripeSubscriptionState => {
-  const subscriptionPeriods = subscription as Stripe.Subscription & {
-    current_period_start?: number | null;
-    current_period_end?: number | null;
-  };
   const userId = subscription.metadata?.userId;
   const item = subscription.items.data[0];
 
@@ -130,8 +126,9 @@ export const normalizeStripeSubscription = (
     stripePriceId: item.price.id,
     stripeProductId: getStringId(item.price.product, "product"),
     status: subscription.status,
-    currentPeriodStart: toDate(subscriptionPeriods.current_period_start),
-    currentPeriodEnd: toDate(subscriptionPeriods.current_period_end),
+    // 固定しているAPIの版では、期間はSubscriptionではなく項目(SubscriptionItem)が持つ。
+    currentPeriodStart: toDate(item.current_period_start),
+    currentPeriodEnd: toDate(item.current_period_end),
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
     cancelAt: toDate(subscription.cancel_at),
     canceledAt: toDate(subscription.canceled_at),
