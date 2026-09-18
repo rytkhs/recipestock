@@ -66,7 +66,8 @@ const ImportTextForm = ({
   const navigate = useNavigate();
   const [text, setText] = useState(initialText);
   // 上限のエラーのうち、プランを変えれば直るものにだけプランのページへの入口を添える。
-  const [error, setError] = useState<{ message: string; showsPlanLink?: boolean } | null>(null);
+  // プランはviewerを読み終える前に送ることもあるので、描画のときに今のviewerで決める。
+  const [error, setError] = useState<{ message: string; code?: string } | null>(null);
   const viewer = useViewer({ enabled: true });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textId = useId();
@@ -118,9 +119,7 @@ const ImportTextForm = ({
     } catch (submitError) {
       setError({
         message: getCreateImportTextJobErrorMessage(submitError),
-        showsPlanLink:
-          submitError instanceof ApiClientError &&
-          isResolvedByUpgrade(submitError.code, viewer.data?.plan),
+        code: submitError instanceof ApiClientError ? submitError.code : undefined,
       });
     } finally {
       setIsSubmitting(false);
@@ -229,7 +228,7 @@ const ImportTextForm = ({
               <p className="break-words text-brand-danger text-sm" role="alert">
                 {error.message}
               </p>
-              {error.showsPlanLink ? <PlanLink /> : null}
+              {isResolvedByUpgrade(error.code, viewer.data?.plan) ? <PlanLink /> : null}
             </div>
           ) : null}
         </div>

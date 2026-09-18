@@ -33,7 +33,8 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
   const navigate = useNavigate();
   const [url, setUrl] = useState(() => getInitialImportUrl(search));
   // 上限のエラーのうち、プランを変えれば直るものにだけプランのページへの入口を添える。
-  const [error, setError] = useState<{ message: string; showsPlanLink?: boolean } | null>(null);
+  // プランはviewerを読み終える前に送ることもあるので、描画のときに今のviewerで決める。
+  const [error, setError] = useState<{ message: string; code?: string } | null>(null);
   const viewer = useViewer({ enabled: true });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const urlId = useId();
@@ -68,9 +69,7 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
     } catch (submitError) {
       setError({
         message: getCreateImportUrlJobErrorMessage(submitError),
-        showsPlanLink:
-          submitError instanceof ApiClientError &&
-          isResolvedByUpgrade(submitError.code, viewer.data?.plan),
+        code: submitError instanceof ApiClientError ? submitError.code : undefined,
       });
     } finally {
       setIsSubmitting(false);
@@ -149,7 +148,7 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
               <p className="break-words text-brand-danger text-sm" role="alert">
                 {error.message}
               </p>
-              {error.showsPlanLink ? <PlanLink /> : null}
+              {isResolvedByUpgrade(error.code, viewer.data?.plan) ? <PlanLink /> : null}
             </div>
           ) : null}
         </div>
