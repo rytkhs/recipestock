@@ -23,17 +23,49 @@ describe("createAuthEmailCallbacks", () => {
     expect(send).toHaveBeenCalledWith({
       from: "Recipe Stock <login@example.com>",
       to: "user@example.com",
-      subject: "Recipe Stock email verification",
-      text: "Open this link to verify your Recipe Stock email address: https://recipestock.example/verify/token",
+      subject: "【Recipe Stock】メールアドレスの確認",
+      text: [
+        "次のリンクを開くと、このメールアドレスをRecipe Stockで使えるようになります。",
+        "",
+        "https://recipestock.example/verify/token",
+        "",
+        "リンクを開くまで、Recipe Stockのメールアドレスは変わりません。",
+        "心当たりがない場合は、このメールを破棄してください。",
+      ].join("\n"),
+    });
+  });
+
+  it("パスワード再設定のOTPを送る", async () => {
+    const send = vi.fn<EmailSender["send"]>(async () => ({ id: "email-1" }));
+    const callbacks = createAuthEmailCallbacks({
+      emailSender: { send },
+      from: "Recipe Stock <login@example.com>",
+    });
+
+    await callbacks.sendVerificationOTP({
+      email: "user@example.com",
+      otp: "123456",
+      type: "forget-password",
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      from: "Recipe Stock <login@example.com>",
+      to: "user@example.com",
+      subject: "【Recipe Stock】パスワード再設定の確認コード",
+      text: [
+        "パスワード再設定の確認コードは 123456 です。",
+        "Recipe Stockの画面に入力してください。",
+        "",
+        "心当たりがない場合は、このメールを破棄してください。パスワードは変わりません。",
+      ].join("\n"),
     });
   });
 
   it.each([
-    ["sign-in", "Recipe Stock verification code"],
-    ["email-verification", "Recipe Stock verification code"],
-    ["forget-password", "Recipe Stock password reset code"],
-    ["change-email", "Recipe Stock verification code"],
-  ] as const)("%s OTPを送る", async (type, subject) => {
+    "sign-in",
+    "email-verification",
+    "change-email",
+  ] as const)("%s OTPを送る", async (type) => {
     const send = vi.fn<EmailSender["send"]>(async () => ({ id: "email-1" }));
     const callbacks = createAuthEmailCallbacks({
       emailSender: { send },
@@ -49,8 +81,13 @@ describe("createAuthEmailCallbacks", () => {
     expect(send).toHaveBeenCalledWith({
       from: "Recipe Stock <login@example.com>",
       to: "user@example.com",
-      subject,
-      text: "Your Recipe Stock code is 123456.",
+      subject: "【Recipe Stock】確認コード",
+      text: [
+        "確認コードは 123456 です。",
+        "Recipe Stockの画面に入力してください。",
+        "",
+        "心当たりがない場合は、このメールを破棄してください。",
+      ].join("\n"),
     });
   });
 

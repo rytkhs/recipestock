@@ -78,23 +78,42 @@ export const createAuthEmailCallbacks = ({
   emailSender: EmailSender;
   from: string;
 }) => ({
+  // 登録の確認はコード(OTP)で行うので、リンクを送るのはメールアドレスの変更だけ。宛先は新しいアドレス。
+  // リンクを開くまで変更は完了しない。
   async sendVerificationEmail({ user, url }: { user: { email: string }; url: string }) {
     await emailSender.send({
       from,
       to: user.email,
-      subject: "Recipe Stock email verification",
-      text: `Open this link to verify your Recipe Stock email address: ${url}`,
+      subject: "【Recipe Stock】メールアドレスの確認",
+      text: [
+        "次のリンクを開くと、このメールアドレスをRecipe Stockで使えるようになります。",
+        "",
+        url,
+        "",
+        "リンクを開くまで、Recipe Stockのメールアドレスは変わりません。",
+        "心当たりがない場合は、このメールを破棄してください。",
+      ].join("\n"),
     });
   },
   async sendVerificationOTP({ email, otp, type }: SendVerificationOTPData) {
+    const isPasswordReset = type === "forget-password";
+
     await emailSender.send({
       from,
       to: email,
-      subject:
-        type === "forget-password"
-          ? "Recipe Stock password reset code"
-          : "Recipe Stock verification code",
-      text: `Your Recipe Stock code is ${otp}.`,
+      subject: isPasswordReset
+        ? "【Recipe Stock】パスワード再設定の確認コード"
+        : "【Recipe Stock】確認コード",
+      text: [
+        isPasswordReset
+          ? `パスワード再設定の確認コードは ${otp} です。`
+          : `確認コードは ${otp} です。`,
+        "Recipe Stockの画面に入力してください。",
+        "",
+        isPasswordReset
+          ? "心当たりがない場合は、このメールを破棄してください。パスワードは変わりません。"
+          : "心当たりがない場合は、このメールを破棄してください。",
+      ].join("\n"),
     });
   },
 });
