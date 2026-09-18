@@ -175,6 +175,10 @@ describe("API app composition", () => {
         retrieveSubscription: async () => {
           throw new Error("should not retrieve subscription");
         },
+        retrievePrice: async () => {
+          throw new Error("should not retrieve price");
+        },
+        listCustomerSubscriptions: async () => [],
         updateCustomerEmail: async () => {},
         verifyWebhook,
       },

@@ -12,7 +12,7 @@ const createImportUrlJobErrorMessages: Partial<Record<ApiErrorCode, string>> = {
   extraction_failed: "レシピ本文を見つけられませんでした。",
   private_or_login_required:
     "この投稿を取得できませんでした。非公開またはログインが必要な投稿です。",
-  ai_usage_limit_exceeded: "今月のAI利用回数の上限に達しています。",
+  ai_usage_limit_exceeded: "今月のAI取り込みの上限に達しています。",
   ai_timeout: "タイムアウトしました。",
   ai_schema_invalid: "結果を読み取れませんでした。",
   recipe_limit_exceeded: "保存できるレシピ数の上限に達しています。",
@@ -20,7 +20,7 @@ const createImportUrlJobErrorMessages: Partial<Record<ApiErrorCode, string>> = {
 
 const createImportTextJobErrorMessages: Partial<Record<ApiErrorCode, string>> = {
   validation_failed: "テキストを確認してください。",
-  ai_usage_limit_exceeded: "今月のAI利用回数の上限に達しています。",
+  ai_usage_limit_exceeded: "今月のAI取り込みの上限に達しています。",
   recipe_limit_exceeded: "保存できるレシピ数の上限に達しています。",
 };
 
@@ -30,7 +30,7 @@ const importJobFailureMessages: Partial<Record<ImportErrorCode, string>> = {
   unsupported_page: "このページは取り込みに対応していません。",
   extraction_failed: "レシピ本文を見つけられませんでした。",
   private_or_login_required: "この投稿を取得できませんでした。",
-  ai_usage_limit_exceeded: "今月のAI利用回数の上限に達しています。",
+  ai_usage_limit_exceeded: "今月のAI取り込みの上限に達しています。",
   ai_timeout: "タイムアウトしました。",
   job_timeout: "取り込み処理が時間内に完了しませんでした。再試行してください。",
   ai_schema_invalid: "解析結果を保存できませんでした。",

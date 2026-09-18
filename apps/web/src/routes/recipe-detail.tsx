@@ -240,7 +240,7 @@ export const RecipeDetailRoute = () => {
         <ScreenTopBar leading={backButton} title="ロック中のレシピ" />
         <RecipeDetailNotice
           icon={<LockSimple size={26} weight="bold" />}
-          message={`フリープランで開けるのは、新しく保存した${FREE_RECIPE_LIMIT}件までです。`}
+          message={`Freeで開けるのは、新しく保存した${FREE_RECIPE_LIMIT}件までです。`}
         >
           <Link className={cn(buttonVariants(), "no-underline")} to="/settings/billing">
             プランを見る

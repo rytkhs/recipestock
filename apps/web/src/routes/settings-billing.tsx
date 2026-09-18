@@ -1,104 +1,186 @@
-import {
-  type CreateBillingPortalResponse,
-  type CreateCheckoutResponse,
-  type GetBillingStatusResponse,
-} from "@recipestock/schemas";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { SettingsPageSkeleton } from "../components/loading";
+import {
+  billingRedirect,
+  billingStatusQueryKey,
+  createBillingPortal,
+  createCheckout,
+} from "../features/billing/api";
+import { BillingNotice } from "../features/billing/billing-notice";
+import {
+  ContractSection,
+  CurrentPlanSection,
+  ProOfferSection,
+} from "../features/billing/plan-sections";
+import { derivePlanState, type PlanState } from "../features/billing/plan-state";
+import {
+  type CheckoutConfirmation,
+  useCheckoutConfirmation,
+} from "../features/billing/use-checkout-confirmation";
 import {
   SettingsSubpageTopBar,
   settingsPageBodyClass,
   settingsPageClass,
 } from "../features/settings/settings-page";
-import { ApiClientError, api, parseApiResponse } from "../lib/api";
-import { billingStatusQueryKey } from "../lib/billing";
+import { ApiClientError } from "../lib/api";
 import { useViewer, viewerQueryKey } from "../lib/viewer";
 
-const createCheckout = () =>
-  parseApiResponse<CreateCheckoutResponse>(api.api.billing.checkout.$post());
+const billingRouteApi = getRouteApi("/_protected/settings/billing");
 
-const createBillingPortal = () =>
-  parseApiResponse<CreateBillingPortalResponse>(api.api.billing.portal.$post());
+type SettingsBillingSearch = ReturnType<typeof billingRouteApi.useSearch>;
 
-const fetchBillingStatus = () =>
-  parseApiResponse<GetBillingStatusResponse>(api.api.billing.status.$get());
-
-export const checkoutRedirect = {
-  assign(url: string) {
-    window.location.assign(url);
-  },
-};
-
-const checkoutMessage = (checkout: unknown) => {
-  if (checkout === "success") {
-    return "契約処理を受け付けました。反映には少し時間がかかる場合があります。";
+/**
+ * 冒頭に出すお知らせを1つだけ選ぶ。URLが運ぶのは「起きたこと」だけで、直し方は今の状態から組み立てる。
+ * 通知を見てから開くまでにレシピを消していれば、上限のままだとは言わない。
+ */
+const ArrivalNotice = ({
+  arrival,
+  confirmation,
+  isPortalSubmitting,
+  onOpenPortal,
+  onRecheck,
+  state,
+}: {
+  arrival: SettingsBillingSearch;
+  confirmation: CheckoutConfirmation;
+  isPortalSubmitting: boolean;
+  onOpenPortal: () => void;
+  onRecheck: () => void;
+  state: PlanState;
+}) => {
+  if (confirmation === "waiting") {
+    return (
+      <BillingNotice
+        icon={<Spinner aria-hidden="true" className="text-brand-sage" role="presentation" />}
+        title="Proへの切り替えを確認しています"
+        tone="info"
+      >
+        少しお待ちください。
+      </BillingNotice>
+    );
   }
 
-  if (checkout === "cancel") {
-    return "契約手続きはキャンセルされました。";
+  if (confirmation === "confirmed") {
+    return (
+      <BillingNotice title="Proになりました" tone="success">
+        これからはレシピを上限なく保存できます。
+      </BillingNotice>
+    );
+  }
+
+  if (confirmation === "timed_out") {
+    return (
+      <BillingNotice
+        action={
+          <Button size="sm" type="button" variant="outline" onClick={onRecheck}>
+            もう一度確認
+          </Button>
+        }
+        title="手続きは受け付けました"
+        tone="info"
+      >
+        反映に時間がかかっています。少し時間をおいてから、もう一度確認してください。
+      </BillingNotice>
+    );
+  }
+
+  if (state.contract?.kind === "payment_failed") {
+    return (
+      <BillingNotice
+        action={
+          <Button disabled={isPortalSubmitting} size="sm" type="button" onClick={onOpenPortal}>
+            支払い方法を更新
+          </Button>
+        }
+        title="お支払いを確認できません"
+        tone="warning"
+      >
+        支払い方法を更新してください。このままだとFreeに戻ります。
+      </BillingNotice>
+    );
+  }
+
+  if (arrival.from === "shortcut" && arrival.upsell === "recipe_limit") {
+    const isStillFull = state.plan === "free" && state.savedRecipes !== "room";
+
+    return (
+      <BillingNotice title="共有したレシピは保存されていません" tone="warning">
+        {isStillFull
+          ? "保存できる上限に達していたためです。保存できるようにしてから、もう一度共有してください。"
+          : "保存できる上限に達していたためです。今は保存できるので、もう一度共有してください。"}
+      </BillingNotice>
+    );
+  }
+
+  if (arrival.from === "shortcut" && arrival.upsell === "ai_usage_limit") {
+    return (
+      <BillingNotice title="共有したレシピは取り込まれていません" tone="warning">
+        {/* また取り込める日は、下の「今のプラン」に出ている。 */}
+        {state.importLimitReached
+          ? `今月のAI取り込みの上限に達していたためです。${
+              state.plan === "free" ? "Proにすると、もっと取り込めます。" : ""
+            }`
+          : "今月のAI取り込みの上限に達していたためです。今は取り込めるので、もう一度共有してください。"}
+      </BillingNotice>
+    );
+  }
+
+  if (arrival.checkout === "cancel") {
+    return (
+      <BillingNotice title="手続きを中止しました" tone="info">
+        料金はかかっていません。
+      </BillingNotice>
+    );
   }
 
   return null;
 };
 
-const checkoutErrorMessage = (error: unknown) => {
-  if (error instanceof ApiClientError && error.code === "already_subscribed") {
-    return "既にPro契約があります。表示を更新してください。";
-  }
-
-  return "Checkoutを開始できませんでした。時間をおいて再度お試しください。";
-};
-
-const formatBillingDate = (date: string) =>
-  new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(date));
-
 export const SettingsBillingRoute = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const search = billingRouteApi.useSearch();
+  // 理由は開いたときに一度だけ読んで持ち、URLからは消す。再読み込みや後日のブックマークで古いお知らせを出さない。
+  const [arrival] = useState(search);
+  const hasArrivalParams = Boolean(search.checkout || search.upsell || search.from);
   const viewer = useViewer({ enabled: true });
-  const billingStatus = useQuery({
-    queryKey: billingStatusQueryKey,
-    queryFn: fetchBillingStatus,
-    retry: false,
+  const { billingStatus, confirmation, startWaiting } = useCheckoutConfirmation({
+    initiallyWaiting: arrival.checkout === "success",
   });
-  const search = useRouterState({ select: (state) => state.location.search });
-  const [error, setError] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [portalError, setPortalError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckoutSubmitting, setIsCheckoutSubmitting] = useState(false);
   const [isPortalSubmitting, setIsPortalSubmitting] = useState(false);
-  const message = checkoutMessage((search as { checkout?: unknown }).checkout);
-  const subscription = billingStatus.data?.subscription;
-  const cancellationMessage =
-    subscription?.cancelAtPeriodEnd && subscription.currentPeriodEnd
-      ? `解約予約中。${formatBillingDate(subscription.currentPeriodEnd)} までは Pro を利用できます。`
-      : null;
+
+  useEffect(() => {
+    if (hasArrivalParams) {
+      void navigate({ to: "/settings/billing", search: {}, replace: true });
+    }
+  }, [hasArrivalParams, navigate]);
 
   const startCheckout = async () => {
-    setError(null);
-    setIsSubmitting(true);
+    setCheckoutError(null);
+    setIsCheckoutSubmitting(true);
 
     try {
       const response = await createCheckout();
-      checkoutRedirect.assign(response.url);
-    } catch (checkoutError) {
-      setError(checkoutErrorMessage(checkoutError));
-
-      if (checkoutError instanceof ApiClientError && checkoutError.code === "already_subscribed") {
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: viewerQueryKey }),
-          queryClient.invalidateQueries({ queryKey: billingStatusQueryKey }),
-        ]);
+      billingRedirect.assign(response.url);
+    } catch (error) {
+      // 決済を終えたのに、まだFreeに見えているあいだに押された。二つ目の契約は作らず、Proに変わるのを待つ。
+      if (error instanceof ApiClientError && error.code === "already_subscribed") {
+        startWaiting();
+        await queryClient.invalidateQueries({ queryKey: viewerQueryKey });
+        return;
       }
+
+      setCheckoutError("お支払いの画面を開けませんでした。時間をおいて再度お試しください。");
     } finally {
-      setIsSubmitting(false);
+      setIsCheckoutSubmitting(false);
     }
   };
 
@@ -108,21 +190,21 @@ export const SettingsBillingRoute = () => {
 
     try {
       const response = await createBillingPortal();
-      checkoutRedirect.assign(response.url);
+      billingRedirect.assign(response.url);
     } catch {
-      setPortalError("請求管理を開けませんでした。時間をおいて再度お試しください。");
+      setPortalError("契約の管理画面を開けませんでした。時間をおいて再度お試しください。");
     } finally {
       setIsPortalSubmitting(false);
     }
   };
 
-  const billingTopBar = <SettingsSubpageTopBar title="プラン" />;
+  const topBar = <SettingsSubpageTopBar title="プラン" />;
 
-  // planと利用状況がすべてviewer由来なので、この画面だけはviewerを待つ。
+  // プランと件数はviewerから出すので、この画面だけはviewerを待つ。
   if (!viewer.data) {
     return viewer.isError ? (
       <section className={settingsPageClass}>
-        {billingTopBar}
+        {topBar}
         <ConnectionUnavailable
           isRetrying={viewer.isFetching}
           onRetry={async () => {
@@ -135,84 +217,46 @@ export const SettingsBillingRoute = () => {
     );
   }
 
-  const isPro = (billingStatus.data?.plan ?? viewer.data.plan) === "pro";
+  const state = derivePlanState(viewer.data, billingStatus.data);
 
   return (
     <section className={settingsPageClass}>
-      {billingTopBar}
+      {topBar}
 
-      <div className={settingsPageBodyClass}>
-        {message ? (
-          <div className="mb-6 min-w-0 rounded-[14px] border border-brand-line-soft bg-brand-paper p-4">
-            <p className="text-brand-walnut text-sm">{message}</p>
-          </div>
+      <div className={`${settingsPageBodyClass} grid gap-10`}>
+        <ArrivalNotice
+          arrival={arrival}
+          confirmation={confirmation}
+          isPortalSubmitting={isPortalSubmitting}
+          state={state}
+          onOpenPortal={() => void openBillingPortal()}
+          onRecheck={startWaiting}
+        />
+
+        <CurrentPlanSection state={state} />
+
+        {state.plan === "free" && confirmation === "idle" ? (
+          <ProOfferSection
+            error={checkoutError}
+            isSubmitting={isCheckoutSubmitting}
+            state={state}
+            onUpgrade={() => void startCheckout()}
+          />
         ) : null}
 
-        <div className="grid min-w-0 gap-5 md:grid-cols-2">
-          <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-            <h2 className="text-brand-walnut font-bold text-lg">現在のプラン</h2>
-            <p className="mt-3 font-bold text-2xl text-brand-ink">{isPro ? "Pro" : "Free"}</p>
-            {cancellationMessage ? (
-              <div className="mt-3 rounded-[14px] bg-brand-paper-muted p-3">
-                <p className="break-words text-brand-walnut text-sm">{cancellationMessage}</p>
-              </div>
-            ) : null}
-            <p className="mt-3 text-brand-muted text-sm">
-              保存件数:{" "}
-              <span className="font-semibold text-brand-ink">{viewer.data.recipeCount}</span>
-              {viewer.data.recipeLimit === null ? "" : ` / ${viewer.data.recipeLimit}`}
-            </p>
-            <p className="mt-1 text-brand-muted text-sm">
-              AI月次上限:{" "}
-              <span className="font-semibold text-brand-ink">{viewer.data.aiUsage.limit} 回</span>
-            </p>
-          </div>
-
-          <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-            <h2 className="text-brand-walnut font-bold text-lg">Pro</h2>
-            <p className="mt-2 text-brand-muted text-sm">
-              保存件数の上限なしでレシピを保存できます。
-            </p>
-            {isPro ? (
-              <div className="mt-4">
-                <p className="font-semibold text-brand-sage text-sm">
-                  {cancellationMessage ? "Proは請求期間終了まで利用できます。" : "Pro契約中です。"}
-                </p>
-                <Button
-                  className="mt-4"
-                  disabled={isPortalSubmitting}
-                  type="button"
-                  onClick={() => void openBillingPortal()}
-                >
-                  請求管理
-                </Button>
-              </div>
-            ) : (
-              <Button
-                className="mt-4"
-                disabled={isSubmitting}
-                type="button"
-                onClick={() => void startCheckout()}
-              >
-                Proにアップグレード
-              </Button>
-            )}
-            {error ? (
-              <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
-                <p className="break-words text-brand-danger text-sm" role="alert">
-                  {error}
-                </p>
-              </div>
-            ) : null}
-            {portalError ? (
-              <div className="mt-4 rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
-                <p className="break-words text-brand-danger text-sm" role="alert">
-                  {portalError}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        {state.plan === "pro" ? (
+          <ContractSection
+            error={portalError}
+            isLoading={billingStatus.isPending}
+            isSubmitting={isPortalSubmitting}
+            loadFailed={billingStatus.isError && !billingStatus.data}
+            state={state}
+            onOpenPortal={() => void openBillingPortal()}
+            onRetryLoad={() => {
+              void queryClient.invalidateQueries({ queryKey: billingStatusQueryKey });
+            }}
+          />
+        ) : null}
       </div>
     </section>
   );

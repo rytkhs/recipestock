@@ -1,9 +1,9 @@
 import { type QueryClient } from "@tanstack/react-query";
+import { billingStatusQueryKey } from "../features/billing/api";
 import { shortcutCredentialsQueryKey } from "../features/ios-share/api";
 import { pushSubscriptionsQueryKey } from "../features/push-notifications/api";
 import { recipesUserScopedQueryRoots } from "../features/recipes";
 import { tagsUserScopedQueryRoots } from "../features/tags";
-import { billingStatusQueryKey } from "./billing";
 import { viewerQueryKey } from "./viewer";
 
 const userScopedQueryKeys = new Set<string>([

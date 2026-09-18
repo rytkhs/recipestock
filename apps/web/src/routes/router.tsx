@@ -368,9 +368,19 @@ const settingsRoute = createRoute({
   pendingMs: 0,
 });
 
+// プランのページを開いた理由。ページは一度だけ読んでURLから消す。読めない値は理由なしとして扱う。
+const settingsBillingSearchSchema = z.object({
+  // Stripeの決済画面から戻ったときの結果（apps/api/src/routes/billing.ts）。
+  checkout: z.enum(["success", "cancel"]).optional().catch(undefined),
+  // ショートカットが上限で止まったときに開くURLの理由（apps/api/src/ios-share-notices.ts）。
+  upsell: z.enum(["recipe_limit", "ai_usage_limit"]).optional().catch(undefined),
+  from: z.literal("shortcut").optional().catch(undefined),
+});
+
 const settingsBillingRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings/billing",
+  validateSearch: settingsBillingSearchSchema,
   component: SettingsBillingRoute,
   errorComponent: RouteChunkError,
   pendingComponent: SettingsPageSkeleton,

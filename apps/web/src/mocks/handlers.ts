@@ -20,11 +20,13 @@ import { delay, HttpResponse, http } from "msw";
 import {
   MOCK_USER_ID,
   type MockTag,
+  proBillingStatusFixture,
   recipeDetailFixture,
   recipeImageUrl,
   recipeThumbnailUrl,
   type SessionFixture,
   sessionFixture,
+  viewerFixture,
 } from "./fixtures";
 import { imagePlaceholderSize, imagePlaceholderSvg } from "./images";
 import { type MockState } from "./scenarios";
@@ -170,6 +172,9 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
   const jobCompletions = new Map<string, number>();
   let nextId = 1;
   let tags: MockTag[] = [...state.tags];
+  let viewer = state.viewer;
+  let billing = state.billing;
+  let billingReads = 0;
   // Recipeのidごとに、付けたタグのidを付けた順に持つ。
   const recipeTags = new Map(
     Object.entries(state.recipeTags).map(([recipeId, tagIds]) => [recipeId, [...tagIds]]),
@@ -196,7 +201,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     session ? null : apiError(401, "unauthorized", "Sign in is required.");
 
   const isRecipeLimitReached = () =>
-    state.viewer.recipeLimit !== null && recipes.length >= state.viewer.recipeLimit;
+    viewer.recipeLimit !== null && recipes.length >= viewer.recipeLimit;
 
   const recipeLimitExceeded = () =>
     apiError(403, "recipe_limit_exceeded", "Recipe limit exceeded.");
@@ -323,7 +328,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       () =>
         requireSession() ??
         HttpResponse.json({
-          ...state.viewer,
+          ...viewer,
           recipeCount: recipes.length,
           isRecipeLimitReached: isRecipeLimitReached(),
         }),
@@ -623,7 +628,23 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     }),
 
     // --- billing ---
-    http.get("/api/billing/status", () => requireSession() ?? HttpResponse.json(state.billing)),
+    http.get("/api/billing/status", () => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      // 決済から戻った直後を再現する。何度か読まれたところでwebhookが届いたことにしてProへ変える。
+      billingReads += 1;
+      if (
+        state.upgradeAfterBillingReads !== undefined &&
+        billingReads > state.upgradeAfterBillingReads
+      ) {
+        viewer = viewerFixture({ plan: "pro" });
+        billing = proBillingStatusFixture();
+      }
+
+      return HttpResponse.json(billing);
+    }),
+    http.get("/api/billing/pro-price", () => requireSession() ?? HttpResponse.json(state.proPrice)),
     http.post("/api/billing/checkout", () =>
       HttpResponse.json({ url: `${window.location.origin}/settings/billing?checkout=success` }),
     ),

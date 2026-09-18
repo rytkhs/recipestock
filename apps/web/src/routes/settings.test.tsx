@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { billingRedirect } from "../features/billing/api";
 import { viewerQueryKey } from "../lib/viewer";
 import {
   billingStatusResponse,
@@ -13,10 +14,10 @@ import {
   renderApp,
   viewerResponse,
 } from "../test/router-test-utils";
-import { checkoutRedirect } from "./settings-billing";
 
 describe("Settings routes", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -975,33 +976,170 @@ describe("Settings routes", () => {
     ).resolves.toBeInTheDocument();
   });
 
-  it("FreeユーザーはプランのページからCheckoutを開始できる", async () => {
-    const fetchMock = mockFetch(
-      async (input, init) => {
-        if (getRequestPath(input) === "/api/billing/checkout" && init?.method === "POST") {
-          return jsonResponse({ url: "https://checkout.stripe.com/session_123" });
-        }
+  const proBilling = (
+    subscription: Partial<{
+      status: string;
+      cancelAtPeriodEnd: boolean;
+      currentPeriodEnd: string | null;
+      cancelAt: string | null;
+    }> = {},
+  ) => ({
+    plan: "pro" as const,
+    subscription: {
+      status: "active",
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: "2026-10-07T15:00:00.000Z",
+      cancelAt: null,
+      ...subscription,
+    },
+  });
 
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
+  const proViewer = {
+    ...viewerResponse,
+    plan: "pro" as const,
+    recipeCount: 128,
+    recipeLimit: null,
+    aiUsage: { ...viewerResponse.aiUsage, limit: 300 },
+  };
+
+  const freeViewer = (recipeCount: number, used = 0) => ({
+    ...viewerResponse,
+    recipeCount,
+    isRecipeLimitReached: recipeCount >= 5,
+    aiUsage: { ...viewerResponse.aiUsage, used },
+  });
+
+  const unknownError = () =>
+    jsonResponse(
+      { error: { code: "unknown", message: "Unexpected error occurred." } },
+      { status: 500 },
     );
-    const assign = vi.spyOn(checkoutRedirect, "assign").mockImplementation(() => {});
+
+  // viewerと課金の状態は、呼ばれた回数で変えたいときのために関数でも受け取る。
+  const mockBillingFetch = ({
+    billing = billingStatusResponse,
+    checkout = () => jsonResponse({ url: "https://checkout.stripe.com/session_123" }),
+    portal = () => jsonResponse({ url: "https://billing.stripe.com/session_123" }),
+    proPrice = { amount: 480, currency: "jpy", interval: "month" },
+    viewer = viewerResponse,
+  }: {
+    billing?: object | (() => object);
+    checkout?: () => Response;
+    portal?: () => Response;
+    proPrice?: object | null;
+    viewer?: object | (() => object);
+  } = {}) =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (isGetSessionRequest(input)) {
+        return createSessionResponse(true);
+      }
+      if (path === "/api/me") {
+        return jsonResponse(typeof viewer === "function" ? viewer() : viewer);
+      }
+      if (path === "/api/billing/status") {
+        return jsonResponse(typeof billing === "function" ? billing() : billing);
+      }
+      if (path === "/api/billing/pro-price") {
+        return proPrice ? jsonResponse(proPrice) : unknownError();
+      }
+      if (path === "/api/billing/checkout" && init?.method === "POST") {
+        return checkout();
+      }
+      if (path === "/api/billing/portal" && init?.method === "POST") {
+        return portal();
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+  it("FreeはFreeとProの違いと値段を見て、Checkoutへ進める", async () => {
+    const fetchMock = mockBillingFetch({ viewer: freeViewer(3) });
+    const assign = vi.spyOn(billingRedirect, "assign").mockImplementation(() => {});
+
     await renderApp("/settings/billing");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Proにアップグレード" }));
+    await expect(screen.findByText("3 / 5件")).resolves.toBeInTheDocument();
+    expect(screen.getByText("あと2件保存できます。")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByRole("cell", { name: "5件まで" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "上限なし" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "月10回まで" })).toBeInTheDocument();
+    expect(within(table).getByRole("rowheader", { name: "AI取り込み" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "たっぷり" })).toBeInTheDocument();
+    await expect(
+      screen.findByText(/^月額 [¥￥]480（税込）· いつでも解約できます$/),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "契約を管理" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Proにする" }));
 
     await waitFor(() => {
       expect(findFetchCall(fetchMock, "/api/billing/checkout")).toEqual([
         "/api/billing/checkout",
-        expect.objectContaining({
-          credentials: "include",
-          method: "POST",
-        }),
+        expect.objectContaining({ credentials: "include", method: "POST" }),
       ]);
     });
     expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/session_123");
-    expect(screen.queryByRole("button", { name: "請求管理" })).not.toBeInTheDocument();
+  });
+
+  it("値段を読めなくても、Proにするは押せる", async () => {
+    mockBillingFetch({ proPrice: null });
+
+    await renderApp("/settings/billing");
+
+    await expect(screen.findByText("いつでも解約できます")).resolves.toBeInTheDocument();
+    expect(screen.queryByText(/月額/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Proにする" })).toBeEnabled();
+  });
+
+  it("Checkoutを始められなければ知らせる", async () => {
+    mockBillingFetch({ checkout: unknownError });
+
+    await renderApp("/settings/billing");
+    await userEvent.click(await screen.findByRole("button", { name: "Proにする" }));
+
+    await expect(
+      screen.findByText("お支払いの画面を開けませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("上限ちょうどなら、Proにするか削除すれば保存できると伝える", async () => {
+    mockBillingFetch({ viewer: freeViewer(5) });
+
+    await renderApp("/settings/billing");
+
+    await expect(
+      screen.findByText(
+        "上限に達しています。新しく保存するには、Proにするか、いらないレシピを削除してください。",
+      ),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("ProからFreeに戻ってロックがあれば、消えていないこととProで開けることを伝える", async () => {
+    mockBillingFetch({ viewer: freeViewer(12) });
+
+    await renderApp("/settings/billing");
+
+    await expect(
+      screen.findByText(
+        "12件のうち、開けるのは新しく保存した5件だけです。ほかの7件はロック中ですが、消えてはいません。",
+      ),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("ロック中の7件も、すべて開けるようになります。")).toBeInTheDocument();
+  });
+
+  it("今月のAI取り込みが上限なら、戻る日と手入力での保存を伝える", async () => {
+    mockBillingFetch({ viewer: freeViewer(2, 10) });
+
+    await renderApp("/settings/billing");
+
+    await expect(
+      screen.findByText(
+        "今月のAI取り込みは上限に達しました。6月1日からまた取り込めます。手入力での保存はできます。",
+      ),
+    ).resolves.toBeInTheDocument();
   });
 
   it("プランのページでviewer取得に失敗しても設定へ戻れる", async () => {
@@ -1036,169 +1174,177 @@ describe("Settings routes", () => {
     expect(appRouter.state.location.pathname).toBe("/settings");
   });
 
-  it("ProユーザーにはPro契約ボタンを表示しない", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const path = getRequestPath(input);
-
-      if (path.endsWith("/get-session")) {
-        return createSessionResponse(true);
-      }
-
-      if (path === "/api/me") {
-        return jsonResponse({
-          ...viewerResponse,
-          plan: "pro",
-          recipeLimit: null,
-          aiUsage: {
-            ...viewerResponse.aiUsage,
-            limit: 300,
-          },
-        });
-      }
-
-      if (path === "/api/billing/status") {
-        return jsonResponse({
-          plan: "pro",
-          subscription: {
-            status: "active",
-            cancelAtPeriodEnd: false,
-            currentPeriodEnd: "2026-07-04T00:00:00.000Z",
-            cancelAt: null,
-          },
-        });
-      }
-
-      return new Response(null, { status: 404 });
-    });
+  it("Proは次の更新日と契約の管理を出し、Proにするは出さない", async () => {
+    const fetchMock = mockBillingFetch({ viewer: proViewer, billing: proBilling() });
+    const assign = vi.spyOn(billingRedirect, "assign").mockImplementation(() => {});
 
     await renderApp("/settings/billing");
 
-    await expect(screen.findByText("Pro契約中です。")).resolves.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Pro契約" })).not.toBeInTheDocument();
-  });
+    await expect(screen.findByText("2026年10月8日")).resolves.toBeInTheDocument();
+    expect(screen.getByText("128件（上限なし）")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Proにする" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
 
-  it("ProユーザーはCustomer Portalを開ける", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const path = getRequestPath(input);
-
-      if (path.endsWith("/get-session")) {
-        return createSessionResponse(true);
-      }
-
-      if (path === "/api/me") {
-        return jsonResponse({
-          ...viewerResponse,
-          plan: "pro",
-          recipeLimit: null,
-        });
-      }
-
-      if (path === "/api/billing/status") {
-        return jsonResponse({
-          plan: "pro",
-          subscription: {
-            status: "active",
-            cancelAtPeriodEnd: false,
-            currentPeriodEnd: "2026-07-04T00:00:00.000Z",
-            cancelAt: null,
-          },
-        });
-      }
-
-      if (path === "/api/billing/portal" && init?.method === "POST") {
-        return jsonResponse({ url: "https://billing.stripe.com/session_123" });
-      }
-
-      return new Response(null, { status: 404 });
-    });
-    const assign = vi.spyOn(checkoutRedirect, "assign").mockImplementation(() => {});
-
-    await renderApp("/settings/billing");
-    await userEvent.click(await screen.findByRole("button", { name: "請求管理" }));
+    await userEvent.click(screen.getByRole("button", { name: "契約を管理" }));
 
     await waitFor(() => {
       expect(findFetchCall(fetchMock, "/api/billing/portal")).toEqual([
         "/api/billing/portal",
-        expect.objectContaining({
-          credentials: "include",
-          method: "POST",
-        }),
+        expect.objectContaining({ credentials: "include", method: "POST" }),
       ]);
     });
     expect(assign).toHaveBeenCalledWith("https://billing.stripe.com/session_123");
   });
 
-  it("Portal作成に失敗した場合は案内を表示する", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const path = getRequestPath(input);
+  it("解約を予約したProには、Freeに戻る日とロックされる件数を伝え、Proを続けられる", async () => {
+    const fetchMock = mockBillingFetch({
+      viewer: proViewer,
+      billing: proBilling({ cancelAtPeriodEnd: true }),
+    });
+    vi.spyOn(billingRedirect, "assign").mockImplementation(() => {});
 
-      if (path.endsWith("/get-session")) {
-        return createSessionResponse(true);
-      }
+    await renderApp("/settings/billing");
 
-      if (path === "/api/me") {
-        return jsonResponse({
-          ...viewerResponse,
-          plan: "pro",
-          recipeLimit: null,
-        });
-      }
+    await expect(screen.findByText("2026年10月8日にFreeに戻ります")).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "それまではProのまま使えます。Freeに戻ると、開けるのは新しく保存した5件だけになります。ほかの123件はロックされますが、消えません。",
+      ),
+    ).toBeInTheDocument();
 
-      if (path === "/api/billing/status") {
-        return jsonResponse({
-          plan: "pro",
-          subscription: {
-            status: "active",
-            cancelAtPeriodEnd: false,
-            currentPeriodEnd: "2026-07-04T00:00:00.000Z",
-            cancelAt: null,
-          },
-        });
-      }
+    await userEvent.click(screen.getByRole("button", { name: "Proを続ける" }));
 
-      if (path === "/api/billing/portal" && init?.method === "POST") {
-        return jsonResponse(
-          {
-            error: {
-              code: "unknown",
-              message: "Unexpected error occurred.",
-            },
-          },
-          { status: 500 },
-        );
-      }
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/billing/portal")).toBeDefined();
+    });
+  });
 
-      return new Response(null, { status: 404 });
+  it.each([
+    3, 5,
+  ])("解約を予約したProのレシピが%i件なら、Freeに戻っても今のレシピはすべて開けると伝える", async (recipeCount) => {
+    mockBillingFetch({
+      viewer: { ...proViewer, recipeCount },
+      billing: proBilling({ cancelAtPeriodEnd: true }),
     });
 
     await renderApp("/settings/billing");
-    await userEvent.click(await screen.findByRole("button", { name: "請求管理" }));
 
     await expect(
-      screen.findByText("請求管理を開けませんでした。時間をおいて再度お試しください。"),
+      screen.findByText(
+        "それまではProのまま使えます。Freeに戻ると、保存できるのは5件までになります。今のレシピはすべて開けます。",
+      ),
     ).resolves.toBeInTheDocument();
   });
 
-  it("already_subscribedの場合は案内を表示してviewerを再取得する", async () => {
+  it("支払いを確認できないProには、冒頭で支払い方法の更新を促す", async () => {
+    const fetchMock = mockBillingFetch({
+      viewer: proViewer,
+      billing: proBilling({ status: "past_due" }),
+    });
+    vi.spyOn(billingRedirect, "assign").mockImplementation(() => {});
+
+    await renderApp("/settings/billing");
+
+    await expect(screen.findByText("お支払いを確認できません")).resolves.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "支払い方法を更新" }));
+
+    await waitFor(() => {
+      expect(findFetchCall(fetchMock, "/api/billing/portal")).toBeDefined();
+    });
+  });
+
+  it("契約の管理画面を開けなければ知らせる", async () => {
+    mockBillingFetch({ viewer: proViewer, billing: proBilling(), portal: unknownError });
+
+    await renderApp("/settings/billing");
+    await userEvent.click(await screen.findByRole("button", { name: "契約を管理" }));
+
+    await expect(
+      screen.findByText("契約の管理画面を開けませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("決済から戻ったら、Proに変わるまで待ってから知らせ、そのあいだProにするを出さない", async () => {
+    vi.useFakeTimers();
     let meCalls = 0;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const path = getRequestPath(input);
-
-      if (path.endsWith("/get-session")) {
-        return createSessionResponse(true);
-      }
-
-      if (path === "/api/me") {
+    let statusCalls = 0;
+    mockBillingFetch({
+      viewer: () => {
         meCalls += 1;
-        return jsonResponse(viewerResponse);
-      }
+        return meCalls > 1 ? proViewer : freeViewer(12);
+      },
+      billing: () => {
+        statusCalls += 1;
+        return statusCalls > 1 ? proBilling() : billingStatusResponse;
+      },
+    });
 
-      if (path === "/api/billing/status") {
-        return jsonResponse(billingStatusResponse);
-      }
+    const { appRouter } = await renderApp("/settings/billing?checkout=success");
 
-      if (path === "/api/billing/checkout" && init?.method === "POST") {
-        return jsonResponse(
+    await vi.waitFor(() => {
+      expect(screen.getByText("Proへの切り替えを確認しています")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "Proにする" })).not.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(appRouter.state.location.href).toBe("/settings/billing");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText("Proになりました")).toBeInTheDocument();
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByText("128件（上限なし）")).toBeInTheDocument();
+    });
+    expect(meCalls).toBeGreaterThan(1);
+  });
+
+  it("決済から戻ってもProに変わらなければ、手続きは受け付けたと伝え、もう一度確かめられる", async () => {
+    vi.useFakeTimers();
+    let statusCalls = 0;
+    mockBillingFetch({
+      billing: () => {
+        statusCalls += 1;
+        return billingStatusResponse;
+      },
+    });
+
+    await renderApp("/settings/billing?checkout=success");
+
+    await vi.waitFor(() => {
+      expect(screen.getByText("Proへの切り替えを確認しています")).toBeInTheDocument();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(screen.getByText("手続きは受け付けました")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Proにする" })).not.toBeInTheDocument();
+    const callsBeforeRecheck = statusCalls;
+
+    act(() => {
+      screen.getByRole("button", { name: "もう一度確認" }).click();
+    });
+
+    expect(screen.getByText("Proへの切り替えを確認しています")).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(statusCalls).toBeGreaterThan(callsBeforeRecheck);
+    });
+  });
+
+  it("決済を終えたのにまだFreeに見えているときに押されたら、二つ目の契約を作らずProに変わるのを待つ", async () => {
+    let meCalls = 0;
+    const assign = vi.spyOn(billingRedirect, "assign").mockImplementation(() => {});
+    mockBillingFetch({
+      viewer: () => {
+        meCalls += 1;
+        return viewerResponse;
+      },
+      checkout: () =>
+        jsonResponse(
           {
             error: {
               code: "already_subscribed",
@@ -1206,22 +1352,84 @@ describe("Settings routes", () => {
             },
           },
           { status: 409 },
-        );
-      }
-
-      return new Response(null, { status: 404 });
+        ),
     });
+
     await renderApp("/settings/billing");
+    await userEvent.click(await screen.findByRole("button", { name: "Proにする" }));
 
-    await userEvent.click(await screen.findByRole("button", { name: "Proにアップグレード" }));
-
-    await expect(
-      screen.findByText("既にPro契約があります。表示を更新してください。"),
-    ).resolves.toBeInTheDocument();
-    expect(findFetchCall(fetchMock, "/api/billing/checkout")).toBeDefined();
+    await expect(screen.findByText("Proへの切り替えを確認しています")).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Proにする" })).not.toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(meCalls).toBeGreaterThan(1);
     });
+  });
+
+  it("決済を中止して戻ったら、料金がかかっていないことを伝える", async () => {
+    mockBillingFetch();
+
+    await renderApp("/settings/billing?checkout=cancel");
+
+    await expect(screen.findByText("手続きを中止しました")).resolves.toBeInTheDocument();
+    expect(screen.getByText("料金はかかっていません。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Proにする" })).toBeInTheDocument();
+  });
+
+  it("ショートカットが保存の上限で止まって開いたら、保存されていないことと直し方を伝える", async () => {
+    mockBillingFetch({ viewer: freeViewer(5) });
+
+    await renderApp("/settings/billing?upsell=recipe_limit&from=shortcut");
+
+    await expect(
+      screen.findByText("共有したレシピは保存されていません"),
+    ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "保存できる上限に達していたためです。保存できるようにしてから、もう一度共有してください。",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("開くまでにレシピを消して空きがあれば、もう一度共有するよう伝える", async () => {
+    mockBillingFetch({ viewer: freeViewer(4) });
+
+    await renderApp("/settings/billing?upsell=recipe_limit&from=shortcut");
+
+    await expect(
+      screen.findByText(
+        "保存できる上限に達していたためです。今は保存できるので、もう一度共有してください。",
+      ),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("ショートカットがAI取り込みの上限で止まって開いたら、理由と戻る日を伝える", async () => {
+    mockBillingFetch({ viewer: freeViewer(2, 10) });
+
+    await renderApp("/settings/billing?upsell=ai_usage_limit&from=shortcut");
+
+    await expect(
+      screen.findByText("共有したレシピは取り込まれていません"),
+    ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "今月のAI取り込みの上限に達していたためです。Proにすると、もっと取り込めます。",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "今月のAI取り込みは上限に達しました。6月1日からまた取り込めます。手入力での保存はできます。",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("読めない理由が付いていても、お知らせを出さずに開く", async () => {
+    mockBillingFetch();
+
+    await renderApp("/settings/billing?upsell=unknown&checkout=done");
+
+    await expect(screen.findByRole("button", { name: "Proにする" })).resolves.toBeInTheDocument();
+    expect(screen.queryByText(/共有したレシピ|手続き/)).not.toBeInTheDocument();
   });
 
   const linkedCredential = (id: string, name: string) => ({
@@ -1232,10 +1440,12 @@ describe("Settings routes", () => {
   });
 
   const mockSettingsFetch = ({
+    billing = null,
     credentials = [],
     tags = [],
     viewer = viewerResponse,
   }: {
+    billing?: object | null;
     credentials?: ReturnType<typeof linkedCredential>[];
     tags?: { id: string; name: string; recipeCount: number }[];
     viewer?: typeof viewerResponse | null;
@@ -1259,6 +1469,9 @@ describe("Settings routes", () => {
       }
       if (path === "/api/shortcut-credentials") {
         return jsonResponse({ credentials });
+      }
+      if (path === "/api/billing/status" && billing) {
+        return jsonResponse(billing);
       }
 
       return new Response(null, { status: 404 });
@@ -1311,6 +1524,38 @@ describe("Settings routes", () => {
       screen.findByRole("link", { name: /共有から取り込む.*未設定/ }),
     ).resolves.toBeInTheDocument();
     await expect(screen.findByRole("link", { name: /タグ.*なし/ })).resolves.toBeInTheDocument();
+  });
+
+  it("ProからFreeに戻ってロックがあれば、目次のプランの行にロック中の件数を出す", async () => {
+    mockSettingsFetch({ viewer: freeViewer(12) });
+
+    await renderApp("/settings");
+
+    await expect(
+      screen.findByRole("link", { name: /プラン.*Free · 7件ロック中/ }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("Free · 7件ロック中")).toHaveClass("text-brand-orange-dark");
+  });
+
+  it("解約を予約したProは、目次のプランの行にいつまでProかを出す", async () => {
+    mockSettingsFetch({ viewer: proViewer, billing: proBilling({ cancelAtPeriodEnd: true }) });
+
+    await renderApp("/settings");
+
+    await expect(
+      screen.findByRole("link", { name: /プラン.*Pro · 10月8日まで/ }),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("支払いを確認できないProは、目次のプランの行で知らせる", async () => {
+    mockSettingsFetch({ viewer: proViewer, billing: proBilling({ status: "past_due" }) });
+
+    await renderApp("/settings");
+
+    await expect(
+      screen.findByRole("link", { name: /プラン.*支払いを確認できません/ }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("支払いを確認できません")).toHaveClass("text-brand-orange-dark");
   });
 
   it("viewerを読めないときはプランを既定値で描かない", async () => {

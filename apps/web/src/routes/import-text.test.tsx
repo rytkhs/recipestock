@@ -138,6 +138,10 @@ describe("Import text route", () => {
     await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
       "保存できるレシピ数の上限に達しています。",
     );
+    expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
+      "href",
+      "/settings/billing",
+    );
   });
 
   it("失敗したjobの原文を読み込み、送り直したら古いjobを閉じる", async () => {

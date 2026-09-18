@@ -1,6 +1,7 @@
 import {
   type GetBillingStatusResponse,
   type GetMeResponse,
+  type GetProPriceResponse,
   type GetPushSubscriptionsResponse,
   type ImportJobSummary,
   type ListShortcutCredentialsResponse,
@@ -51,6 +52,26 @@ export const billingStatusFixture = (
   plan: "free",
   subscription: null,
   ...overrides,
+});
+
+// Proで契約中。更新日は開いた日から20日後にする。
+export const proBillingStatusFixture = (
+  subscription: Partial<NonNullable<GetBillingStatusResponse["subscription"]>> = {},
+): GetBillingStatusResponse => ({
+  plan: "pro",
+  subscription: {
+    status: "active",
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
+    cancelAt: null,
+    ...subscription,
+  },
+});
+
+export const proPriceFixture = (): GetProPriceResponse => ({
+  amount: 480,
+  currency: "jpy",
+  interval: "month",
 });
 
 const encodeObjectKey = (objectKey: string) =>

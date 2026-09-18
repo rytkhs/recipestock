@@ -7,7 +7,6 @@ import {
   SignOut,
   Tag,
 } from "@phosphor-icons/react";
-import { type GetMeResponse } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -22,6 +21,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
+import { billingStatusQueryKey, fetchBillingStatus } from "../features/billing/api";
+import { derivePlanState, planRowValue } from "../features/billing/plan-state";
 import { listShortcutCredentials, shortcutCredentialsQueryKey } from "../features/ios-share/api";
 import {
   deactivatePushSubscription,
@@ -42,13 +43,6 @@ import { useViewer } from "../lib/viewer";
 
 const rowIconSize = 20;
 
-const planLabel = (viewer: GetMeResponse) => {
-  const name = viewer.plan === "pro" ? "Pro" : "Free";
-  return viewer.recipeLimit === null
-    ? name
-    : `${name} · ${viewer.recipeCount}/${viewer.recipeLimit}件`;
-};
-
 // 読み込み中は"loading"、読めなかったときはundefinedにして、行には何も出さない。
 const rowValue = <T,>(
   query: { data: T | undefined; isPending: boolean },
@@ -63,6 +57,20 @@ export const SettingsIndexRoute = () => {
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const viewer = useViewer({ enabled: true });
+  const isPro = viewer.data?.plan === "pro";
+  // 解約の予約や支払いの遅れはProにしかないので、契約の状態はProのときだけ読む。
+  const billingStatus = useQuery({
+    queryKey: billingStatusQueryKey,
+    queryFn: fetchBillingStatus,
+    enabled: isPro,
+    retry: false,
+  });
+  // Proは契約の状態を待ってから出す。契約を読めなければ、分かっているプラン名だけを出す。
+  const isPlanLoading = viewer.isPending || (isPro && billingStatus.isPending);
+  const planRow =
+    viewer.data && !isPlanLoading
+      ? planRowValue(derivePlanState(viewer.data, billingStatus.data))
+      : undefined;
   const tags = useQuery({ queryKey: tagsQueryKeys.all(), queryFn: listTags });
   const shortcutCredentials = useQuery({
     queryKey: shortcutCredentialsQueryKey,
@@ -127,8 +135,8 @@ export const SettingsIndexRoute = () => {
             icon={<CreditCard size={rowIconSize} weight="bold" />}
             label="プラン"
             to="/settings/billing"
-            value={rowValue(viewer, planLabel)}
-            valueTone={viewer.data?.isRecipeLimitReached ? "warning" : "muted"}
+            value={isPlanLoading ? "loading" : planRow?.text}
+            valueTone={planRow?.tone}
           />
           <SettingsLinkRow
             icon={<ShareNetwork size={rowIconSize} weight="bold" />}

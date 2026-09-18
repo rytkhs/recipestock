@@ -81,7 +81,7 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
 
 AI月次上限はプランでreasonを分ける。保存上限がfreeの投稿を先に止めAIを消費させないため、freeが`ai_usage_limit_exceeded`に達するのは例外的であり、実際に到達するのは主にProである。すでに払っているProへ「Proにすると」と案内しても意味がないので、`ai_usage_quota_exhausted`はopenUrlを持たせずリセット時期だけを伝える。リセットはJST月初固定なので「毎月1日」は常に真であり、日付を補間する必要はない。
 
-AI上限は濫用防止の安全弁であり、プランが売る枠ではない。上限値は運用中にenvで変えられるため、`body`に具体的な回数を書かない。数字を書けばそれ自体が仕様として読まれ、上限の調整がユーザーの期待を裏切ることになる。
+上限値は運用中にenvで変えられるため、`body`に具体的な回数を書かず、文言の一覧を固定のまま保つ。Freeの回数は、遷移先のプランのページが今の値から出す（ADR 0026）。利用者向けの文言では「AI取り込み」の上限と呼ぶ。
 
 表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`、`ai_usage_quota_exhausted`はwarn、それ以外はinfo。freeのAI上限到達はコンバージョン機会であり通常の利用結果だが、proの枠切れは容量または濫用の兆候であるため別のlevelで扱う。
 
