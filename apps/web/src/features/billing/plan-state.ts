@@ -131,3 +131,15 @@ export const isResolvedByUpgrade = (
   code: string | null | undefined,
   plan: GetMeResponse["plan"] | undefined,
 ) => code === "recipe_limit_exceeded" || (code === "ai_usage_limit_exceeded" && plan === "free");
+
+/**
+ * 前に上限で止まったものが、今もプランを変えなければ直らないか。
+ * 止まったあとにレシピを消した、月が替わった、Proにしたときは、再試行すれば通る。
+ */
+export const isStillResolvedByUpgrade = (
+  code: string | null | undefined,
+  state: PlanState | undefined,
+) =>
+  state?.plan === "free" &&
+  ((code === "recipe_limit_exceeded" && state.savedRecipes !== "room") ||
+    (code === "ai_usage_limit_exceeded" && state.importLimitReached));

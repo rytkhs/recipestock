@@ -14,6 +14,7 @@ import {
   jsonResponse,
   mockFetch,
   renderApp,
+  viewerResponse,
 } from "../test/router-test-utils";
 
 const savedImage = (objectKey: string, url?: string, width = 1200, height = 800) => ({
@@ -1366,7 +1367,7 @@ describe("RecipesRoute", () => {
     ]);
   });
 
-  it("保存の上限で止まった取り込みには、再試行の代わりにプランのページへの入口を出す", async () => {
+  const renderLimitFailedJob = async (recipeCount: number) => {
     mockFetch(
       async (input) => {
         if (input === "/api/recipes?limit=20") {
@@ -1393,7 +1394,7 @@ describe("RecipesRoute", () => {
 
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, viewer: { ...viewerResponse, recipeCount } },
     );
 
     await renderApp("/recipes");
@@ -1404,11 +1405,25 @@ describe("RecipesRoute", () => {
     await userEvent.click(screen.getByRole("button", { name: "1件取り込めませんでした" }));
 
     expect(screen.getByText("保存できるレシピ数の上限に達しています。")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
-      "href",
-      "/settings/billing",
-    );
+  };
+
+  it("保存の上限で止まった取り込みには、今も上限にいれば再試行の代わりにプランのページへの入口を出す", async () => {
+    await renderLimitFailedJob(FREE_RECIPE_LIMIT);
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
+        "href",
+        "/settings/billing",
+      );
+    });
     expect(screen.queryByRole("button", { name: "再試行" })).not.toBeInTheDocument();
+  });
+
+  it("保存の上限で止まった取り込みでも、あとで枠が空いていれば再試行を出す", async () => {
+    await renderLimitFailedJob(FREE_RECIPE_LIMIT - 1);
+
+    expect(screen.getByRole("button", { name: "再試行" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "プランを見る" })).not.toBeInTheDocument();
   });
 
   it("URL import失敗は時間経過で自動dismissしない", async () => {

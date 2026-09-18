@@ -50,7 +50,10 @@ export const isGetSessionRequest = (input: RequestInfo | URL) =>
 
 export const mockFetch = (
   handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> | Response,
-  { authenticated = false }: { authenticated?: boolean } = {},
+  {
+    authenticated = false,
+    viewer = viewerResponse,
+  }: { authenticated?: boolean; viewer?: typeof viewerResponse } = {},
 ) =>
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const path = getRequestPath(input);
@@ -60,7 +63,7 @@ export const mockFetch = (
     }
 
     if (path === "/api/me" && authenticated) {
-      return jsonResponse(viewerResponse);
+      return jsonResponse(viewer);
     }
 
     if (path === "/api/billing/status" && authenticated) {

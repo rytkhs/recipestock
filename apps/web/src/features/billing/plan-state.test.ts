@@ -1,7 +1,12 @@
 import { type GetBillingStatusResponse } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
 import { billingStatusFixture, viewerFixture } from "../../mocks/fixtures";
-import { derivePlanState, isResolvedByUpgrade, planRowValue } from "./plan-state";
+import {
+  derivePlanState,
+  isResolvedByUpgrade,
+  isStillResolvedByUpgrade,
+  planRowValue,
+} from "./plan-state";
 
 const proBilling = (
   subscription: Partial<NonNullable<GetBillingStatusResponse["subscription"]>> = {},
@@ -180,5 +185,44 @@ describe("isResolvedByUpgrade", () => {
   it("上限でないエラーには当てはまらない", () => {
     expect(isResolvedByUpgrade("fetch_failed", "free")).toBe(false);
     expect(isResolvedByUpgrade(null, "free")).toBe(false);
+  });
+});
+
+describe("isStillResolvedByUpgrade", () => {
+  it("Freeで今も保存件数の上限にいれば、プランを変えなければ直らない", () => {
+    expect(isStillResolvedByUpgrade("recipe_limit_exceeded", derivePlanState(freeViewer(5)))).toBe(
+      true,
+    );
+    expect(isStillResolvedByUpgrade("recipe_limit_exceeded", derivePlanState(freeViewer(6)))).toBe(
+      true,
+    );
+  });
+
+  it("レシピを消して枠が空いていれば、再試行で直る", () => {
+    expect(isStillResolvedByUpgrade("recipe_limit_exceeded", derivePlanState(freeViewer(4)))).toBe(
+      false,
+    );
+  });
+
+  it("Freeで今もAI取り込みの上限にいれば、プランを変えなければ直らない", () => {
+    expect(
+      isStillResolvedByUpgrade("ai_usage_limit_exceeded", derivePlanState(freeViewer(0, 10))),
+    ).toBe(true);
+  });
+
+  it("月が替わって回数が戻っていれば、再試行で直る", () => {
+    expect(
+      isStillResolvedByUpgrade("ai_usage_limit_exceeded", derivePlanState(freeViewer(0, 0))),
+    ).toBe(false);
+  });
+
+  it("Proにしたあとは、どちらの上限も再試行で直る", () => {
+    const state = derivePlanState(proViewer());
+    expect(isStillResolvedByUpgrade("recipe_limit_exceeded", state)).toBe(false);
+    expect(isStillResolvedByUpgrade("ai_usage_limit_exceeded", state)).toBe(false);
+  });
+
+  it("今の状態が分からなければ、再試行を隠さない", () => {
+    expect(isStillResolvedByUpgrade("recipe_limit_exceeded", undefined)).toBe(false);
   });
 });

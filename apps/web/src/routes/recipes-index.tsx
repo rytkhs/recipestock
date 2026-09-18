@@ -49,7 +49,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { RecipeCardSkeleton } from "../components/loading";
 import { PlanLink } from "../features/billing/plan-link";
-import { isResolvedByUpgrade } from "../features/billing/plan-state";
+import { derivePlanState, isStillResolvedByUpgrade } from "../features/billing/plan-state";
 import {
   dismissFinishedImportJob,
   fetchRecentImportJobs,
@@ -103,6 +103,7 @@ const listRecipeSkeletonKeys = [
 const ImportJobIsland = () => {
   const queryClient = useQueryClient();
   const viewer = useViewer({ enabled: true });
+  const planState = viewer.data ? derivePlanState(viewer.data) : undefined;
   const [isExpanded, setIsExpanded] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const observedSuccessIdsRef = useRef(new Set<string>());
@@ -240,9 +241,8 @@ const ImportJobIsland = () => {
                     ? "取り込めませんでした"
                     : "保存しました";
             const label = job.kind === "text" ? (job.textPreview ?? "貼り付けたテキスト") : job.url;
-            // 上限で止まったものは、今のままでは再試行しても同じ理由で止まる。直せる先へ案内する。
-            const needsPlanChange =
-              isFailed && isResolvedByUpgrade(job.errorCode, viewer.data?.plan);
+            // 上限で止まったものは、今も上限にいれば再試行しても同じ理由で止まる。直せる先へ案内する。
+            const needsPlanChange = isFailed && isStillResolvedByUpgrade(job.errorCode, planState);
 
             return (
               <div
