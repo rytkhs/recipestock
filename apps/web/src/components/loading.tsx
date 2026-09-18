@@ -1,8 +1,8 @@
-import { type ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
 import { type RecipeViewMode, readRecipeViewMode } from "../features/recipes/view-mode";
+import { settingsPageClass } from "../features/settings/settings-page";
 import { ScreenTopBarFrame } from "./screen-top-bar";
 
 const skeletonBaseClass =
@@ -107,13 +107,6 @@ export const RecipeListSkeleton = () => {
     </section>
   );
 };
-
-const SectionSkeleton = ({ titleWidth, children }: { titleWidth: string; children: ReactNode }) => (
-  <section className="rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-    <SkeletonBlock className={`h-5 ${titleWidth}`} />
-    <div className="mt-5">{children}</div>
-  </section>
-);
 
 const detailIngredientSkeletonKeys = [
   "detail-ingredient-1",
@@ -294,37 +287,50 @@ export const ImportTextSkeleton = () => (
   </section>
 );
 
+const SettingsTopBarSkeleton = () => (
+  <ScreenTopBarFrame>
+    <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+    <SkeletonBlock className="mx-auto h-5 w-24 sm:mx-0" />
+    <span aria-hidden="true" className="block h-10 w-10 sm:h-11 sm:w-11" />
+  </ScreenTopBarFrame>
+);
+
+const SettingsRowsSkeleton = ({ rowKeys }: { rowKeys: readonly string[] }) => (
+  <div className="divide-y divide-brand-line-soft overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm">
+    {rowKeys.map((key) => (
+      <div className="flex min-h-13 items-center gap-3 px-4 py-3" key={key}>
+        <SkeletonBlock className="h-5 w-5 rounded-full" />
+        <SkeletonBlock className="h-4 w-28" />
+        <SkeletonBlock className="ml-auto h-4 w-16" />
+      </div>
+    ))}
+  </div>
+);
+
+// 設定の目次と同じ骨格。行の枠を、目次と同じ3行・2行・1行のまとまりで並べる。
 export const SettingsSkeleton = () => (
-  <section
-    aria-label="設定画面を読み込み中"
-    className="mx-auto w-full max-w-[1120px] px-0 pb-10 sm:px-6 lg:px-10"
-    role="status"
-  >
-    <ScreenTopBarFrame>
-      <SkeletonBlock className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
-      <SkeletonBlock className="mx-auto h-5 w-24" />
-      <span aria-hidden="true" className="block h-10 w-10 sm:h-11 sm:w-11" />
-    </ScreenTopBarFrame>
-    <div className="mt-4 grid gap-5 px-4 sm:mt-6 sm:px-0">
-      <SectionSkeleton titleWidth="w-28">
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="grid gap-4">
-            <SkeletonBlock className="h-5 w-36" />
-            <SkeletonBlock className="h-11 w-full" />
-            <SkeletonBlock className="h-10 w-40 rounded-full" />
-          </div>
-          <div className="grid gap-4">
-            <SkeletonBlock className="h-5 w-32" />
-            <SkeletonBlock className="h-11 w-full" />
-            <SkeletonBlock className="h-11 w-full" />
-            <SkeletonBlock className="h-10 w-36 rounded-full" />
-          </div>
-        </div>
-      </SectionSkeleton>
-      <SectionSkeleton titleWidth="w-20">
-        <SkeletonBlock className="h-5 w-40" />
-        <SkeletonBlock className="mt-4 h-10 w-28 rounded-full" />
-      </SectionSkeleton>
+  <section aria-label="設定画面を読み込み中" className={settingsPageClass} role="status">
+    <SettingsTopBarSkeleton />
+    <div className="mt-4 grid gap-6 px-4 sm:mt-6 sm:px-0">
+      <SettingsRowsSkeleton rowKeys={["settings-plan", "settings-share", "settings-tags"]} />
+      <div>
+        <SkeletonBlock className="mb-2 ml-4 h-3 w-16" />
+        <SettingsRowsSkeleton rowKeys={["settings-email", "settings-password"]} />
+      </div>
+      <SettingsRowsSkeleton rowKeys={["settings-sign-out"]} />
+    </div>
+  </section>
+);
+
+// 目次から開くページに共通の骨格。中身はページごとに違うので、説明と入力欄とボタンの形だけを出す。
+export const SettingsPageSkeleton = () => (
+  <section aria-label="設定画面を読み込み中" className={settingsPageClass} role="status">
+    <SettingsTopBarSkeleton />
+    <div className="mt-4 grid gap-4 px-4 sm:mt-6 sm:px-0">
+      <SkeletonBlock className="h-4 w-full max-w-md" />
+      <SkeletonBlock className="h-4 w-2/3 max-w-sm" />
+      <SkeletonBlock className="mt-2 h-11 w-full" />
+      <SkeletonBlock className="h-11 w-full rounded-full sm:w-40" />
     </div>
   </section>
 );

@@ -1,16 +1,19 @@
-import { CaretLeft } from "@phosphor-icons/react";
 import {
   type CreateBillingPortalResponse,
   type CreateCheckoutResponse,
   type GetBillingStatusResponse,
 } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
-import { SettingsSkeleton } from "../components/loading";
-import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
+import { SettingsPageSkeleton } from "../components/loading";
+import {
+  SettingsSubpageTopBar,
+  settingsPageBodyClass,
+  settingsPageClass,
+} from "../features/settings/settings-page";
 import { ApiClientError, api, parseApiResponse } from "../lib/api";
 import { billingStatusQueryKey } from "../lib/billing";
 import { useViewer, viewerQueryKey } from "../lib/viewer";
@@ -66,7 +69,6 @@ export const SettingsBillingRoute = () => {
     queryFn: fetchBillingStatus,
     retry: false,
   });
-  const navigate = useNavigate();
   const search = useRouterState({ select: (state) => state.location.search });
   const [error, setError] = useState<string | null>(null);
   const [portalError, setPortalError] = useState<string | null>(null);
@@ -114,26 +116,12 @@ export const SettingsBillingRoute = () => {
     }
   };
 
-  const billingTopBar = (
-    <ScreenTopBar
-      leading={
-        <ScreenTopBarIconButton
-          aria-label="設定へ戻る"
-          onPress={() => {
-            void navigate({ to: "/settings" });
-          }}
-        >
-          <CaretLeft size={21} weight="bold" />
-        </ScreenTopBarIconButton>
-      }
-      title="課金設定"
-    />
-  );
+  const billingTopBar = <SettingsSubpageTopBar title="プラン" />;
 
   // planと利用状況がすべてviewer由来なので、この画面だけはviewerを待つ。
   if (!viewer.data) {
     return viewer.isError ? (
-      <section className="mx-auto w-full max-w-[1120px] px-0 pb-10 sm:px-6 lg:px-10">
+      <section className={settingsPageClass}>
         {billingTopBar}
         <ConnectionUnavailable
           isRetrying={viewer.isFetching}
@@ -143,17 +131,17 @@ export const SettingsBillingRoute = () => {
         />
       </section>
     ) : (
-      <SettingsSkeleton />
+      <SettingsPageSkeleton />
     );
   }
 
   const isPro = (billingStatus.data?.plan ?? viewer.data.plan) === "pro";
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-0 pb-10 sm:px-6 lg:px-10">
+    <section className={settingsPageClass}>
       {billingTopBar}
 
-      <div className="mt-4 px-4 sm:mt-6 sm:px-0">
+      <div className={settingsPageBodyClass}>
         {message ? (
           <div className="mb-6 min-w-0 rounded-[14px] border border-brand-line-soft bg-brand-paper p-4">
             <p className="text-brand-walnut text-sm">{message}</p>

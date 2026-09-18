@@ -1,11 +1,13 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { viewerQueryKey } from "../lib/viewer";
 import {
   billingStatusResponse,
   createSessionResponse,
   findFetchCall,
   getRequestPath,
+  isGetSessionRequest,
   jsonResponse,
   mockFetch,
   renderApp,
@@ -80,6 +82,12 @@ describe("Settings routes", () => {
     };
   };
 
+  const confirmSignOut = async () => {
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "ログアウトしますか？" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "ログアウト" }));
+  };
+
   const createPushSubscription = ({
     endpoint = "https://push.example.com/subscription/device-1",
     unsubscribeResult = true,
@@ -123,7 +131,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
 
     await expect(screen.findByText("この端末では通知が無効です。")).resolves.toBeInTheDocument();
     expect(browser.requestPermissionMock).not.toHaveBeenCalled();
@@ -162,7 +170,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
 
     await expect(
@@ -204,7 +212,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
 
     await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
@@ -223,7 +231,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
 
     await expect(
@@ -320,21 +328,23 @@ describe("Settings routes", () => {
       return new Response(null, { status: 404 });
     });
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
     await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "ログアウト" }));
+    await userEvent.click(screen.getByRole("button", { name: "設定へ戻る" }));
+    await confirmSignOut();
     await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
     await userEvent.type(screen.getByLabelText("パスワード"), "password123");
     await userEvent.click(screen.getByRole("button", { name: "ログイン" }));
-    await userEvent.click(await screen.findByRole("link", { name: "アカウント" }));
+    await userEvent.click((await screen.findAllByRole("link", { name: "設定" }))[0]);
+    await userEvent.click(await screen.findByRole("link", { name: /共有から取り込む/ }));
 
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
     await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
   });
 
-  it("通知拒否を説明し、Shortcut連携は利用可能なままにする", async () => {
+  it("通知拒否を説明し、共有の連携は利用可能なままにする", async () => {
     const browser = installPushBrowser({ requestPermission: "denied" });
     mockFetch(
       async (input, init) => {
@@ -346,14 +356,14 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
 
     await expect(
       screen.findByText("通知が拒否されています。端末の設定から許可してください。"),
     ).resolves.toBeInTheDocument();
     expect(browser.subscribe).not.toHaveBeenCalled();
-    expect(screen.getByRole("heading", { name: "共有から取り込む" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "連携キーを発行" })).toBeInTheDocument();
   });
 
   it("通知権限dialogを閉じた場合は拒否扱いにせず再試行できる", async () => {
@@ -368,7 +378,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
 
     await expect(
@@ -397,7 +407,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
 
     await expect(
@@ -406,18 +416,37 @@ describe("Settings routes", () => {
     expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it("未対応環境を説明し、通知権限を要求しない", async () => {
+  it("ホーム画面から開いていない未対応環境には、追加すれば通知を使えることを伝える", async () => {
     vi.stubGlobal("Notification", undefined);
     vi.stubGlobal("PushManager", undefined);
     mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
 
     await expect(
-      screen.findByText("この環境はWeb Push通知に対応していません。"),
+      screen.findByText(
+        "通知を受け取るには、Recipe Stockをホーム画面に追加して、そこから開いてください。",
+      ),
     ).resolves.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "通知を有効にする" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "共有から取り込む" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "連携キーを発行" })).toBeInTheDocument();
+  });
+
+  it("ホーム画面から開いていても未対応なら、通知権限を要求せず未対応と伝える", async () => {
+    vi.stubGlobal("Notification", undefined);
+    vi.stubGlobal("PushManager", undefined);
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true })),
+    );
+    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+
+    await renderApp("/settings/share");
+
+    await expect(
+      screen.findByText("この環境は通知に対応していません。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "通知を有効にする" })).not.toBeInTheDocument();
   });
 
   it("Service Worker登録がなければ通知無効として表示する", async () => {
@@ -435,7 +464,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
 
     await expect(screen.findByText("この端末では通知が無効です。")).resolves.toBeInTheDocument();
   });
@@ -460,7 +489,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を解除する" }));
 
     await expect(screen.findByText("この端末では通知が無効です。")).resolves.toBeInTheDocument();
@@ -513,7 +542,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を解除する" }));
 
     await expect(screen.findByText(expectedMessage)).resolves.toBeInTheDocument();
@@ -543,7 +572,7 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
+    await renderApp("/settings/share");
     await userEvent.click(await screen.findByRole("button", { name: "通知を解除する" }));
 
     await expect(
@@ -584,7 +613,7 @@ describe("Settings routes", () => {
     });
 
     await renderApp("/settings");
-    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    await confirmSignOut();
 
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
     expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
@@ -626,7 +655,7 @@ describe("Settings routes", () => {
     });
 
     await renderApp("/settings");
-    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    await confirmSignOut();
 
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
   });
@@ -636,16 +665,21 @@ describe("Settings routes", () => {
     browser.getRegistration.mockRejectedValue(new Error("Service Worker lookup failed."));
     mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
 
-    await renderApp("/settings");
-    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    const { appRouter } = await renderApp("/settings");
+    await confirmSignOut();
 
     await expect(
       screen.findByText(
         "通知を解除できなかったため、ログアウトを中止しました。時間をおいて再度お試しください。",
       ),
     ).resolves.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "ログアウト" })).toBeEnabled();
-    expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("alertdialog", { name: "ログアウトしますか？" })).getByRole(
+        "button",
+        { name: "ログアウト" },
+      ),
+    ).toBeEnabled();
+    expect(appRouter.state.location.pathname).toBe("/settings");
   });
 
   it.each([
@@ -695,7 +729,7 @@ describe("Settings routes", () => {
     });
 
     await renderApp("/settings");
-    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    await confirmSignOut();
 
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
     expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
@@ -734,7 +768,7 @@ describe("Settings routes", () => {
     );
 
     await renderApp("/settings");
-    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    await confirmSignOut();
 
     await expect(
       screen.findByText(
@@ -777,23 +811,19 @@ describe("Settings routes", () => {
       return new Response(null, { status: 404 });
     });
 
-    await renderApp("/settings");
-    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    const { appRouter } = await renderApp("/settings");
+    await confirmSignOut();
 
     await expect(
       screen.findByText(
         "通知を解除できなかったため、ログアウトを中止しました。時間をおいて再度お試しください。",
       ),
     ).resolves.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
+    expect(appRouter.state.location.pathname).toBe("/settings");
   });
 
-  it("PWAからShortcut連携トークンを発行して追加導線を表示する", async () => {
+  it("ホーム画面に追加していなくても連携キーを発行してショートカットの追加へ進める", async () => {
     vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", "https://www.icloud.com/shortcuts/recipe-stock-test");
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn(() => ({ matches: true })),
-    );
     const fetchMock = mockFetch(
       async (input, init) => {
         const path = getRequestPath(input);
@@ -819,18 +849,11 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
 
-    await renderApp("/settings");
-    await expect(
-      screen.findByText(
-        "iPhoneやiPadの共有メニューからURLを共有すると、Recipe Stockへの取り込みを直接開始します。通知を許可している場合は、完了をお知らせします。",
-      ),
-    ).resolves.toBeInTheDocument();
-    await userEvent.click(await screen.findByRole("button", { name: "連携トークンを発行" }));
+    await renderApp("/settings/share");
+    await userEvent.click(await screen.findByRole("button", { name: "連携キーを発行" }));
 
-    await expect(screen.findByLabelText("連携トークン")).resolves.toHaveValue(
-      `rssc_${"a".repeat(25)}`,
-    );
-    expect(screen.getByRole("link", { name: "Shortcutを追加" })).toHaveAttribute(
+    await expect(screen.findByLabelText("連携キー")).resolves.toHaveValue(`rssc_${"a".repeat(25)}`);
+    expect(screen.getByRole("link", { name: "ショートカットを追加" })).toHaveAttribute(
       "href",
       "https://www.icloud.com/shortcuts/recipe-stock-test",
     );
@@ -842,7 +865,7 @@ describe("Settings routes", () => {
     ).toBe(true);
   });
 
-  it("設定画面からメールアドレス変更確認メールを送信できる", async () => {
+  it("メールアドレスのページから変更確認メールを送信できる", async () => {
     const fetchMock = mockFetch(
       async (input, init) => {
         if (getRequestPath(input) === "/api/auth/change-email" && init?.method === "POST") {
@@ -853,8 +876,9 @@ describe("Settings routes", () => {
       },
       { authenticated: true },
     );
-    await renderApp("/settings");
+    await renderApp("/settings/email");
 
+    await expect(screen.findByText("chef@example.com")).resolves.toBeInTheDocument();
     await userEvent.type(await screen.findByLabelText("新しいメールアドレス"), "new@example.com");
     await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
 
@@ -874,7 +898,7 @@ describe("Settings routes", () => {
     expect(screen.getByLabelText("新しいメールアドレス")).toHaveValue("");
   });
 
-  it("設定画面からパスワードを変更できる", async () => {
+  it("パスワードのページから変更できる", async () => {
     const fetchMock = mockFetch(
       async (input, init) => {
         if (getRequestPath(input) === "/api/auth/change-password" && init?.method === "POST") {
@@ -885,7 +909,7 @@ describe("Settings routes", () => {
       },
       { authenticated: true },
     );
-    await renderApp("/settings");
+    await renderApp("/settings/password");
 
     await userEvent.type(await screen.findByLabelText("現在のパスワード"), "password123");
     await userEvent.type(screen.getByLabelText("新しいパスワード"), "newpassword123");
@@ -909,7 +933,7 @@ describe("Settings routes", () => {
     expect(screen.getByLabelText("新しいパスワード")).toHaveValue("");
   });
 
-  it("アカウント設定の変更に失敗した場合は固定文言を表示する", async () => {
+  const mockFailingAccountChanges = () =>
     mockFetch(
       async (input, init) => {
         const path = getRequestPath(input);
@@ -925,7 +949,10 @@ describe("Settings routes", () => {
       },
       { authenticated: true },
     );
-    await renderApp("/settings");
+
+  it("メールアドレスの変更に失敗した場合は固定文言を表示する", async () => {
+    mockFailingAccountChanges();
+    await renderApp("/settings/email");
 
     await userEvent.type(await screen.findByLabelText("新しいメールアドレス"), "new@example.com");
     await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
@@ -933,8 +960,13 @@ describe("Settings routes", () => {
     await expect(
       screen.findByText("メールアドレスを変更できませんでした。時間をおいて再度お試しください。"),
     ).resolves.toBeInTheDocument();
+  });
 
-    await userEvent.type(screen.getByLabelText("現在のパスワード"), "password123");
+  it("パスワードの変更に失敗した場合は固定文言を表示する", async () => {
+    mockFailingAccountChanges();
+    await renderApp("/settings/password");
+
+    await userEvent.type(await screen.findByLabelText("現在のパスワード"), "password123");
     await userEvent.type(screen.getByLabelText("新しいパスワード"), "newpassword123");
     await userEvent.click(screen.getByRole("button", { name: "パスワードを変更" }));
 
@@ -943,7 +975,7 @@ describe("Settings routes", () => {
     ).resolves.toBeInTheDocument();
   });
 
-  it("Freeユーザーは課金設定からCheckoutを開始できる", async () => {
+  it("FreeユーザーはプランのページからCheckoutを開始できる", async () => {
     const fetchMock = mockFetch(
       async (input, init) => {
         if (getRequestPath(input) === "/api/billing/checkout" && init?.method === "POST") {
@@ -972,7 +1004,7 @@ describe("Settings routes", () => {
     expect(screen.queryByRole("button", { name: "請求管理" })).not.toBeInTheDocument();
   });
 
-  it("課金設定のviewer取得に失敗しても設定へ戻れる", async () => {
+  it("プランのページでviewer取得に失敗しても設定へ戻れる", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
 
@@ -1190,5 +1222,230 @@ describe("Settings routes", () => {
     await waitFor(() => {
       expect(meCalls).toBeGreaterThan(1);
     });
+  });
+
+  const linkedCredential = (id: string, name: string) => ({
+    id,
+    name,
+    tokenSuffix: id.slice(-4),
+    createdAt: new Date().toISOString(),
+  });
+
+  const mockSettingsFetch = ({
+    credentials = [],
+    tags = [],
+    viewer = viewerResponse,
+  }: {
+    credentials?: ReturnType<typeof linkedCredential>[];
+    tags?: { id: string; name: string; recipeCount: number }[];
+    viewer?: typeof viewerResponse | null;
+  } = {}) =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+
+      if (isGetSessionRequest(input)) {
+        return createSessionResponse(true);
+      }
+      if (path === "/api/me") {
+        return viewer
+          ? jsonResponse(viewer)
+          : jsonResponse(
+              { error: { code: "temporarily_unavailable", message: "Please retry later." } },
+              { status: 503 },
+            );
+      }
+      if (path === "/api/tags") {
+        return jsonResponse({ tags });
+      }
+      if (path === "/api/shortcut-credentials") {
+        return jsonResponse({ credentials });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+  it("目次の各行に今の状態を出し、上限に達したプランを目立たせる", async () => {
+    mockSettingsFetch({
+      viewer: { ...viewerResponse, recipeCount: 5, recipeLimit: 5, isRecipeLimitReached: true },
+      credentials: [
+        linkedCredential("credential_0001", "iPhone"),
+        linkedCredential("credential_0002", "iPad"),
+      ],
+      tags: [
+        { id: "tag_1", name: "鶏肉", recipeCount: 2 },
+        { id: "tag_2", name: "作り置き", recipeCount: 1 },
+        { id: "tag_3", name: "お菓子", recipeCount: 0 },
+      ],
+    });
+
+    await renderApp("/settings");
+
+    await expect(
+      screen.findByRole("link", { name: /プラン.*Free · 5\/5件/ }),
+    ).resolves.toHaveAttribute("href", "/settings/billing");
+    expect(screen.getByText("Free · 5/5件")).toHaveClass("text-brand-orange-dark");
+    await expect(
+      screen.findByRole("link", { name: /共有から取り込む.*2台と連携中/ }),
+    ).resolves.toHaveAttribute("href", "/settings/share");
+    await expect(screen.findByRole("link", { name: /タグ.*3個/ })).resolves.toHaveAttribute(
+      "href",
+      "/tags",
+    );
+    expect(screen.getByRole("link", { name: /メールアドレス.*chef@example\.com/ })).toHaveAttribute(
+      "href",
+      "/settings/email",
+    );
+    expect(screen.getByRole("link", { name: "パスワード" })).toHaveAttribute(
+      "href",
+      "/settings/password",
+    );
+  });
+
+  it("Proで連携もタグもなければ、そのとおりに出す", async () => {
+    mockSettingsFetch({ viewer: { ...viewerResponse, plan: "pro", recipeLimit: null } });
+
+    await renderApp("/settings");
+
+    await expect(screen.findByRole("link", { name: /プラン.*Pro/ })).resolves.toBeInTheDocument();
+    await expect(
+      screen.findByRole("link", { name: /共有から取り込む.*未設定/ }),
+    ).resolves.toBeInTheDocument();
+    await expect(screen.findByRole("link", { name: /タグ.*なし/ })).resolves.toBeInTheDocument();
+  });
+
+  it("viewerを読めないときはプランを既定値で描かない", async () => {
+    mockSettingsFetch({ viewer: null });
+
+    const { queryClient } = await renderApp("/settings");
+
+    await waitFor(() => {
+      expect(queryClient.getQueryState(viewerQueryKey)?.status).toBe("error");
+    });
+    expect(screen.getByRole("link", { name: /プラン/ })).toHaveTextContent(/^プラン$/);
+  });
+
+  it("目次から各ページへ進み、設定へ戻れる", async () => {
+    mockSettingsFetch();
+
+    const { appRouter } = await renderApp("/settings");
+
+    await userEvent.click(await screen.findByRole("link", { name: /共有から取り込む/ }));
+    await expect(
+      screen.findByRole("heading", { name: "共有から取り込む" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.pathname).toBe("/settings/share");
+
+    await userEvent.click(screen.getByRole("button", { name: "設定へ戻る" }));
+    await userEvent.click(await screen.findByRole("link", { name: /メールアドレス/ }));
+    await expect(
+      screen.findByRole("heading", { name: "メールアドレス" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.pathname).toBe("/settings/email");
+  });
+
+  it("ログアウトの確認をキャンセルするとログアウトしない", async () => {
+    const fetchMock = mockSettingsFetch();
+
+    await renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "ログアウトしますか？" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "キャンセル" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(findFetchCall(fetchMock, "/api/auth/sign-out")).toBeUndefined();
+  });
+
+  const mockLinkedDevicesFetch = ({ revokeSucceeds = true }: { revokeSucceeds?: boolean } = {}) => {
+    let credentials = [
+      linkedCredential("credential_0001", "iPhone"),
+      linkedCredential("credential_0002", "iPad"),
+    ];
+
+    return mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+
+        if (path === "/api/shortcut-credentials" && init?.method === "GET") {
+          return jsonResponse({ credentials });
+        }
+        if (path.startsWith("/api/shortcut-credentials/") && init?.method === "DELETE") {
+          if (!revokeSucceeds) {
+            return jsonResponse(
+              { error: { code: "unknown", message: "Unexpected error occurred." } },
+              { status: 500 },
+            );
+          }
+          const credentialId = path.split("/").at(-1);
+          credentials = credentials.filter(({ id }) => id !== credentialId);
+          return jsonResponse({ revoked: true });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+  };
+
+  it("ホーム画面から開いていなくても、連携している端末を確認して解除できる", async () => {
+    const fetchMock = mockLinkedDevicesFetch();
+
+    await renderApp("/settings/share");
+
+    const list = await screen.findByRole("list", { name: "連携している端末" });
+    expect(within(list).getByText("iPhone")).toBeInTheDocument();
+    expect(within(list).getByText(/末尾 0001/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "「iPhone」の連携を解除" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "「iPhone」の連携を解除しますか？",
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: "解除" }));
+
+    await waitFor(() => {
+      expect(within(list).queryByText("iPhone")).not.toBeInTheDocument();
+    });
+    expect(within(list).getByText("iPad")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          getRequestPath(input) === "/api/shortcut-credentials/credential_0001" &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+
+  it("連携の解除をキャンセルすると解除しない", async () => {
+    const fetchMock = mockLinkedDevicesFetch();
+
+    await renderApp("/settings/share");
+    await userEvent.click(await screen.findByRole("button", { name: "「iPhone」の連携を解除" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "「iPhone」の連携を解除しますか？",
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: "キャンセル" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("iPhone")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  });
+
+  it("連携を解除できなかったら知らせ、端末を一覧に残す", async () => {
+    mockLinkedDevicesFetch({ revokeSucceeds: false });
+
+    await renderApp("/settings/share");
+    await userEvent.click(await screen.findByRole("button", { name: "「iPhone」の連携を解除" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "「iPhone」の連携を解除しますか？",
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: "解除" }));
+
+    await expect(
+      screen.findByText("連携を解除できませんでした。時間をおいて再度お試しください。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("iPhone")).toBeInTheDocument();
   });
 });

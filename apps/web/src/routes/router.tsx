@@ -21,6 +21,7 @@ import {
   RecipeDetailSkeleton,
   RecipeFormSkeleton,
   RecipeListSkeleton,
+  SettingsPageSkeleton,
   SettingsSkeleton,
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
@@ -46,6 +47,18 @@ const SettingsIndexRoute = lazyRouteComponent(
 const SettingsBillingRoute = lazyRouteComponent(
   () => import("./settings-billing"),
   "SettingsBillingRoute",
+);
+const SettingsShareRoute = lazyRouteComponent(
+  () => import("./settings-share"),
+  "SettingsShareRoute",
+);
+const SettingsEmailRoute = lazyRouteComponent(
+  () => import("./settings-email"),
+  "SettingsEmailRoute",
+);
+const SettingsPasswordRoute = lazyRouteComponent(
+  () => import("./settings-password"),
+  "SettingsPasswordRoute",
 );
 
 const withPreload = <TProps,>(
@@ -92,8 +105,12 @@ const ProtectedRouteSkeleton = () => {
     return <LoadingStatus label="タグを読み込み中" />;
   }
 
-  if (pathname === "/settings" || pathname.startsWith("/settings/")) {
+  if (pathname === "/settings") {
     return <SettingsSkeleton />;
+  }
+
+  if (pathname.startsWith("/settings/")) {
+    return <SettingsPageSkeleton />;
   }
 
   return <RecipeListSkeleton />;
@@ -356,7 +373,34 @@ const settingsBillingRoute = createRoute({
   path: "/settings/billing",
   component: SettingsBillingRoute,
   errorComponent: RouteChunkError,
-  pendingComponent: SettingsSkeleton,
+  pendingComponent: SettingsPageSkeleton,
+  pendingMs: 0,
+});
+
+const settingsShareRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/settings/share",
+  component: SettingsShareRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: SettingsPageSkeleton,
+  pendingMs: 0,
+});
+
+const settingsEmailRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/settings/email",
+  component: SettingsEmailRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: SettingsPageSkeleton,
+  pendingMs: 0,
+});
+
+const settingsPasswordRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/settings/password",
+  component: SettingsPasswordRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: SettingsPageSkeleton,
   pendingMs: 0,
 });
 
@@ -381,6 +425,9 @@ const routeTree = rootRoute.addChildren([
     tagsRoute,
     settingsRoute,
     settingsBillingRoute,
+    settingsShareRoute,
+    settingsEmailRoute,
+    settingsPasswordRoute,
   ]),
 ]);
 

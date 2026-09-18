@@ -15,12 +15,14 @@
 3. **URLの内容を取得**
    - URL: `https://<app-host>/api/shortcut/import-jobs`
    - メソッド: `POST`
-   - ヘッダ: `Authorization: Bearer <連携トークン>` / `X-Shortcut-Version: 1`
+   - ヘッダ: `Authorization: Bearer <連携キー>` / `X-Shortcut-Version: 1`
    - 本文: JSON、`input` = 手順2の結果
 4. **通知を表示** — タイトル `notice.title`、本文 `notice.body`
 5. **もし** `notice.openUrl` が `https://` を含む **なら** — **URLを開く** `notice.openUrl`
 
-連携トークンは、Shortcut追加時のインポート質問でユーザーが貼り付ける。判断ロジックはゼロ、分岐は手順5の1つだけである。
+連携キーは、Shortcut追加時のインポート質問でユーザーが貼り付ける。質問文は「Recipe Stockの設定画面でコピーした連携キーを貼り付けてください」とし、設定画面の「共有から取り込む」（`/settings/share`）の言葉と合わせる。判断ロジックはゼロ、分岐は手順5の1つだけである。
+
+画面では「連携トークン」と呼ばない。「トークン」は利用者に伝わらず、インポート質問はアプリの外に出るので説明を添えられない。「キー」は人に見せない・無効にできるという性質を伝え、ログインの「確認コード」とも紛れない。APIとDBでは従来どおりtoken/credentialと呼ぶ。
 
 `notice.body`は常に存在し、2行目を出さないreasonでは空文字になる。手順4はbodyの有無を分岐せず、空文字のときはタイトルだけの1行通知になる。
 
@@ -41,7 +43,7 @@ Content-Type: application/json
 
 `input`は共有入力をテキスト化したもので、1〜8192文字。URLの抽出はサーバーが行う。
 
-連携トークンは`rssc_`と乱数25文字（`[A-Za-z0-9_-]`）の計30文字で、150bitである。DBにはSHA-256のhashだけを保存し、末尾4文字を`tokenSuffix`として平文で持ち、設定画面の連携済み端末一覧に出す。suffixは平文で公開する分だけ実効エントロピーを削るため、長くしない。認証はhash照合だけで行い長さや文字種を検査しないので、旧形式の発行済みトークンもそのまま有効である。
+連携キーは`rssc_`と乱数25文字（`[A-Za-z0-9_-]`）の計30文字で、150bitである。DBにはSHA-256のhashだけを保存し、末尾4文字を`tokenSuffix`として平文で持ち、設定画面の「連携している端末」に出す。suffixは平文で公開する分だけ実効エントロピーを削るため、長くしない。認証はhash照合だけで行い長さや文字種を検査しないので、旧形式の発行済みトークンもそのまま有効である。
 
 ### Response
 
@@ -65,13 +67,13 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
 | `existing_active_job` | `accepted` | 空文字 | なし |
 | `no_url_in_input` | `rejected` | 空文字 | なし |
 | `invalid_url` | `rejected` | あり | なし |
-| `malformed_request` | `rejected` | あり | `/settings` |
+| `malformed_request` | `rejected` | あり | `/settings/share` |
 | `recipe_limit_exceeded` | `rejected` | あり | `/settings/billing?upsell=recipe_limit&from=shortcut` |
 | `ai_usage_limit_exceeded` | `rejected` | あり | `/settings/billing?upsell=ai_usage_limit&from=shortcut` |
 | `ai_usage_quota_exhausted` | `rejected` | あり | なし |
 | `rate_limit_exceeded` | `rejected` | 空文字 | なし |
 | `temporarily_unavailable` | `rejected` | あり | なし |
-| `unauthorized` | `rejected` | あり | `/settings` |
+| `unauthorized` | `rejected` | あり | `/settings/share` |
 
 `openUrl`のキーは常に存在し、遷移先がないreasonでは`null`になる。`body`と違い空文字は返さない。
 

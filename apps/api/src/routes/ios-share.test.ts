@@ -225,7 +225,7 @@ describe("iOS Share routes", () => {
       await expect(response.json()).resolves.toMatchObject({
         outcome: "rejected",
         reason: "malformed_request",
-        notice: { openUrl: "https://app.example.com/settings" },
+        notice: { openUrl: "https://app.example.com/settings/share" },
       });
     }
     expect(createUrlJob).not.toHaveBeenCalled();
@@ -362,7 +362,7 @@ describe("iOS Share routes", () => {
       await expect(response.json()).resolves.toMatchObject({
         outcome: "rejected",
         reason: "unauthorized",
-        notice: { openUrl: "https://app.example.com/settings" },
+        notice: { openUrl: "https://app.example.com/settings/share" },
       });
     }
   });

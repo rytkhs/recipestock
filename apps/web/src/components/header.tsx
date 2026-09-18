@@ -1,11 +1,11 @@
 import {
   Article,
   CookingPot,
+  GearSix,
   Link as LinkIcon,
   List as ListIcon,
   PencilSimple,
   Plus,
-  UserCircle,
 } from "@phosphor-icons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type ReactNode } from "react";
@@ -118,12 +118,12 @@ const AppNav = () => (
     </Link>
     <Link
       activeProps={{ className: "text-primary" }}
-      aria-label="アカウント"
+      aria-label="設定"
       className={cn(buttonVariants({ size: "sm", variant: "ghost" }), "no-underline")}
       to="/settings"
     >
-      <UserCircle data-icon="inline-start" weight="bold" />
-      <span className="hidden sm:inline">アカウント</span>
+      <GearSix data-icon="inline-start" weight="bold" />
+      <span className="hidden sm:inline">設定</span>
     </Link>
   </nav>
 );
