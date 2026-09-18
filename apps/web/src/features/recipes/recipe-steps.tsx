@@ -1,8 +1,8 @@
 import { type RecipeStepWithUrl } from "@recipestock/schemas";
 import { type ReactNode, useId, useState } from "react";
 import { cn } from "@/lib/utils";
+import { SectionHeader } from "../../components/section-header";
 import { withOccurrenceKeys } from "./occurrence-keys";
-import { RecipeSectionHeader } from "./recipe-detail-section";
 
 // 押した手順を「いまここ」として目立たせる。手を動かしたあとに画面へ戻っても位置を見失わないため。
 // 位置は画面を開いている間だけ持ち、保存しない。
@@ -24,7 +24,7 @@ export const RecipeSteps = ({
 
   return (
     <section aria-labelledby={headingId}>
-      <RecipeSectionHeader action={action} id={headingId} title="手順" />
+      <SectionHeader action={action} id={headingId} title="手順" />
       <ol className="mt-2">
         {keyedSteps.map(({ item: step, key }, stepIndex) => {
           const isCurrent = key === currentKey;

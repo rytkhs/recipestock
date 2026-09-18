@@ -2,7 +2,7 @@ import { MAX_RECIPE_NOTE_LENGTH } from "@recipestock/schemas";
 import { useId } from "react";
 import { useController } from "react-hook-form";
 import { cn } from "@/lib/utils";
-import { RecipeSectionHeader } from "../recipes/recipe-detail-section";
+import { SectionHeader } from "../../components/section-header";
 import { draftInlineFieldClass, type RecipeDraftFormControl } from "./form-internals";
 
 type NoteSectionProps = {
@@ -15,7 +15,7 @@ export const NoteSection = ({ control }: NoteSectionProps) => {
 
   return (
     <section aria-labelledby={headingId}>
-      <RecipeSectionHeader id={headingId} title="メモ" />
+      <SectionHeader id={headingId} title="メモ" />
       <textarea
         aria-labelledby={headingId}
         className={cn(draftInlineFieldClass, "field-sizing-content mt-2 min-h-24 leading-7")}

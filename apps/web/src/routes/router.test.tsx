@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -204,10 +204,10 @@ describe("AppRouter", () => {
     expect(appRouter.state.location.href).toBe(importPath);
     expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
     expect(screen.queryAllByRole("button", { name: "レシピ追加" })).toHaveLength(0);
-    expect(screen.queryByRole("link", { name: "アカウント" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "設定" })).toBeNull();
   });
 
-  it("レシピ一覧ではレシピ追加FABとアカウント導線を表示する", async () => {
+  it("レシピ一覧ではレシピ追加FABと設定への導線を表示する", async () => {
     mockFetch(
       async (input) => {
         if (getRequestPath(input) === "/api/recipes?limit=20") {
@@ -222,7 +222,7 @@ describe("AppRouter", () => {
     await renderApp("/recipes");
 
     await expect(screen.findByTestId("add-recipe-fab")).resolves.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "アカウント" })).not.toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: "設定" })).not.toHaveLength(0);
   });
 
   it("レシピ一覧以外ではレシピ追加FABを表示しない", async () => {
@@ -278,7 +278,7 @@ describe("AppRouter", () => {
     await renderApp("/recipes");
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "アカウント" })).not.toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: "設定" })).not.toHaveLength(0);
     expect(screen.queryByRole("heading", { name: "接続を確認できません" })).toBeNull();
   });
 
@@ -482,8 +482,13 @@ describe("AppRouter", () => {
       ],
     });
 
-    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    queryClient.setQueryData(["shortcut-credentials"], { credentials: [] });
 
+    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "ログアウトしますか？" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "ログアウト" }));
+
+    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/auth/sign-out")).toEqual([
       "/api/auth/sign-out",
       expect.objectContaining({
@@ -491,11 +496,11 @@ describe("AppRouter", () => {
         credentials: "include",
       }),
     ]);
-    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
     expect(queryClient.getQueryData(["recipes", { query: "" }])).toBeUndefined();
     expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
     expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
     expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();
     expect(queryClient.getQueryData(["push-subscriptions"])).toBeUndefined();
+    expect(queryClient.getQueryData(["shortcut-credentials"])).toBeUndefined();
   });
 });

@@ -1,41 +1,74 @@
-import { CaretLeft, CreditCard, SignOut, User } from "@phosphor-icons/react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useId, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { SkeletonBlock } from "../components/loading";
+import {
+  CaretLeft,
+  CreditCard,
+  EnvelopeSimple,
+  LockKey,
+  ShareNetwork,
+  SignOut,
+  Tag,
+} from "@phosphor-icons/react";
+import { type GetMeResponse } from "@recipestock/schemas";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
-import { IosShareSettingsCard } from "../features/ios-share/settings-card";
+import { listShortcutCredentials, shortcutCredentialsQueryKey } from "../features/ios-share/api";
 import {
   deactivatePushSubscription,
   getCurrentPushSubscription,
   supportsPushNotifications,
 } from "../features/push-notifications/browser";
-import { PushNotificationSettingsCard } from "../features/push-notifications/settings-card";
 import { readRecipeListFilters } from "../features/recipes/list-search";
-import { changeEmail, changePassword, signOut, useAuthSession } from "../lib/auth";
+import {
+  SettingsActionRow,
+  SettingsGroup,
+  SettingsLinkRow,
+} from "../features/settings/settings-list";
+import { settingsPageBodyClass, settingsPageClass } from "../features/settings/settings-page";
+import { listTags, tagsQueryKeys } from "../features/tags";
+import { signOut, useAuthSession } from "../lib/auth";
 import { clearUserScopedCache } from "../lib/query-cache";
 import { useViewer } from "../lib/viewer";
+
+const rowIconSize = 20;
+
+const planLabel = (viewer: GetMeResponse) => {
+  const name = viewer.plan === "pro" ? "Pro" : "Free";
+  return viewer.recipeLimit === null
+    ? name
+    : `${name} · ${viewer.recipeCount}/${viewer.recipeLimit}件`;
+};
+
+// 読み込み中は"loading"、読めなかったときはundefinedにして、行には何も出さない。
+const rowValue = <T,>(
+  query: { data: T | undefined; isPending: boolean },
+  format: (data: T) => string,
+) => {
+  if (query.data !== undefined) return format(query.data);
+  return query.isPending ? ("loading" as const) : undefined;
+};
 
 export const SettingsIndexRoute = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const viewer = useViewer({ enabled: true });
-  const [newEmail, setNewEmail] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const newEmailId = useId();
-  const currentPasswordId = useId();
-  const newPasswordId = useId();
-  const [emailMessage, setEmailMessage] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
-  const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
+  const tags = useQuery({ queryKey: tagsQueryKeys.all(), queryFn: listTags });
+  const shortcutCredentials = useQuery({
+    queryKey: shortcutCredentialsQueryKey,
+    queryFn: listShortcutCredentials,
+  });
+  const [isSignOutDialogOpen, setIsSignOutDialogOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
 
@@ -72,43 +105,8 @@ export const SettingsIndexRoute = () => {
     }
   };
 
-  const handleEmailChange = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setEmailMessage(null);
-    setEmailError(null);
-    setIsEmailSubmitting(true);
-
-    try {
-      await changeEmail(newEmail);
-      setNewEmail("");
-      setEmailMessage("確認メールを送信しました。");
-    } catch {
-      setEmailError("メールアドレスを変更できませんでした。時間をおいて再度お試しください。");
-    } finally {
-      setIsEmailSubmitting(false);
-    }
-  };
-
-  const handlePasswordChange = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setPasswordMessage(null);
-    setPasswordError(null);
-    setIsPasswordSubmitting(true);
-
-    try {
-      await changePassword(currentPassword, newPassword);
-      setCurrentPassword("");
-      setNewPassword("");
-      setPasswordMessage("パスワードを変更しました。");
-    } catch {
-      setPasswordError("パスワードを変更できませんでした。入力内容を確認してください。");
-    } finally {
-      setIsPasswordSubmitting(false);
-    }
-  };
-
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-0 pb-10 sm:px-6 lg:px-10">
+    <section className={settingsPageClass}>
       <ScreenTopBar
         leading={
           <ScreenTopBarIconButton
@@ -123,147 +121,85 @@ export const SettingsIndexRoute = () => {
         title="設定"
       />
 
-      <div className="mt-4 px-4 sm:mt-6 sm:px-0">
-        <div className="grid min-w-0 gap-5">
-          <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-            <div className="mb-4 flex min-w-0 items-center gap-2">
-              <User size={18} weight="bold" className="text-brand-walnut" />
-              <h2 className="text-brand-walnut font-bold text-lg">アカウント</h2>
-            </div>
-            <p className="break-all text-brand-muted text-sm">
-              現在のメールアドレス: {session.data?.user.email ?? ""}
-            </p>
-            <div className="mt-5 grid min-w-0 gap-6 md:grid-cols-2">
-              <form className="grid min-w-0 content-start gap-4" onSubmit={handleEmailChange}>
-                <h3 className="text-brand-walnut font-semibold text-base">メールアドレス変更</h3>
-                <FieldGroup>
-                  <Field className="min-w-0">
-                    <FieldLabel htmlFor={newEmailId}>新しいメールアドレス</FieldLabel>
-                    <Input
-                      id={newEmailId}
-                      required
-                      type="email"
-                      autoComplete="email"
-                      inputMode="email"
-                      value={newEmail}
-                      onChange={(event) => setNewEmail(event.target.value)}
-                    />
-                  </Field>
-                </FieldGroup>
-                <Button disabled={isEmailSubmitting} type="submit" variant="secondary">
-                  確認メールを送信
-                </Button>
-                {emailMessage ? (
-                  <div className="rounded-[14px] bg-brand-sage-soft/30 border border-brand-sage-soft p-3">
-                    <p className="font-medium text-brand-sage-dark text-sm" role="status">
-                      {emailMessage}
-                    </p>
-                  </div>
-                ) : null}
-                {emailError ? (
-                  <div className="rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
-                    <p className="text-brand-danger text-sm" role="alert">
-                      {emailError}
-                    </p>
-                  </div>
-                ) : null}
-              </form>
+      <div className={`${settingsPageBodyClass} grid gap-6`}>
+        <SettingsGroup>
+          <SettingsLinkRow
+            icon={<CreditCard size={rowIconSize} weight="bold" />}
+            label="プラン"
+            to="/settings/billing"
+            value={rowValue(viewer, planLabel)}
+            valueTone={viewer.data?.isRecipeLimitReached ? "warning" : "muted"}
+          />
+          <SettingsLinkRow
+            icon={<ShareNetwork size={rowIconSize} weight="bold" />}
+            label="共有から取り込む"
+            to="/settings/share"
+            value={rowValue(shortcutCredentials, ({ credentials }) =>
+              credentials.length > 0 ? `${credentials.length}台と連携中` : "未設定",
+            )}
+          />
+          <SettingsLinkRow
+            icon={<Tag size={rowIconSize} weight="bold" />}
+            label="タグ"
+            to="/tags"
+            value={rowValue(tags, (items) => (items.length > 0 ? `${items.length}個` : "なし"))}
+          />
+        </SettingsGroup>
 
-              <form className="grid min-w-0 content-start gap-4" onSubmit={handlePasswordChange}>
-                <h3 className="text-brand-walnut font-semibold text-base">パスワード変更</h3>
-                <FieldGroup>
-                  <Field className="min-w-0">
-                    <FieldLabel htmlFor={currentPasswordId}>現在のパスワード</FieldLabel>
-                    <Input
-                      id={currentPasswordId}
-                      required
-                      type="password"
-                      autoComplete="current-password"
-                      maxLength={128}
-                      minLength={8}
-                      value={currentPassword}
-                      onChange={(event) => setCurrentPassword(event.target.value)}
-                    />
-                  </Field>
-                  <Field className="min-w-0">
-                    <FieldLabel htmlFor={newPasswordId}>新しいパスワード</FieldLabel>
-                    <Input
-                      id={newPasswordId}
-                      required
-                      type="password"
-                      autoComplete="new-password"
-                      maxLength={128}
-                      minLength={8}
-                      value={newPassword}
-                      onChange={(event) => setNewPassword(event.target.value)}
-                    />
-                  </Field>
-                </FieldGroup>
-                <Button disabled={isPasswordSubmitting} type="submit" variant="secondary">
-                  パスワードを変更
-                </Button>
-                {passwordMessage ? (
-                  <div className="rounded-[14px] bg-brand-sage-soft/30 border border-brand-sage-soft p-3">
-                    <p className="font-medium text-brand-sage-dark text-sm" role="status">
-                      {passwordMessage}
-                    </p>
-                  </div>
-                ) : null}
-                {passwordError ? (
-                  <div className="rounded-[14px] bg-brand-danger/5 border border-brand-danger/20 p-3">
-                    <p className="text-brand-danger text-sm" role="alert">
-                      {passwordError}
-                    </p>
-                  </div>
-                ) : null}
-              </form>
-            </div>
-          </div>
+        <SettingsGroup title="アカウント">
+          <SettingsLinkRow
+            icon={<EnvelopeSimple size={rowIconSize} weight="bold" />}
+            label="メールアドレス"
+            to="/settings/email"
+            value={session.data?.user.email}
+          />
+          <SettingsLinkRow
+            icon={<LockKey size={rowIconSize} weight="bold" />}
+            label="パスワード"
+            to="/settings/password"
+          />
+        </SettingsGroup>
 
-          <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-            <div className="mb-3 flex min-w-0 items-center gap-2">
-              <CreditCard size={18} weight="bold" className="text-brand-walnut" />
-              <h2 className="text-brand-walnut font-bold text-lg">プラン</h2>
-            </div>
-            <p className="text-brand-muted text-sm">
-              現在のプラン:{" "}
-              {viewer.data ? (
-                <span className="font-semibold text-brand-ink">
-                  {viewer.data.plan === "pro" ? "Pro" : "Free"}
-                </span>
-              ) : (
-                <SkeletonBlock className="inline-block h-4 w-10 align-middle" />
-              )}
-            </p>
-            <Link
-              className="mt-4 inline-flex min-h-10 items-center justify-center rounded-full bg-brand-sage px-5 font-semibold text-white text-sm hover:bg-brand-sage-dark transition-colors"
-              to="/settings/billing"
-            >
-              課金設定
-            </Link>
-          </div>
-
-          <PushNotificationSettingsCard />
-
-          <IosShareSettingsCard />
-        </div>
-
-        <div className="mt-8 flex justify-center">
-          <Button
-            disabled={isSigningOut}
-            variant="destructive"
-            onClick={() => void handleSignOut()}
-          >
-            <SignOut data-icon="inline-start" weight="bold" />
-            ログアウト
-          </Button>
-        </div>
-        {signOutError ? (
-          <p className="mt-3 text-center text-brand-danger text-sm" role="alert">
-            {signOutError}
-          </p>
-        ) : null}
+        <SettingsGroup>
+          <SettingsActionRow
+            icon={<SignOut size={rowIconSize} weight="bold" />}
+            label="ログアウト"
+            onPress={() => {
+              setSignOutError(null);
+              setIsSignOutDialogOpen(true);
+            }}
+          />
+        </SettingsGroup>
       </div>
+
+      <AlertDialog
+        open={isSignOutDialogOpen}
+        onOpenChange={(isOpen) => {
+          if (!isOpen && !isSigningOut) {
+            setIsSignOutDialogOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>ログアウトしますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              この端末で取り込み完了の通知を受け取っている場合は、それも止まります。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {signOutError ? (
+            <p className="text-brand-danger text-sm" role="alert">
+              {signOutError}
+            </p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSigningOut}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction disabled={isSigningOut} onClick={() => void handleSignOut()}>
+              ログアウト
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 };

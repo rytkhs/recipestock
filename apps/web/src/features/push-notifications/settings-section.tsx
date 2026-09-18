@@ -1,9 +1,10 @@
-import { Bell } from "@phosphor-icons/react";
 import { type GetPushSubscriptionsResponse } from "@recipestock/schemas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { SectionHeader } from "../../components/section-header";
 import { registerAppServiceWorker } from "../../pwa/browser";
+import { isStandaloneWebApp } from "../../pwa/display-mode";
 import { getPushSubscriptions, pushSubscriptionsQueryKey, registerPushSubscription } from "./api";
 import {
   deactivatePushSubscription,
@@ -42,12 +43,20 @@ const stateMessage = (state: NotificationState) => {
   if (state === "enabled") return "この端末では通知が有効です。";
   if (state === "disabled") return "この端末では通知が無効です。";
   if (state === "denied") return "通知が拒否されています。端末の設定から許可してください。";
-  if (state === "unsupported") return "この環境はWeb Push通知に対応していません。";
+  if (state === "unsupported") return "この環境は通知に対応していません。";
   return "通知の状態を確認できませんでした。時間をおいて再度お試しください。";
 };
 
-export const PushNotificationSettingsCard = () => {
+/**
+ * 通知に対応していない環境のうち、ホーム画面から開いていないものは、ほぼiOSとiPadOSのブラウザである。
+ * そこではホーム画面に追加すれば通知を使えるので、「対応していません」ではなく追加の仕方を伝える。
+ */
+const installToEnableMessage =
+  "通知を受け取るには、Recipe Stockをホーム画面に追加して、そこから開いてください。";
+
+export const PushNotificationSettings = () => {
   const supported = supportsPushNotifications();
+  const headingId = useId();
   const queryClient = useQueryClient();
   const pushSubscriptions = useQuery({
     queryKey: pushSubscriptionsQueryKey,
@@ -211,16 +220,15 @@ export const PushNotificationSettingsCard = () => {
   };
 
   return (
-    <div className="min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
-      <div className="mb-3 flex min-w-0 items-center gap-2">
-        <Bell size={18} weight="bold" className="text-brand-walnut" />
-        <h2 className="text-brand-walnut font-bold text-lg">完了通知</h2>
-      </div>
-      <p className="text-brand-muted text-sm">
-        Shortcutから開始した取り込みの完了を、この端末へ通知します。通知を利用しなくてもShortcut連携は使えます。
+    <section aria-labelledby={headingId}>
+      <SectionHeader id={headingId} title="取り込み完了の通知" />
+      <p className="mt-3 text-brand-muted text-sm leading-6">
+        ショートカットから始めた取り込みが終わったら、この端末に通知します。通知を使わなくても、共有からの取り込みはできます。
       </p>
       <p className="mt-3 font-medium text-brand-walnut text-sm" role="status">
-        {stateMessage(state)}
+        {state === "unsupported" && !isStandaloneWebApp()
+          ? installToEnableMessage
+          : stateMessage(state)}
       </p>
 
       {state === "disabled" ? (
@@ -267,6 +275,6 @@ export const PushNotificationSettingsCard = () => {
           {actionError}
         </p>
       ) : null}
-    </div>
+    </section>
   );
 };

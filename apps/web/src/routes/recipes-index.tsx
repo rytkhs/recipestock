@@ -2,11 +2,11 @@ import {
   CaretRight,
   CheckCircle,
   CookingPot,
+  GearSix,
   List,
   MagnifyingGlass,
   SlidersHorizontal,
   SquaresFour,
-  UserCircle,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -661,14 +661,14 @@ export const RecipesIndexRoute = () => {
             </>
           ) : null}
           <Link
-            aria-label="アカウント"
+            aria-label="設定"
             className={cn(
               buttonVariants({ size: "icon-lg", variant: "outline" }),
               "shrink-0 no-underline sm:hidden",
             )}
             to="/settings"
           >
-            <UserCircle weight="bold" />
+            <GearSix weight="bold" />
           </Link>
         </div>
         {/* ツールバーと一緒に固定し、スクロールしても絞り込み中の条件が見えるようにする。
