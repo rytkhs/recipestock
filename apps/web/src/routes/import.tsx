@@ -95,7 +95,7 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
 
       <div className="mt-4 px-4 sm:mt-6 sm:px-0">
         <p className="text-brand-muted text-sm">
-          レシピのページのURLを入力すると、材料と作り方を読み取って保存します
+          レシピサイトのURLを入力すると、AIがレシピを自動で取り込みます
         </p>
         <div className="mt-4 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
           <form className="grid min-w-0 gap-4" onSubmit={submit}>

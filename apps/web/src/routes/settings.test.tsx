@@ -1066,11 +1066,11 @@ describe("Settings routes", () => {
     expect(within(table).getByRole("cell", { name: "5件まで" })).toBeInTheDocument();
     expect(within(table).getByRole("cell", { name: "上限なし" })).toBeInTheDocument();
     expect(within(table).getByRole("cell", { name: "月10回まで" })).toBeInTheDocument();
+    expect(within(table).getByRole("rowheader", { name: "AI取り込み" })).toBeInTheDocument();
     expect(within(table).getByRole("cell", { name: "たっぷり" })).toBeInTheDocument();
     await expect(
       screen.findByText(/^月額 [¥￥]480（税込）· いつでも解約できます$/),
     ).resolves.toBeInTheDocument();
-    expect(screen.queryByText(/AI/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "契約を管理" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Proにする" }));
@@ -1130,14 +1130,14 @@ describe("Settings routes", () => {
     expect(screen.getByText("ロック中の7件も、すべて開けるようになります。")).toBeInTheDocument();
   });
 
-  it("今月の取り込みが上限なら、戻る日と手入力での保存を伝える", async () => {
+  it("今月のAI取り込みが上限なら、戻る日と手入力での保存を伝える", async () => {
     mockBillingFetch({ viewer: freeViewer(2, 10) });
 
     await renderApp("/settings/billing");
 
     await expect(
       screen.findByText(
-        "今月の取り込みは上限に達しました。6月1日からまた取り込めます。手入力での保存はできます。",
+        "今月のAI取り込みは上限に達しました。6月1日からまた取り込めます。手入力での保存はできます。",
       ),
     ).resolves.toBeInTheDocument();
   });
@@ -1386,7 +1386,7 @@ describe("Settings routes", () => {
     ).resolves.toBeInTheDocument();
   });
 
-  it("ショートカットが取り込み回数の上限で止まって開いたら、理由と戻る日を伝える", async () => {
+  it("ショートカットがAI取り込みの上限で止まって開いたら、理由と戻る日を伝える", async () => {
     mockBillingFetch({ viewer: freeViewer(2, 10) });
 
     await renderApp("/settings/billing?upsell=ai_usage_limit&from=shortcut");
@@ -1396,12 +1396,12 @@ describe("Settings routes", () => {
     ).resolves.toBeInTheDocument();
     expect(
       screen.getByText(
-        "今月の取り込み回数の上限に達していたためです。Proにすると、もっと取り込めます。",
+        "今月のAI取り込みの上限に達していたためです。Proにすると、もっと取り込めます。",
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "今月の取り込みは上限に達しました。6月1日からまた取り込めます。手入力での保存はできます。",
+        "今月のAI取り込みは上限に達しました。6月1日からまた取り込めます。手入力での保存はできます。",
       ),
     ).toBeInTheDocument();
   });

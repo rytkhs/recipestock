@@ -56,11 +56,11 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
    *
    * 上限値は運用中にenvで変えられるため、このカタログには回数を書かず静的に保つ。
    * Freeの回数は、遷移先のプランのページが今の値から出す（ADR 0026）。
-   * 利用者には「取り込み」の回数として見せ、AIを使うかどうかは見せない。
+   * 利用者には「AI取り込み」の上限として見せる。
    */
   ai_usage_limit_exceeded: {
     outcome: "rejected",
-    title: "今月の取り込み回数の上限に達しました",
+    title: "今月のAI取り込みの上限に達しました",
     body: "Proにするともっと取り込めます。",
     path: "/settings/billing?upsell=ai_usage_limit&from=shortcut",
   },
@@ -70,7 +70,7 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
    */
   ai_usage_quota_exhausted: {
     outcome: "rejected",
-    title: "今月の取り込み回数の上限に達しました",
+    title: "今月のAI取り込みの上限に達しました",
     body: "毎月1日にリセットされます。",
   },
   rate_limit_exceeded: {

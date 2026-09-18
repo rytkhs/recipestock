@@ -139,7 +139,7 @@ export const scenarios: Scenario[] = [
   },
   {
     id: "import-limit",
-    label: "Free(今月の取り込みが上限)",
+    label: "Free(今月のAI取り込みが上限)",
     build: () => {
       const state = freeState(2);
 

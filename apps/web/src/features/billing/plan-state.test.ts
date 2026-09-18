@@ -124,7 +124,7 @@ describe("planRowValue", () => {
     {
       name: "取り込みが上限",
       state: derivePlanState(freeViewer(3, 10)),
-      text: "Free · 取り込み上限",
+      text: "Free · AI取り込み上限",
       tone: "warning",
     },
     { name: "Pro", state: derivePlanState(proViewer(), proBilling()), text: "Pro", tone: "muted" },
@@ -152,7 +152,7 @@ describe("planRowValue", () => {
     {
       name: "Proで取り込みが上限",
       state: derivePlanState(proViewer(300), proBilling({ cancelAtPeriodEnd: true })),
-      text: "Pro · 取り込み上限",
+      text: "Pro · AI取り込み上限",
       tone: "warning",
     },
     {

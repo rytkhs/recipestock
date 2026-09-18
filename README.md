@@ -141,7 +141,7 @@ pnpm dev:mock
 | `no-tags` | タグを持たない(チップ列なし・詳細で定番候補) |
 | `free-locked` | Freeで末尾がロック |
 | `limit-reached` | Freeで保存上限ちょうど |
-| `import-limit` | Freeで今月の取り込みが上限 |
+| `import-limit` | Freeで今月のAI取り込みが上限 |
 | `checkout-pending` | 決済から戻った直後(`/settings/billing?checkout=success` を開くと、数秒でProに変わる) |
 | `pro-canceling` | Proで解約予約中 |
 | `pro-past-due` | Proで支払いを確認できない |

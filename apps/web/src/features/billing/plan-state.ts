@@ -81,7 +81,7 @@ const jstDate = new Intl.DateTimeFormat("ja-JP", {
   day: "numeric",
 });
 
-/** 「10月1日」。取り込みの回数が戻る日のように、1年以内に来る日に使う。 */
+/** 「10月1日」。AI取り込みの回数が戻る日のように、1年以内に来る日に使う。 */
 export const formatJstMonthDay = (date: string) => jstMonthDay.format(new Date(date));
 
 /** 「2026年10月8日」。請求にかかわる日は年まで書く。 */
@@ -101,7 +101,7 @@ export const planRowValue = (state: PlanState): { text: string; tone: "muted" | 
       return { text: `Free · ${count}`, tone: "warning" };
     }
     if (state.importLimitReached) {
-      return { text: "Free · 取り込み上限", tone: "warning" };
+      return { text: "Free · AI取り込み上限", tone: "warning" };
     }
     return { text: `Free · ${count}`, tone: "muted" };
   }
@@ -110,7 +110,7 @@ export const planRowValue = (state: PlanState): { text: string; tone: "muted" | 
     return { text: "支払いを確認できません", tone: "warning" };
   }
   if (state.importLimitReached) {
-    return { text: "Pro · 取り込み上限", tone: "warning" };
+    return { text: "Pro · AI取り込み上限", tone: "warning" };
   }
   if (state.contract?.kind === "ending") {
     return {
@@ -124,7 +124,7 @@ export const planRowValue = (state: PlanState): { text: string; tone: "muted" | 
 };
 
 /**
- * プランを変えれば直る上限のエラーか。取り込みの回数の上限はProにもあるので、Freeのときだけ当てはまる。
+ * プランを変えれば直る上限のエラーか。AI取り込みの上限はProにもあるので、Freeのときだけ当てはまる。
  * Webの取り込みAPIはプランでエラーを分けないので、画面が知っているプランで見分ける（ADR 0010）。
  */
 export const isResolvedByUpgrade = (

@@ -421,7 +421,7 @@ describe("Import routes", () => {
     );
   });
 
-  it("Proが取り込み回数の上限で止まっても、プランのページへは案内しない", async () => {
+  it("ProがAI取り込みの上限で止まっても、プランのページへは案内しない", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = getRequestPath(input);
 
@@ -447,7 +447,7 @@ describe("Import routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
-      "今月の取り込み回数の上限に達しています。",
+      "今月のAI取り込みの上限に達しています。",
     );
     expect(screen.queryByRole("link", { name: "プランを見る" })).not.toBeInTheDocument();
   });

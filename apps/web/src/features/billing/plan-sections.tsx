@@ -87,7 +87,7 @@ export const CurrentPlanSection = ({ state }: { state: PlanState }) => {
       ) : null}
       {state.importLimitReached ? (
         <p className="mt-3 text-brand-orange-dark text-sm leading-6">
-          今月の取り込みは上限に達しました。{formatJstMonthDay(state.importResetAt)}
+          今月のAI取り込みは上限に達しました。{formatJstMonthDay(state.importResetAt)}
           からまた取り込めます。手入力での保存はできます。
         </p>
       ) : null}
@@ -156,7 +156,7 @@ export const ProOfferSection = ({
           </tr>
           <tr>
             <th className="py-3 pr-2 text-left font-normal text-brand-muted" scope="row">
-              取り込み
+              AI取り込み
             </th>
             <td className="py-3 text-brand-ink">月{state.importLimit}回まで</td>
             <td className="py-3 font-semibold text-brand-ink">たっぷり</td>

@@ -442,7 +442,7 @@ describe("iOS Share routes", () => {
       outcome: "rejected",
       reason: "ai_usage_limit_exceeded",
       notice: {
-        title: "今月の取り込み回数の上限に達しました",
+        title: "今月のAI取り込みの上限に達しました",
         body: "Proにするともっと取り込めます。",
         openUrl: "https://app.example.com/settings/billing?upsell=ai_usage_limit&from=shortcut",
       },
@@ -473,7 +473,7 @@ describe("iOS Share routes", () => {
       outcome: "rejected",
       reason: "ai_usage_quota_exhausted",
       notice: {
-        title: "今月の取り込み回数の上限に達しました",
+        title: "今月のAI取り込みの上限に達しました",
         body: "毎月1日にリセットされます。",
         openUrl: null,
       },

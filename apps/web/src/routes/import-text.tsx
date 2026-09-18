@@ -145,7 +145,7 @@ const ImportTextForm = ({
 
       <div className="mt-4 px-4 sm:mt-6 sm:px-0">
         <p className="text-brand-muted text-sm">
-          レシピの文章を貼り付けると、材料と作り方に整えて保存します
+          レシピの文章を貼り付けると、AIが材料と作り方に整えて保存します
         </p>
         {isSourceTextUnavailable ? (
           <p className="mt-2 text-brand-muted text-sm">
