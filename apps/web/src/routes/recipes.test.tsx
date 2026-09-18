@@ -1366,6 +1366,51 @@ describe("RecipesRoute", () => {
     ]);
   });
 
+  it("保存の上限で止まった取り込みには、再試行の代わりにプランのページへの入口を出す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/import/jobs/recent") {
+          return jsonResponse({
+            jobs: [
+              {
+                id: "job_limit",
+                kind: "url",
+                status: "failed",
+                url: "https://example.com/recipes/tomato",
+                recipeId: null,
+                errorCode: "recipe_limit_exceeded",
+                createdAt: "2026-06-01T00:00:00.000Z",
+                startedAt: "2026-06-01T00:00:01.000Z",
+                finishedAt: "2026-06-01T00:00:10.000Z",
+              },
+            ],
+          });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes");
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("1件取り込めませんでした");
+    });
+    await userEvent.click(screen.getByRole("button", { name: "1件取り込めませんでした" }));
+
+    expect(screen.getByText("保存できるレシピ数の上限に達しています。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
+      "href",
+      "/settings/billing",
+    );
+    expect(screen.queryByRole("button", { name: "再試行" })).not.toBeInTheDocument();
+  });
+
   it("URL import失敗は時間経過で自動dismissしない", async () => {
     vi.useFakeTimers();
     let dismissed = false;
@@ -2498,7 +2543,7 @@ describe("RecipesRoute", () => {
       screen.findByRole("heading", { name: "ロック中のレシピ" }),
     ).resolves.toBeInTheDocument();
     expect(
-      screen.getByText(`フリープランで開けるのは、新しく保存した${FREE_RECIPE_LIMIT}件までです。`),
+      screen.getByText(`Freeで開けるのは、新しく保存した${FREE_RECIPE_LIMIT}件までです。`),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
       "href",

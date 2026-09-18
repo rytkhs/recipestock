@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ImportTextSkeleton } from "../components/loading";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
+import { PlanLink } from "../features/billing/plan-link";
+import { isResolvedByUpgrade } from "../features/billing/plan-state";
 import {
   createImportTextJob,
   fetchImportJob,
@@ -18,6 +20,8 @@ import {
   retryImportTextJob,
 } from "../features/import-jobs";
 import { readRecipeListFilters } from "../features/recipes/list-search";
+import { ApiClientError } from "../lib/api";
+import { useViewer } from "../lib/viewer";
 
 export type ImportTextSearch = {
   fromJob?: string;
@@ -61,7 +65,9 @@ const ImportTextForm = ({
 }) => {
   const navigate = useNavigate();
   const [text, setText] = useState(initialText);
-  const [error, setError] = useState<string | null>(null);
+  // 上限のエラーのうち、プランを変えれば直るものにだけプランのページへの入口を添える。
+  const [error, setError] = useState<{ message: string; showsPlanLink?: boolean } | null>(null);
+  const viewer = useViewer({ enabled: true });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textId = useId();
   const countId = useId();
@@ -79,14 +85,14 @@ const ImportTextForm = ({
 
   const pasteText = async () => {
     if (!navigator.clipboard?.readText) {
-      setError("クリップボードを読み取れませんでした。");
+      setError({ message: "クリップボードを読み取れませんでした。" });
       return;
     }
 
     try {
       updateText(await navigator.clipboard.readText());
     } catch {
-      setError("クリップボードを読み取れませんでした。");
+      setError({ message: "クリップボードを読み取れませんでした。" });
     }
   };
 
@@ -110,7 +116,12 @@ const ImportTextForm = ({
 
       await navigate({ to: "/recipes" });
     } catch (submitError) {
-      setError(getCreateImportTextJobErrorMessage(submitError));
+      setError({
+        message: getCreateImportTextJobErrorMessage(submitError),
+        showsPlanLink:
+          submitError instanceof ApiClientError &&
+          isResolvedByUpgrade(submitError.code, viewer.data?.plan),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -134,7 +145,7 @@ const ImportTextForm = ({
 
       <div className="mt-4 px-4 sm:mt-6 sm:px-0">
         <p className="text-brand-muted text-sm">
-          レシピの文章を貼り付けると、AIが材料と作り方に整えて保存します
+          レシピの文章を貼り付けると、材料と作り方に整えて保存します
         </p>
         {isSourceTextUnavailable ? (
           <p className="mt-2 text-brand-muted text-sm">
@@ -214,10 +225,11 @@ const ImportTextForm = ({
             </div>
           </form>
           {error ? (
-            <div className="mt-4 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
               <p className="break-words text-brand-danger text-sm" role="alert">
-                {error}
+                {error.message}
               </p>
+              {error.showsPlanLink ? <PlanLink /> : null}
             </div>
           ) : null}
         </div>

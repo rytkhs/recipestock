@@ -48,6 +48,8 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { RecipeCardSkeleton } from "../components/loading";
+import { PlanLink } from "../features/billing/plan-link";
+import { isResolvedByUpgrade } from "../features/billing/plan-state";
 import {
   dismissFinishedImportJob,
   fetchRecentImportJobs,
@@ -73,6 +75,7 @@ import {
 } from "../features/recipes/view-mode";
 import { listTags, tagsQueryKeys } from "../features/tags";
 import { TagFilterBar } from "../features/tags/tag-filter-bar";
+import { useViewer } from "../lib/viewer";
 
 // routeには遅延読み込みのcomponentをそのまま渡し、routerに画面のコードを先読みさせる。
 // そのため並び順はpropsではなく、ここでrouteから読む。
@@ -99,6 +102,7 @@ const listRecipeSkeletonKeys = [
 
 const ImportJobIsland = () => {
   const queryClient = useQueryClient();
+  const viewer = useViewer({ enabled: true });
   const [isExpanded, setIsExpanded] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const observedSuccessIdsRef = useRef(new Set<string>());
@@ -236,6 +240,9 @@ const ImportJobIsland = () => {
                     ? "取り込めませんでした"
                     : "保存しました";
             const label = job.kind === "text" ? (job.textPreview ?? "貼り付けたテキスト") : job.url;
+            // 上限で止まったものは、今のままでは再試行しても同じ理由で止まる。直せる先へ案内する。
+            const needsPlanChange =
+              isFailed && isResolvedByUpgrade(job.errorCode, viewer.data?.plan);
 
             return (
               <div
@@ -258,7 +265,8 @@ const ImportJobIsland = () => {
                     開く
                   </Link>
                 ) : null}
-                {isFailed && job.kind === "text" ? (
+                {needsPlanChange ? <PlanLink variant="default" /> : null}
+                {isFailed && !needsPlanChange && job.kind === "text" ? (
                   <Link
                     className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
                     search={{ fromJob: job.id }}
@@ -267,7 +275,7 @@ const ImportJobIsland = () => {
                     再試行
                   </Link>
                 ) : null}
-                {isFailed && job.kind === "url" ? (
+                {isFailed && !needsPlanChange && job.kind === "url" ? (
                   <Button
                     className="shrink-0"
                     disabled={!job.url || retryMutation.isPending}

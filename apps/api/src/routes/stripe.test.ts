@@ -96,6 +96,10 @@ const createStripeClient = (
   createCheckoutSession: async () => ({ url: "https://checkout.stripe.com/session_123" }),
   createPortalSession: async () => ({ url: "https://billing.stripe.com/session_123" }),
   retrieveSubscription: async () => subscription,
+  retrievePrice: async () => {
+    throw new Error("should not retrieve price");
+  },
+  listCustomerSubscriptions: async () => [],
   updateCustomerEmail: async () => {},
   verifyWebhook: async () => event,
 });

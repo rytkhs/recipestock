@@ -139,8 +139,12 @@ pnpm dev:mock
 | `default` | Pro・26件(2ページ目あり)・タグあり |
 | `empty` | レシピなし |
 | `no-tags` | タグを持たない(チップ列なし・詳細で定番候補) |
-| `free-locked` | フリープランで末尾がロック |
-| `limit-reached` | フリープランで保存上限ちょうど |
+| `free-locked` | Freeで末尾がロック |
+| `limit-reached` | Freeで保存上限ちょうど |
+| `import-limit` | Freeで今月の取り込みが上限 |
+| `checkout-pending` | 決済から戻った直後(`/settings/billing?checkout=success` を開くと、数秒でProに変わる) |
+| `pro-canceling` | Proで解約予約中 |
+| `pro-past-due` | Proで支払いを確認できない |
 | `list-error` | 一覧の取得失敗 |
 | `next-page-error` | 2ページ目の取得失敗 |
 | `importing` | 取り込み中 |
@@ -155,7 +159,8 @@ pnpm dev:mock
 検索ヒットなしの表示は、`default` で一致しない語を検索すると出ます。
 取り込みは URL やテキストを送信してから数秒で成功に変わるので、島の一連の流れをそのまま追えます。
 レシピの作成・編集・削除も、リロードするまでは入力した内容で詳細と一覧に反映されます。
-フリープランで保存上限に達しているシナリオ(`limit-reached` / `free-locked`)では、作成と URL・テキストの取り込みが本番と同じく `recipe_limit_exceeded` で失敗します。
+Freeで保存上限に達しているシナリオ(`limit-reached` / `free-locked`)では、作成と URL・テキストの取り込みが本番と同じく `recipe_limit_exceeded` で失敗します。
+Freeのシナリオでプランのページから「Proにする」を押すと、決済から戻った画面になりますが、Proには変わらず待ちきれなかったときの表示になります。
 `signed-out` でメールアドレスによるログインや新規登録(OTP 検証)をすると、そのままログイン状態になります。
 Google ログインはリロードを伴うので、戻り先で `default` シナリオに切り替わります。
 

@@ -1,6 +1,7 @@
 import {
   type GetBillingStatusResponse,
   type GetMeResponse,
+  type GetProPriceResponse,
   type GetPushSubscriptionsResponse,
   type ImportJobSummary,
   type ListShortcutCredentialsResponse,
@@ -15,6 +16,8 @@ import {
   MOCK_RECIPE_SEED_COUNT,
   type MockTag,
   mockRecipeId,
+  proBillingStatusFixture,
+  proPriceFixture,
   pushSubscriptionsFixture,
   type RecipeContentOverride,
   recipeListFixture,
@@ -49,6 +52,9 @@ export type MockState = {
   importJobSourceTexts: Record<string, string>;
   pushSubscriptions: GetPushSubscriptionsResponse;
   shortcutCredentials: ListShortcutCredentialsResponse;
+  proPrice: GetProPriceResponse;
+  /** 指定すると、課金の状態をこの回数より多く読んだところでProに変わる(決済から戻った直後の再現)。 */
+  upgradeAfterBillingReads?: number;
   failures: {
     /** "always" は全ページ、"after-first-page" は2ページ目以降を500にする。 */
     listRecipes?: "always" | "after-first-page";
@@ -65,15 +71,7 @@ const baseState = (): MockState => ({
   session: sessionFixture(),
   sessionFailure: false,
   viewer: viewerFixture({ plan: "pro", recipeCount: MOCK_RECIPE_SEED_COUNT }),
-  billing: billingStatusFixture({
-    plan: "pro",
-    subscription: {
-      status: "active",
-      cancelAtPeriodEnd: false,
-      currentPeriodEnd: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
-      cancelAt: null,
-    },
-  }),
+  billing: proBillingStatusFixture(),
   recipes: recipeListFixture(),
   tags: tagsFixture(),
   recipeTags: recipeTagsFixture(),
@@ -82,6 +80,7 @@ const baseState = (): MockState => ({
   importJobSourceTexts: {},
   pushSubscriptions: pushSubscriptionsFixture(),
   shortcutCredentials: shortcutCredentialsFixture(),
+  proPrice: proPriceFixture(),
   failures: {},
 });
 
@@ -130,13 +129,46 @@ export const scenarios: Scenario[] = [
   },
   {
     id: "free-locked",
-    label: "フリープラン(末尾がロック)",
+    label: "Free(末尾がロック)",
     build: () => freeState(12),
   },
   {
     id: "limit-reached",
-    label: "フリープラン(保存上限ちょうど)",
+    label: "Free(保存上限ちょうど)",
     build: () => freeState(FREE_RECIPE_LIMIT),
+  },
+  {
+    id: "import-limit",
+    label: "Free(今月の取り込みが上限)",
+    build: () => {
+      const state = freeState(2);
+
+      return {
+        ...state,
+        viewer: {
+          ...state.viewer,
+          aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
+        },
+      };
+    },
+  },
+  {
+    id: "checkout-pending",
+    label: "決済から戻った直後(数秒でProに変わる)",
+    build: () => ({ ...freeState(12), upgradeAfterBillingReads: 2 }),
+  },
+  {
+    id: "pro-canceling",
+    label: "Pro(解約予約中)",
+    build: () => ({
+      ...baseState(),
+      billing: proBillingStatusFixture({ cancelAtPeriodEnd: true }),
+    }),
+  },
+  {
+    id: "pro-past-due",
+    label: "Pro(支払いを確認できない)",
+    build: () => ({ ...baseState(), billing: proBillingStatusFixture({ status: "past_due" }) }),
   },
   {
     id: "list-error",

@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { type SubscriptionPlanInput } from "./billing";
 import { type Bindings } from "./env";
 
 export type CreateStripeCustomerParams = {
@@ -29,6 +30,21 @@ export type RetrieveStripeSubscriptionParams = {
   stripeSubscriptionId: string;
 };
 
+export type RetrieveStripePriceParams = {
+  priceId: string;
+};
+
+export type StripePriceState = {
+  unitAmount: number | null;
+  currency: string;
+  recurringInterval: string | null;
+  recurringIntervalCount: number | null;
+};
+
+export type ListStripeCustomerSubscriptionsParams = {
+  stripeCustomerId: string;
+};
+
 export type StripeSubscriptionState = {
   userId: string;
   stripeCustomerId: string;
@@ -48,6 +64,10 @@ export type StripeBillingClient = {
   createCheckoutSession(params: CreateStripeCheckoutSessionParams): Promise<{ url: string }>;
   createPortalSession(params: CreateStripePortalSessionParams): Promise<{ url: string }>;
   retrieveSubscription(params: RetrieveStripeSubscriptionParams): Promise<StripeSubscriptionState>;
+  retrievePrice(params: RetrieveStripePriceParams): Promise<StripePriceState>;
+  listCustomerSubscriptions(
+    params: ListStripeCustomerSubscriptionsParams,
+  ): Promise<SubscriptionPlanInput[]>;
   updateCustomerEmail(params: UpdateStripeCustomerEmailParams): Promise<void>;
   verifyWebhook(params: VerifyStripeWebhookParams): Promise<StripeWebhookEvent>;
 };
@@ -245,6 +265,31 @@ export const createStripeBillingClient = (env: Bindings): StripeBillingClient =>
       const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
 
       return normalizeStripeSubscription(subscription);
+    },
+    async retrievePrice({ priceId }) {
+      const price = await stripe.prices.retrieve(priceId);
+
+      return {
+        unitAmount: price.unit_amount,
+        currency: price.currency,
+        recurringInterval: price.recurring?.interval ?? null,
+        recurringIntervalCount: price.recurring?.interval_count ?? null,
+      };
+    },
+    async listCustomerSubscriptions({ stripeCustomerId }) {
+      // statusを指定しなければ、解約が済んだもの以外がすべて返る。
+      const subscriptions = await stripe.subscriptions.list({
+        customer: stripeCustomerId,
+        limit: 100,
+      });
+
+      return subscriptions.data.flatMap((subscription) =>
+        subscription.items.data.map((item) => ({
+          stripePriceId: item.price.id,
+          status: subscription.status,
+          currentPeriodEnd: toDate(item.current_period_end),
+        })),
+      );
     },
     async updateCustomerEmail({ email, stripeCustomerId }) {
       await stripe.customers.update(stripeCustomerId, {

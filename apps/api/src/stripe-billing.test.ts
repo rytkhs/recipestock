@@ -12,6 +12,8 @@ const stripeMocks = vi.hoisted(() => ({
   customersCreate: vi.fn(),
   customersUpdate: vi.fn(),
   portalSessionsCreate: vi.fn(),
+  pricesRetrieve: vi.fn(),
+  subscriptionsList: vi.fn(),
   subscriptionsRetrieve: vi.fn(),
 }));
 
@@ -21,7 +23,11 @@ vi.mock("stripe", () => {
       billingPortal: { sessions: { create: stripeMocks.portalSessionsCreate } },
       checkout: { sessions: { create: stripeMocks.checkoutSessionsCreate } },
       customers: { create: stripeMocks.customersCreate, update: stripeMocks.customersUpdate },
-      subscriptions: { retrieve: stripeMocks.subscriptionsRetrieve },
+      prices: { retrieve: stripeMocks.pricesRetrieve },
+      subscriptions: {
+        list: stripeMocks.subscriptionsList,
+        retrieve: stripeMocks.subscriptionsRetrieve,
+      },
       webhooks: { constructEventAsync: stripeMocks.constructEventAsync },
     };
   });
@@ -146,6 +152,66 @@ describe("createStripeBillingClient", () => {
     ).resolves.toBeUndefined();
     expect(stripeMocks.customersUpdate).toHaveBeenCalledWith("cus_123", {
       email: "new@example.com",
+    });
+  });
+});
+
+describe("createStripeBillingClient reads", () => {
+  const createClient = () =>
+    createStripeBillingClient({
+      STRIPE_SECRET_KEY: "sk_test",
+    } as Parameters<typeof createStripeBillingClient>[0]);
+
+  it("Priceの金額と支払いの間隔を返す", async () => {
+    stripeMocks.pricesRetrieve.mockResolvedValue({
+      id: "price_pro",
+      unit_amount: 480,
+      currency: "jpy",
+      recurring: { interval: "month", interval_count: 1 },
+    });
+
+    await expect(createClient().retrievePrice({ priceId: "price_pro" })).resolves.toEqual({
+      unitAmount: 480,
+      currency: "jpy",
+      recurringInterval: "month",
+      recurringIntervalCount: 1,
+    });
+    expect(stripeMocks.pricesRetrieve).toHaveBeenCalledWith("price_pro");
+  });
+
+  it("一回払いのPriceは支払いの間隔を持たない", async () => {
+    stripeMocks.pricesRetrieve.mockResolvedValue({
+      id: "price_once",
+      unit_amount: 480,
+      currency: "jpy",
+      recurring: null,
+    });
+
+    await expect(createClient().retrievePrice({ priceId: "price_once" })).resolves.toEqual({
+      unitAmount: 480,
+      currency: "jpy",
+      recurringInterval: null,
+      recurringIntervalCount: null,
+    });
+  });
+
+  it("Customerの契約を、項目ごとのPriceと期間の終わりで返す", async () => {
+    stripeMocks.subscriptionsList.mockResolvedValue({
+      data: [subscriptionObject({ status: "past_due" })],
+    });
+
+    await expect(
+      createClient().listCustomerSubscriptions({ stripeCustomerId: "cus_123" }),
+    ).resolves.toEqual([
+      {
+        stripePriceId: "price_pro",
+        status: "past_due",
+        currentPeriodEnd: new Date("2026-07-04T00:00:00.000Z"),
+      },
+    ]);
+    expect(stripeMocks.subscriptionsList).toHaveBeenCalledWith({
+      customer: "cus_123",
+      limit: 100,
     });
   });
 });
