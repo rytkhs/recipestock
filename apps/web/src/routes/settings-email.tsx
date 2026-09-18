@@ -2,7 +2,9 @@ import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { useLoginMethods } from "../features/settings/login-methods";
 import {
+  SettingsFormMessage,
   SettingsSubpageTopBar,
   settingsPageBodyClass,
   settingsPageClass,
@@ -11,22 +13,34 @@ import { changeEmail, useAuthSession } from "../lib/auth";
 
 export const SettingsEmailRoute = () => {
   const session = useAuthSession();
+  const loginMethods = useLoginMethods();
+  const currentEmail = session.data?.user.email ?? "";
   const [newEmail, setNewEmail] = useState("");
   const newEmailId = useId();
-  const [message, setMessage] = useState<string | null>(null);
+  // 宛先を出すために、送った先を覚える。入力欄は送信後に空にする。
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setMessage(null);
+    setSentTo(null);
     setError(null);
+
+    const requestedEmail = newEmail.trim();
+
+    // 同じアドレスはサーバでも断られるが、理由が返らない。ここで止めて、何が起きたかを伝える。
+    if (requestedEmail.toLowerCase() === currentEmail.toLowerCase()) {
+      setError("今のメールアドレスと同じです。");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      await changeEmail(newEmail);
+      await changeEmail(requestedEmail);
       setNewEmail("");
-      setMessage("確認メールを送信しました。");
+      setSentTo(requestedEmail);
     } catch {
       setError("メールアドレスを変更できませんでした。時間をおいて再度お試しください。");
     } finally {
@@ -41,9 +55,18 @@ export const SettingsEmailRoute = () => {
       <div className={`${settingsPageBodyClass} grid gap-6`}>
         <div className="min-w-0">
           <p className="text-brand-muted text-sm">今のメールアドレス</p>
-          <p className="mt-1 break-all font-medium text-base text-brand-ink">
-            {session.data?.user.email ?? ""}
+          <p className="mt-1 break-all font-medium text-base text-brand-ink">{currentEmail}</p>
+        </div>
+
+        <div className="grid gap-2">
+          <p className="text-brand-muted text-sm leading-6">
+            新しいメールアドレスに確認メールを送ります。メール内のリンクを開くまで、メールアドレスは今のままです。
           </p>
+          {loginMethods.data?.hasGoogle ? (
+            <p className="text-brand-muted text-sm leading-6">
+              Googleアカウントのメールアドレスは変わりません。Googleでのログインは今までどおり使えます。
+            </p>
+          ) : null}
         </div>
 
         <form className="grid min-w-0 gap-4" onSubmit={handleSubmit}>
@@ -69,20 +92,12 @@ export const SettingsEmailRoute = () => {
           >
             確認メールを送信
           </Button>
-          {message ? (
-            <div className="rounded-[14px] border border-brand-sage-soft bg-brand-sage-soft/30 p-3">
-              <p className="font-medium text-brand-sage-dark text-sm" role="status">
-                {message}
-              </p>
-            </div>
+          {sentTo ? (
+            <SettingsFormMessage tone="success">
+              {`${sentTo} 宛に確認メールを送信しました。メール内のリンクを開くと、変更が完了します。それまでは、今のメールアドレスのままです。`}
+            </SettingsFormMessage>
           ) : null}
-          {error ? (
-            <div className="rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
-              <p className="text-brand-danger text-sm" role="alert">
-                {error}
-              </p>
-            </div>
-          ) : null}
+          {error ? <SettingsFormMessage tone="error">{error}</SettingsFormMessage> : null}
         </form>
       </div>
     </section>

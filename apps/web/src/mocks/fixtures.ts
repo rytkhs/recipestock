@@ -454,3 +454,34 @@ export const shortcutCredentialsFixture = (
   credentials: [],
   ...overrides,
 });
+
+/** better-authの`/list-accounts`が返す1件。パスワードは"credential"というproviderで持つ。 */
+export type LoginAccountFixture = {
+  accountId: string;
+  createdAt: string;
+  id: string;
+  providerId: string;
+  scopes: string[];
+  updatedAt: string;
+  userId: string;
+};
+
+export const loginAccountFixture = (providerId: string): LoginAccountFixture => ({
+  accountId: providerId === "credential" ? MOCK_USER_ID : `${providerId}_account_123`,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  id: `account_${providerId}`,
+  providerId,
+  scopes: providerId === "credential" ? [] : ["openid", "email", "profile"],
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  userId: MOCK_USER_ID,
+});
+
+/** メールアドレスとパスワードでログインする人。 */
+export const passwordLoginAccountsFixture = (): LoginAccountFixture[] => [
+  loginAccountFixture("credential"),
+];
+
+/** Googleだけでログインする人。パスワードを持たない。 */
+export const googleLoginAccountsFixture = (): LoginAccountFixture[] => [
+  loginAccountFixture("google"),
+];

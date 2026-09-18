@@ -3,6 +3,7 @@ import { billingStatusQueryKey } from "../features/billing/api";
 import { shortcutCredentialsQueryKey } from "../features/ios-share/api";
 import { pushSubscriptionsQueryKey } from "../features/push-notifications/api";
 import { recipesUserScopedQueryRoots } from "../features/recipes";
+import { loginMethodsQueryKey } from "../features/settings/login-methods";
 import { tagsUserScopedQueryRoots } from "../features/tags";
 import { viewerQueryKey } from "./viewer";
 
@@ -11,6 +12,7 @@ const userScopedQueryKeys = new Set<string>([
   billingStatusQueryKey[0],
   pushSubscriptionsQueryKey[0],
   shortcutCredentialsQueryKey[0],
+  loginMethodsQueryKey[0],
   ...recipesUserScopedQueryRoots,
   ...tagsUserScopedQueryRoots,
 ]);

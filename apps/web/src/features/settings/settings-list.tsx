@@ -8,8 +8,15 @@ import { SkeletonBlock } from "../../components/loading";
 const groupListClass =
   "divide-y divide-brand-line-soft overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm";
 
-const rowClass =
-  "flex min-h-13 w-full min-w-0 items-center gap-3 px-4 py-3 text-left no-underline transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-orange disabled:opacity-50";
+const rowClass = "flex min-h-13 w-full min-w-0 items-center gap-3 px-4 py-3 text-left";
+
+const pressableRowClass = `${rowClass} no-underline transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-orange disabled:opacity-50`;
+
+const rowIconClass = "shrink-0 text-brand-walnut";
+
+const rowLabelClass = "shrink-0 font-medium text-base text-brand-ink";
+
+const rowValueClass = "ml-auto min-w-0 truncate text-right text-sm";
 
 // 行が1つしかないまとまりに見出しを付けると項目名を繰り返すだけになるので、見出しは任意にする。
 export const SettingsGroup = ({ children, title }: { children: ReactNode; title?: string }) => {
@@ -47,14 +54,14 @@ export const SettingsLinkRow = ({
   valueTone?: "muted" | "warning";
 }) => (
   <li>
-    <Link className={rowClass} to={to}>
-      <span aria-hidden="true" className="shrink-0 text-brand-walnut">
+    <Link className={pressableRowClass} to={to}>
+      <span aria-hidden="true" className={rowIconClass}>
         {icon}
       </span>
-      <span className="shrink-0 font-medium text-base text-brand-ink">{label}</span>
+      <span className={rowLabelClass}>{label}</span>
       <span
         className={cn(
-          "ml-auto min-w-0 truncate text-right text-sm",
+          rowValueClass,
           valueTone === "warning" ? "font-semibold text-brand-orange-dark" : "text-brand-muted",
         )}
       >
@@ -86,11 +93,39 @@ export const SettingsActionRow = ({
   onPress: () => void;
 }) => (
   <li>
-    <button className={rowClass} disabled={disabled} type="button" onClick={onPress}>
-      <span aria-hidden="true" className="shrink-0 text-brand-walnut">
+    <button className={pressableRowClass} disabled={disabled} type="button" onClick={onPress}>
+      <span aria-hidden="true" className={rowIconClass}>
         {icon}
       </span>
       <span className="font-medium text-base text-brand-ink">{label}</span>
     </button>
+  </li>
+);
+
+// 行き先を持たない行。今どうなっているかを伝えるだけで、押せない。
+export const SettingsValueRow = ({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) => (
+  <li className={rowClass}>
+    <span aria-hidden="true" className={rowIconClass}>
+      {icon}
+    </span>
+    <span className={rowLabelClass}>{label}</span>
+    <span className={cn(rowValueClass, "text-brand-muted")}>{value}</span>
+  </li>
+);
+
+// どの行を出すかが読み込み結果で決まる場所に置く。決まる前に、違う行を出して差し替えない。
+export const SettingsRowSkeleton = () => (
+  <li className={rowClass}>
+    <SkeletonBlock className="h-5 w-5 rounded-full" />
+    <SkeletonBlock className="h-4 w-28" />
+    <SkeletonBlock className="ml-auto h-4 w-16" />
   </li>
 );
