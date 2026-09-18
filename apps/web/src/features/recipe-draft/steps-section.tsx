@@ -7,7 +7,7 @@ import {
 import { useId, useRef } from "react";
 import { useController, useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
-import { RecipeSectionHeader } from "../recipes/recipe-detail-section";
+import { SectionHeader } from "../../components/section-header";
 import {
   DraftAddImageButton,
   DraftAddPhotoButton,
@@ -205,7 +205,7 @@ export const StepsSection = ({
 
   return (
     <section aria-labelledby={headingId}>
-      <RecipeSectionHeader id={headingId} title="手順" />
+      <SectionHeader id={headingId} title="手順" />
       <ol className="mt-1">
         {fields.map((field, stepIndex) => (
           <StepRow

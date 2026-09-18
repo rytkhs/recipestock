@@ -8,7 +8,7 @@ import {
 import { useId } from "react";
 import { useController, useFieldArray } from "react-hook-form";
 import { cn } from "@/lib/utils";
-import { RecipeSectionHeader } from "../recipes/recipe-detail-section";
+import { SectionHeader } from "../../components/section-header";
 import { DraftRowMenu } from "./draft-row-menu";
 import {
   draftAddRowButtonClass,
@@ -234,7 +234,7 @@ export const IngredientsSection = ({ control }: IngredientsSectionProps) => {
 
   return (
     <section aria-labelledby={headingId}>
-      <RecipeSectionHeader
+      <SectionHeader
         id={headingId}
         meta={
           <input

@@ -51,6 +51,7 @@ import {
   screenTopBarIconButtonClass,
   screenTopBarTitleClass,
 } from "../components/screen-top-bar";
+import { SectionHeader } from "../components/section-header";
 import {
   deleteRecipe,
   getRecipe,
@@ -65,11 +66,7 @@ import {
   RecipeImageStrip,
   RecipeSingleImage,
 } from "../features/recipes/recipe-detail-image";
-import {
-  RecipeNote,
-  RecipeSectionHeader,
-  RecipeSource,
-} from "../features/recipes/recipe-detail-section";
+import { RecipeNote, RecipeSource } from "../features/recipes/recipe-detail-section";
 import { RecipeIngredients } from "../features/recipes/recipe-ingredients";
 import { formatRecipeCreatedAt } from "../features/recipes/recipe-shelf";
 import { RecipeSteps } from "../features/recipes/recipe-steps";
@@ -507,7 +504,7 @@ const RecipeDetailView = ({
           {content.note ? <RecipeNote note={content.note} /> : null}
           {hasReferenceImagesBesidesCover ? (
             <section aria-labelledby={referenceHeadingId}>
-              <RecipeSectionHeader
+              <SectionHeader
                 action={hasIngredients || hasSteps ? undefined : keepScreenOn}
                 id={referenceHeadingId}
                 meta={`${images.references.length}枚`}

@@ -1,6 +1,6 @@
 import { type DraftImageRef } from "@recipestock/schemas";
 import { useId, useRef } from "react";
-import { RecipeSectionHeader } from "../recipes/recipe-detail-section";
+import { SectionHeader } from "../../components/section-header";
 import {
   DraftAddImageButton,
   DraftAddPhotoButton,
@@ -50,7 +50,7 @@ export const ReferenceImagesSection = ({
 
   return (
     <section aria-labelledby={headingId}>
-      <RecipeSectionHeader
+      <SectionHeader
         id={headingId}
         meta={images.length > 0 ? `${images.length}枚` : undefined}
         title="レシピ画像"
