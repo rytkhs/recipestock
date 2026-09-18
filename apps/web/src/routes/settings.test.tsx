@@ -1219,6 +1219,23 @@ describe("Settings routes", () => {
     });
   });
 
+  it.each([
+    3, 5,
+  ])("解約を予約したProのレシピが%i件なら、Freeに戻っても今のレシピはすべて開けると伝える", async (recipeCount) => {
+    mockBillingFetch({
+      viewer: { ...proViewer, recipeCount },
+      billing: proBilling({ cancelAtPeriodEnd: true }),
+    });
+
+    await renderApp("/settings/billing");
+
+    await expect(
+      screen.findByText(
+        "それまではProのまま使えます。Freeに戻ると、保存できるのは5件までになります。今のレシピはすべて開けます。",
+      ),
+    ).resolves.toBeInTheDocument();
+  });
+
   it("支払いを確認できないProには、冒頭で支払い方法の更新を促す", async () => {
     const fetchMock = mockBillingFetch({
       viewer: proViewer,

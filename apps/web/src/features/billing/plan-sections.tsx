@@ -188,9 +188,11 @@ export const ProOfferSection = ({
 const endingMessage = (state: PlanState) => {
   const lockedAfterEnding = state.recipeCount - FREE_RECIPE_LIMIT;
 
-  return `それまではProのまま使えます。Freeに戻ると、開けるのは新しく保存した${FREE_RECIPE_LIMIT}件だけになります。${
-    lockedAfterEnding > 0 ? `ほかの${lockedAfterEnding}件はロックされますが、消えません。` : ""
-  }`;
+  // 上限以内なら何もロックされないので、開けるものが減るように読める言い方をしない。
+  if (lockedAfterEnding <= 0) {
+    return `それまではProのまま使えます。Freeに戻ると、保存できるのは${FREE_RECIPE_LIMIT}件までになります。今のレシピはすべて開けます。`;
+  }
+  return `それまではProのまま使えます。Freeに戻ると、開けるのは新しく保存した${FREE_RECIPE_LIMIT}件だけになります。ほかの${lockedAfterEnding}件はロックされますが、消えません。`;
 };
 
 export const ContractSection = ({
