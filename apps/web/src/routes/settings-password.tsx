@@ -1,3 +1,4 @@
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/schemas";
 import { type FormEvent, useId, useState } from "react";
 import {
   AlertDialog,
@@ -23,9 +24,6 @@ import {
 } from "../features/settings/settings-page";
 import { useSignOut } from "../features/settings/use-sign-out";
 import { AuthRequestError, changePassword } from "../lib/auth";
-
-const MIN_PASSWORD_LENGTH = 8;
-const MAX_PASSWORD_LENGTH = 128;
 
 // 直せる失敗は、何を直すかまで伝える。それ以外は同じ文言にまとめる。
 const changePasswordErrorMessage = (error: unknown) => {

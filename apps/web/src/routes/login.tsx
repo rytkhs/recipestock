@@ -1,4 +1,5 @@
 import { EnvelopeSimple, GoogleLogo, Key } from "@phosphor-icons/react";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/schemas";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -183,8 +184,8 @@ export const LoginRoute = ({
                     type="password"
                     autoComplete="current-password"
                     className="w-full min-w-0"
-                    maxLength={128}
-                    minLength={8}
+                    maxLength={MAX_PASSWORD_LENGTH}
+                    minLength={MIN_PASSWORD_LENGTH}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                   />
@@ -226,8 +227,8 @@ export const LoginRoute = ({
                     type="password"
                     autoComplete="new-password"
                     className="w-full min-w-0"
-                    maxLength={128}
-                    minLength={8}
+                    maxLength={MAX_PASSWORD_LENGTH}
+                    minLength={MIN_PASSWORD_LENGTH}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                   />
@@ -320,8 +321,8 @@ export const LoginRoute = ({
                     type="password"
                     autoComplete="new-password"
                     className="w-full min-w-0"
-                    maxLength={128}
-                    minLength={8}
+                    maxLength={MAX_PASSWORD_LENGTH}
+                    minLength={MIN_PASSWORD_LENGTH}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                   />

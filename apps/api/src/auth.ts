@@ -1,5 +1,6 @@
 import * as schema from "@recipestock/db";
 import { appUsers, createDb } from "@recipestock/db";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/schemas";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { type EmailOTPOptions, emailOTP } from "better-auth/plugins/email-otp";
@@ -145,8 +146,8 @@ const createAuth = (env: Bindings) => {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
-      minPasswordLength: 8,
-      maxPasswordLength: 128,
+      minPasswordLength: MIN_PASSWORD_LENGTH,
+      maxPasswordLength: MAX_PASSWORD_LENGTH,
       revokeSessionsOnPasswordReset: true,
     },
     user: {
