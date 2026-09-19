@@ -1,11 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { isNotFoundError } from "./lib/api";
 import { registerAppServiceWorker } from "./pwa/browser";
 import { AppRouter } from "./routes/router";
 import "./styles.css";
 
-const queryClient = new QueryClient();
+// 見つからないものは読み直しても見つからないので、待たせずに結果を出す。回数はTanStack Queryの既定と同じ。
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => !isNotFoundError(error) && failureCount < 3,
+    },
+  },
+});
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {

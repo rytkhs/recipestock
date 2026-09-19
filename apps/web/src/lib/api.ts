@@ -33,6 +33,9 @@ export class ApiClientError extends Error {
   }
 }
 
+export const isNotFoundError = (error: unknown) =>
+  error instanceof ApiClientError && error.status === 404;
+
 type ApiResponseLike = {
   ok: boolean;
   status: number;

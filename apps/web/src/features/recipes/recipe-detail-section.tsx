@@ -10,7 +10,9 @@ export const RecipeNote = ({ note }: { note: string }) => {
   return (
     <section aria-labelledby={headingId}>
       <SectionHeader id={headingId} title="メモ" />
-      <p className="mt-3 whitespace-pre-wrap text-base text-brand-ink leading-7">{note}</p>
+      <p className="mt-3 whitespace-pre-wrap break-words text-base text-brand-ink leading-7">
+        {note}
+      </p>
     </section>
   );
 };

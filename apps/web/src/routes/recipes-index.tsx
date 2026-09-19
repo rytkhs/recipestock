@@ -259,6 +259,7 @@ const ImportJobIsland = () => {
                   <Link
                     className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
                     params={{ recipeId: job.recipeId }}
+                    state={{ openedFromRecipeList: true }}
                     to="/recipes/$recipeId"
                     onClick={() => dismissImportJob(job.id)}
                   >

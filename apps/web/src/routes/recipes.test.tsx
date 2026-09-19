@@ -646,6 +646,36 @@ describe("RecipesRoute", () => {
       screen.findByRole("button", { name: "表示の設定（古い順）" }),
     ).resolves.toBeInTheDocument();
     expect(appRouter.state.location.searchStr).toBe("?sort=oldest");
+    // 一覧を積み直さず、履歴を戻っている。
+    expect(appRouter.history.canGoBack()).toBe(false);
+  });
+
+  it("一覧から開いた詳細でも、編集から戻ってきた詳細の戻るは編集画面ではなく一覧を開く", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [tomatoPastaListItem], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes");
+
+    await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
+    await userEvent.click(await screen.findByRole("link", { name: "編集" }));
+    await userEvent.click(await screen.findByRole("button", { name: "閉じる" }));
+    await userEvent.click(await screen.findByRole("button", { name: "レシピ一覧へ戻る" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/recipes");
+    });
   });
 
   it("古い順から新しい順に戻すと、詳細から一覧へ戻っても新しい順のまま", async () => {
@@ -2367,7 +2397,7 @@ describe("RecipesRoute", () => {
     expect(screen.getByText("example.com")).toBeInTheDocument();
   });
 
-  it("詳細画面で材料と手順を押すと印が付き、もう一度押すと外れる", async () => {
+  it("詳細画面の材料と手順は押せる操作にせず、文字として出す", async () => {
     mockFetch(
       async (input) => {
         if (getRequestPath(input) === "/api/recipes/recipe_123") {
@@ -2401,30 +2431,17 @@ describe("RecipesRoute", () => {
 
     await renderApp("/recipes/recipe_123");
 
-    const user = userEvent.setup();
-    const tomato = await screen.findByRole("button", { name: /トマト缶/ });
-    // 分量を分けられなかった行は、名前だけの行になる。
-    const salt = screen.getByRole("button", { name: "塩 少々" });
-    expect(tomato).toHaveAttribute("aria-pressed", "false");
-
-    await user.click(tomato);
-    expect(tomato).toHaveAttribute("aria-pressed", "true");
-    expect(salt).toHaveAttribute("aria-pressed", "false");
-
-    await user.click(tomato);
-    expect(tomato).toHaveAttribute("aria-pressed", "false");
-
-    const firstStep = screen.getByRole("button", { name: /煮詰める/ });
-    const secondStep = screen.getByRole("button", { name: /塩で味を調える/ });
-
-    await user.click(firstStep);
-    expect(firstStep).toHaveAttribute("aria-pressed", "true");
-    expect(firstStep.closest("li")).toHaveAttribute("aria-current", "step");
-
-    await user.click(secondStep);
-    expect(firstStep).toHaveAttribute("aria-pressed", "false");
-    expect(firstStep.closest("li")).not.toHaveAttribute("aria-current");
-    expect(secondStep).toHaveAttribute("aria-pressed", "true");
+    const ingredients = within(await screen.findByRole("region", { name: "材料" })).getAllByRole(
+      "listitem",
+    );
+    expect(ingredients.map((ingredient) => ingredient.textContent)).toEqual([
+      "トマト缶1缶",
+      // 分量を分けられなかった行は、名前だけの行になる。
+      "塩 少々",
+    ]);
+    const steps = within(screen.getByRole("region", { name: "手順" })).getAllByRole("listitem");
+    expect(steps.map((step) => step.textContent)).toEqual(["1煮詰める", "2塩で味を調える"]);
+    expect(screen.queryByRole("button", { name: /トマト缶|煮詰める/ })).not.toBeInTheDocument();
     // wake lockを使えないブラウザでは切り替えを出さない。
     expect(screen.queryByRole("button", { name: "画面を消さない" })).not.toBeInTheDocument();
   });
@@ -2500,6 +2517,80 @@ describe("RecipesRoute", () => {
 
     const lightbox = await screen.findByRole("dialog", { name: "画像プレビュー" });
     expect(within(lightbox).getByText("1 / 1")).toBeInTheDocument();
+  });
+
+  it("見つからないレシピは再読み込みを出さず、一覧へ戻る導線を出す", async () => {
+    mockFetch(
+      async (input) => {
+        if (input === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_deleted") {
+          return jsonResponse(
+            { error: { code: "not_found", message: "Recipe was not found." } },
+            { status: 404 },
+          );
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes/recipe_deleted");
+
+    await expect(
+      screen.findByRole("heading", { name: "レシピが見つかりません" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "再読み込み" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ" }));
+
+    await waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/recipes");
+    });
+  });
+
+  it("詳細からの削除に失敗したら、ダイアログを開いたまま中にエラーを出す", async () => {
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return init?.method === "DELETE"
+            ? new Response(null, { status: 500 })
+            : jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123");
+    await userEvent.click(await screen.findByRole("button", { name: "操作メニュー" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /削除/ }));
+    const deleteDialog = await screen.findByRole("alertdialog", {
+      name: "レシピを削除しますか？",
+    });
+    await userEvent.click(within(deleteDialog).getByRole("button", { name: "削除" }));
+
+    await expect(within(deleteDialog).findByRole("alert")).resolves.toHaveTextContent(
+      "レシピを削除できませんでした。",
+    );
+    expect(deleteDialog).toBeInTheDocument();
+    expect(within(deleteDialog).getByRole("button", { name: "削除" })).toBeEnabled();
+
+    // 開き直したときは、前回の失敗を出さない。
+    await userEvent.click(within(deleteDialog).getByRole("button", { name: "キャンセル" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("button", { name: "操作メニュー" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /削除/ }));
+    const reopenedDialog = await screen.findByRole("alertdialog", {
+      name: "レシピを削除しますか？",
+    });
+    expect(within(reopenedDialog).queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("詳細を読み込めなかったら、再読み込みで取り直せる", async () => {

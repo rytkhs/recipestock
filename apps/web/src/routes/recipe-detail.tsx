@@ -10,7 +10,7 @@ import {
 import { type RecipeDetail } from "@recipestock/schemas";
 import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import {
   type ReactNode,
   type RefObject,
@@ -72,6 +72,7 @@ import { formatRecipeCreatedAt } from "../features/recipes/recipe-shelf";
 import { RecipeSteps } from "../features/recipes/recipe-steps";
 import { tagsQueryKeys } from "../features/tags";
 import { RecipeTags } from "../features/tags/recipe-tags";
+import { isNotFoundError } from "../lib/api";
 
 const detailPageClass = "mx-auto w-full max-w-5xl pb-12 sm:px-6 lg:px-10";
 
@@ -210,8 +211,13 @@ const RecipeDetailNotice = ({
 export const RecipeDetailRoute = () => {
   const { recipeId } = useParams({ from: "/_protected/recipes/$recipeId" });
   const navigate = useNavigate();
+  const router = useRouter();
+  const isOpenedFromRecipeList = useLocation({
+    select: (location) => location.state.openedFromRecipeList === true,
+  });
   const {
     data: recipe,
+    error,
     isFetching,
     isLoading,
     refetch,
@@ -219,13 +225,18 @@ export const RecipeDetailRoute = () => {
     queryKey: recipesQueryKeys.detail(recipeId),
     queryFn: () => getRecipe(recipeId),
   });
+  // 一覧から開いたときは履歴を戻り、一覧を離れたときのスクロール位置に帰す。
+  // 直接開いたときや編集から来たときは、戻る先が一覧とは限らないので一覧を開く。
+  const returnToRecipeList = () => {
+    if (isOpenedFromRecipeList) {
+      router.history.back();
+      return;
+    }
+
+    void navigate({ to: "/recipes", search: readRecipeListFilters() });
+  };
   const backButton = (
-    <ScreenTopBarIconButton
-      aria-label="レシピ一覧へ戻る"
-      onPress={() => {
-        void navigate({ to: "/recipes", search: readRecipeListFilters() });
-      }}
-    >
+    <ScreenTopBarIconButton aria-label="レシピ一覧へ戻る" onPress={returnToRecipeList}>
       <CaretLeft size={21} weight="bold" />
     </ScreenTopBarIconButton>
   );
@@ -250,6 +261,22 @@ export const RecipeDetailRoute = () => {
     );
   }
 
+  if (!recipe && isNotFoundError(error)) {
+    return (
+      <article className={detailPageClass}>
+        <ScreenTopBar leading={backButton} title="レシピが見つかりません" />
+        <RecipeDetailNotice
+          icon={<WarningCircle size={26} weight="bold" />}
+          message="レシピが見つかりませんでした。削除された可能性があります。"
+        >
+          <Button variant="outline" onClick={returnToRecipeList}>
+            レシピ一覧へ
+          </Button>
+        </RecipeDetailNotice>
+      </article>
+    );
+  }
+
   // 読み直しに失敗しても、手元にある内容は出したままにする。
   if (!recipe) {
     return (
@@ -267,17 +294,20 @@ export const RecipeDetailRoute = () => {
     );
   }
 
-  return <RecipeDetailView backButton={backButton} recipe={recipe} />;
+  return (
+    <RecipeDetailView backButton={backButton} recipe={recipe} onReturnToList={returnToRecipeList} />
+  );
 };
 
 const RecipeDetailView = ({
   backButton,
+  onReturnToList,
   recipe,
 }: {
   backButton: ReactNode;
+  onReturnToList: () => void;
   recipe: RecipeDetail;
 }) => {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const barRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -294,7 +324,7 @@ const RecipeDetailView = ({
         syncDeletedRecipeCaches(queryClient, recipe.id),
         queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() }),
       ]);
-      await navigate({ to: "/recipes", search: readRecipeListFilters() });
+      onReturnToList();
     },
   });
   const images = useMemo(() => collectRecipeImages(recipe), [recipe]);
@@ -330,9 +360,16 @@ const RecipeDetailView = ({
       setLightboxIndex(index);
     }
   };
-  const confirmDelete = () => {
-    setIsDeleteDialogOpen(false);
-    deleteMutation.mutate();
+  const openDeleteDialog = () => {
+    deleteMutation.reset();
+    setIsDeleteDialogOpen(true);
+  };
+  // 削除の結果が出るまでダイアログは閉じない。操作メニューは上部バーにあり、どこまでスクロールしていても押せるので、
+  // 失敗もページの上ではなくダイアログの中に出す。
+  const changeDeleteDialogOpen = (isOpen: boolean) => {
+    if (!deleteMutation.isPending) {
+      setIsDeleteDialogOpen(isOpen);
+    }
   };
 
   useEffect(() => {
@@ -410,12 +447,7 @@ const RecipeDetailView = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-36">
               <DropdownMenuGroup>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => {
-                    setIsDeleteDialogOpen(true);
-                  }}
-                >
+                <DropdownMenuItem variant="destructive" onClick={openDeleteDialog}>
                   <Trash weight="bold" />
                   <span>削除</span>
                 </DropdownMenuItem>
@@ -436,7 +468,7 @@ const RecipeDetailView = ({
         />
         <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
           <h1
-            className="font-bold text-[1.625rem] text-brand-ink leading-[1.35] sm:text-3xl"
+            className="break-words font-bold text-[1.625rem] text-brand-ink leading-[1.35] sm:text-3xl"
             ref={titleRef}
           >
             {recipe.title}
@@ -464,14 +496,6 @@ const RecipeDetailView = ({
         </div>
       </header>
 
-      {deleteMutation.error ? (
-        <div className="mx-4 mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3 sm:mx-0">
-          <p className="text-brand-danger text-sm" role="alert">
-            レシピを削除できませんでした。
-          </p>
-        </div>
-      ) : null}
-
       <div
         className={cn(
           "mt-8 px-4 sm:mt-10 sm:px-0 lg:mt-14",
@@ -485,7 +509,6 @@ const RecipeDetailView = ({
             <RecipeIngredients
               action={keepScreenOn}
               groups={content.ingredientGroups}
-              key={recipe.updatedAt}
               yieldText={content.yieldText}
             />
           </div>
@@ -496,7 +519,6 @@ const RecipeDetailView = ({
           {hasSteps ? (
             <RecipeSteps
               action={hasIngredients ? undefined : keepScreenOn}
-              key={recipe.updatedAt}
               renderImages={renderStepImages}
               steps={content.steps}
             />
@@ -525,20 +547,25 @@ const RecipeDetailView = ({
         </div>
       </div>
 
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={changeDeleteDialogOpen}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
             <AlertDialogMedia>
               <WarningCircle weight="fill" />
             </AlertDialogMedia>
             <AlertDialogTitle>レシピを削除しますか？</AlertDialogTitle>
+            {deleteMutation.error ? (
+              <p className="text-brand-danger text-sm" role="alert">
+                レシピを削除できませんでした。
+              </p>
+            ) : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteMutation.isPending}>キャンセル</AlertDialogCancel>
             <AlertDialogAction
               disabled={deleteMutation.isPending}
               variant="destructive"
-              onClick={confirmDelete}
+              onClick={() => deleteMutation.mutate()}
             >
               削除
             </AlertDialogAction>
