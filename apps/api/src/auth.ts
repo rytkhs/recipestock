@@ -1,6 +1,10 @@
 import * as schema from "@recipestock/db";
 import { appUsers, createDb } from "@recipestock/db";
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/schemas";
+import {
+  EMAIL_CHANGE_LINK_EXPIRES_IN_HOURS,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+} from "@recipestock/schemas";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { type EmailOTPOptions, emailOTP } from "better-auth/plugins/email-otp";
@@ -91,7 +95,7 @@ export const createAuthEmailCallbacks = ({
         "",
         url,
         "",
-        "リンクを開くまで、Recipe Stockのメールアドレスは変わりません。",
+        `リンクの有効期限は${EMAIL_CHANGE_LINK_EXPIRES_IN_HOURS}時間です。開くまで、Recipe Stockのメールアドレスは変わりません。`,
         "心当たりがない場合は、このメールを破棄してください。",
       ].join("\n"),
     });
@@ -156,6 +160,8 @@ const createAuth = (env: Bindings) => {
       },
     },
     emailVerification: {
+      // リンクで確かめるのはメールアドレスの変更だけ。登録と再設定のコードの期限はemailOTP側で決まる。
+      expiresIn: EMAIL_CHANGE_LINK_EXPIRES_IN_HOURS * 60 * 60,
       autoSignInAfterVerification: true,
       sendOnSignUp: false,
       sendVerificationEmail: emailCallbacks.sendVerificationEmail,
