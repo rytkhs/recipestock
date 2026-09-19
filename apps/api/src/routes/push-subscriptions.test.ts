@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type PushSubscriptionRepository } from "../push-subscriptions";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -9,16 +9,9 @@ const env = {
   VAPID_PUBLIC_KEY: "BNc-public-key",
 };
 
-const auth = {
-  getSession: async () => ({ user: { id: "user_1", email: "chef@example.com" } }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth({ id: "user_1", email: "chef@example.com" });
 
-const sameOriginHeaders = {
-  "content-type": "application/json",
-  origin: "https://app.example.com",
-  "sec-fetch-site": "same-origin",
-};
+const jsonHeaders = { "content-type": "application/json", ...sameOriginHeaders };
 
 const subscription = {
   endpoint: "https://push.example.com/subscription/device-1",
@@ -120,7 +113,7 @@ describe("Push subscription routes", () => {
         "/api/push-subscriptions",
         {
           method: "POST",
-          headers: sameOriginHeaders,
+          headers: jsonHeaders,
           body: JSON.stringify(subscription),
         },
         env,
@@ -151,7 +144,7 @@ describe("Push subscription routes", () => {
         "/api/push-subscriptions",
         {
           method: "POST",
-          headers: sameOriginHeaders,
+          headers: jsonHeaders,
           body: JSON.stringify(requestBody),
         },
         env,
@@ -163,7 +156,7 @@ describe("Push subscription routes", () => {
       "/api/push-subscriptions",
       {
         method: "DELETE",
-        headers: sameOriginHeaders,
+        headers: jsonHeaders,
         body: JSON.stringify({ endpoint: subscription.endpoint }),
       },
       env,
@@ -180,10 +173,7 @@ describe("Push subscription routes", () => {
 
   it("Shortcut Bearer tokenではsubscriptionを登録、参照、解除できない", async () => {
     const app = createSilentTestApp({
-      auth: {
-        ...auth,
-        getSession: async () => null,
-      },
+      auth: createTestAuth(null),
       pushSubscriptionRepository: createRepository(),
     });
 
@@ -198,7 +188,7 @@ describe("Push subscription routes", () => {
         {
           method: "POST",
           headers: {
-            ...sameOriginHeaders,
+            ...jsonHeaders,
             authorization: "Bearer rssc_shortcut-token",
           },
           body: JSON.stringify(subscription),
@@ -210,7 +200,7 @@ describe("Push subscription routes", () => {
         {
           method: "DELETE",
           headers: {
-            ...sameOriginHeaders,
+            ...jsonHeaders,
             authorization: "Bearer rssc_shortcut-token",
           },
           body: JSON.stringify({ endpoint: subscription.endpoint }),
@@ -233,7 +223,7 @@ describe("Push subscription routes", () => {
       "/api/push-subscriptions",
       {
         method: "POST",
-        headers: sameOriginHeaders,
+        headers: jsonHeaders,
         body: JSON.stringify(subscription),
       },
       env,
@@ -263,7 +253,7 @@ describe("Push subscription routes", () => {
       "/api/push-subscriptions",
       {
         method: "POST",
-        headers: sameOriginHeaders,
+        headers: jsonHeaders,
         body: JSON.stringify({ ...subscription, endpoint: "not-a-url" }),
       },
       env,

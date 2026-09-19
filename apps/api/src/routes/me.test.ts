@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 
 describe("Me routes", () => {
   it("現在ユーザー取得で未ログイン時に統一形式のunauthorizedを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       meRepository: {
         getAppUserPlan: async () => {
           throw new Error("should not read plans without a session");
@@ -34,12 +31,7 @@ describe("Me routes", () => {
   it("現在ユーザーの基礎情報を返しアプリユーザーを作成または再利用する", async () => {
     const calls: string[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       meRepository: {
         getAppUserPlan: async (userId) => {
           calls.push(`plan:${userId}`);

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "../billing";
 import { type StripeBillingClient } from "../stripe-billing";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -11,18 +11,9 @@ const env = {
   STRIPE_SECRET_KEY: "sk_test",
 };
 
-const auth = {
-  getSession: async () => ({ user: { id: "user_123", email: "user@example.com" } }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth();
 
-const sameOriginPost = {
-  method: "POST",
-  headers: {
-    origin: "https://app.example.com",
-    "sec-fetch-site": "same-origin",
-  },
-};
+const sameOriginPost = { method: "POST", headers: sameOriginHeaders };
 
 const createRepository = (overrides: Partial<BillingRepository> = {}): BillingRepository => ({
   getBillingStatus: async () => ({
@@ -85,10 +76,7 @@ describe("Billing routes", () => {
       updateCustomerEmail: vi.fn(),
     });
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async () => {
           throw new Error("should not load billing state without a session");
@@ -118,10 +106,7 @@ describe("Billing routes", () => {
       updateCustomerEmail: vi.fn(),
     });
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async () => {
           throw new Error("should not load billing state without a session");
@@ -677,10 +662,7 @@ describe("Billing routes", () => {
   it("未ログイン時はProの値段を問い合わせない", async () => {
     const retrievePrice = vi.fn<StripeBillingClient["retrievePrice"]>();
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       stripeBillingClient: createStripeClient({ retrievePrice }),
     });
 

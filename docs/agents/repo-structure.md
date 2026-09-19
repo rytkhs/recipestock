@@ -169,3 +169,11 @@ Cloudflare Worker
 - The default lint / format tool is Biome. Keep root-level tool config such as `biome.json` thin and aligned with shared guidance in `packages/config`.
 
 If a file seems to fit in multiple places, choose the narrowest package that can own it without importing from a higher-level app.
+
+## Test Placement
+
+- Colocate unit, component, and request tests with the code they cover as `<name>.test.ts` or `<name>.test.tsx`.
+- When one module's tests grow large, split them by behavior as `<name>-<aspect>.test.ts` in the same directory, as with `apps/api/src/routes/recipes-create.test.ts` and `recipes-list.test.ts`.
+- Request tests for API routes live in `apps/api/src/routes/` and are named by endpoint or behavior, not necessarily by source file.
+- Tests that need a real database live in `apps/api/test/db/` as `*.repository.test.ts`. They run with `pnpm test:db` through `vitest.db.config.ts` and are excluded from `pnpm test`.
+- Shared test helpers live in `apps/api/src/test-helpers.ts`, `apps/api/src/routes/test-helpers.ts`, and `apps/web/src/test/`. Typed web fixtures live in `apps/web/src/mocks/fixtures.ts`. Reuse them before adding new helpers.
