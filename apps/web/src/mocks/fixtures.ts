@@ -25,9 +25,36 @@ export const sessionFixture = (): SessionFixture => ({
   user: { id: MOCK_USER_ID, email: MOCK_USER_EMAIL, name: "chef" },
 });
 
-export const viewerFixture = (overrides: Partial<GetMeResponse> = {}): GetMeResponse => {
+const getJstAiUsagePeriod = (date: Date) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+
+  if (!year || !month) {
+    throw new Error("Failed to format current JST month.");
+  }
+
+  const monthNumber = Number(month);
+  const nextMonthYear = monthNumber === 12 ? Number(year) + 1 : Number(year);
+  const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
+
+  return {
+    month: `${year}-${month}`,
+    resetAt: new Date(Date.UTC(nextMonthYear, nextMonth - 1, 1, -9)).toISOString(),
+  };
+};
+
+export const viewerFixture = (
+  overrides: Partial<GetMeResponse> = {},
+  now = new Date(),
+): GetMeResponse => {
   const plan: Plan = overrides.plan ?? "free";
   const limits = PLAN_LIMITS[plan];
+  const aiUsagePeriod = getJstAiUsagePeriod(now);
 
   return {
     userId: MOCK_USER_ID,
@@ -37,10 +64,10 @@ export const viewerFixture = (overrides: Partial<GetMeResponse> = {}): GetMeResp
     recipeLimit: limits.savedRecipes,
     isRecipeLimitReached: false,
     aiUsage: {
-      month: "2026-05",
+      month: aiUsagePeriod.month,
       used: 0,
       limit: limits.monthlyAiImports,
-      resetAt: "2026-05-31T15:00:00.000Z",
+      resetAt: aiUsagePeriod.resetAt,
     },
     ...overrides,
   };

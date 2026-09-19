@@ -1,4 +1,4 @@
-import { scenarios } from "./scenarios";
+import { scenarioGroups, scenarios } from "./scenarios";
 
 // アプリのz-indexは最大50、右下はFAB、下部中央は取り込みの島が占めている。
 // パネルは左下に、どのレイヤーよりも手前に置く。
@@ -30,20 +30,24 @@ const selectStyle = [
 
 const delayOptions = [0, 300, 1000, 3000];
 
+const createOption = (option: { value: string; label: string }, selected: string) => {
+  const element = document.createElement("option");
+  element.value = option.value;
+  element.textContent = option.label;
+  element.selected = option.value === selected;
+
+  return element;
+};
+
 const createSelect = (
-  options: readonly { value: string; label: string }[],
-  selected: string,
+  children: readonly (HTMLOptionElement | HTMLOptGroupElement)[],
   onChange: (value: string) => void,
 ) => {
   const select = document.createElement("select");
   select.setAttribute("style", selectStyle);
 
-  for (const option of options) {
-    const element = document.createElement("option");
-    element.value = option.value;
-    element.textContent = option.label;
-    element.selected = option.value === selected;
-    select.appendChild(element);
+  for (const child of children) {
+    select.appendChild(child);
   }
 
   select.addEventListener("change", () => {
@@ -71,15 +75,26 @@ export const mountScenarioPanel = ({
   badge.setAttribute("style", "letter-spacing:0.08em;opacity:0.7");
 
   const scenarioSelect = createSelect(
-    scenarios.map((scenario) => ({ value: scenario.id, label: scenario.label })),
-    scenarioId,
+    scenarioGroups.map((group) => {
+      const element = document.createElement("optgroup");
+      element.label = group.label;
+
+      for (const scenario of scenarios.filter((scenario) => scenario.group === group.id)) {
+        element.appendChild(
+          createOption({ value: scenario.id, label: scenario.label }, scenarioId),
+        );
+      }
+
+      return element;
+    }),
     (value) => {
       onChange({ scenarioId: value, delayMs });
     },
   );
   const delaySelect = createSelect(
-    delayOptions.map((value) => ({ value: String(value), label: `${value}ms` })),
-    String(delayMs),
+    delayOptions.map((value) =>
+      createOption({ value: String(value), label: `${value}ms` }, String(delayMs)),
+    ),
     (value) => {
       onChange({ scenarioId, delayMs: Number(value) });
     },

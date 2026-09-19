@@ -134,27 +134,28 @@ pnpm dev:mock
 一度指定すると sessionStorage に残るので、画面遷移しても維持されます。
 `?delay=2000` を付けると全 API レスポンスが遅くなり、スケルトンを観察できます。
 
-| id | 内容 |
-| --- | --- |
-| `default` | Pro・26件(2ページ目あり)・タグあり |
-| `empty` | レシピなし |
-| `no-tags` | タグを持たない(チップ列なし・詳細で定番候補) |
-| `free-locked` | Freeで末尾がロック |
-| `limit-reached` | Freeで保存上限ちょうど |
-| `import-limit` | Freeで今月のAI取り込みが上限 |
-| `checkout-pending` | 決済から戻った直後(`/settings/billing?checkout=success` を開くと、数秒でProに変わる) |
-| `pro-canceling` | Proで解約予約中 |
-| `pro-past-due` | Proで支払いを確認できない |
-| `list-error` | 一覧の取得失敗 |
-| `next-page-error` | 2ページ目の取得失敗 |
-| `importing` | 取り込み中 |
-| `import-failed` | 取り込み失敗 |
-| `text-import-failed` | テキストの取り込み失敗(原文を直して再試行) |
-| `no-cover` | カバー画像なし |
-| `image-only` | 画像だけの投稿(詳細が材料・手順なしで画像だけ。表紙はレシピ画像の1枚目と同じ。2件目は1枚だけ) |
-| `broken-image` | 画像の読み込み失敗(一覧のサムネイルと、2・5・8件目の詳細の画像) |
-| `signed-out` | 未ログイン |
-| `offline` | 接続不可 |
+| 分類 | id | 内容 |
+| --- | --- | --- |
+| 基本 | `default` | Pro・26件(2ページ目あり)・タグあり |
+| レシピ一覧・詳細 | `empty` | レシピなし |
+| レシピ一覧・詳細 | `no-tags` | タグを持たない(チップ列なし・詳細で定番候補) |
+| レシピ一覧・詳細 | `list-error` | 一覧の取得失敗 |
+| レシピ一覧・詳細 | `next-page-error` | 2ページ目の取得失敗 |
+| レシピ一覧・詳細 | `no-cover` | カバー画像なし |
+| レシピ一覧・詳細 | `image-only` | 画像だけの投稿(詳細が材料・手順なしで画像だけ。表紙はレシピ画像の1枚目と同じ。2件目は1枚だけ) |
+| レシピ一覧・詳細 | `broken-image` | 画像の読み込み失敗(一覧のサムネイルと、2・5・8件目の詳細の画像) |
+| プラン・上限 | `free-locked` | Freeで末尾がロック |
+| プラン・上限 | `limit-reached` | Freeで保存上限ちょうど |
+| プラン・上限 | `import-limit` | Freeで今月のAI取り込みが上限 |
+| プラン・上限 | `checkout-pending` | 決済から戻った直後(`/settings/billing?checkout=success` を開くと、数秒でProに変わる) |
+| プラン・上限 | `pro-canceling` | Proで解約予約中 |
+| プラン・上限 | `pro-past-due` | Proで支払いを確認できない |
+| 取り込み | `importing` | 取り込み中 |
+| 取り込み | `import-failed` | 取り込み失敗 |
+| 取り込み | `text-import-failed` | テキストの取り込み失敗(原文を直して再試行) |
+| アカウント | `google-login` | Googleだけでログイン(アカウント設定にパスワードとメールアドレスの変更が出ない) |
+| セッション | `signed-out` | 未ログイン |
+| セッション | `offline` | 接続不可 |
 
 検索ヒットなしの表示は、`default` で一致しない語を検索すると出ます。
 取り込みは URL やテキストを送信してから数秒で成功に変わるので、島の一連の流れをそのまま追えます。

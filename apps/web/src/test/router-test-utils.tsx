@@ -1,3 +1,4 @@
+import { PLAN_LIMITS } from "@recipestock/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { act, render } from "@testing-library/react";
@@ -14,7 +15,14 @@ import { AppRouter, createAppRouter } from "../routes/router";
 
 const authenticatedSession = sessionFixture();
 
-export const viewerResponse = viewerFixture();
+export const viewerResponse = viewerFixture({
+  aiUsage: {
+    month: "2026-05",
+    used: 0,
+    limit: PLAN_LIMITS.free.monthlyAiImports,
+    resetAt: "2026-05-31T15:00:00.000Z",
+  },
+});
 
 export const billingStatusResponse = billingStatusFixture();
 
