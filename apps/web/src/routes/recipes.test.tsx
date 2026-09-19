@@ -8,6 +8,7 @@ import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { recipesQueryKeys } from "../features/recipes";
 import {
   findFetchCall,
   getRequestPath,
@@ -2550,6 +2551,38 @@ describe("RecipesRoute", () => {
     await waitFor(() => {
       expect(appRouter.state.location.pathname).toBe("/recipes");
     });
+  });
+
+  it("開いている詳細がほかで削除されたら、読み直した時点で前の内容を消して見つからないと伝える", async () => {
+    let isDeleted = false;
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return isDeleted
+            ? jsonResponse(
+                { error: { code: "not_found", message: "Recipe was not found." } },
+                { status: 404 },
+              )
+            : jsonResponse(tomatoPastaDetailResponse);
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { queryClient } = await renderApp("/recipes/recipe_123");
+    await screen.findByRole("heading", { name: "Tomato pasta" });
+
+    isDeleted = true;
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: recipesQueryKeys.detail("recipe_123") });
+    });
+
+    await expect(
+      screen.findByRole("heading", { name: "レシピが見つかりません" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Tomato pasta" })).not.toBeInTheDocument();
   });
 
   it("詳細からの削除に失敗したら、ダイアログを開いたまま中にエラーを出す", async () => {

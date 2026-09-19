@@ -245,6 +245,24 @@ export const RecipeDetailRoute = () => {
     return <RecipeDetailSkeleton />;
   }
 
+  // ほかの端末で削除されたときは、読み直しで404になっても手元に前の内容が残る。
+  // 見つからないことは確定なので、残っている内容より先に伝える。
+  if (isNotFoundError(error)) {
+    return (
+      <article className={detailPageClass}>
+        <ScreenTopBar leading={backButton} title="レシピが見つかりません" />
+        <RecipeDetailNotice
+          icon={<WarningCircle size={26} weight="bold" />}
+          message="レシピが見つかりませんでした。削除された可能性があります。"
+        >
+          <Button variant="outline" onClick={returnToRecipeList}>
+            レシピ一覧へ
+          </Button>
+        </RecipeDetailNotice>
+      </article>
+    );
+  }
+
   if (recipe?.locked) {
     return (
       <article className={detailPageClass}>
@@ -256,22 +274,6 @@ export const RecipeDetailRoute = () => {
           <Link className={cn(buttonVariants(), "no-underline")} to="/settings/billing">
             プランを見る
           </Link>
-        </RecipeDetailNotice>
-      </article>
-    );
-  }
-
-  if (!recipe && isNotFoundError(error)) {
-    return (
-      <article className={detailPageClass}>
-        <ScreenTopBar leading={backButton} title="レシピが見つかりません" />
-        <RecipeDetailNotice
-          icon={<WarningCircle size={26} weight="bold" />}
-          message="レシピが見つかりませんでした。削除された可能性があります。"
-        >
-          <Button variant="outline" onClick={returnToRecipeList}>
-            レシピ一覧へ
-          </Button>
         </RecipeDetailNotice>
       </article>
     );
