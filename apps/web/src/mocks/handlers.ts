@@ -40,6 +40,10 @@ const apiError = (status: number, code: ApiErrorCode, message: string, details?:
     { status },
   );
 
+// Better Authのclientが読むエラーは通常APIのenvelopeとは形が異なる。
+const authError = (status: number, code: string, message: string) =>
+  HttpResponse.json({ code, message }, { status });
+
 const svgResponse = (seed: string) =>
   HttpResponse.text(imagePlaceholderSvg(seed), {
     headers: { "content-type": "image/svg+xml", "cache-control": "no-store" },
@@ -305,17 +309,39 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     }),
     http.post("/api/auth/sign-up/email", () => HttpResponse.json({ token: null })),
     http.post("/api/auth/sign-out", () => {
+      if (state.failures.signOut) {
+        return authError(500, "UNKNOWN_ERROR", "Failed to sign out.");
+      }
+
       session = null;
 
       return HttpResponse.json({ success: true });
     }),
-    http.post("/api/auth/change-email", () => HttpResponse.json({ status: true })),
-    http.post("/api/auth/change-password", () => HttpResponse.json({ status: true })),
-    http.get("/api/auth/list-accounts", () =>
-      session
-        ? HttpResponse.json(state.loginAccounts)
-        : HttpResponse.json({ code: "UNAUTHORIZED", message: "Unauthorized" }, { status: 401 }),
+    http.post("/api/auth/change-email", () =>
+      state.failures.changeEmail
+        ? authError(500, "UNKNOWN_ERROR", "Failed to change email.")
+        : HttpResponse.json({ status: true }),
     ),
+    http.post("/api/auth/change-password", () => {
+      if (state.failures.changePassword === "invalid-password") {
+        return authError(400, "INVALID_PASSWORD", "Invalid password.");
+      }
+      if (state.failures.changePassword === "generic") {
+        return authError(500, "UNKNOWN_ERROR", "Failed to change password.");
+      }
+
+      return HttpResponse.json({ status: true });
+    }),
+    http.get("/api/auth/list-accounts", () => {
+      if (!session) {
+        return authError(401, "UNAUTHORIZED", "Unauthorized");
+      }
+      if (state.failures.listLoginAccounts) {
+        return authError(500, "UNKNOWN_ERROR", "Failed to list accounts.");
+      }
+
+      return HttpResponse.json(state.loginAccounts);
+    }),
     // APIはautoSignInAfterVerificationなので、検証が通ればそのままログインする。
     http.post("/api/auth/email-otp/verify-email", () => {
       session = sessionFixture();
@@ -328,16 +354,19 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     http.post("/api/auth/email-otp/reset-password", () => HttpResponse.json({ status: true })),
 
     // --- viewer ---
-    http.get(
-      "/api/me",
-      () =>
-        requireSession() ??
-        HttpResponse.json({
-          ...viewer,
-          recipeCount: recipes.length,
-          isRecipeLimitReached: isRecipeLimitReached(),
-        }),
-    ),
+    http.get("/api/me", () => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+      if (state.failures.getViewer) {
+        return apiError(503, "temporarily_unavailable", "Failed to load viewer.");
+      }
+
+      return HttpResponse.json({
+        ...viewer,
+        recipeCount: recipes.length,
+        isRecipeLimitReached: isRecipeLimitReached(),
+      });
+    }),
 
     // --- recipes ---
     http.get("/api/recipes", ({ request }) => {
@@ -544,7 +573,15 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     }),
 
     // --- tags ---
-    http.get("/api/tags", () => requireSession() ?? HttpResponse.json({ tags: tagsWithCount() })),
+    http.get("/api/tags", () => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+      if (state.failures.listTags) {
+        return apiError(503, "temporarily_unavailable", "Failed to list tags.");
+      }
+
+      return HttpResponse.json({ tags: tagsWithCount() });
+    }),
     http.patch("/api/tags/:tagId", async ({ params, request }) => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
@@ -636,6 +673,9 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     http.get("/api/billing/status", () => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
+      if (state.failures.getBillingStatus) {
+        return apiError(503, "temporarily_unavailable", "Failed to load billing status.");
+      }
 
       // 決済から戻った直後を再現する。何度か読まれたところでwebhookが届いたことにしてProへ変える。
       billingReads += 1;
@@ -649,13 +689,35 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
 
       return HttpResponse.json(billing);
     }),
-    http.get("/api/billing/pro-price", () => requireSession() ?? HttpResponse.json(state.proPrice)),
-    http.post("/api/billing/checkout", () =>
-      HttpResponse.json({ url: `${window.location.origin}/settings/billing?checkout=success` }),
-    ),
-    http.post("/api/billing/portal", () =>
-      HttpResponse.json({ url: `${window.location.origin}/settings/billing` }),
-    ),
+    http.get("/api/billing/pro-price", () => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+      if (state.failures.getProPrice) {
+        return apiError(503, "temporarily_unavailable", "Failed to load Pro price.");
+      }
+
+      return HttpResponse.json(state.proPrice);
+    }),
+    http.post("/api/billing/checkout", () => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+      if (state.failures.createCheckout) {
+        return apiError(500, "unknown", "Failed to create checkout.");
+      }
+
+      return HttpResponse.json({
+        url: `${window.location.origin}/settings/billing?checkout=success`,
+      });
+    }),
+    http.post("/api/billing/portal", () => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+      if (state.failures.createBillingPortal) {
+        return apiError(500, "unknown", "Failed to create billing portal.");
+      }
+
+      return HttpResponse.json({ url: `${window.location.origin}/settings/billing` });
+    }),
 
     // --- import jobs ---
     http.get("/api/import/jobs/recent", () => {
@@ -762,10 +824,15 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     }),
 
     // --- push subscriptions ---
-    http.get(
-      "/api/push-subscriptions",
-      () => requireSession() ?? HttpResponse.json(pushSubscriptions),
-    ),
+    http.get("/api/push-subscriptions", () => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+      if (state.failures.getPushSubscriptions) {
+        return apiError(503, "temporarily_unavailable", "Failed to load push subscriptions.");
+      }
+
+      return HttpResponse.json(pushSubscriptions);
+    }),
     http.post("/api/push-subscriptions", async ({ request }) => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
@@ -802,13 +869,21 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     }),
 
     // --- iOS Shortcut credentials ---
-    http.get(
-      "/api/shortcut-credentials",
-      () => requireSession() ?? HttpResponse.json({ credentials }),
-    ),
+    http.get("/api/shortcut-credentials", () => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+      if (state.failures.listShortcutCredentials) {
+        return apiError(503, "temporarily_unavailable", "Failed to list shortcut credentials.");
+      }
+
+      return HttpResponse.json({ credentials });
+    }),
     http.post("/api/shortcut-credentials", async ({ request }) => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
+      if (state.failures.issueShortcutCredential) {
+        return apiError(500, "unknown", "Failed to issue shortcut credential.");
+      }
 
       const body = (await request.json()) as { name: string };
       const credential: ShortcutCredential = {
@@ -828,6 +903,9 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     http.delete("/api/shortcut-credentials/:credentialId", ({ params }) => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
+      if (state.failures.revokeShortcutCredential) {
+        return apiError(500, "unknown", "Failed to revoke shortcut credential.");
+      }
 
       const credentialId = String(params.credentialId);
       credentials = credentials.filter((credential) => credential.id !== credentialId);

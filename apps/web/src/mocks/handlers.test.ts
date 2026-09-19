@@ -191,6 +191,95 @@ describe("mock handlers", () => {
     });
   });
 
+  it.each([
+    ["viewer-error", "GET", "/api/me", 503, "temporarily_unavailable"],
+    ["tags-error", "GET", "/api/tags", 503, "temporarily_unavailable"],
+    ["billing-status-error", "GET", "/api/billing/status", 503, "temporarily_unavailable"],
+    ["pro-price-error", "GET", "/api/billing/pro-price", 503, "temporarily_unavailable"],
+    ["checkout-error", "POST", "/api/billing/checkout", 500, "unknown"],
+    ["billing-portal-error", "POST", "/api/billing/portal", 500, "unknown"],
+    [
+      "shortcut-credentials-error",
+      "GET",
+      "/api/shortcut-credentials",
+      503,
+      "temporarily_unavailable",
+    ],
+    ["push-subscriptions-error", "GET", "/api/push-subscriptions", 503, "temporarily_unavailable"],
+    ["shortcut-issue-error", "POST", "/api/shortcut-credentials", 500, "unknown"],
+    [
+      "shortcut-revoke-error",
+      "DELETE",
+      "/api/shortcut-credentials/credential_0001",
+      500,
+      "unknown",
+    ],
+  ] as const)("%sでは%s %sが失敗する", async (scenarioId, method, path, expectedStatus, expectedCode) => {
+    const response = await send(setup(scenarioId), method, path, method === "GET" ? undefined : {});
+
+    expect(response.status).toBe(expectedStatus);
+    expect(await errorCodeOf(response)).toBe(expectedCode);
+  });
+
+  it("ログイン方法の取得失敗はBetter Authのエラー形式を返す", async () => {
+    const response = await send(setup("login-methods-error"), "GET", "/api/auth/list-accounts");
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ code: "UNKNOWN_ERROR" });
+  });
+
+  it("アカウント変更失敗はメールとパスワードの両方で再現する", async () => {
+    const handlers = setup("account-write-error");
+    const email = await send(handlers, "POST", "/api/auth/change-email", {});
+    const password = await send(handlers, "POST", "/api/auth/change-password", {});
+
+    expect(email.status).toBe(500);
+    expect(await email.json()).toMatchObject({ code: "UNKNOWN_ERROR" });
+    expect(password.status).toBe(500);
+    expect(await password.json()).toMatchObject({ code: "UNKNOWN_ERROR" });
+  });
+
+  it("現在のパスワード不一致はINVALID_PASSWORDを返す", async () => {
+    const response = await send(
+      setup("invalid-current-password"),
+      "POST",
+      "/api/auth/change-password",
+      {},
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "INVALID_PASSWORD" });
+  });
+
+  it("ログアウト失敗ではsessionを残す", async () => {
+    const handlers = setup("sign-out-error");
+    const response = await send(handlers, "POST", "/api/auth/sign-out");
+
+    expect(response.status).toBe(500);
+    expect(await (await send(handlers, "GET", "/api/auth/get-session")).json()).not.toBeNull();
+  });
+
+  it("連携キーの発行失敗では端末を追加しない", async () => {
+    const handlers = setup("shortcut-issue-error");
+
+    await send(handlers, "POST", "/api/shortcut-credentials", { name: "iPhone" });
+
+    expect(await (await send(handlers, "GET", "/api/shortcut-credentials")).json()).toEqual({
+      credentials: [],
+    });
+  });
+
+  it("端末の連携解除失敗では一覧から削除しない", async () => {
+    const handlers = setup("shortcut-revoke-error");
+
+    await send(handlers, "DELETE", "/api/shortcut-credentials/credential_0001");
+
+    const body = (await (await send(handlers, "GET", "/api/shortcut-credentials")).json()) as {
+      credentials: unknown[];
+    };
+    expect(body.credentials).toHaveLength(2);
+  });
+
   it("ハンドラのないAPIは実APIに流さず501で止める", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const handlers = setup();
