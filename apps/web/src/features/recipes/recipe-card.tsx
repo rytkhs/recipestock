@@ -80,7 +80,7 @@ export const LockedShelfNotice = () => (
     <div className="min-w-0 flex-1">
       <p className="font-semibold text-brand-walnut text-sm">ロック中のレシピ</p>
       <p className="mt-0.5 text-brand-muted text-xs">
-        フリープランで開けるのは、新しく保存した{FREE_RECIPE_LIMIT}件までです。
+        Freeで開けるのは、新しく保存した{FREE_RECIPE_LIMIT}件までです。
       </p>
     </div>
     <Link

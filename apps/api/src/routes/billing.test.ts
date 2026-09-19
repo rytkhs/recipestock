@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "../billing";
 import { type StripeBillingClient } from "../stripe-billing";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -11,18 +11,9 @@ const env = {
   STRIPE_SECRET_KEY: "sk_test",
 };
 
-const auth = {
-  getSession: async () => ({ user: { id: "user_123", email: "user@example.com" } }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth();
 
-const sameOriginPost = {
-  method: "POST",
-  headers: {
-    origin: "https://app.example.com",
-    "sec-fetch-site": "same-origin",
-  },
-};
+const sameOriginPost = { method: "POST", headers: sameOriginHeaders };
 
 const createRepository = (overrides: Partial<BillingRepository> = {}): BillingRepository => ({
   getBillingStatus: async () => ({
@@ -60,6 +51,13 @@ const createStripeClient = (overrides: Partial<StripeBillingClient> = {}): Strip
     cancelAt: null,
     canceledAt: null,
   }),
+  retrievePrice: async () => ({
+    unitAmount: 480,
+    currency: "jpy",
+    recurringInterval: "month",
+    recurringIntervalCount: 1,
+  }),
+  listCustomerSubscriptions: async () => [],
   updateCustomerEmail: async () => {},
   verifyWebhook: async () => ({
     kind: "noop",
@@ -78,10 +76,7 @@ describe("Billing routes", () => {
       updateCustomerEmail: vi.fn(),
     });
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async () => {
           throw new Error("should not load billing state without a session");
@@ -111,10 +106,7 @@ describe("Billing routes", () => {
       updateCustomerEmail: vi.fn(),
     });
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async () => {
           throw new Error("should not load billing state without a session");
@@ -246,6 +238,83 @@ describe("Billing routes", () => {
       "update-customer-email:cus_existing:user@example.com",
       "create-checkout:cus_existing",
     ]);
+  });
+
+  it("webhookが届く前でも、StripeにProの契約があれば二つ目のCheckoutを作らない", async () => {
+    const listCustomerSubscriptions = vi.fn<StripeBillingClient["listCustomerSubscriptions"]>(
+      async () => [{ stripePriceId: "price_pro", status: "active", currentPeriodEnd: null }],
+    );
+    const createCheckoutSession = vi.fn<StripeBillingClient["createCheckoutSession"]>();
+    const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>();
+    const testApp = createSilentTestApp({
+      auth,
+      billingRepository: createRepository({
+        getOrCreateAppUserBillingState: async (userId) => ({
+          userId,
+          plan: "free",
+          stripeCustomerId: "cus_existing",
+        }),
+      }),
+      stripeBillingClient: createStripeClient({
+        listCustomerSubscriptions,
+        createCheckoutSession,
+        updateCustomerEmail,
+      }),
+    });
+
+    const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "already_subscribed" },
+    });
+    expect(listCustomerSubscriptions).toHaveBeenCalledWith({ stripeCustomerId: "cus_existing" });
+    expect(createCheckoutSession).not.toHaveBeenCalled();
+    expect(updateCustomerEmail).not.toHaveBeenCalled();
+  });
+
+  it("StripeにあるのがProでない契約だけなら、Checkoutを作る", async () => {
+    const createCheckoutSession = vi.fn<StripeBillingClient["createCheckoutSession"]>(async () => ({
+      url: "https://checkout.stripe.com/session_456",
+    }));
+    const testApp = createSilentTestApp({
+      auth,
+      billingRepository: createRepository({
+        getOrCreateAppUserBillingState: async (userId) => ({
+          userId,
+          plan: "free",
+          stripeCustomerId: "cus_existing",
+        }),
+      }),
+      stripeBillingClient: createStripeClient({
+        listCustomerSubscriptions: async () => [
+          { stripePriceId: "price_pro", status: "incomplete", currentPeriodEnd: null },
+          { stripePriceId: "price_other", status: "active", currentPeriodEnd: null },
+        ],
+        createCheckoutSession,
+      }),
+    });
+
+    const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
+
+    expect(response.status).toBe(200);
+    expect(createCheckoutSession).toHaveBeenCalled();
+  });
+
+  it("Stripe Customerがまだなければ、Stripeの契約を問い合わせない", async () => {
+    const listCustomerSubscriptions = vi.fn<StripeBillingClient["listCustomerSubscriptions"]>(
+      async () => [],
+    );
+    const testApp = createSilentTestApp({
+      auth,
+      billingRepository: createRepository(),
+      stripeBillingClient: createStripeClient({ listCustomerSubscriptions }),
+    });
+
+    const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
+
+    expect(response.status).toBe(200);
+    expect(listCustomerSubscriptions).not.toHaveBeenCalled();
   });
 
   it("Checkout前のCustomer email同期が失敗してもCheckoutを作る", async () => {
@@ -540,5 +609,66 @@ describe("Billing routes", () => {
       plan: "free",
       subscription: null,
     });
+  });
+
+  it("Proの値段を月額の円で返し、同じPriceは一度しかStripeに問い合わせない", async () => {
+    const retrievePrice = vi.fn<StripeBillingClient["retrievePrice"]>(async () => ({
+      unitAmount: 480,
+      currency: "jpy",
+      recurringInterval: "month",
+      recurringIntervalCount: 1,
+    }));
+    const testApp = createSilentTestApp({
+      auth,
+      stripeBillingClient: createStripeClient({ retrievePrice }),
+    });
+
+    const first = await testApp.request("/api/billing/pro-price", undefined, env);
+    const second = await testApp.request("/api/billing/pro-price", undefined, env);
+
+    expect(first.status).toBe(200);
+    await expect(first.json()).resolves.toEqual({
+      amount: 480,
+      currency: "jpy",
+      interval: "month",
+    });
+    await expect(second.json()).resolves.toEqual({
+      amount: 480,
+      currency: "jpy",
+      interval: "month",
+    });
+    expect(retrievePrice).toHaveBeenCalledTimes(1);
+    expect(retrievePrice).toHaveBeenCalledWith({ priceId: "price_pro" });
+  });
+
+  it.each([
+    { name: "円でない", currency: "usd", recurringInterval: "month", recurringIntervalCount: 1 },
+    { name: "年払い", currency: "jpy", recurringInterval: "year", recurringIntervalCount: 1 },
+    { name: "3か月ごと", currency: "jpy", recurringInterval: "month", recurringIntervalCount: 3 },
+    { name: "一回払い", currency: "jpy", recurringInterval: null, recurringIntervalCount: null },
+  ])("Proの値段が$nameのPriceなら、別の値段を見せずにエラーにする", async (price) => {
+    const testApp = createSilentTestApp({
+      auth,
+      stripeBillingClient: createStripeClient({
+        retrievePrice: async () => ({ unitAmount: 480, ...price }),
+      }),
+    });
+
+    const response = await testApp.request("/api/billing/pro-price", undefined, env);
+
+    expect(response.status).toBe(500);
+  });
+
+  it("未ログイン時はProの値段を問い合わせない", async () => {
+    const retrievePrice = vi.fn<StripeBillingClient["retrievePrice"]>();
+    const testApp = createSilentTestApp({
+      auth: createTestAuth(null),
+      stripeBillingClient: createStripeClient({ retrievePrice }),
+    });
+
+    const response = await testApp.request("/api/billing/pro-price", undefined, env);
+
+    expect(response.status).toBe(401);
+    expect(retrievePrice).not.toHaveBeenCalled();
   });
 });

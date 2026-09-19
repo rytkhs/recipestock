@@ -1,17 +1,33 @@
+import { PLAN_LIMITS } from "@recipestock/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { act, render } from "@testing-library/react";
 import { vi } from "vitest";
 import { writeRecipeListFilters, writeRecipeListSort } from "../features/recipes/list-search";
 import { authClient } from "../lib/auth";
-import { billingStatusFixture, sessionFixture, viewerFixture } from "../mocks/fixtures";
+import {
+  billingStatusFixture,
+  passwordLoginAccountsFixture,
+  sessionFixture,
+  viewerFixture,
+} from "../mocks/fixtures";
 import { AppRouter, createAppRouter } from "../routes/router";
 
 const authenticatedSession = sessionFixture();
 
-export const viewerResponse = viewerFixture();
+export const viewerResponse = viewerFixture({
+  aiUsage: {
+    month: "2026-05",
+    used: 0,
+    limit: PLAN_LIMITS.free.monthlyAiImports,
+    resetAt: "2026-05-31T15:00:00.000Z",
+  },
+});
 
 export const billingStatusResponse = billingStatusFixture();
+
+// 断らない限り、メールアドレスとパスワードでログインした人として扱う。
+export const loginAccountsResponse = passwordLoginAccountsFixture();
 
 export const getRequestPath = (input: RequestInfo | URL) => {
   const toPath = (urlValue: string) => {
@@ -50,7 +66,15 @@ export const isGetSessionRequest = (input: RequestInfo | URL) =>
 
 export const mockFetch = (
   handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> | Response,
-  { authenticated = false }: { authenticated?: boolean } = {},
+  {
+    authenticated = false,
+    loginAccounts = loginAccountsResponse,
+    viewer = viewerResponse,
+  }: {
+    authenticated?: boolean;
+    loginAccounts?: typeof loginAccountsResponse;
+    viewer?: typeof viewerResponse;
+  } = {},
 ) =>
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const path = getRequestPath(input);
@@ -60,7 +84,11 @@ export const mockFetch = (
     }
 
     if (path === "/api/me" && authenticated) {
-      return jsonResponse(viewerResponse);
+      return jsonResponse(viewer);
+    }
+
+    if (path === "/api/auth/list-accounts" && authenticated) {
+      return jsonResponse(loginAccounts);
     }
 
     if (path === "/api/billing/status" && authenticated) {

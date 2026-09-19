@@ -2,11 +2,14 @@ import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createSessionResponse,
   findFetchCall,
   getRequestPath,
+  isGetSessionRequest,
   jsonResponse,
   mockFetch,
   renderApp,
+  viewerResponse,
 } from "../test/router-test-utils";
 
 describe("Import routes", () => {
@@ -412,6 +415,83 @@ describe("Import routes", () => {
     await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
       "保存できるレシピ数の上限に達しています。",
     );
+    expect(screen.getByRole("link", { name: "プランを見る" })).toHaveAttribute(
+      "href",
+      "/settings/billing",
+    );
+  });
+
+  it("viewerを読み終える前にFreeがAI取り込みの上限で止まっても、読み終えたらプランのページへ案内する", async () => {
+    let resolveViewer: (() => void) | undefined;
+    const viewerLoaded = new Promise<void>((resolve) => {
+      resolveViewer = resolve;
+    });
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+
+      if (isGetSessionRequest(input)) {
+        return createSessionResponse(true);
+      }
+      if (path === "/api/me") {
+        await viewerLoaded;
+        return jsonResponse(viewerResponse);
+      }
+      if (path === "/api/import/url/jobs") {
+        return jsonResponse(
+          { error: { code: "ai_usage_limit_exceeded", message: "AI usage limit exceeded." } },
+          { status: 429 },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/import/url");
+
+    await userEvent.type(await screen.findByLabelText("URL"), "https://example.com/recipes/tomato");
+    await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
+
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("link", { name: "プランを見る" })).not.toBeInTheDocument();
+
+    resolveViewer?.();
+
+    await expect(screen.findByRole("link", { name: "プランを見る" })).resolves.toHaveAttribute(
+      "href",
+      "/settings/billing",
+    );
+  });
+
+  it("ProがAI取り込みの上限で止まっても、プランのページへは案内しない", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+
+      if (isGetSessionRequest(input)) {
+        return createSessionResponse(true);
+      }
+      if (path === "/api/me") {
+        return jsonResponse({ ...viewerResponse, plan: "pro", recipeLimit: null });
+      }
+      if (path === "/api/import/url/jobs") {
+        return jsonResponse(
+          { error: { code: "ai_usage_limit_exceeded", message: "AI usage limit exceeded." } },
+          { status: 429 },
+        );
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/import/url");
+
+    await userEvent.type(await screen.findByLabelText("URL"), "https://example.com/recipes/tomato");
+    await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "今月のAI取り込みの上限に達しています。",
+    );
+    expect(screen.queryByRole("link", { name: "プランを見る" })).not.toBeInTheDocument();
   });
 
   it("private/login required errorを入力画面に表示する", async () => {

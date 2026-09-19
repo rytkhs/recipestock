@@ -214,4 +214,18 @@ describe("LoginRoute", () => {
       password: "newpassword123",
     });
   });
+
+  // 設定のパスワードのページからは、ログアウトしてこのURLへ送る。
+  it("mode=resetで開くとパスワード再設定から始まる", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }));
+    await renderApp("/login?mode=reset");
+
+    await expect(
+      screen.findByRole("heading", { name: "パスワード再設定" }),
+    ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText("登録しているメールアドレスに確認コードを送ります。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "再設定コードを送信" })).toBeInTheDocument();
+  });
 });

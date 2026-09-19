@@ -21,6 +21,7 @@ import {
   RecipeDetailSkeleton,
   RecipeFormSkeleton,
   RecipeListSkeleton,
+  SettingsPageSkeleton,
   SettingsSkeleton,
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
@@ -47,6 +48,18 @@ const SettingsBillingRoute = lazyRouteComponent(
   () => import("./settings-billing"),
   "SettingsBillingRoute",
 );
+const SettingsShareRoute = lazyRouteComponent(
+  () => import("./settings-share"),
+  "SettingsShareRoute",
+);
+const SettingsEmailRoute = lazyRouteComponent(
+  () => import("./settings-email"),
+  "SettingsEmailRoute",
+);
+const SettingsPasswordRoute = lazyRouteComponent(
+  () => import("./settings-password"),
+  "SettingsPasswordRoute",
+);
 
 const withPreload = <TProps,>(
   component: (props: TProps) => ReactNode,
@@ -54,7 +67,9 @@ const withPreload = <TProps,>(
 ) => Object.assign(component, { preload });
 
 const LoginRoute = withPreload(
-  ({ redirectTo }: { redirectTo: string }) => <LoginScreen redirectTo={redirectTo} />,
+  ({ redirectTo, startAtPasswordReset }: { redirectTo: string; startAtPasswordReset: boolean }) => (
+    <LoginScreen redirectTo={redirectTo} startAtPasswordReset={startAtPasswordReset} />
+  ),
   LoginScreen.preload,
 );
 const ImportUrlRoute = withPreload(
@@ -92,8 +107,12 @@ const ProtectedRouteSkeleton = () => {
     return <LoadingStatus label="タグを読み込み中" />;
   }
 
-  if (pathname === "/settings" || pathname.startsWith("/settings/")) {
+  if (pathname === "/settings") {
     return <SettingsSkeleton />;
+  }
+
+  if (pathname.startsWith("/settings/")) {
+    return <SettingsPageSkeleton />;
   }
 
   return <RecipeListSkeleton />;
@@ -282,6 +301,8 @@ const editRecipeRoute = createRoute({
 });
 
 type LoginSearch = {
+  // 設定のパスワードのページからログアウトして再設定へ進むときに付く。読めない値は指定なしに戻す。
+  mode?: "reset";
   redirect?: string;
 };
 
@@ -289,6 +310,7 @@ const loginRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/login",
   validateSearch: (search): LoginSearch => ({
+    mode: search.mode === "reset" ? "reset" : undefined,
     redirect: stringSearchParam(search.redirect),
   }),
   component: () => {
@@ -297,7 +319,7 @@ const loginRoute = createRoute({
 
     return (
       <RedirectAuthenticated redirectTo={redirectTo}>
-        <LoginRoute redirectTo={redirectTo} />
+        <LoginRoute redirectTo={redirectTo} startAtPasswordReset={search.mode === "reset"} />
       </RedirectAuthenticated>
     );
   },
@@ -351,12 +373,49 @@ const settingsRoute = createRoute({
   pendingMs: 0,
 });
 
+// プランのページを開いた理由。ページは一度だけ読んでURLから消す。読めない値は理由なしとして扱う。
+const settingsBillingSearchSchema = z.object({
+  // Stripeの決済画面から戻ったときの結果（apps/api/src/routes/billing.ts）。
+  checkout: z.enum(["success", "cancel"]).optional().catch(undefined),
+  // ショートカットが上限で止まったときに開くURLの理由（apps/api/src/ios-share-notices.ts）。
+  upsell: z.enum(["recipe_limit", "ai_usage_limit"]).optional().catch(undefined),
+  from: z.literal("shortcut").optional().catch(undefined),
+});
+
 const settingsBillingRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings/billing",
+  validateSearch: settingsBillingSearchSchema,
   component: SettingsBillingRoute,
   errorComponent: RouteChunkError,
-  pendingComponent: SettingsSkeleton,
+  pendingComponent: SettingsPageSkeleton,
+  pendingMs: 0,
+});
+
+const settingsShareRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/settings/share",
+  component: SettingsShareRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: SettingsPageSkeleton,
+  pendingMs: 0,
+});
+
+const settingsEmailRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/settings/email",
+  component: SettingsEmailRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: SettingsPageSkeleton,
+  pendingMs: 0,
+});
+
+const settingsPasswordRoute = createRoute({
+  getParentRoute: () => protectedLayoutRoute,
+  path: "/settings/password",
+  component: SettingsPasswordRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: SettingsPageSkeleton,
   pendingMs: 0,
 });
 
@@ -381,6 +440,9 @@ const routeTree = rootRoute.addChildren([
     tagsRoute,
     settingsRoute,
     settingsBillingRoute,
+    settingsShareRoute,
+    settingsEmailRoute,
+    settingsPasswordRoute,
   ]),
 ]);
 

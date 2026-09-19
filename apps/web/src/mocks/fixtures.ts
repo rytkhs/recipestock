@@ -1,6 +1,7 @@
 import {
   type GetBillingStatusResponse,
   type GetMeResponse,
+  type GetProPriceResponse,
   type GetPushSubscriptionsResponse,
   type ImportJobSummary,
   type ListShortcutCredentialsResponse,
@@ -24,9 +25,36 @@ export const sessionFixture = (): SessionFixture => ({
   user: { id: MOCK_USER_ID, email: MOCK_USER_EMAIL, name: "chef" },
 });
 
-export const viewerFixture = (overrides: Partial<GetMeResponse> = {}): GetMeResponse => {
+const getJstAiUsagePeriod = (date: Date) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+
+  if (!year || !month) {
+    throw new Error("Failed to format current JST month.");
+  }
+
+  const monthNumber = Number(month);
+  const nextMonthYear = monthNumber === 12 ? Number(year) + 1 : Number(year);
+  const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
+
+  return {
+    month: `${year}-${month}`,
+    resetAt: new Date(Date.UTC(nextMonthYear, nextMonth - 1, 1, -9)).toISOString(),
+  };
+};
+
+export const viewerFixture = (
+  overrides: Partial<GetMeResponse> = {},
+  now = new Date(),
+): GetMeResponse => {
   const plan: Plan = overrides.plan ?? "free";
   const limits = PLAN_LIMITS[plan];
+  const aiUsagePeriod = getJstAiUsagePeriod(now);
 
   return {
     userId: MOCK_USER_ID,
@@ -36,10 +64,10 @@ export const viewerFixture = (overrides: Partial<GetMeResponse> = {}): GetMeResp
     recipeLimit: limits.savedRecipes,
     isRecipeLimitReached: false,
     aiUsage: {
-      month: "2026-05",
+      month: aiUsagePeriod.month,
       used: 0,
       limit: limits.monthlyAiImports,
-      resetAt: "2026-05-31T15:00:00.000Z",
+      resetAt: aiUsagePeriod.resetAt,
     },
     ...overrides,
   };
@@ -51,6 +79,26 @@ export const billingStatusFixture = (
   plan: "free",
   subscription: null,
   ...overrides,
+});
+
+// Proで契約中。更新日は開いた日から20日後にする。
+export const proBillingStatusFixture = (
+  subscription: Partial<NonNullable<GetBillingStatusResponse["subscription"]>> = {},
+): GetBillingStatusResponse => ({
+  plan: "pro",
+  subscription: {
+    status: "active",
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
+    cancelAt: null,
+    ...subscription,
+  },
+});
+
+export const proPriceFixture = (): GetProPriceResponse => ({
+  amount: 480,
+  currency: "jpy",
+  interval: "month",
 });
 
 const encodeObjectKey = (objectKey: string) =>
@@ -433,3 +481,34 @@ export const shortcutCredentialsFixture = (
   credentials: [],
   ...overrides,
 });
+
+/** better-authの`/list-accounts`が返す1件。パスワードは"credential"というproviderで持つ。 */
+export type LoginAccountFixture = {
+  accountId: string;
+  createdAt: string;
+  id: string;
+  providerId: string;
+  scopes: string[];
+  updatedAt: string;
+  userId: string;
+};
+
+export const loginAccountFixture = (providerId: string): LoginAccountFixture => ({
+  accountId: providerId === "credential" ? MOCK_USER_ID : `${providerId}_account_123`,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  id: `account_${providerId}`,
+  providerId,
+  scopes: providerId === "credential" ? [] : ["openid", "email", "profile"],
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  userId: MOCK_USER_ID,
+});
+
+/** メールアドレスとパスワードでログインする人。 */
+export const passwordLoginAccountsFixture = (): LoginAccountFixture[] => [
+  loginAccountFixture("credential"),
+];
+
+/** Googleだけでログインする人。パスワードを持たない。 */
+export const googleLoginAccountsFixture = (): LoginAccountFixture[] => [
+  loginAccountFixture("google"),
+];

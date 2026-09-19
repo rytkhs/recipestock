@@ -1,36 +1,15 @@
 import { ArrowUpRight } from "@phosphor-icons/react";
-import { type ReactNode, useId } from "react";
+import { useId } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-// 詳細の段の見出し。一覧と同じくカードで囲まず、見出しと罫線だけで区切る。
-export const RecipeSectionHeader = ({
-  action,
-  id,
-  meta,
-  title,
-}: {
-  action?: ReactNode;
-  id: string;
-  /** 見出しの横に添える補足。編集画面ではできあがり量の入力欄を置く。 */
-  meta?: ReactNode;
-  title: string;
-}) => (
-  <div className="flex items-center gap-3 border-brand-line border-b pb-2.5">
-    <h2 className="shrink-0 font-bold text-brand-walnut text-lg leading-8" id={id}>
-      {title}
-    </h2>
-    {meta ? <div className="min-w-0 flex-1 text-brand-muted text-sm">{meta}</div> : null}
-    {action ? <div className={cn("shrink-0", !meta && "ml-auto")}>{action}</div> : null}
-  </div>
-);
+import { SectionHeader } from "../../components/section-header";
 
 export const RecipeNote = ({ note }: { note: string }) => {
   const headingId = useId();
 
   return (
     <section aria-labelledby={headingId}>
-      <RecipeSectionHeader id={headingId} title="メモ" />
+      <SectionHeader id={headingId} title="メモ" />
       <p className="mt-3 whitespace-pre-wrap text-base text-brand-ink leading-7">{note}</p>
     </section>
   );
@@ -51,7 +30,7 @@ export const RecipeSource = ({
 
   return (
     <section aria-labelledby={headingId}>
-      <RecipeSectionHeader id={headingId} title="出典" />
+      <SectionHeader id={headingId} title="出典" />
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1">
           <p className="break-words font-medium text-base text-brand-ink">{name}</p>

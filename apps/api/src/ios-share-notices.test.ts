@@ -21,8 +21,8 @@ const titleOnlyReasons: IosShareShortcutImportReason[] = [
 ];
 
 const openUrlByReason: Partial<Record<IosShareShortcutImportReason, string>> = {
-  malformed_request: `${APP_ORIGIN}/settings`,
-  unauthorized: `${APP_ORIGIN}/settings`,
+  malformed_request: `${APP_ORIGIN}/settings/share`,
+  unauthorized: `${APP_ORIGIN}/settings/share`,
   recipe_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=recipe_limit&from=shortcut`,
   ai_usage_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=ai_usage_limit&from=shortcut`,
 };

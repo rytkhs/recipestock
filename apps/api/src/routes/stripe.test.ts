@@ -6,7 +6,7 @@ import {
   type StripeWebhookEvent,
   StripeWebhookSignatureError,
 } from "../stripe-billing";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -17,10 +17,7 @@ const env = {
   STRIPE_WEBHOOK_SECRET: "whsec_test",
 };
 
-const auth = {
-  getSession: async () => null,
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth(null);
 
 const eventCreatedAt = new Date("2026-06-04T00:00:00.000Z");
 
@@ -96,6 +93,10 @@ const createStripeClient = (
   createCheckoutSession: async () => ({ url: "https://checkout.stripe.com/session_123" }),
   createPortalSession: async () => ({ url: "https://billing.stripe.com/session_123" }),
   retrieveSubscription: async () => subscription,
+  retrievePrice: async () => {
+    throw new Error("should not retrieve price");
+  },
+  listCustomerSubscriptions: async () => [],
   updateCustomerEmail: async () => {},
   verifyWebhook: async () => event,
 });

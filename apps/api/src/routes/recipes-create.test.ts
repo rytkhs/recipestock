@@ -1,18 +1,13 @@
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe create routes", () => {
   it("ログイン済みユーザーがタイトルだけでレシピを保存できる", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       meRepository: {
         getAppUserPlan: async () => "free",
         countRecipes: async () => 0,
@@ -87,12 +82,7 @@ describe("Recipe create routes", () => {
 
   it("レシピ保存リクエストが不正な場合はvalidation_failedとdetailsを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -135,12 +125,7 @@ describe("Recipe create routes", () => {
   // 画像はR2へ直接PUTするので、本文のJSONが大きくなる理由がない。
   it("大きすぎる保存リクエストは本文を読み取る前に断る", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -180,12 +165,7 @@ describe("Recipe create routes", () => {
   it("任意項目と出典情報をRecipeContentとSource metadataとして保存する", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       meRepository: {
         getAppUserPlan: async () => "free",
         countRecipes: async () => 0,
@@ -265,12 +245,7 @@ describe("Recipe create routes", () => {
   it("正規化済み出典URLが送られてもsourceUrlから再計算して保存する", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -328,12 +303,7 @@ describe("Recipe create routes", () => {
   it("Freeユーザーが保存上限到達済みならレシピを保存しない", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => ({ status: "limitExceeded" }),
         getRecipe: async () => null,
@@ -372,12 +342,7 @@ describe("Recipe create routes", () => {
   it("上限付き保存処理が成功した場合は保存済みレシピを返す", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -422,12 +387,7 @@ describe("Recipe create routes", () => {
     const deletes: unknown[] = [];
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -518,12 +478,7 @@ describe("Recipe create routes", () => {
     const copies: unknown[] = [];
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -626,12 +581,7 @@ describe("Recipe create routes", () => {
     const externalCopies: unknown[] = [];
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -723,12 +673,7 @@ describe("Recipe create routes", () => {
     const externalCopies: unknown[] = [];
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -821,12 +766,7 @@ describe("Recipe create routes", () => {
   it("外部画像URLの確定に失敗しても画像を省略してレシピを保存する", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -915,12 +855,7 @@ describe("Recipe create routes", () => {
   it("レシピ保存が例外で失敗したらcopy済み確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("database failed");
@@ -973,12 +908,7 @@ describe("Recipe create routes", () => {
   it("外部画像URLのcopy後にレシピ保存が失敗したら確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("database failed");
@@ -1037,12 +967,7 @@ describe("Recipe create routes", () => {
   it("外部画像URLのcopy後に保存上限超過なら確定画像を削除対象にする", async () => {
     const deletes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => ({ status: "limitExceeded" }),
         getRecipe: async () => null,
@@ -1102,12 +1027,7 @@ describe("Recipe create routes", () => {
   it("tmp画像の確定に失敗したらレシピを保存しない", async () => {
     const savedRecipes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -1172,12 +1092,7 @@ describe("Recipe create routes", () => {
     const copies: unknown[] = [];
     const deletes: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);
@@ -1256,12 +1171,7 @@ describe("Recipe create routes", () => {
     const savedRecipes: unknown[] = [];
     const copies: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async (recipe) => {
           savedRecipes.push(recipe);

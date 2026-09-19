@@ -1,7 +1,7 @@
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
 import { type RecipeWithTagsRecord } from "../recipes";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 const recipeImage = (objectKey: string, width = 1200, height = 800) => ({
@@ -31,21 +31,11 @@ const baseRecipe = (overrides: Partial<RecipeWithTagsRecord> = {}): RecipeWithTa
   ...overrides,
 });
 
-const sameOriginHeaders = {
-  origin: "https://app.example.com",
-  "sec-fetch-site": "same-origin",
-};
-
 describe("Recipe mutation routes", () => {
   it("ログイン済みユーザーがレシピ本文全体を更新できる", async () => {
     const updates: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -123,12 +113,7 @@ describe("Recipe mutation routes", () => {
 
   it("レシピ更新で対象が存在しない場合はnot_foundを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -158,12 +143,7 @@ describe("Recipe mutation routes", () => {
   it("レシピ更新で所有者が違う場合はnot_foundを返す", async () => {
     const calls: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -196,12 +176,7 @@ describe("Recipe mutation routes", () => {
 
   it("レシピ更新リクエストが不正な場合はvalidation_failedを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -238,12 +213,7 @@ describe("Recipe mutation routes", () => {
   it("ロック中Recipeは更新できず画像確定もDB更新も実行しない", async () => {
     const updates: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -329,12 +299,7 @@ describe("Recipe mutation routes", () => {
       },
     });
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -444,12 +409,7 @@ describe("Recipe mutation routes", () => {
       },
     });
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -546,12 +506,7 @@ describe("Recipe mutation routes", () => {
     const deletes: unknown[] = [];
     const existing = baseRecipe();
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -610,12 +565,7 @@ describe("Recipe mutation routes", () => {
     const updates: unknown[] = [];
     const existing = baseRecipe();
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -680,12 +630,7 @@ describe("Recipe mutation routes", () => {
     const existing = baseRecipe();
     const imageIds = ["cover", "step"];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -758,12 +703,7 @@ describe("Recipe mutation routes", () => {
     const copies: unknown[] = [];
     const existing = baseRecipe();
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -827,12 +767,7 @@ describe("Recipe mutation routes", () => {
     const updates: unknown[] = [];
     const existing = baseRecipe();
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -890,12 +825,7 @@ describe("Recipe mutation routes", () => {
     const deletes: unknown[] = [];
     const deletedPrefixes: string[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -942,12 +872,7 @@ describe("Recipe mutation routes", () => {
 
   it("レシピ削除で対象が存在しない場合はnot_foundを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -976,12 +901,7 @@ describe("Recipe mutation routes", () => {
   it("レシピ削除で所有者が違う場合はnot_foundを返す", async () => {
     const calls: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");

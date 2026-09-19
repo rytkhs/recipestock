@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type ShortcutCredentials } from "../shortcut-credentials";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -8,16 +8,9 @@ const env = {
   DATABASE_URL: "postgresql://example",
 };
 
-const auth = {
-  getSession: async () => ({ user: { id: "user_1", email: "chef@example.com" } }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth({ id: "user_1", email: "chef@example.com" });
 
-const csrfHeaders = {
-  "content-type": "application/json",
-  origin: "https://app.example.com",
-  "sec-fetch-site": "same-origin",
-};
+const csrfHeaders = { "content-type": "application/json", ...sameOriginHeaders };
 
 const createCredentials = (): ShortcutCredentials => ({
   issue: async ({ name }) => ({

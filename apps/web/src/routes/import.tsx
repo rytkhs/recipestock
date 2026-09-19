@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
+import { PlanLink } from "../features/billing/plan-link";
+import { isResolvedByUpgrade } from "../features/billing/plan-state";
 import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
 import { readRecipeListFilters } from "../features/recipes/list-search";
+import { ApiClientError } from "../lib/api";
+import { useViewer } from "../lib/viewer";
 
 export type ImportUrlSearch = {
   text?: string;
@@ -28,7 +32,10 @@ export const getInitialImportUrl = ({ text, url }: ImportUrlSearch) => {
 export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) => {
   const navigate = useNavigate();
   const [url, setUrl] = useState(() => getInitialImportUrl(search));
-  const [error, setError] = useState<string | null>(null);
+  // 上限のエラーのうち、プランを変えれば直るものにだけプランのページへの入口を添える。
+  // プランはviewerを読み終える前に送ることもあるので、描画のときに今のviewerで決める。
+  const [error, setError] = useState<{ message: string; code?: string } | null>(null);
+  const viewer = useViewer({ enabled: true });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const urlId = useId();
 
@@ -39,14 +46,14 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
 
   const pasteUrl = async () => {
     if (!navigator.clipboard?.readText) {
-      setError("クリップボードを読み取れませんでした。");
+      setError({ message: "クリップボードを読み取れませんでした。" });
       return;
     }
 
     try {
       updateUrl((await navigator.clipboard.readText()).trim());
     } catch {
-      setError("クリップボードを読み取れませんでした。");
+      setError({ message: "クリップボードを読み取れませんでした。" });
     }
   };
 
@@ -60,7 +67,10 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
 
       await navigate({ to: "/recipes" });
     } catch (submitError) {
-      setError(getCreateImportUrlJobErrorMessage(submitError));
+      setError({
+        message: getCreateImportUrlJobErrorMessage(submitError),
+        code: submitError instanceof ApiClientError ? submitError.code : undefined,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -134,10 +144,11 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
             </div>
           </form>
           {error ? (
-            <div className="mt-4 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-3">
               <p className="break-words text-brand-danger text-sm" role="alert">
-                {error}
+                {error.message}
               </p>
+              {isResolvedByUpgrade(error.code, viewer.data?.plan) ? <PlanLink /> : null}
             </div>
           ) : null}
         </div>

@@ -2,8 +2,8 @@ import { Check } from "@phosphor-icons/react";
 import { type IngredientGroup } from "@recipestock/schemas";
 import { type ReactNode, useId, useState } from "react";
 import { cn } from "@/lib/utils";
+import { SectionHeader } from "../../components/section-header";
 import { withOccurrenceKeys } from "./occurrence-keys";
-import { RecipeSectionHeader } from "./recipe-detail-section";
 
 // 材料は用意できたものに印を付けながら読む。印は画面を開いている間だけ持ち、保存しない。
 export const RecipeIngredients = ({
@@ -39,7 +39,7 @@ export const RecipeIngredients = ({
 
   return (
     <section aria-labelledby={headingId}>
-      <RecipeSectionHeader action={action} id={headingId} meta={yieldText} title="材料" />
+      <SectionHeader action={action} id={headingId} meta={yieldText} title="材料" />
       {keyedGroups.map(({ item: group, key: groupKey }) => (
         <div className="mt-3" key={groupKey}>
           {group.label ? (

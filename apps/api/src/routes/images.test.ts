@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 
-const auth = {
-  getSession: async () => ({
-    user: { id: "user_123", email: "user@example.com" },
-  }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth();
 
 const imageBytes = new TextEncoder().encode("image bytes");
 
@@ -115,10 +110,7 @@ describe("Image routes", () => {
 
   it("画像アップロード用URLは認証を必須にする", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
     });
 
     const response = await testApp.request(

@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { InvalidRecipeListCursorError } from "../recipes";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe list routes", () => {
   it("レシピ一覧取得で未ログイン時にunauthorizedを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -37,12 +34,7 @@ describe("Recipe list routes", () => {
   it("ログイン済みユーザーがレシピ一覧を検索条件付きで取得できる", async () => {
     const calls: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -101,12 +93,7 @@ describe("Recipe list routes", () => {
   it("並び順を指定してレシピ一覧を取得できる", async () => {
     const calls: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -141,12 +128,7 @@ describe("Recipe list routes", () => {
 
   it("並び順が不正な場合はvalidation_failedを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -170,12 +152,7 @@ describe("Recipe list routes", () => {
 
   it("Freeユーザーは新しく保存した5件以外のレシピがlockedとして一覧に表示される", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -237,12 +214,7 @@ describe("Recipe list routes", () => {
 
   it("一覧cursorが不正な場合はinvalid_recipe_list_cursorを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -272,12 +244,7 @@ describe("Recipe list routes", () => {
   it("タグの指定を繰り返したクエリで受け取り、タグなしの指定も渡す", async () => {
     const calls: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -311,12 +278,7 @@ describe("Recipe list routes", () => {
 
   it("タグとタグなしを同時に指定したり、タグを多く指定しすぎたりするとvalidation_failedを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");

@@ -3,7 +3,7 @@ import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
 import { type AppDependencies } from "../index";
 import { createLogger, type LogEntry } from "../logger";
 import { type ShortcutCredentials } from "../shortcut-credentials";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -11,10 +11,7 @@ const env = {
   DATABASE_URL: "postgresql://example",
 };
 
-const auth = {
-  getSession: async () => ({ user: { id: "user_1", email: "chef@example.com" } }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth({ id: "user_1", email: "chef@example.com" });
 
 const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord => ({
   id: "job_123",
@@ -225,7 +222,7 @@ describe("iOS Share routes", () => {
       await expect(response.json()).resolves.toMatchObject({
         outcome: "rejected",
         reason: "malformed_request",
-        notice: { openUrl: "https://app.example.com/settings" },
+        notice: { openUrl: "https://app.example.com/settings/share" },
       });
     }
     expect(createUrlJob).not.toHaveBeenCalled();
@@ -316,7 +313,7 @@ describe("iOS Share routes", () => {
 
   it("Shortcut Bearer tokenをCookie保護されたresourceの認証に使えない", async () => {
     const app = createShortcutTestApp({
-      auth: { ...auth, getSession: async () => null },
+      auth: createTestAuth(null),
       shortcutCredentials: createShortcutCredentialsFake(),
     });
 
@@ -362,7 +359,7 @@ describe("iOS Share routes", () => {
       await expect(response.json()).resolves.toMatchObject({
         outcome: "rejected",
         reason: "unauthorized",
-        notice: { openUrl: "https://app.example.com/settings" },
+        notice: { openUrl: "https://app.example.com/settings/share" },
       });
     }
   });
@@ -442,7 +439,7 @@ describe("iOS Share routes", () => {
       outcome: "rejected",
       reason: "ai_usage_limit_exceeded",
       notice: {
-        title: "今月のAI取り込み上限に達しました",
+        title: "今月のAI取り込みの上限に達しました",
         body: "Proにするともっと取り込めます。",
         openUrl: "https://app.example.com/settings/billing?upsell=ai_usage_limit&from=shortcut",
       },
@@ -473,7 +470,7 @@ describe("iOS Share routes", () => {
       outcome: "rejected",
       reason: "ai_usage_quota_exhausted",
       notice: {
-        title: "今月のAI取り込み上限に達しました",
+        title: "今月のAI取り込みの上限に達しました",
         body: "毎月1日にリセットされます。",
         openUrl: null,
       },

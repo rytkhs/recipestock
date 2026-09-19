@@ -1,6 +1,7 @@
 import {
   type GetBillingStatusResponse,
   type GetMeResponse,
+  type GetProPriceResponse,
   type GetPushSubscriptionsResponse,
   type ImportJobSummary,
   type ListShortcutCredentialsResponse,
@@ -10,11 +11,16 @@ import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
 import {
   billingStatusFixture,
   brokenImageRecipeContentFixture,
+  googleLoginAccountsFixture,
   imageOnlyRecipeContentFixture,
   importJobFixture,
+  type LoginAccountFixture,
   MOCK_RECIPE_SEED_COUNT,
   type MockTag,
   mockRecipeId,
+  passwordLoginAccountsFixture,
+  proBillingStatusFixture,
+  proPriceFixture,
   pushSubscriptionsFixture,
   type RecipeContentOverride,
   recipeListFixture,
@@ -35,6 +41,8 @@ export type MockState = {
   session: SessionFixture | null;
   /** true なら get-session をネットワークエラーにする(接続不可の確認用)。 */
   sessionFailure: boolean;
+  /** ログイン方法。"credential" を持たない人は、設定にパスワードの行が出ない。 */
+  loginAccounts: LoginAccountFixture[];
   viewer: GetMeResponse;
   billing: GetBillingStatusResponse;
   recipes: RecipeListItem[];
@@ -49,14 +57,28 @@ export type MockState = {
   importJobSourceTexts: Record<string, string>;
   pushSubscriptions: GetPushSubscriptionsResponse;
   shortcutCredentials: ListShortcutCredentialsResponse;
+  proPrice: GetProPriceResponse;
+  /** 指定すると、課金の状態をこの回数より多く読んだところでProに変わる(決済から戻った直後の再現)。 */
+  upgradeAfterBillingReads?: number;
   failures: {
     /** "always" は全ページ、"after-first-page" は2ページ目以降を500にする。 */
     listRecipes?: "always" | "after-first-page";
   };
 };
 
+// 1つのシナリオが複数の画面に効くので、画面ではなく状態の種類で分ける。パネルはこの順に並べる。
+export const scenarioGroups = [
+  { id: "base", label: "基本" },
+  { id: "recipes", label: "レシピ一覧・詳細" },
+  { id: "plan", label: "プラン・上限" },
+  { id: "import", label: "取り込み" },
+  { id: "account", label: "アカウント" },
+  { id: "session", label: "セッション" },
+] as const;
+
 export type Scenario = {
   id: string;
+  group: (typeof scenarioGroups)[number]["id"];
   label: string;
   build: () => MockState;
 };
@@ -64,16 +86,9 @@ export type Scenario = {
 const baseState = (): MockState => ({
   session: sessionFixture(),
   sessionFailure: false,
+  loginAccounts: passwordLoginAccountsFixture(),
   viewer: viewerFixture({ plan: "pro", recipeCount: MOCK_RECIPE_SEED_COUNT }),
-  billing: billingStatusFixture({
-    plan: "pro",
-    subscription: {
-      status: "active",
-      cancelAtPeriodEnd: false,
-      currentPeriodEnd: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
-      cancelAt: null,
-    },
-  }),
+  billing: proBillingStatusFixture(),
   recipes: recipeListFixture(),
   tags: tagsFixture(),
   recipeTags: recipeTagsFixture(),
@@ -82,6 +97,7 @@ const baseState = (): MockState => ({
   importJobSourceTexts: {},
   pushSubscriptions: pushSubscriptionsFixture(),
   shortcutCredentials: shortcutCredentialsFixture(),
+  proPrice: proPriceFixture(),
   failures: {},
 });
 
@@ -108,11 +124,13 @@ const brokenImageRecipeIndexes = [1, 4, 7];
 export const scenarios: Scenario[] = [
   {
     id: "default",
+    group: "base",
     label: "通常(Pro・複数ページ)",
     build: baseState,
   },
   {
     id: "empty",
+    group: "recipes",
     label: "レシピなし",
     build: () => ({
       ...baseState(),
@@ -125,31 +143,114 @@ export const scenarios: Scenario[] = [
   },
   {
     id: "no-tags",
+    group: "recipes",
     label: "タグを持たない(チップ列なし・定番候補)",
     build: () => ({ ...baseState(), tags: [], recipeTags: {} }),
   },
   {
-    id: "free-locked",
-    label: "フリープラン(末尾がロック)",
-    build: () => freeState(12),
-  },
-  {
-    id: "limit-reached",
-    label: "フリープラン(保存上限ちょうど)",
-    build: () => freeState(FREE_RECIPE_LIMIT),
-  },
-  {
     id: "list-error",
+    group: "recipes",
     label: "一覧の取得失敗",
     build: () => ({ ...baseState(), failures: { listRecipes: "always" } }),
   },
   {
     id: "next-page-error",
+    group: "recipes",
     label: "2ページ目の取得失敗",
     build: () => ({ ...baseState(), failures: { listRecipes: "after-first-page" } }),
   },
   {
+    id: "no-cover",
+    group: "recipes",
+    label: "カバー画像なし",
+    build: () => ({ ...baseState(), recipes: recipeListFixture({ withCoverImage: false }) }),
+  },
+  {
+    id: "image-only",
+    group: "recipes",
+    label: "画像だけの投稿(材料・手順なし)",
+    build: () => {
+      const state = baseState();
+
+      return {
+        ...state,
+        recipeContents: Object.fromEntries(
+          // 2件目は表紙と同じ1枚だけの投稿にして、レシピ画像の段を出さない表示も確かめられるようにする。
+          state.recipes.map((recipe, index) => [
+            recipe.id,
+            imageOnlyRecipeContentFixture(recipe.id, index === 1 ? 1 : 4),
+          ]),
+        ),
+      };
+    },
+  },
+  {
+    id: "broken-image",
+    group: "recipes",
+    label: "画像の読み込み失敗",
+    build: () => ({
+      ...baseState(),
+      recipes: recipeListFixture({ brokenCoverIndexes: brokenImageRecipeIndexes }),
+      recipeContents: Object.fromEntries(
+        brokenImageRecipeIndexes.map((index) => [
+          mockRecipeId(index),
+          brokenImageRecipeContentFixture(mockRecipeId(index)),
+        ]),
+      ),
+    }),
+  },
+  {
+    id: "free-locked",
+    group: "plan",
+    label: "Free(末尾がロック)",
+    build: () => freeState(12),
+  },
+  {
+    id: "limit-reached",
+    group: "plan",
+    label: "Free(保存上限ちょうど)",
+    build: () => freeState(FREE_RECIPE_LIMIT),
+  },
+  {
+    id: "import-limit",
+    group: "plan",
+    label: "Free(今月のAI取り込みが上限)",
+    build: () => {
+      const state = freeState(2);
+
+      return {
+        ...state,
+        viewer: {
+          ...state.viewer,
+          aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
+        },
+      };
+    },
+  },
+  {
+    id: "checkout-pending",
+    group: "plan",
+    label: "決済から戻った直後(数秒でProに変わる)",
+    build: () => ({ ...freeState(12), upgradeAfterBillingReads: 2 }),
+  },
+  {
+    id: "pro-canceling",
+    group: "plan",
+    label: "Pro(解約予約中)",
+    build: () => ({
+      ...baseState(),
+      billing: proBillingStatusFixture({ cancelAtPeriodEnd: true }),
+    }),
+  },
+  {
+    id: "pro-past-due",
+    group: "plan",
+    label: "Pro(支払いを確認できない)",
+    build: () => ({ ...baseState(), billing: proBillingStatusFixture({ status: "past_due" }) }),
+  },
+  {
     id: "importing",
+    group: "import",
     label: "取り込み中",
     build: () => ({
       ...baseState(),
@@ -158,6 +259,7 @@ export const scenarios: Scenario[] = [
   },
   {
     id: "import-failed",
+    group: "import",
     label: "取り込み失敗",
     build: () => ({
       ...baseState(),
@@ -174,6 +276,7 @@ export const scenarios: Scenario[] = [
   },
   {
     id: "text-import-failed",
+    group: "import",
     label: "テキストの取り込み失敗",
     build: () => ({
       ...baseState(),
@@ -195,49 +298,20 @@ export const scenarios: Scenario[] = [
     }),
   },
   {
-    id: "no-cover",
-    label: "カバー画像なし",
-    build: () => ({ ...baseState(), recipes: recipeListFixture({ withCoverImage: false }) }),
-  },
-  {
-    id: "image-only",
-    label: "画像だけの投稿(材料・手順なし)",
-    build: () => {
-      const state = baseState();
-
-      return {
-        ...state,
-        recipeContents: Object.fromEntries(
-          // 2件目は表紙と同じ1枚だけの投稿にして、レシピ画像の段を出さない表示も確かめられるようにする。
-          state.recipes.map((recipe, index) => [
-            recipe.id,
-            imageOnlyRecipeContentFixture(recipe.id, index === 1 ? 1 : 4),
-          ]),
-        ),
-      };
-    },
-  },
-  {
-    id: "broken-image",
-    label: "画像の読み込み失敗",
-    build: () => ({
-      ...baseState(),
-      recipes: recipeListFixture({ brokenCoverIndexes: brokenImageRecipeIndexes }),
-      recipeContents: Object.fromEntries(
-        brokenImageRecipeIndexes.map((index) => [
-          mockRecipeId(index),
-          brokenImageRecipeContentFixture(mockRecipeId(index)),
-        ]),
-      ),
-    }),
+    id: "google-login",
+    group: "account",
+    label: "Googleだけでログイン(パスワードなし)",
+    build: () => ({ ...baseState(), loginAccounts: googleLoginAccountsFixture() }),
   },
   {
     id: "signed-out",
+    group: "session",
     label: "未ログイン",
     build: () => ({ ...baseState(), session: null }),
   },
   {
     id: "offline",
+    group: "session",
     label: "接続不可",
     build: () => ({ ...baseState(), sessionFailure: true }),
   },

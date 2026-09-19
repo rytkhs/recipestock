@@ -3,16 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { type Bindings } from "../env";
 import { createRecipeImageService } from "../images";
 import { createLogger, createMemoryLogSink } from "../logger";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 
 const sourceKey = "recipes/user_123/recipe_123/cover.jpg";
 const thumbnailKey = "recipes/user_123/recipe_123/_thumbnails/cover.jpg/v1.webp";
 const url = `/api/images/thumbnail/v1/${sourceKey}`;
-const auth = {
-  getSession: async () => ({ user: { id: "user_123", email: "user@example.com" } }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
-
 const setup = ({ cached = false, authenticated = true, sourceSize = 3 } = {}) => {
   const objects = new Map<string, Uint8Array>([[sourceKey, new Uint8Array([1, 2, 3])]]);
   if (cached) objects.set(thumbnailKey, new Uint8Array([4, 5]));
@@ -68,7 +63,7 @@ const setup = ({ cached = false, authenticated = true, sourceSize = 3 } = {}) =>
   };
   const logSink = createMemoryLogSink();
   const app = createSilentTestApp({
-    auth: authenticated ? auth : { ...auth, getSession: async () => null },
+    auth: authenticated ? createTestAuth() : createTestAuth(null),
     loggerFactory: (baseFields) => createLogger(baseFields, { sink: logSink }),
   });
   const env = {

@@ -1,6 +1,7 @@
 import {
   getBillingStatusResponseSchema,
   getMeResponseSchema,
+  getProPriceResponseSchema,
   getPushSubscriptionsResponseSchema,
   getRecipeResponseSchema,
   listRecipesResponseSchema,
@@ -32,6 +33,10 @@ describe.each(
 
   it("billingがGetBillingStatusResponseの形をしている", () => {
     expectValid(getBillingStatusResponseSchema, state.billing);
+  });
+
+  it("proPriceがGetProPriceResponseの形をしている", () => {
+    expectValid(getProPriceResponseSchema, state.proPrice);
   });
 
   it("recipesがListRecipesResponseの形をしている", () => {
