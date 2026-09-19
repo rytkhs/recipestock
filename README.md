@@ -147,13 +147,31 @@ pnpm dev:mock
 | プラン・上限 | `free-locked` | Freeで末尾がロック |
 | プラン・上限 | `limit-reached` | Freeで保存上限ちょうど |
 | プラン・上限 | `import-limit` | Freeで今月のAI取り込みが上限 |
+| プラン・上限 | `pro-import-limit` | Proで今月のAI取り込みが上限 |
 | プラン・上限 | `checkout-pending` | 決済から戻った直後(`/settings/billing?checkout=success` を開くと、数秒でProに変わる) |
 | プラン・上限 | `pro-canceling` | Proで解約予約中 |
+| プラン・上限 | `pro-canceling-no-lock` | Proで解約予約中だが、Freeの保存上限以内 |
 | プラン・上限 | `pro-past-due` | Proで支払いを確認できない |
+| プラン・上限 | `billing-status-error` | 契約状態の取得失敗 |
+| プラン・上限 | `pro-price-error` | Pro価格の取得失敗 |
+| プラン・上限 | `checkout-error` | Checkoutの開始失敗 |
+| プラン・上限 | `billing-portal-error` | 契約管理画面の開始失敗 |
+| 設定・連携 | `linked-devices` | iPhoneとiPadの2台と共有を連携中 |
+| 設定・連携 | `viewer-error` | プラン・利用状況の取得失敗 |
+| 設定・連携 | `tags-error` | タグの取得失敗 |
+| 設定・連携 | `shortcut-credentials-error` | 連携端末の取得失敗 |
+| 設定・連携 | `push-subscriptions-error` | 通知状態の取得失敗(Push対応ブラウザ向け) |
+| 設定・連携 | `shortcut-issue-error` | 連携キーの発行失敗 |
+| 設定・連携 | `shortcut-revoke-error` | 連携端末の解除失敗 |
 | 取り込み | `importing` | 取り込み中 |
 | 取り込み | `import-failed` | 取り込み失敗 |
 | 取り込み | `text-import-failed` | テキストの取り込み失敗(原文を直して再試行) |
 | アカウント | `google-login` | Googleだけでログイン(アカウント設定にパスワードとメールアドレスの変更が出ない) |
+| アカウント | `password-and-google` | パスワードとGoogleの両方でログイン可能 |
+| アカウント | `login-methods-error` | ログイン方法の取得失敗 |
+| アカウント | `account-write-error` | メールアドレスとパスワードの変更失敗 |
+| アカウント | `invalid-current-password` | パスワード変更時に現在のパスワードが不一致 |
+| アカウント | `sign-out-error` | ログアウト失敗 |
 | セッション | `signed-out` | 未ログイン |
 | セッション | `offline` | 接続不可 |
 
@@ -162,6 +180,7 @@ pnpm dev:mock
 レシピの作成・編集・削除も、リロードするまでは入力した内容で詳細と一覧に反映されます。
 Freeで保存上限に達しているシナリオ(`limit-reached` / `free-locked`)では、作成と URL・テキストの取り込みが本番と同じく `recipe_limit_exceeded` で失敗します。
 Freeのシナリオでプランのページから「Proにする」を押すと、決済から戻った画面になりますが、Proには変わらず待ちきれなかったときの表示になります。
+`checkout-error`、`billing-portal-error`、`shortcut-issue-error`、`shortcut-revoke-error`、アカウントの更新失敗は、対象の設定ページでボタンを押すとエラー表示を確認できます。
 `signed-out` でメールアドレスによるログインや新規登録(OTP 検証)をすると、そのままログイン状態になります。
 Google ログインはリロードを伴うので、戻り先で `default` シナリオに切り替わります。
 

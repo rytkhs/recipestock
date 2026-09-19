@@ -7,6 +7,7 @@ import {
   type ListShortcutCredentialsResponse,
   type RecipeDetail,
   type RecipeListItem,
+  type ShortcutCredential,
 } from "@recipestock/schemas";
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { imagePlaceholderSize } from "./images";
@@ -482,6 +483,29 @@ export const shortcutCredentialsFixture = (
   ...overrides,
 });
 
+export const shortcutCredentialFixture = (
+  overrides: Partial<ShortcutCredential> = {},
+): ShortcutCredential => ({
+  id: "credential_0001",
+  name: "iPhone",
+  tokenSuffix: "0001",
+  createdAt: "2026-06-01T00:00:00.000Z",
+  ...overrides,
+});
+
+/** 設定の台数表示と、連携済み端末の一覧を確認する2台。 */
+export const linkedShortcutCredentialsFixture = (): ListShortcutCredentialsResponse => ({
+  credentials: [
+    shortcutCredentialFixture(),
+    shortcutCredentialFixture({
+      id: "credential_0002",
+      name: "iPad",
+      tokenSuffix: "0002",
+      createdAt: "2025-12-20T00:00:00.000Z",
+    }),
+  ],
+});
+
 /** better-authの`/list-accounts`が返す1件。パスワードは"credential"というproviderで持つ。 */
 export type LoginAccountFixture = {
   accountId: string;
@@ -510,5 +534,11 @@ export const passwordLoginAccountsFixture = (): LoginAccountFixture[] => [
 
 /** Googleだけでログインする人。パスワードを持たない。 */
 export const googleLoginAccountsFixture = (): LoginAccountFixture[] => [
+  loginAccountFixture("google"),
+];
+
+/** パスワードとGoogleのどちらでもログインできる人。 */
+export const passwordAndGoogleLoginAccountsFixture = (): LoginAccountFixture[] => [
+  loginAccountFixture("credential"),
   loginAccountFixture("google"),
 ];

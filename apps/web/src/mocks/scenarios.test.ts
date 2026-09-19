@@ -12,7 +12,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { type ZodType } from "zod";
 import { recipeDetailFixture } from "./fixtures";
-import { scenarios } from "./scenarios";
+import { findScenario, scenarios } from "./scenarios";
 
 // 失敗時にどのフィールドがズレたか出るように、issueを露出させて比較する。
 const expectValid = (schema: ZodType, value: unknown) => {
@@ -20,6 +20,44 @@ const expectValid = (schema: ZodType, value: unknown) => {
 
   expect(result.error?.issues ?? null).toBeNull();
 };
+
+it("シナリオのidが重複していない", () => {
+  const ids = scenarios.map((scenario) => scenario.id);
+
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+describe("設定シナリオ", () => {
+  it("パスワードとGoogleの両方をログイン方法に持つ", () => {
+    expect(
+      findScenario("password-and-google")
+        .build()
+        .loginAccounts.map((account) => account.providerId),
+    ).toEqual(["credential", "google"]);
+  });
+
+  it("共有に連携している2台を持つ", () => {
+    const { credentials } = findScenario("linked-devices").build().shortcutCredentials;
+
+    expect(credentials).toHaveLength(2);
+    expect(credentials.map(({ name }) => name)).toEqual(["iPhone", "iPad"]);
+  });
+
+  it("ProのAI取り込み上限を持つ", () => {
+    const { viewer } = findScenario("pro-import-limit").build();
+
+    expect(viewer.plan).toBe("pro");
+    expect(viewer.aiUsage.used).toBe(viewer.aiUsage.limit);
+  });
+
+  it("Free上限以内で解約予約中のProを持つ", () => {
+    const state = findScenario("pro-canceling-no-lock").build();
+
+    expect(state.viewer).toMatchObject({ plan: "pro", recipeCount: 3 });
+    expect(state.recipes).toHaveLength(3);
+    expect(state.billing.subscription?.cancelAtPeriodEnd).toBe(true);
+  });
+});
 
 // モックのフィクスチャがAPI契約から外れたら、dev:mockを起動しなくてもここで落ちる。
 describe.each(
