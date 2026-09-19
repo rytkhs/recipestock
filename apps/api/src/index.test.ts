@@ -5,16 +5,13 @@ import { type ImportJobRecord, type ImportJobRepository } from "./import-jobs";
 import { handleImportQueueMessage, handleImportQueueMessageError } from "./index";
 import { createLogger, createMemoryLogSink } from "./logger";
 import { type StripeBillingClient, StripeWebhookSignatureError } from "./stripe-billing";
-import { createSilentTestApp } from "./test-helpers";
+import { createSilentTestApp, createTestAuth } from "./test-helpers";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const auth = {
-  getSession: async () => null,
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth(null);
 
 const env = {
   APP_ENV: "development",

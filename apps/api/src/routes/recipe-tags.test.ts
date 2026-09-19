@@ -2,15 +2,8 @@ import { MAX_RECIPE_TAGS } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
 import { type RecipeRepository, type RecipeWithTagsRecord } from "../recipes";
 import { type ReplaceRecipeTagsParams, type TagRepository } from "../tags";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
-
-const signedInAuth = {
-  getSession: async () => ({
-    user: { id: "user_123", email: "user@example.com" },
-  }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
 
 const savedRecipe = (overrides: Partial<RecipeWithTagsRecord> = {}): RecipeWithTagsRecord => ({
   id: "recipe_123",
@@ -79,10 +72,7 @@ const putRecipeTags = (app: ReturnType<typeof createSilentTestApp>, body: unknow
 describe("Recipe tag routes", () => {
   it("未ログインではRecipeのタグを置き換えない", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       recipeRepository: createRecipeRepositoryStub(async () => {
         throw new Error("should not get a recipe without a session");
       }),
@@ -97,7 +87,7 @@ describe("Recipe tag routes", () => {
   it("名前を揃えて同じ名前をまとめてから、Recipeのタグを置き換える", async () => {
     const calls: ReplaceRecipeTagsParams[] = [];
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       recipeRepository: createRecipeRepositoryStub(async (userId, recipeId) =>
         savedRecipe({ id: recipeId, userId }),
       ),
@@ -135,7 +125,7 @@ describe("Recipe tag routes", () => {
   it("タグを空にするとRecipeからすべて外す", async () => {
     const calls: ReplaceRecipeTagsParams[] = [];
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       recipeRepository: createRecipeRepositoryStub(async () =>
         savedRecipe({ tags: [{ id: "tag_1", name: "作り置き" }] }),
       ),
@@ -154,7 +144,7 @@ describe("Recipe tag routes", () => {
 
   it("存在しないRecipeにはタグを付けない", async () => {
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       recipeRepository: createRecipeRepositoryStub(async () => null),
       tagRepository: createTagRepositoryStub(),
     });
@@ -166,7 +156,7 @@ describe("Recipe tag routes", () => {
 
   it("ロック中のRecipeにはタグを付けない", async () => {
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       recipeRepository: createRecipeRepositoryStub(async () => savedRecipe({ locked: true })),
       tagRepository: createTagRepositoryStub(),
     });
@@ -179,7 +169,7 @@ describe("Recipe tag routes", () => {
 
   it("揃えると空になる名前、長すぎる名前、多すぎるタグはvalidation_failedにする", async () => {
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       recipeRepository: createRecipeRepositoryStub(async () => savedRecipe()),
       tagRepository: createTagRepositoryStub(),
     });

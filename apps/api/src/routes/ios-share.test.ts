@@ -3,7 +3,7 @@ import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
 import { type AppDependencies } from "../index";
 import { createLogger, type LogEntry } from "../logger";
 import { type ShortcutCredentials } from "../shortcut-credentials";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 
 const env = {
   APP_ENV: "development",
@@ -11,10 +11,7 @@ const env = {
   DATABASE_URL: "postgresql://example",
 };
 
-const auth = {
-  getSession: async () => ({ user: { id: "user_1", email: "chef@example.com" } }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+const auth = createTestAuth({ id: "user_1", email: "chef@example.com" });
 
 const createJob = (overrides: Partial<ImportJobRecord> = {}): ImportJobRecord => ({
   id: "job_123",
@@ -316,7 +313,7 @@ describe("iOS Share routes", () => {
 
   it("Shortcut Bearer tokenをCookie保護されたresourceの認証に使えない", async () => {
     const app = createShortcutTestApp({
-      auth: { ...auth, getSession: async () => null },
+      auth: createTestAuth(null),
       shortcutCredentials: createShortcutCredentialsFake(),
     });
 

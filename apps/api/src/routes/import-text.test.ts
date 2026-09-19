@@ -1,19 +1,9 @@
 import { IMPORT_TEXT_MAX_LENGTH } from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
-const auth = {
-  getSession: async () => ({
-    user: { id: "user_123", email: "user@example.com" },
-  }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
-
-const sameOriginHeaders = {
-  origin: "https://app.example.com",
-  "sec-fetch-site": "same-origin",
-};
+const auth = createTestAuth();
 
 const env = {
   APP_ENV: "development",

@@ -1,14 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createSilentTestApp } from "../test-helpers";
+import { createSilentTestApp, createTestAuth } from "../test-helpers";
 import { unusedDeleteRecipe, unusedListRecipes, unusedUpdateRecipe } from "./test-helpers";
 
 describe("Recipe detail routes", () => {
   it("レシピ詳細取得で未ログイン時にunauthorizedを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -37,12 +34,7 @@ describe("Recipe detail routes", () => {
 
   it("保存済みレシピを詳細画面用に取得できる", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -98,12 +90,7 @@ describe("Recipe detail routes", () => {
 
   it("保存済みレシピの画像に表示用URLを付与する", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -197,12 +184,7 @@ describe("Recipe detail routes", () => {
 
   it("複数の手順画像にstable URLを付与して対応関係を保持する", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -281,12 +263,7 @@ describe("Recipe detail routes", () => {
 
   it("ロック中Recipe詳細は本文を返さない", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");
@@ -332,12 +309,7 @@ describe("Recipe detail routes", () => {
 
   it("保存済みレシピが存在しない場合はnot_foundを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => ({
-          user: { id: "user_123", email: "user@example.com" },
-        }),
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(),
       recipeRepository: {
         createRecipeEnforcingPlanLimit: async () => {
           throw new Error("should not create a recipe");

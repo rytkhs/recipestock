@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type TagRepository } from "../tags";
-import { createSilentTestApp } from "../test-helpers";
-
-const signedInAuth = {
-  getSession: async () => ({
-    user: { id: "user_123", email: "user@example.com" },
-  }),
-  handleAuthRequest: async () => new Response(null, { status: 404 }),
-};
+import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
 const createTagRepositoryStub = (overrides: Partial<TagRepository> = {}): TagRepository => ({
   listTags: async () => {
@@ -36,18 +29,10 @@ const jsonRequest = (method: string, body: unknown): RequestInit => ({
 
 const env = { APP_ENV: "development" };
 
-const sameOriginHeaders = {
-  origin: "https://app.example.com",
-  "sec-fetch-site": "same-origin",
-};
-
 describe("Tag routes", () => {
   it("未ログインではタグ一覧を返さない", async () => {
     const testApp = createSilentTestApp({
-      auth: {
-        getSession: async () => null,
-        handleAuthRequest: async () => new Response(null, { status: 404 }),
-      },
+      auth: createTestAuth(null),
       tagRepository: createTagRepositoryStub(),
     });
 
@@ -59,7 +44,7 @@ describe("Tag routes", () => {
   it("自分のタグを件数付きで一覧する", async () => {
     const calls: string[] = [];
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub({
         listTags: async (userId) => {
           calls.push(userId);
@@ -86,7 +71,7 @@ describe("Tag routes", () => {
   it("名前を揃えてからタグ名を変更する", async () => {
     const calls: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub({
         renameTag: async (params) => {
           calls.push(params);
@@ -115,7 +100,7 @@ describe("Tag routes", () => {
 
   it("変更先の名前を別のタグが使っていればtag_name_conflictでそのタグを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub({
         renameTag: async () => ({ status: "conflict", tag: { id: "tag_2", name: "鶏肉" } }),
       }),
@@ -139,7 +124,7 @@ describe("Tag routes", () => {
 
   it("揃えると空になる名前や長すぎる名前には変更しない", async () => {
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub(),
     });
 
@@ -159,7 +144,7 @@ describe("Tag routes", () => {
 
   it("存在しないタグの名前は変更できない", async () => {
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub({
         renameTag: async () => ({ status: "notFound" }),
       }),
@@ -177,7 +162,7 @@ describe("Tag routes", () => {
   it("タグを別のタグへ統合し、統合先を返す", async () => {
     const calls: unknown[] = [];
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub({
         mergeTag: async (params) => {
           calls.push(params);
@@ -199,7 +184,7 @@ describe("Tag routes", () => {
 
   it("タグを自分自身へは統合できない", async () => {
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub(),
     });
 
@@ -217,7 +202,7 @@ describe("Tag routes", () => {
 
   it("統合元か統合先のタグがなければnot_foundを返す", async () => {
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub({
         mergeTag: async () => ({ status: "notFound" }),
       }),
@@ -235,7 +220,7 @@ describe("Tag routes", () => {
   it("タグを削除し、存在しないタグはnot_foundを返す", async () => {
     const deleted: string[] = [];
     const testApp = createSilentTestApp({
-      auth: signedInAuth,
+      auth: createTestAuth(),
       tagRepository: createTagRepositoryStub({
         deleteTag: async (userId, tagId) => {
           deleted.push(`${userId}:${tagId}`);
