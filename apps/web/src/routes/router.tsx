@@ -67,7 +67,9 @@ const withPreload = <TProps,>(
 ) => Object.assign(component, { preload });
 
 const LoginRoute = withPreload(
-  ({ redirectTo }: { redirectTo: string }) => <LoginScreen redirectTo={redirectTo} />,
+  ({ redirectTo, startAtPasswordReset }: { redirectTo: string; startAtPasswordReset: boolean }) => (
+    <LoginScreen redirectTo={redirectTo} startAtPasswordReset={startAtPasswordReset} />
+  ),
   LoginScreen.preload,
 );
 const ImportUrlRoute = withPreload(
@@ -299,6 +301,8 @@ const editRecipeRoute = createRoute({
 });
 
 type LoginSearch = {
+  // 設定のパスワードのページからログアウトして再設定へ進むときに付く。読めない値は指定なしに戻す。
+  mode?: "reset";
   redirect?: string;
 };
 
@@ -306,6 +310,7 @@ const loginRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/login",
   validateSearch: (search): LoginSearch => ({
+    mode: search.mode === "reset" ? "reset" : undefined,
     redirect: stringSearchParam(search.redirect),
   }),
   component: () => {
@@ -314,7 +319,7 @@ const loginRoute = createRoute({
 
     return (
       <RedirectAuthenticated redirectTo={redirectTo}>
-        <LoginRoute redirectTo={redirectTo} />
+        <LoginRoute redirectTo={redirectTo} startAtPasswordReset={search.mode === "reset"} />
       </RedirectAuthenticated>
     );
   },

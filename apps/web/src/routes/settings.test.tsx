@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { billingRedirect } from "../features/billing/api";
 import { viewerQueryKey } from "../lib/viewer";
+import { googleLoginAccountsFixture, loginAccountFixture } from "../mocks/fixtures";
 import {
   billingStatusResponse,
   createSessionResponse,
@@ -10,6 +11,7 @@ import {
   getRequestPath,
   isGetSessionRequest,
   jsonResponse,
+  loginAccountsResponse,
   mockFetch,
   renderApp,
   viewerResponse,
@@ -893,10 +895,59 @@ describe("Settings routes", () => {
     ]);
     expect(JSON.parse(String(changeEmailCall?.[1]?.body))).toEqual({
       newEmail: "new@example.com",
-      callbackURL: "/settings",
+      callbackURL: "/settings/email",
     });
-    await expect(screen.findByText("確認メールを送信しました。")).resolves.toBeInTheDocument();
+    await expect(
+      screen.findByText(
+        "new@example.com 宛に確認メールを送信しました。メール内のリンクを開くと、変更が完了します。それまでは、今のメールアドレスのままです。",
+      ),
+    ).resolves.toBeInTheDocument();
     expect(screen.getByLabelText("新しいメールアドレス")).toHaveValue("");
+  });
+
+  it("今と同じメールアドレスは送らずに理由を出す", async () => {
+    const fetchMock = mockFetch(async () => new Response(null, { status: 404 }), {
+      authenticated: true,
+    });
+    await renderApp("/settings/email");
+
+    await userEvent.type(await screen.findByLabelText("新しいメールアドレス"), "chef@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
+
+    await expect(screen.findByText("今のメールアドレスと同じです。")).resolves.toBeInTheDocument();
+    expect(findFetchCall(fetchMock, "/api/auth/change-email")).toBeUndefined();
+  });
+
+  it("パスワードとGoogleの両方でログインできる人には、Googleのメールアドレスが変わらないことを伝える", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }), {
+      authenticated: true,
+      loginAccounts: [loginAccountFixture("credential"), loginAccountFixture("google")],
+    });
+    await renderApp("/settings/email");
+
+    await expect(
+      screen.findByText(
+        "Googleアカウントのメールアドレスは変わりません。Googleでのログインは今までどおり使えます。",
+      ),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("新しいメールアドレス")).toBeInTheDocument();
+  });
+
+  it("パスワードを持たない人には、メールアドレスの変更のフォームを出さない", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }), {
+      authenticated: true,
+      loginAccounts: googleLoginAccountsFixture(),
+    });
+    await renderApp("/settings/email");
+
+    await expect(
+      screen.findByText(
+        "このアカウントはGoogleでログインしています。メールアドレスはGoogleアカウントのものを使うため、ここでは変更できません。",
+      ),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("chef@example.com")).toBeInTheDocument();
+    expect(screen.queryByLabelText("新しいメールアドレス")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "確認メールを送信" })).not.toBeInTheDocument();
   });
 
   it("パスワードのページから変更できる", async () => {
@@ -912,6 +963,11 @@ describe("Settings routes", () => {
     );
     await renderApp("/settings/password");
 
+    await expect(
+      screen.findByText(
+        "パスワードを変更すると、ほかの端末ではログアウトされます。この端末はログインしたままです。",
+      ),
+    ).resolves.toBeInTheDocument();
     await userEvent.type(await screen.findByLabelText("現在のパスワード"), "password123");
     await userEvent.type(screen.getByLabelText("新しいパスワード"), "newpassword123");
     await userEvent.click(screen.getByRole("button", { name: "パスワードを変更" }));
@@ -929,7 +985,9 @@ describe("Settings routes", () => {
       newPassword: "newpassword123",
       revokeOtherSessions: true,
     });
-    await expect(screen.findByText("パスワードを変更しました。")).resolves.toBeInTheDocument();
+    await expect(
+      screen.findByText("パスワードを変更しました。ほかの端末ではログアウトされました。"),
+    ).resolves.toBeInTheDocument();
     expect(screen.getByLabelText("現在のパスワード")).toHaveValue("");
     expect(screen.getByLabelText("新しいパスワード")).toHaveValue("");
   });
@@ -972,8 +1030,89 @@ describe("Settings routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "パスワードを変更" }));
 
     await expect(
-      screen.findByText("パスワードを変更できませんでした。入力内容を確認してください。"),
+      screen.findByText("パスワードを変更できませんでした。時間をおいて再度お試しください。"),
     ).resolves.toBeInTheDocument();
+  });
+
+  it("現在のパスワードが違うときは、それだけを伝える", async () => {
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/auth/change-password" && init?.method === "POST") {
+          return jsonResponse(
+            { code: "INVALID_PASSWORD", message: "Invalid password" },
+            { status: 400 },
+          );
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+    await renderApp("/settings/password");
+
+    await userEvent.type(await screen.findByLabelText("現在のパスワード"), "wrongpassword");
+    await userEvent.type(screen.getByLabelText("新しいパスワード"), "newpassword123");
+    await userEvent.click(screen.getByRole("button", { name: "パスワードを変更" }));
+
+    await expect(
+      screen.findByText("現在のパスワードが正しくありません。"),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("パスワードを持たない人には、変更のフォームを出さない", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }), {
+      authenticated: true,
+      loginAccounts: googleLoginAccountsFixture(),
+    });
+    await renderApp("/settings/password");
+
+    await expect(
+      screen.findByText(
+        "このアカウントはGoogleでログインしています。パスワードは設定されていないため、変更するものはありません。",
+      ),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByLabelText("現在のパスワード")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "パスワードを忘れた場合" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("パスワードを忘れた場合は、ログアウトしてログイン画面の再設定へ進む", async () => {
+    installPushBrowser();
+    let authenticated = true;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = getRequestPath(input);
+
+      if (isGetSessionRequest(input)) {
+        return createSessionResponse(authenticated);
+      }
+      if (path === "/api/auth/list-accounts") {
+        return jsonResponse(loginAccountsResponse);
+      }
+      if (path === "/api/me") {
+        return jsonResponse(viewerResponse);
+      }
+      if (path === "/api/auth/sign-out" && init?.method === "POST") {
+        authenticated = false;
+        return jsonResponse({ success: true });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    const { appRouter } = await renderApp("/settings/password");
+
+    await userEvent.click(await screen.findByRole("button", { name: "パスワードを忘れた場合" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "パスワードを再設定しますか？",
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: "ログアウトして進む" }));
+
+    await expect(
+      screen.findByRole("button", { name: "再設定コードを送信" }),
+    ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.pathname).toBe("/login");
+    expect(appRouter.state.location.search).toEqual({ mode: "reset" });
   });
 
   const proBilling = (
@@ -1442,11 +1581,13 @@ describe("Settings routes", () => {
   const mockSettingsFetch = ({
     billing = null,
     credentials = [],
+    loginAccounts = loginAccountsResponse,
     tags = [],
     viewer = viewerResponse,
   }: {
     billing?: object | null;
     credentials?: ReturnType<typeof linkedCredential>[];
+    loginAccounts?: typeof loginAccountsResponse;
     tags?: { id: string; name: string; recipeCount: number }[];
     viewer?: typeof viewerResponse | null;
   } = {}) =>
@@ -1455,6 +1596,9 @@ describe("Settings routes", () => {
 
       if (isGetSessionRequest(input)) {
         return createSessionResponse(true);
+      }
+      if (path === "/api/auth/list-accounts") {
+        return jsonResponse(loginAccounts);
       }
       if (path === "/api/me") {
         return viewer
@@ -1512,6 +1656,45 @@ describe("Settings routes", () => {
       "href",
       "/settings/password",
     );
+  });
+
+  it("パスワードを持たない人には、メールアドレスを押せない行にし、パスワードの行のかわりにログイン方法を出す", async () => {
+    mockSettingsFetch({ loginAccounts: googleLoginAccountsFixture() });
+
+    await renderApp("/settings");
+
+    await expect(screen.findByText("ログイン方法")).resolves.toBeInTheDocument();
+    expect(screen.getByText("Google")).toBeInTheDocument();
+    expect(screen.getByText("chef@example.com")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /メールアドレス/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "パスワード" })).not.toBeInTheDocument();
+  });
+
+  it("ログイン方法を読めないときは、メールアドレスとパスワードの行を今までどおり出す", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+
+      if (isGetSessionRequest(input)) {
+        return createSessionResponse(true);
+      }
+      if (path === "/api/me") {
+        return jsonResponse(viewerResponse);
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    await renderApp("/settings");
+
+    await expect(screen.findByRole("link", { name: "パスワード" })).resolves.toHaveAttribute(
+      "href",
+      "/settings/password",
+    );
+    expect(screen.getByRole("link", { name: /メールアドレス/ })).toHaveAttribute(
+      "href",
+      "/settings/email",
+    );
+    expect(screen.queryByText("ログイン方法")).not.toBeInTheDocument();
   });
 
   it("Proで連携もタグもなければ、そのとおりに出す", async () => {

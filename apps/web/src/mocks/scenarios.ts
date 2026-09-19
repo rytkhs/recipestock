@@ -11,11 +11,14 @@ import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
 import {
   billingStatusFixture,
   brokenImageRecipeContentFixture,
+  googleLoginAccountsFixture,
   imageOnlyRecipeContentFixture,
   importJobFixture,
+  type LoginAccountFixture,
   MOCK_RECIPE_SEED_COUNT,
   type MockTag,
   mockRecipeId,
+  passwordLoginAccountsFixture,
   proBillingStatusFixture,
   proPriceFixture,
   pushSubscriptionsFixture,
@@ -38,6 +41,8 @@ export type MockState = {
   session: SessionFixture | null;
   /** true なら get-session をネットワークエラーにする(接続不可の確認用)。 */
   sessionFailure: boolean;
+  /** ログイン方法。"credential" を持たない人は、設定にパスワードの行が出ない。 */
+  loginAccounts: LoginAccountFixture[];
   viewer: GetMeResponse;
   billing: GetBillingStatusResponse;
   recipes: RecipeListItem[];
@@ -70,6 +75,7 @@ export type Scenario = {
 const baseState = (): MockState => ({
   session: sessionFixture(),
   sessionFailure: false,
+  loginAccounts: passwordLoginAccountsFixture(),
   viewer: viewerFixture({ plan: "pro", recipeCount: MOCK_RECIPE_SEED_COUNT }),
   billing: proBillingStatusFixture(),
   recipes: recipeListFixture(),
@@ -169,6 +175,11 @@ export const scenarios: Scenario[] = [
     id: "pro-past-due",
     label: "Pro(支払いを確認できない)",
     build: () => ({ ...baseState(), billing: proBillingStatusFixture({ status: "past_due" }) }),
+  },
+  {
+    id: "google-login",
+    label: "Googleだけでログイン(パスワードなし)",
+    build: () => ({ ...baseState(), loginAccounts: googleLoginAccountsFixture() }),
   },
   {
     id: "list-error",

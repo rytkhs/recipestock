@@ -1,4 +1,5 @@
 export * from "./api-error";
+export * from "./auth";
 export * from "./billing";
 export * from "./image";
 export * from "./import";

@@ -1,4 +1,5 @@
 import { EnvelopeSimple, GoogleLogo, Key } from "@phosphor-icons/react";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/schemas";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -16,10 +17,21 @@ import {
 
 type LoginMode = "signIn" | "signUp" | "verifySignUp" | "requestReset" | "resetPassword";
 
-export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string }) => {
+/**
+ * `startAtPasswordReset`は、設定のパスワードのページから「パスワードを忘れた場合」で来たとき。
+ * 再設定はログイン中には行えない(成功すると全端末のsessionが切れる)ので、
+ * 呼び出し側でログアウトしてからこの画面へ送り、ここでは再設定から始める。
+ */
+export const LoginRoute = ({
+  redirectTo = "/recipes",
+  startAtPasswordReset = false,
+}: {
+  redirectTo?: string;
+  startAtPasswordReset?: boolean;
+}) => {
   const navigate = useNavigate();
   const session = useAuthSession();
-  const [mode, setMode] = useState<LoginMode>("signIn");
+  const [mode, setMode] = useState<LoginMode>(startAtPasswordReset ? "requestReset" : "signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -172,8 +184,8 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                     type="password"
                     autoComplete="current-password"
                     className="w-full min-w-0"
-                    maxLength={128}
-                    minLength={8}
+                    maxLength={MAX_PASSWORD_LENGTH}
+                    minLength={MIN_PASSWORD_LENGTH}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                   />
@@ -215,8 +227,8 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                     type="password"
                     autoComplete="new-password"
                     className="w-full min-w-0"
-                    maxLength={128}
-                    minLength={8}
+                    maxLength={MAX_PASSWORD_LENGTH}
+                    minLength={MIN_PASSWORD_LENGTH}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                   />
@@ -252,7 +264,10 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
           ) : null}
 
           {mode === "requestReset" ? (
-            <form className="min-w-0" onSubmit={handleRequestReset}>
+            <form className="grid min-w-0 gap-4" onSubmit={handleRequestReset}>
+              <p className="text-brand-muted text-sm leading-6">
+                登録しているメールアドレスに確認コードを送ります。
+              </p>
               <FieldGroup>
                 <Field className="min-w-0">
                   <FieldLabel htmlFor={emailId}>
@@ -306,8 +321,8 @@ export const LoginRoute = ({ redirectTo = "/recipes" }: { redirectTo?: string })
                     type="password"
                     autoComplete="new-password"
                     className="w-full min-w-0"
-                    maxLength={128}
-                    minLength={8}
+                    maxLength={MAX_PASSWORD_LENGTH}
+                    minLength={MIN_PASSWORD_LENGTH}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                   />

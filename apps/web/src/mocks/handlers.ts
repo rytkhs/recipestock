@@ -311,6 +311,11 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     }),
     http.post("/api/auth/change-email", () => HttpResponse.json({ status: true })),
     http.post("/api/auth/change-password", () => HttpResponse.json({ status: true })),
+    http.get("/api/auth/list-accounts", () =>
+      session
+        ? HttpResponse.json(state.loginAccounts)
+        : HttpResponse.json({ code: "UNAUTHORIZED", message: "Unauthorized" }, { status: 401 }),
+    ),
     // APIはautoSignInAfterVerificationなので、検証が通ればそのままログインする。
     http.post("/api/auth/email-otp/verify-email", () => {
       session = sessionFixture();

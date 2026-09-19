@@ -4,10 +4,11 @@ import {
   EnvelopeSimple,
   LockKey,
   ShareNetwork,
+  SignIn,
   SignOut,
   Tag,
 } from "@phosphor-icons/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
@@ -24,21 +25,19 @@ import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-b
 import { billingStatusQueryKey, fetchBillingStatus } from "../features/billing/api";
 import { derivePlanState, planRowValue } from "../features/billing/plan-state";
 import { listShortcutCredentials, shortcutCredentialsQueryKey } from "../features/ios-share/api";
-import {
-  deactivatePushSubscription,
-  getCurrentPushSubscription,
-  supportsPushNotifications,
-} from "../features/push-notifications/browser";
 import { readRecipeListFilters } from "../features/recipes/list-search";
+import { useLoginMethods } from "../features/settings/login-methods";
 import {
   SettingsActionRow,
   SettingsGroup,
   SettingsLinkRow,
+  SettingsRowSkeleton,
+  SettingsValueRow,
 } from "../features/settings/settings-list";
 import { settingsPageBodyClass, settingsPageClass } from "../features/settings/settings-page";
+import { useSignOut } from "../features/settings/use-sign-out";
 import { listTags, tagsQueryKeys } from "../features/tags";
-import { signOut, useAuthSession } from "../lib/auth";
-import { clearUserScopedCache } from "../lib/query-cache";
+import { useAuthSession } from "../lib/auth";
 import { useViewer } from "../lib/viewer";
 
 const rowIconSize = 20;
@@ -52,9 +51,66 @@ const rowValue = <T,>(
   return query.isPending ? ("loading" as const) : undefined;
 };
 
+/**
+ * パスワードを持たない人には、メールアドレスもパスワードも変更の行を出さない。
+ * パスワードは持っておらず、メールアドレスはログインに使わないため。
+ * かわりに、今のアドレスと、何でログインしているかを見せる。
+ */
+const AccountRows = ({
+  email,
+  loginMethods,
+}: {
+  email: string | undefined;
+  loginMethods: ReturnType<typeof useLoginMethods>;
+}) => {
+  if (loginMethods.isPending) {
+    return (
+      <>
+        <SettingsRowSkeleton />
+        <SettingsRowSkeleton />
+      </>
+    );
+  }
+
+  // 読めなかったときは今までどおり変更の行を出す。消すと、パスワードを持つ人が変更手段を失う。
+  if (!loginMethods.data || loginMethods.data.hasPassword) {
+    return (
+      <>
+        <SettingsLinkRow
+          icon={<EnvelopeSimple size={rowIconSize} weight="bold" />}
+          label="メールアドレス"
+          to="/settings/email"
+          value={email}
+        />
+        <SettingsLinkRow
+          icon={<LockKey size={rowIconSize} weight="bold" />}
+          label="パスワード"
+          to="/settings/password"
+        />
+      </>
+    );
+  }
+
+  // このアプリのログイン方法はメールアドレスとパスワード、Googleの2つだけ。
+  // パスワードを持たない人はGoogleでログインしている。
+  return (
+    <>
+      <SettingsValueRow
+        icon={<EnvelopeSimple size={rowIconSize} weight="bold" />}
+        label="メールアドレス"
+        value={email ?? ""}
+      />
+      <SettingsValueRow
+        icon={<SignIn size={rowIconSize} weight="bold" />}
+        label="ログイン方法"
+        value="Google"
+      />
+    </>
+  );
+};
+
 export const SettingsIndexRoute = () => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const session = useAuthSession();
   const viewer = useViewer({ enabled: true });
   const isPro = viewer.data?.plan === "pro";
@@ -76,42 +132,9 @@ export const SettingsIndexRoute = () => {
     queryKey: shortcutCredentialsQueryKey,
     queryFn: listShortcutCredentials,
   });
+  const loginMethods = useLoginMethods();
+  const { clearSignOutError, isSigningOut, signOutAndGoToLogin, signOutError } = useSignOut();
   const [isSignOutDialogOpen, setIsSignOutDialogOpen] = useState(false);
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
-
-  const handleSignOut = async () => {
-    setIsSigningOut(true);
-    setSignOutError(null);
-    let pushCleanupCompleted = false;
-
-    try {
-      if (supportsPushNotifications()) {
-        const subscription = await getCurrentPushSubscription();
-        if (subscription) {
-          const { browserCleanupSucceeded, serverCleanupSucceeded } =
-            await deactivatePushSubscription(subscription);
-          if (!browserCleanupSucceeded && !serverCleanupSucceeded) {
-            throw new Error("push_subscription_cleanup_failed");
-          }
-        }
-      }
-      pushCleanupCompleted = true;
-
-      await signOut();
-      clearUserScopedCache(queryClient);
-      await session.refetch();
-      await navigate({ to: "/login" });
-    } catch {
-      setSignOutError(
-        pushCleanupCompleted
-          ? "ログアウトできませんでした。時間をおいて再度お試しください。"
-          : "通知を解除できなかったため、ログアウトを中止しました。時間をおいて再度お試しください。",
-      );
-    } finally {
-      setIsSigningOut(false);
-    }
-  };
 
   return (
     <section className={settingsPageClass}>
@@ -155,17 +178,7 @@ export const SettingsIndexRoute = () => {
         </SettingsGroup>
 
         <SettingsGroup title="アカウント">
-          <SettingsLinkRow
-            icon={<EnvelopeSimple size={rowIconSize} weight="bold" />}
-            label="メールアドレス"
-            to="/settings/email"
-            value={session.data?.user.email}
-          />
-          <SettingsLinkRow
-            icon={<LockKey size={rowIconSize} weight="bold" />}
-            label="パスワード"
-            to="/settings/password"
-          />
+          <AccountRows email={session.data?.user.email} loginMethods={loginMethods} />
         </SettingsGroup>
 
         <SettingsGroup>
@@ -173,7 +186,7 @@ export const SettingsIndexRoute = () => {
             icon={<SignOut size={rowIconSize} weight="bold" />}
             label="ログアウト"
             onPress={() => {
-              setSignOutError(null);
+              clearSignOutError();
               setIsSignOutDialogOpen(true);
             }}
           />
@@ -202,7 +215,7 @@ export const SettingsIndexRoute = () => {
           ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSigningOut}>キャンセル</AlertDialogCancel>
-            <AlertDialogAction disabled={isSigningOut} onClick={() => void handleSignOut()}>
+            <AlertDialogAction disabled={isSigningOut} onClick={() => void signOutAndGoToLogin()}>
               ログアウト
             </AlertDialogAction>
           </AlertDialogFooter>
