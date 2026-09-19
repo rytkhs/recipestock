@@ -895,14 +895,35 @@ describe("Settings routes", () => {
     ]);
     expect(JSON.parse(String(changeEmailCall?.[1]?.body))).toEqual({
       newEmail: "new@example.com",
-      callbackURL: "/settings/email",
+      callbackURL: "/settings/email?from=verify-link",
     });
-    await expect(
-      screen.findByText(
-        "new@example.com 宛に確認メールを送信しました。メール内のリンクを開くと、変更が完了します。それまでは、今のメールアドレスのままです。",
-      ),
-    ).resolves.toBeInTheDocument();
-    expect(screen.getByLabelText("新しいメールアドレス")).toHaveValue("");
+    const sentHeading = await screen.findByRole("heading", { name: "確認メールを送りました" });
+    expect(sentHeading).toHaveFocus();
+    expect(screen.getByText("new@example.com")).toBeInTheDocument();
+    expect(screen.getByText("1時間以内に、メールのリンクを開いてください。")).toBeInTheDocument();
+    expect(screen.queryByLabelText("新しいメールアドレス")).not.toBeInTheDocument();
+  });
+
+  it("確認メールを送った後は、送った先を入れたままフォームに戻って送り直せる", async () => {
+    mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/auth/change-email" && init?.method === "POST") {
+          return jsonResponse({ status: true });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+    await renderApp("/settings/email");
+
+    await userEvent.type(await screen.findByLabelText("新しいメールアドレス"), "nwe@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
+    await userEvent.click(await screen.findByRole("button", { name: "送り直す" }));
+
+    const newEmailInput = screen.getByLabelText("新しいメールアドレス");
+    expect(newEmailInput).toHaveValue("nwe@example.com");
+    expect(newEmailInput).toHaveFocus();
   });
 
   it("今と同じメールアドレスは送らずに理由を出す", async () => {
@@ -915,7 +936,15 @@ describe("Settings routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
 
     await expect(screen.findByText("今のメールアドレスと同じです。")).resolves.toBeInTheDocument();
+    const newEmailInput = screen.getByLabelText("新しいメールアドレス");
+    expect(newEmailInput).toHaveAttribute("aria-invalid", "true");
+    expect(newEmailInput).toHaveAccessibleDescription(
+      expect.stringContaining("今のメールアドレスと同じです。"),
+    );
     expect(findFetchCall(fetchMock, "/api/auth/change-email")).toBeUndefined();
+
+    await userEvent.type(newEmailInput, "x");
+    expect(newEmailInput).not.toHaveAttribute("aria-invalid");
   });
 
   it("パスワードとGoogleの両方でログインできる人には、Googleのメールアドレスが変わらないことを伝える", async () => {
@@ -925,12 +954,51 @@ describe("Settings routes", () => {
     });
     await renderApp("/settings/email");
 
-    await expect(
-      screen.findByText(
+    expect(await screen.findByLabelText("新しいメールアドレス")).toHaveAccessibleDescription(
+      expect.stringContaining(
         "Googleアカウントのメールアドレスは変わりません。Googleでのログインは今までどおり使えます。",
       ),
-    ).resolves.toBeInTheDocument();
+    );
+  });
+
+  it("確認メールのリンクから戻ると、変更できたことを伝えてURLから目印を消す", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+    const { appRouter } = await renderApp("/settings/email?from=verify-link");
+
+    await expect(screen.findByText("メールアドレスを変更しました")).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText("次からは、このメールアドレスでログインしてください。"),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(appRouter.state.location.href).toBe("/settings/email");
+    });
+    expect(screen.getByText("メールアドレスを変更しました")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["TOKEN_EXPIRED", "確認リンクの有効期限が切れていました"],
+    ["INVALID_USER", "別のアカウントでログインしています"],
+    ["INVALID_TOKEN", "確認リンクを使えませんでした"],
+    ["USER_NOT_FOUND", "確認リンクを使えませんでした"],
+  ])("確認メールのリンクを開けなかったとき(%s)は、変わっていないことと理由を伝える", async (code, title) => {
+    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+    await renderApp(`/settings/email?from=verify-link&error=${code}`);
+
+    await expect(screen.findByText(title)).resolves.toBeInTheDocument();
+    expect(screen.getByText(/メールアドレスは変わっていません。/)).toBeInTheDocument();
+    expect(screen.queryByText("メールアドレスを変更しました")).not.toBeInTheDocument();
     expect(screen.getByLabelText("新しいメールアドレス")).toBeInTheDocument();
+  });
+
+  it("確認メールのリンクから戻った目印がなければ、お知らせは出さない", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+    const { appRouter } = await renderApp("/settings/email?error=TOKEN_EXPIRED");
+
+    await expect(screen.findByLabelText("新しいメールアドレス")).resolves.toBeInTheDocument();
+    expect(screen.queryByText("確認リンクの有効期限が切れていました")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(appRouter.state.location.href).toBe("/settings/email");
+    });
   });
 
   it("パスワードを持たない人には、メールアドレスの変更のフォームを出さない", async () => {
@@ -961,11 +1029,11 @@ describe("Settings routes", () => {
       },
       { authenticated: true },
     );
-    await renderApp("/settings/password");
+    const { appRouter } = await renderApp("/settings/password");
 
     await expect(
       screen.findByText(
-        "パスワードを変更すると、ほかの端末ではログアウトされます。この端末はログインしたままです。",
+        "変更すると、ほかの端末ではログアウトされます。この端末はログインしたままです。",
       ),
     ).resolves.toBeInTheDocument();
     await userEvent.type(await screen.findByLabelText("現在のパスワード"), "password123");
@@ -985,11 +1053,36 @@ describe("Settings routes", () => {
       newPassword: "newpassword123",
       revokeOtherSessions: true,
     });
-    await expect(
-      screen.findByText("パスワードを変更しました。ほかの端末ではログアウトされました。"),
-    ).resolves.toBeInTheDocument();
-    expect(screen.getByLabelText("現在のパスワード")).toHaveValue("");
-    expect(screen.getByLabelText("新しいパスワード")).toHaveValue("");
+    await expect(screen.findByText("パスワードを変更しました")).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText("ほかの端末ではログアウトされました。この端末はログインしたままです。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("現在のパスワード")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("新しいパスワード")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "設定に戻る" }));
+    await waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/settings");
+    });
+  });
+
+  it("パスワードは表示を切り替えて確かめられ、パスワードマネージャー向けにアカウントを添える", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+    const { container } = await renderApp("/settings/password");
+
+    const currentPassword = await screen.findByLabelText("現在のパスワード");
+    const [currentToggle] = screen.getAllByRole("button", { name: "パスワードを表示" });
+    expect(currentPassword).toHaveAttribute("type", "password");
+    expect(currentToggle).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(currentToggle as HTMLElement);
+
+    expect(currentPassword).toHaveAttribute("type", "text");
+    expect(currentToggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("新しいパスワード")).toHaveAttribute("type", "password");
+    expect(container.querySelector('input[autocomplete="username"]')).toHaveValue(
+      "chef@example.com",
+    );
   });
 
   const mockFailingAccountChanges = () =>
@@ -1057,6 +1150,15 @@ describe("Settings routes", () => {
     await expect(
       screen.findByText("現在のパスワードが正しくありません。"),
     ).resolves.toBeInTheDocument();
+    const currentPassword = screen.getByLabelText("現在のパスワード");
+    expect(currentPassword).toHaveAttribute("aria-invalid", "true");
+    expect(currentPassword).toHaveAccessibleDescription("現在のパスワードが正しくありません。");
+    expect(currentPassword).toHaveFocus();
+    expect(screen.getByLabelText("新しいパスワード")).not.toHaveAttribute("aria-invalid");
+
+    await userEvent.type(currentPassword, "x");
+    expect(currentPassword).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByText("現在のパスワードが正しくありません。")).not.toBeInTheDocument();
   });
 
   it("パスワードを持たない人には、変更のフォームを出さない", async () => {
