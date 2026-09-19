@@ -8,7 +8,6 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type ReactNode } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,6 +16,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const PublicNav = () => (
@@ -30,69 +37,44 @@ const PublicNav = () => (
   </nav>
 );
 
-const AddRecipeMenu = ({
-  "aria-label": ariaLabel,
-  children,
-  className,
-  "data-testid": testId,
-}: {
-  "aria-label"?: string;
-  children: ReactNode;
-  className: string;
-  "data-testid"?: string;
-}) => {
+const addRecipeOptions = [
+  { to: "/import/url", icon: LinkIcon, label: "URLから", description: "サイトから取り込む" },
+  {
+    to: "/import/text",
+    icon: Article,
+    label: "テキストから",
+    description: "文章を貼り付けて取り込む",
+  },
+  { to: "/recipes/new", icon: PencilSimple, label: "手入力", description: "レシピを自分で入力" },
+] as const;
+
+const AddRecipeMenu = () => {
   const navigate = useNavigate();
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={ariaLabel}
-        data-testid={testId}
-        render={<Button className={className} />}
-      >
-        {children}
+      <DropdownMenuTrigger render={<Button className="hidden sm:inline-flex" />}>
+        <CookingPot data-icon="inline-start" weight="bold" />
+        レシピ追加
       </DropdownMenuTrigger>
       <DropdownMenuContent className="min-w-56">
         <DropdownMenuGroup>
-          <DropdownMenuItem
-            onClick={() => {
-              void navigate({ to: "/import/url" });
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <LinkIcon weight="bold" />
-              <div className="flex flex-col">
-                <span>URLから</span>
-                <span className="text-xs text-muted-foreground">サイトから取り込む</span>
+          {addRecipeOptions.map(({ description, icon: Icon, label, to }) => (
+            <DropdownMenuItem
+              key={to}
+              onClick={() => {
+                void navigate({ to });
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <Icon weight="bold" />
+                <div className="flex flex-col">
+                  <span>{label}</span>
+                  <span className="text-xs text-muted-foreground">{description}</span>
+                </div>
               </div>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              void navigate({ to: "/import/text" });
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <Article weight="bold" />
-              <div className="flex flex-col">
-                <span>テキストから</span>
-                <span className="text-xs text-muted-foreground">文章を貼り付けて取り込む</span>
-              </div>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              void navigate({ to: "/recipes/new" });
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <PencilSimple weight="bold" />
-              <div className="flex flex-col">
-                <span>手入力</span>
-                <span className="text-xs text-muted-foreground">レシピを自分で入力</span>
-              </div>
-            </div>
-          </DropdownMenuItem>
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -101,10 +83,7 @@ const AddRecipeMenu = ({
 
 const AppNav = () => (
   <nav aria-label="Main navigation" className="flex items-center gap-x-1">
-    <AddRecipeMenu className="hidden sm:inline-flex">
-      <CookingPot data-icon="inline-start" weight="bold" />
-      レシピ追加
-    </AddRecipeMenu>
+    <AddRecipeMenu />
     <Link
       activeProps={{ className: "text-primary" }}
       className={cn(
@@ -128,14 +107,50 @@ const AppNav = () => (
   </nav>
 );
 
+// モバイルでは親指の届く下からシートで出し、追加の方法を全幅の行で選ばせる。
+// 行を選ぶと一覧から離れ、FABごとシートが外れる。
 export const MobileAddRecipeFab = () => (
-  <AddRecipeMenu
-    aria-label="レシピ追加"
-    data-testid="add-recipe-fab"
-    className="fixed right-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 size-14 rounded-full shadow-lg sm:hidden"
-  >
-    <Plus weight="bold" />
-  </AddRecipeMenu>
+  <Sheet>
+    <SheetTrigger
+      aria-label="レシピ追加"
+      data-testid="add-recipe-fab"
+      render={
+        <Button className="fixed right-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 size-14 rounded-full shadow-lg sm:hidden" />
+      }
+    >
+      <Plus weight="bold" />
+    </SheetTrigger>
+    <SheetContent
+      className="gap-0 rounded-t-[20px] border-brand-line-soft bg-brand-paper"
+      showCloseButton={false}
+      side="bottom"
+    >
+      <div className="mx-auto flex w-full max-w-lg flex-col pb-[env(safe-area-inset-bottom)]">
+        <SheetHeader className="flex-row items-center justify-between gap-3 border-brand-line-soft border-b px-4 py-3">
+          <SheetTitle className="font-semibold text-brand-ink">レシピを追加</SheetTitle>
+          <SheetClose render={<Button size="sm" variant="ghost" />}>閉じる</SheetClose>
+        </SheetHeader>
+        <ul className="px-2 py-2">
+          {addRecipeOptions.map(({ description, icon: Icon, label, to }) => (
+            <li key={to}>
+              <Link
+                className="flex min-h-14 items-center gap-3 rounded-[12px] px-2 py-2 text-brand-ink no-underline outline-none transition-colors hover:bg-brand-paper-muted focus-visible:bg-brand-paper-muted"
+                to={to}
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-brand-line-soft bg-brand-paper-raised text-brand-walnut [&_svg]:size-5">
+                  <Icon weight="bold" />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="font-medium text-sm">{label}</span>
+                  <span className="text-brand-muted text-xs">{description}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </SheetContent>
+  </Sheet>
 );
 
 export const Header = ({

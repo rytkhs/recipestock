@@ -225,6 +225,33 @@ describe("AppRouter", () => {
     expect(screen.getAllByRole("link", { name: "設定" })).not.toHaveLength(0);
   });
 
+  it("レシピ追加FABはシートで追加の方法を選ばせ、選んだ画面へ遷移する", async () => {
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    const { appRouter } = await renderApp("/recipes");
+
+    await userEvent.click(await screen.findByTestId("add-recipe-fab"));
+    const sheet = await screen.findByRole("dialog", { name: "レシピを追加" });
+    expect(within(sheet).getByRole("link", { name: /^URLから/ })).toBeInTheDocument();
+    expect(within(sheet).getByRole("link", { name: /^テキストから/ })).toBeInTheDocument();
+
+    await userEvent.click(within(sheet).getByRole("link", { name: /^手入力/ }));
+
+    await vi.waitFor(() => {
+      expect(appRouter.state.location.pathname).toBe("/recipes/new");
+    });
+    expect(screen.queryByRole("dialog", { name: "レシピを追加" })).toBeNull();
+  });
+
   it("レシピ一覧以外ではレシピ追加FABを表示しない", async () => {
     mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
 
