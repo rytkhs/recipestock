@@ -363,11 +363,16 @@ const ingredientGroups = [
 ];
 
 // APIが保存する画像と同じく、縦横は配信するプレースホルダ画像の実寸に揃える。
-const recipeImageFixture = (recipeId: string, name: string) => {
+export const recipeImageFixture = (recipeId: string, name: string) => {
   const objectKey = objectKeyFor(recipeId, name);
 
   return { objectKey, ...imagePlaceholderSize(objectKey), url: recipeImageUrl(objectKey) };
 };
+
+export const recipeImagesFixture = (recipeId: string, namePrefix: string, count: number) =>
+  Array.from({ length: count }, (_, index) =>
+    recipeImageFixture(recipeId, `${namePrefix}-${index + 1}`),
+  );
 
 export const recipeDetailFixture = (
   recipeId: string,

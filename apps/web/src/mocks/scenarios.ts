@@ -5,6 +5,17 @@ import {
   type GetPushSubscriptionsResponse,
   type ImportJobSummary,
   type ListShortcutCredentialsResponse,
+  MAX_INGREDIENT_AMOUNT_LENGTH,
+  MAX_INGREDIENT_GROUP_LABEL_LENGTH,
+  MAX_INGREDIENT_NAME_LENGTH,
+  MAX_RECIPE_NOTE_LENGTH,
+  MAX_RECIPE_REFERENCE_IMAGES,
+  MAX_RECIPE_SOURCE_NAME_LENGTH,
+  MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_STEP_TEXT_LENGTH,
+  MAX_RECIPE_TAGS,
+  MAX_RECIPE_TITLE_LENGTH,
+  MAX_RECIPE_TOTAL_IMAGES,
   type RecipeListItem,
 } from "@recipestock/schemas";
 import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
@@ -25,6 +36,8 @@ import {
   proPriceFixture,
   pushSubscriptionsFixture,
   type RecipeContentOverride,
+  recipeImageFixture,
+  recipeImagesFixture,
   recipeListFixture,
   recipeTagsFixture,
   type SessionFixture,
@@ -65,6 +78,13 @@ export type MockState = {
   failures: {
     /** "always" は全ページ、"after-first-page" は2ページ目以降を500にする。 */
     listRecipes?: "always" | "after-first-page";
+    /** "once" は最初の詳細取得だけを500にし、再読み込みでは成功させる。 */
+    getRecipe?: "once" | "always";
+    saveRecipe?: "generic" | "image-finalize";
+    deleteRecipe?: boolean;
+    replaceRecipeTags?: boolean;
+    /** "after-first" は最初の1枚だけ成功させ、同時選択した後続を失敗させる。 */
+    uploadImage?: "always" | "after-first";
     getViewer?: boolean;
     listTags?: boolean;
     getBillingStatus?: boolean;
@@ -137,6 +157,239 @@ const freeState = (recipeCount: number): MockState => {
 
 // 一覧のサムネイルと、開いた詳細の画像がどちらも読み込めないRecipe。
 const brokenImageRecipeIndexes = [1, 4, 7];
+
+const fillText = (prefix: string, length: number) =>
+  `${prefix}${"あ".repeat(Math.max(0, length - prefix.length))}`;
+
+const withoutImageUrl = (recipeId: string, name: string) => {
+  const { url: _url, ...image } = recipeImageFixture(recipeId, name);
+  return image;
+};
+
+const contentVariantsState = (): MockState => {
+  const state = baseState();
+  const titles: Record<string, string> = {
+    recipe_001: "材料だけのレシピ",
+    recipe_002: "手順だけのレシピ",
+    recipe_003: "メモだけのレシピ",
+    recipe_004: "URLだけの出典を持つレシピ",
+    recipe_005: "画像URLが欠けたレシピ",
+    recipe_006: "タイトルだけのレシピ",
+  };
+  const recipes = recipeListFixture({ count: 6 }).map((recipe) => ({
+    ...recipe,
+    title: titles[recipe.id] ?? recipe.title,
+    coverImageUrl:
+      recipe.id === "recipe_002" || recipe.id === "recipe_005" ? recipe.coverImageUrl : null,
+    sourceName: recipe.id === "recipe_004" || recipe.id === "recipe_006" ? null : recipe.sourceName,
+  }));
+
+  return {
+    ...state,
+    viewer: viewerFixture({ plan: "pro", recipeCount: recipes.length }),
+    recipes,
+    recipeTags: Object.fromEntries(recipes.map((recipe) => [recipe.id, []])),
+    recipeContents: {
+      recipe_001: {
+        yieldText: "2人分",
+        coverImage: undefined,
+        referenceImages: [],
+        ingredientGroups: [
+          {
+            ingredients: [
+              { name: "じゃがいも", amount: "2個" },
+              { name: "塩", amount: "少々" },
+            ],
+          },
+        ],
+        steps: [],
+        note: undefined,
+      },
+      recipe_002: {
+        yieldText: undefined,
+        referenceImages: [],
+        ingredientGroups: [],
+        steps: [
+          { text: "材料を混ぜる。", images: [] },
+          { text: "器に盛り付ける。", images: [] },
+        ],
+        note: undefined,
+      },
+      recipe_003: {
+        yieldText: undefined,
+        coverImage: undefined,
+        referenceImages: [],
+        ingredientGroups: [],
+        steps: [],
+        note: "次は少しだけ塩を減らす。\n冷めてもおいしかった。",
+      },
+      recipe_004: {
+        yieldText: undefined,
+        coverImage: undefined,
+        referenceImages: [],
+        ingredientGroups: [],
+        steps: [],
+        note: undefined,
+      },
+      recipe_005: {
+        coverImage: withoutImageUrl("recipe_005", "cover-without-url"),
+        referenceImages: [withoutImageUrl("recipe_005", "reference-without-url")],
+        ingredientGroups: [],
+        steps: [
+          {
+            text: "画像を見ながら盛り付ける。",
+            images: [withoutImageUrl("recipe_005", "step-without-url")],
+          },
+        ],
+        note: undefined,
+      },
+      recipe_006: {
+        yieldText: undefined,
+        coverImage: undefined,
+        referenceImages: [],
+        ingredientGroups: [],
+        steps: [],
+        note: undefined,
+      },
+    },
+  };
+};
+
+const longContentState = (): MockState => {
+  const state = baseState();
+  const [recipe] = recipeListFixture({ count: 1 });
+  const tags = Array.from({ length: MAX_RECIPE_TAGS }, (_, index) => ({
+    id: `tag_stress_${index + 1}`,
+    name: `長い確認用タグ${String(index + 1).padStart(2, "0")}番`,
+  }));
+  const title = fillText("表示確認用のとても長いレシピ名", MAX_RECIPE_TITLE_LENGTH);
+
+  return {
+    ...state,
+    viewer: viewerFixture({ plan: "pro", recipeCount: 1 }),
+    recipes: [
+      {
+        ...recipe,
+        title,
+        sourceName: fillText("表示確認用の長い出典名", MAX_RECIPE_SOURCE_NAME_LENGTH),
+      },
+    ],
+    tags,
+    recipeTags: { [recipe.id]: tags.map((tag) => tag.id) },
+    recipeContents: {
+      [recipe.id]: {
+        title,
+        yieldText: "12人分（作り置きと翌日のお弁当を含む）",
+        referenceImages: recipeImagesFixture(recipe.id, "stress-reference", 6),
+        ingredientGroups: [
+          {
+            label: fillText("とても長い材料グループ名", MAX_INGREDIENT_GROUP_LABEL_LENGTH),
+            ingredients: [
+              {
+                name: fillText("折り返しを確認するための長い材料名", MAX_INGREDIENT_NAME_LENGTH),
+                amount: fillText("大さじ", MAX_INGREDIENT_AMOUNT_LENGTH),
+              },
+              { name: "分量のない材料をそのまま書いた行", amount: "" },
+            ],
+          },
+        ],
+        steps: [
+          {
+            text: fillText(
+              "長い手順の表示を確認する。\n途中に改行を入れ、段落が続く場合も確認する。\n",
+              MAX_RECIPE_STEP_TEXT_LENGTH,
+            ),
+            images: recipeImagesFixture(recipe.id, "stress-step", 3),
+          },
+          { text: "仕上げに全体を混ぜ、器に盛る。", images: [] },
+        ],
+        note: fillText(
+          "長いメモの表示を確認する。\n翌日に作るときの注意点もここへ残す。\n",
+          MAX_RECIPE_NOTE_LENGTH,
+        ),
+      },
+    },
+  };
+};
+
+const editImageLimitsState = (): MockState => {
+  const state = baseState();
+  const recipes = recipeListFixture({ count: 3 }).map((recipe, index) => ({
+    ...recipe,
+    title: ["レシピ画像が20枚", "1つの手順画像が10枚", "画像が合計100枚"][index],
+  }));
+  const [referenceLimit, stepLimit, totalLimit] = recipes;
+
+  return {
+    ...state,
+    viewer: viewerFixture({ plan: "pro", recipeCount: recipes.length }),
+    recipes,
+    recipeTags: Object.fromEntries(recipes.map((recipe) => [recipe.id, []])),
+    recipeContents: {
+      [referenceLimit.id]: {
+        referenceImages: recipeImagesFixture(
+          referenceLimit.id,
+          "reference-limit",
+          MAX_RECIPE_REFERENCE_IMAGES,
+        ),
+        ingredientGroups: [],
+        steps: [],
+        note: undefined,
+      },
+      [stepLimit.id]: {
+        referenceImages: [],
+        ingredientGroups: [],
+        steps: [
+          {
+            text: "画像上限の手順",
+            images: recipeImagesFixture(stepLimit.id, "step-limit", MAX_RECIPE_STEP_IMAGES),
+          },
+        ],
+        note: undefined,
+      },
+      [totalLimit.id]: {
+        referenceImages: recipeImagesFixture(
+          totalLimit.id,
+          "total-reference",
+          MAX_RECIPE_REFERENCE_IMAGES,
+        ),
+        ingredientGroups: [],
+        steps: Array.from(
+          {
+            length:
+              (MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_REFERENCE_IMAGES) / MAX_RECIPE_STEP_IMAGES,
+          },
+          (_, index) => ({
+            text: `画像上限を確認する手順${index + 1}`,
+            images: recipeImagesFixture(
+              totalLimit.id,
+              `total-step-${index + 1}`,
+              MAX_RECIPE_STEP_IMAGES,
+            ),
+          }),
+        ),
+        note: undefined,
+      },
+    },
+  };
+};
+
+const maxTagsState = (): MockState => {
+  const state = baseState();
+  const [recipe] = recipeListFixture({ count: 1 });
+  const tags = Array.from({ length: MAX_RECIPE_TAGS }, (_, index) => ({
+    id: `tag_max_${index + 1}`,
+    name: `確認タグ${index + 1}`,
+  }));
+
+  return {
+    ...state,
+    viewer: viewerFixture({ plan: "pro", recipeCount: 1 }),
+    recipes: [{ ...recipe, title: "タグが上限まで付いたレシピ" }],
+    tags,
+    recipeTags: { [recipe.id]: tags.map((tag) => tag.id) },
+  };
+};
 
 export const scenarios: Scenario[] = [
   {
@@ -215,6 +468,96 @@ export const scenarios: Scenario[] = [
         ]),
       ),
     }),
+  },
+  {
+    id: "content-variants",
+    group: "recipes",
+    label: "本文のバリエーション",
+    build: contentVariantsState,
+  },
+  {
+    id: "long-content",
+    group: "recipes",
+    label: "長い本文・10個のタグ",
+    build: longContentState,
+  },
+  {
+    id: "detail-error",
+    group: "recipes",
+    label: "詳細の初回取得失敗(再読み込みで成功)",
+    build: () => ({ ...baseState(), failures: { getRecipe: "once" } }),
+  },
+  {
+    id: "recipe-save-error",
+    group: "recipes",
+    label: "レシピの作成・更新失敗",
+    build: () => ({ ...baseState(), failures: { saveRecipe: "generic" } }),
+  },
+  {
+    id: "recipe-delete-error",
+    group: "recipes",
+    label: "レシピの削除失敗",
+    build: () => ({ ...baseState(), failures: { deleteRecipe: true } }),
+  },
+  {
+    id: "image-finalize-error",
+    group: "recipes",
+    label: "保存時に画像を確定できない",
+    build: () => ({ ...baseState(), failures: { saveRecipe: "image-finalize" } }),
+  },
+  {
+    id: "image-upload-error",
+    group: "recipes",
+    label: "画像のアップロード失敗(全件)",
+    build: () => ({ ...baseState(), failures: { uploadImage: "always" } }),
+  },
+  {
+    id: "image-upload-partial-error",
+    group: "recipes",
+    label: "画像のアップロード失敗(2枚目以降)",
+    build: () => ({ ...baseState(), failures: { uploadImage: "after-first" } }),
+  },
+  {
+    id: "edit-image-limits",
+    group: "recipes",
+    label: "編集の画像上限(20枚・10枚・合計100枚)",
+    build: editImageLimitsState,
+  },
+  {
+    id: "legacy-over-limit",
+    group: "recipes",
+    label: "現在の文字数上限を超える保存済みレシピ",
+    build: () => {
+      const state = baseState();
+      const [recipe] = recipeListFixture({ count: 1 });
+
+      return {
+        ...state,
+        viewer: viewerFixture({ plan: "pro", recipeCount: 1 }),
+        recipes: [{ ...recipe, title: "上限追加前に保存した長いレシピ" }],
+        recipeTags: { [recipe.id]: [] },
+        recipeContents: {
+          [recipe.id]: {
+            referenceImages: [],
+            ingredientGroups: [],
+            steps: [{ text: "あ".repeat(MAX_RECIPE_STEP_TEXT_LENGTH + 1), images: [] }],
+            note: undefined,
+          },
+        },
+      };
+    },
+  },
+  {
+    id: "max-tags",
+    group: "recipes",
+    label: "タグが10個付いたレシピ",
+    build: maxTagsState,
+  },
+  {
+    id: "recipe-tag-save-error",
+    group: "recipes",
+    label: "レシピのタグ保存失敗",
+    build: () => ({ ...baseState(), failures: { replaceRecipeTags: true } }),
   },
   {
     id: "free-locked",

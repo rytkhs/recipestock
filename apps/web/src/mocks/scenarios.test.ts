@@ -7,6 +7,14 @@ import {
   listRecipesResponseSchema,
   listShortcutCredentialsResponseSchema,
   listTagsResponseSchema,
+  MAX_RECIPE_NOTE_LENGTH,
+  MAX_RECIPE_REFERENCE_IMAGES,
+  MAX_RECIPE_SOURCE_NAME_LENGTH,
+  MAX_RECIPE_STEP_IMAGES,
+  MAX_RECIPE_STEP_TEXT_LENGTH,
+  MAX_RECIPE_TAGS,
+  MAX_RECIPE_TITLE_LENGTH,
+  MAX_RECIPE_TOTAL_IMAGES,
   recentImportJobsResponseSchema,
 } from "@recipestock/schemas";
 import { describe, expect, it } from "vitest";
@@ -56,6 +64,70 @@ describe("設定シナリオ", () => {
     expect(state.viewer).toMatchObject({ plan: "pro", recipeCount: 3 });
     expect(state.recipes).toHaveLength(3);
     expect(state.billing.subscription?.cancelAtPeriodEnd).toBe(true);
+  });
+});
+
+describe("レシピシナリオ", () => {
+  it("本文のバリエーションを1つの一覧から開ける", () => {
+    const state = findScenario("content-variants").build();
+
+    expect(state.recipes.map((recipe) => recipe.title)).toEqual([
+      "材料だけのレシピ",
+      "手順だけのレシピ",
+      "メモだけのレシピ",
+      "URLだけの出典を持つレシピ",
+      "画像URLが欠けたレシピ",
+      "タイトルだけのレシピ",
+    ]);
+    expect(state.recipes.filter((recipe) => recipe.coverImageUrl)).toHaveLength(2);
+    expect(state.recipeContents.recipe_006).toMatchObject({
+      referenceImages: [],
+      ingredientGroups: [],
+      steps: [],
+    });
+    expect(state.recipeContents.recipe_005?.coverImage).not.toHaveProperty("url");
+    expect(state.recipeContents.recipe_005?.referenceImages?.[0]).not.toHaveProperty("url");
+    expect(state.recipeContents.recipe_005?.steps?.[0]?.images[0]).not.toHaveProperty("url");
+  });
+
+  it("長文シナリオは書き込み上限ちょうどの本文と10個のタグを持つ", () => {
+    const state = findScenario("long-content").build();
+    const [recipe] = state.recipes;
+    const content = state.recipeContents[recipe.id];
+
+    expect(recipe.title).toHaveLength(MAX_RECIPE_TITLE_LENGTH);
+    expect(recipe.sourceName).toHaveLength(MAX_RECIPE_SOURCE_NAME_LENGTH);
+    expect(content.steps?.[0]?.text).toHaveLength(MAX_RECIPE_STEP_TEXT_LENGTH);
+    expect(content.note).toHaveLength(MAX_RECIPE_NOTE_LENGTH);
+    expect(state.recipeTags[recipe.id]).toHaveLength(MAX_RECIPE_TAGS);
+  });
+
+  it("画像上限シナリオはレシピ画像・手順・全体の各境界を持つ", () => {
+    const state = findScenario("edit-image-limits").build();
+    const [referenceLimit, stepLimit, totalLimit] = state.recipes;
+    const referenceContent = state.recipeContents[referenceLimit.id];
+    const stepContent = state.recipeContents[stepLimit.id];
+    const totalContent = state.recipeContents[totalLimit.id];
+    const totalImages =
+      (totalContent.referenceImages?.length ?? 0) +
+      (totalContent.steps ?? []).reduce((count, step) => count + step.images.length, 0);
+
+    expect(referenceContent.referenceImages).toHaveLength(MAX_RECIPE_REFERENCE_IMAGES);
+    expect(stepContent.steps?.[0]?.images).toHaveLength(MAX_RECIPE_STEP_IMAGES);
+    expect(totalImages).toBe(MAX_RECIPE_TOTAL_IMAGES);
+  });
+
+  it("旧データとタグ上限の境界状態を持つ", () => {
+    const legacy = findScenario("legacy-over-limit").build();
+    const maxTags = findScenario("max-tags").build();
+    const [legacyRecipe] = legacy.recipes;
+    const [taggedRecipe] = maxTags.recipes;
+
+    expect(legacy.recipeContents[legacyRecipe.id].steps?.[0]?.text).toHaveLength(
+      MAX_RECIPE_STEP_TEXT_LENGTH + 1,
+    );
+    expect(maxTags.tags).toHaveLength(MAX_RECIPE_TAGS);
+    expect(maxTags.recipeTags[taggedRecipe.id]).toHaveLength(MAX_RECIPE_TAGS);
   });
 });
 
@@ -126,9 +198,25 @@ describe.each(
   it("各Recipeの詳細がGetRecipeResponseの形をしている", () => {
     for (const recipe of state.recipes) {
       const fixture = recipeDetailFixture(recipe.id);
+      const content = { ...fixture.content, ...state.recipeContents[recipe.id] };
       const detail = recipe.locked
         ? { id: recipe.id, locked: true as const }
-        : { ...fixture, content: { ...fixture.content, ...state.recipeContents[recipe.id] } };
+        : {
+            ...fixture,
+            title: recipe.title,
+            content: {
+              ...content,
+              title: recipe.title,
+              coverImage: recipe.coverImageUrl ? content.coverImage : undefined,
+            },
+            source: { ...fixture.source, sourceName: recipe.sourceName },
+            createdAt: recipe.createdAt,
+            updatedAt: recipe.createdAt,
+            tags: (state.recipeTags[recipe.id] ?? []).flatMap((tagId) => {
+              const tag = state.tags.find((candidate) => candidate.id === tagId);
+              return tag ? [tag] : [];
+            }),
+          };
 
       expectValid(getRecipeResponseSchema, { recipe: detail });
     }
