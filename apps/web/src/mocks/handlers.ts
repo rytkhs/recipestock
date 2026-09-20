@@ -11,6 +11,7 @@ import {
   type RecipeDetail,
   type RecipeListItem,
   renameTagRequestSchema,
+  reorderTagsRequestSchema,
   replaceRecipeTagsRequestSchema,
   type ShortcutCredential,
   updateRecipeRequestSchema,
@@ -192,16 +193,12 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       return tag ? [{ id: tag.id, name: tag.name }] : [];
     });
 
-  // APIと同じく件数の多い順、同数なら作った順（配列の順）に並べる。
+  // APIと同じく、tagsの配列の順（＝利用者が決めた語彙の並び）のまま件数を付ける。
   const tagsWithCount = () =>
-    tags
-      .map((tag, order) => ({
-        ...tag,
-        order,
-        recipeCount: recipes.filter((recipe) => recipeTags.get(recipe.id)?.includes(tag.id)).length,
-      }))
-      .sort((a, b) => b.recipeCount - a.recipeCount || a.order - b.order)
-      .map(({ id, name, recipeCount }) => ({ id, name, recipeCount }));
+    tags.map((tag) => ({
+      ...tag,
+      recipeCount: recipes.filter((recipe) => recipeTags.get(recipe.id)?.includes(tag.id)).length,
+    }));
 
   const requireSession = () =>
     session ? null : apiError(401, "unauthorized", "Sign in is required.");
@@ -615,6 +612,23 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       return HttpResponse.json({ tags: tagsWithCount() });
+    }),
+    http.put("/api/tags/order", async ({ request }) => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      const body = reorderTagsRequestSchema.safeParse(await request.json());
+
+      if (!body.success) {
+        return tagsInvalid();
+      }
+
+      // 送られたタグを先頭から並べ、送られなかったタグは今の相対順のまま後ろに残す。
+      const requestedIds = [...new Set(body.data.tagIds)];
+      const requested = requestedIds.flatMap((tagId) => tags.find((tag) => tag.id === tagId) ?? []);
+      tags = [...requested, ...tags.filter((tag) => !requestedIds.includes(tag.id))];
+
+      return HttpResponse.json({ ok: true });
     }),
     http.patch("/api/tags/:tagId", async ({ params, request }) => {
       const unauthorized = requireSession();

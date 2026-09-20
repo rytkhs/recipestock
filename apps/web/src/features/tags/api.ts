@@ -3,6 +3,7 @@ import {
   type ListTagsResponse,
   type MergeTagResponse,
   type RenameTagResponse,
+  type ReorderTagsResponse,
   type ReplaceRecipeTagsResponse,
 } from "@recipestock/schemas";
 import { api, parseApiResponse } from "../../lib/api";
@@ -28,6 +29,10 @@ export const replaceRecipeTags = async (recipeId: string, names: readonly string
   );
   return body.tags;
 };
+
+// 並びは全体を送って置き換える。送らなかったタグは後ろに残る。
+export const reorderTags = async (tagIds: readonly string[]) =>
+  parseApiResponse<ReorderTagsResponse>(sendJson("PUT", "/api/tags/order", { tagIds }));
 
 export const renameTag = async (tagId: string, name: string) => {
   const body = await parseApiResponse<RenameTagResponse>(

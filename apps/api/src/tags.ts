@@ -1,7 +1,7 @@
 import { type DbClient, recipeTags, tags } from "@recipestock/db";
 import { MAX_TAG_NAME_LENGTH, type RecipeTag, type TagWithCount } from "@recipestock/schemas";
 import { countTagNameLength, type NormalizedTagName, normalizeTagName } from "@recipestock/shared";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { ulid } from "ulid";
 
 export type ReplaceRecipeTagsParams = {
@@ -23,6 +23,12 @@ export type RenameTagResult =
   | { status: "conflict"; tag: RecipeTag }
   | { status: "notFound" };
 
+export type ReorderTagsParams = {
+  userId: string;
+  tagIds: readonly string[];
+  now: Date;
+};
+
 export type MergeTagParams = {
   userId: string;
   tagId: string;
@@ -35,6 +41,7 @@ export type TagRepository = {
   listTags(userId: string): Promise<TagWithCount[]>;
   replaceRecipeTags(params: ReplaceRecipeTagsParams): Promise<RecipeTag[] | null>;
   renameTag(params: RenameTagParams): Promise<RenameTagResult>;
+  reorderTags(params: ReorderTagsParams): Promise<void>;
   mergeTag(params: MergeTagParams): Promise<MergeTagResult>;
   deleteTag(userId: string, tagId: string): Promise<boolean>;
 };
@@ -99,11 +106,12 @@ export const createTagRepository = (db: DbClient): TagRepository => ({
       .leftJoin(recipeTags, eq(recipeTags.tagId, tags.id))
       .where(eq(tags.userId, userId))
       .groupBy(tags.id)
-      .orderBy(desc(recipeCount), asc(tags.createdAt), asc(tags.id));
+      .orderBy(asc(tags.position), asc(tags.createdAt), asc(tags.id));
   },
   async replaceRecipeTags({ userId, recipeId, names, now }) {
     const nowIso = now.toISOString();
     // 自分のRecipeでなければタグも作らない。既存のタグはon conflictで同じ行を返させ、組の置き換えに使う。
+    // 新しく作るタグは語彙の末尾に置く。max(position)も文の開始時点を見るので、同じ要求で作る分はordだけずらす。
     // CTEは文の開始時点のスナップショットを見るので、並びは既存の付与日時と今回の時刻から組み立てる。
     // 別のタブや端末から同じRecipeへ同時に送られると、後から始まった文は先の文が足した付与を見られず外せないことがある。
     // 画面は同じRecipeの要求を順に送るので、ここでは直列化しない。
@@ -115,17 +123,19 @@ export const createTagRepository = (db: DbClient): TagRepository => ({
           and user_id = ${userId}
       ),
       input as (
-        select input.id, input.name, input.normalized_name
+        select input.id, input.name, input.normalized_name, input.ord
         from unnest(
           ${textArray(names.map(() => createTagId()))},
           ${textArray(names.map((name) => name.name))},
           ${textArray(names.map((name) => name.normalizedName))}
-        ) as input(id, name, normalized_name)
+        ) with ordinality as input(id, name, normalized_name, ord)
         where exists (select 1 from target)
       ),
       selected as (
-        insert into tags (id, user_id, name, normalized_name, created_at, updated_at)
-        select id, ${userId}, name, normalized_name, ${nowIso}::timestamptz, ${nowIso}::timestamptz
+        insert into tags (id, user_id, name, normalized_name, position, created_at, updated_at)
+        select id, ${userId}, name, normalized_name,
+          ((select coalesce(max(existing.position), -1) from tags existing where existing.user_id = ${userId}) + input.ord)::int,
+          ${nowIso}::timestamptz, ${nowIso}::timestamptz
         from input
         on conflict (user_id, normalized_name) do update
           set normalized_name = excluded.normalized_name
@@ -200,6 +210,37 @@ export const createTagRepository = (db: DbClient): TagRepository => ({
     }
 
     return { status: row.status, tag: { id: row.id, name: row.name } };
+  },
+  async reorderTags({ userId, tagIds, now }) {
+    if (tagIds.length === 0) {
+      return;
+    }
+
+    // 送られたタグを先頭から並べ、送られなかった自分のタグは今の相対順のまま後ろに回す。
+    // 自分のものでないidと消えたidはjoinで落ちるので、別の端末で作った・消した直後でも収まる。
+    await db.execute(sql`
+      with requested as (
+        select requested.tag_id, (requested.ord - 1)::int as position
+        from unnest(${textArray(tagIds)}) with ordinality as requested(tag_id, ord)
+      ),
+      reordered as (
+        select tag.id,
+          coalesce(
+            requested.position,
+            ${tagIds.length}::int + (row_number() over (order by tag.position, tag.created_at, tag.id))::int
+          ) as position
+        from tags tag
+        left join requested on requested.tag_id = tag.id
+        where tag.user_id = ${userId}
+      )
+      update tags
+      set position = reordered.position,
+        updated_at = ${now.toISOString()}::timestamptz
+      from reordered
+      where tags.id = reordered.id
+        and tags.user_id = ${userId}
+        and tags.position <> reordered.position
+    `);
   },
   async mergeTag({ userId, tagId, intoTagId }) {
     // 付与を統合先へ移し、元のタグを消す（元の付与はcascadeで消える）。

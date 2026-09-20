@@ -50,6 +50,9 @@ const createTagRepositoryStub = (
   renameTag: async () => {
     throw new Error("should not rename a tag");
   },
+  reorderTags: async () => {
+    throw new Error("should not reorder tags");
+  },
   mergeTag: async () => {
     throw new Error("should not merge tags");
   },
