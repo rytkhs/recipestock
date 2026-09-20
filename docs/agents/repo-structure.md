@@ -114,22 +114,29 @@ Put these here:
 - `RecipeDraftContent`
 - import request / response schemas
 - recipe request / response schemas
-- auth-related schemas
 - billing-related schemas
+- limits that belong to an API contract, next to the schema they constrain, whether a schema here validates them (`IMPORT_TEXT_MAX_LENGTH`) or the API enforces them itself (`MAX_TAG_NAME_LENGTH`)
 
 Use these schemas at API boundaries and in frontend forms where applicable.
 
+Better Auth owns the auth endpoints, so auth has no request / response schemas here. Its shared constants live in `packages/shared`.
+
+This package depends on Zod. A module here that needs no Zod is worth a second look: unless it describes the API contract, it belongs in `packages/shared`.
+
 ### `packages/shared`
 
-Shared deterministic logic used by both API and frontend.
+Deterministic logic and constants shared across packages, with no Zod dependency.
 
 Put these here:
 
 - URL normalization
 - `searchText` generation
 - constants
-- plan limit types and values
+- plan names, plan limit types, and values
+- constants that an API configuration and the UI must agree on, such as password length, OTP length, and email-link expiry
 - source platform detection
+
+`packages/schemas` may import from here; this package must not import from `packages/schemas`.
 
 Do not put code that requires server-only secrets or Cloudflare bindings here unless it is explicitly isolated from frontend bundles.
 
@@ -162,7 +169,7 @@ Cloudflare Worker
 
 - API request / response contracts belong in `packages/schemas`.
 - Database schema and migrations belong in `packages/db`.
-- Business logic shared by API and web belongs in `packages/shared`.
+- Business logic and constants shared across packages belong in `packages/shared`.
 - Cloudflare binding code, Stripe server code, R2 signing, Resend calls, and AI calls belong in `apps/api`.
 - UI state, route loaders, forms, and visual components belong in `apps/web`.
 - Repo-wide lint, format, and TypeScript config guidance belongs in `packages/config`.

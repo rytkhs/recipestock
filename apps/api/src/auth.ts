@@ -4,7 +4,8 @@ import {
   EMAIL_CHANGE_LINK_EXPIRES_IN_HOURS,
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
-} from "@recipestock/schemas";
+  OTP_LENGTH,
+} from "@recipestock/shared";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { type EmailOTPOptions, emailOTP } from "better-auth/plugins/email-otp";
@@ -177,7 +178,7 @@ const createAuth = (env: Bindings) => {
         : undefined,
     plugins: [
       emailOTP({
-        otpLength: 6,
+        otpLength: OTP_LENGTH,
         sendVerificationOnSignUp: true,
         sendVerificationOTP: emailCallbacks.sendVerificationOTP,
       }),

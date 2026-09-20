@@ -1,9 +1,10 @@
+import { PLAN_NAMES } from "@recipestock/shared";
 import { z } from "zod";
 
 export const getMeResponseSchema = z.object({
   userId: z.string(),
   email: z.string().email(),
-  plan: z.enum(["free", "pro"]),
+  plan: z.enum(PLAN_NAMES),
   recipeCount: z.number().int().nonnegative(),
   recipeLimit: z.number().int().positive().nullable(),
   isRecipeLimitReached: z.boolean(),

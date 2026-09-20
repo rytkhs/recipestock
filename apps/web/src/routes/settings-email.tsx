@@ -1,4 +1,4 @@
-import { EMAIL_CHANGE_LINK_EXPIRES_IN_HOURS } from "@recipestock/schemas";
+import { EMAIL_CHANGE_LINK_EXPIRES_IN_HOURS } from "@recipestock/shared";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import {
   type FormEvent,

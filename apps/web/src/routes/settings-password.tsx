@@ -1,5 +1,5 @@
 import { CheckCircle, Circle } from "@phosphor-icons/react";
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/schemas";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/shared";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
