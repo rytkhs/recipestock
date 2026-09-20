@@ -22,7 +22,7 @@ Metadata describing where a **Recipe** came from, such as the source URL, normal
 _Avoid_: Origin, reference, citation
 
 **Tag**:
-A user-owned label attached to **Recipes** to narrow the recipe list. Tags form the user's vocabulary: a **Tag** exists independently of any **Recipe** and is renamed, merged, or deleted as a whole. A **Tag** is not part of **RecipeContent** or **Source**.
+A user-owned label attached to **Recipes** to narrow the recipe list. Tags form the user's vocabulary: a **Tag** exists independently of any **Recipe** and is renamed, merged, or deleted as a whole. The vocabulary is kept in an order the user decides; it does not change with how many **Recipes** carry a **Tag**. A **Tag** is not part of **RecipeContent** or **Source**.
 _Avoid_: Category, Folder, Label
 
 **Import Job**:
