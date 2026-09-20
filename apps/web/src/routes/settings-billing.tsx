@@ -11,7 +11,6 @@ import {
   createBillingPortal,
   createCheckout,
 } from "../features/billing/api";
-import { BillingNotice } from "../features/billing/billing-notice";
 import {
   ContractSection,
   CurrentPlanSection,
@@ -23,6 +22,7 @@ import {
   useCheckoutConfirmation,
 } from "../features/billing/use-checkout-confirmation";
 import {
+  SettingsNotice,
   SettingsSubpageTopBar,
   settingsPageBodyClass,
   settingsPageClass,
@@ -55,27 +55,27 @@ const ArrivalNotice = ({
 }) => {
   if (confirmation === "waiting") {
     return (
-      <BillingNotice
+      <SettingsNotice
         icon={<Spinner aria-hidden="true" className="text-brand-sage" role="presentation" />}
         title="Proへの切り替えを確認しています"
         tone="info"
       >
         少しお待ちください。
-      </BillingNotice>
+      </SettingsNotice>
     );
   }
 
   if (confirmation === "confirmed") {
     return (
-      <BillingNotice title="Proになりました" tone="success">
+      <SettingsNotice title="Proになりました" tone="success">
         これからはレシピを上限なく保存できます。
-      </BillingNotice>
+      </SettingsNotice>
     );
   }
 
   if (confirmation === "timed_out") {
     return (
-      <BillingNotice
+      <SettingsNotice
         action={
           <Button size="sm" type="button" variant="outline" onClick={onRecheck}>
             もう一度確認
@@ -85,13 +85,13 @@ const ArrivalNotice = ({
         tone="info"
       >
         反映に時間がかかっています。少し時間をおいてから、もう一度確認してください。
-      </BillingNotice>
+      </SettingsNotice>
     );
   }
 
   if (state.contract?.kind === "payment_failed") {
     return (
-      <BillingNotice
+      <SettingsNotice
         action={
           <Button disabled={isPortalSubmitting} size="sm" type="button" onClick={onOpenPortal}>
             支払い方法を更新
@@ -101,7 +101,7 @@ const ArrivalNotice = ({
         tone="warning"
       >
         支払い方法を更新してください。このままだとFreeに戻ります。
-      </BillingNotice>
+      </SettingsNotice>
     );
   }
 
@@ -109,32 +109,32 @@ const ArrivalNotice = ({
     const isStillFull = state.plan === "free" && state.savedRecipes !== "room";
 
     return (
-      <BillingNotice title="共有したレシピは保存されていません" tone="warning">
+      <SettingsNotice title="共有したレシピは保存されていません" tone="warning">
         {isStillFull
           ? "保存できる上限に達していたためです。保存できるようにしてから、もう一度共有してください。"
           : "保存できる上限に達していたためです。今は保存できるので、もう一度共有してください。"}
-      </BillingNotice>
+      </SettingsNotice>
     );
   }
 
   if (arrival.from === "shortcut" && arrival.upsell === "ai_usage_limit") {
     return (
-      <BillingNotice title="共有したレシピは取り込まれていません" tone="warning">
+      <SettingsNotice title="共有したレシピは取り込まれていません" tone="warning">
         {/* また取り込める日は、下の「今のプラン」に出ている。 */}
         {state.importLimitReached
           ? `今月のAI取り込みの上限に達していたためです。${
               state.plan === "free" ? "Proにすると、もっと取り込めます。" : ""
             }`
           : "今月のAI取り込みの上限に達していたためです。今は取り込めるので、もう一度共有してください。"}
-      </BillingNotice>
+      </SettingsNotice>
     );
   }
 
   if (arrival.checkout === "cancel") {
     return (
-      <BillingNotice title="手続きを中止しました" tone="info">
+      <SettingsNotice title="手続きを中止しました" tone="info">
         料金はかかっていません。
-      </BillingNotice>
+      </SettingsNotice>
     );
   }
 

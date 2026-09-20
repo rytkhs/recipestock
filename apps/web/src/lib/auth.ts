@@ -83,11 +83,12 @@ export const signOut = async () => {
 };
 
 // 確認メールは新しいメールアドレス宛に届き、リンクを開いた時点で変更が完了する。
-// 戻り先をメールアドレスのページにして、開いた人が今のメールアドレスを確かめられるようにする。
+// 戻り先はメールアドレスのページ。目印を付けて、リンクから戻ったことを見分ける。
+// 開けなかったときは、better-authが戻り先に`&error=<コード>`を足す。
 export const changeEmail = async (newEmail: string) => {
   const result = await authClient.changeEmail({
     newEmail,
-    callbackURL: "/settings/email",
+    callbackURL: "/settings/email?from=verify-link",
   });
   assertAuthSuccess(result);
 };

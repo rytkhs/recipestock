@@ -1,6 +1,7 @@
 import { CaretLeft } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../../components/screen-top-bar";
 
 // 設定のページはどれもタグの管理と同じ幅にする。広い画面でも1列のまま読む。
@@ -50,3 +51,33 @@ export const SettingsFormMessage = ({
       </p>
     </div>
   );
+
+const noticeToneClass = {
+  info: "border-brand-line-soft bg-brand-paper-muted",
+  success: "border-brand-sage-soft bg-brand-sage-soft/30",
+  warning: "border-brand-orange-soft bg-brand-orange-soft/25",
+} as const;
+
+// ページの冒頭に、そのとき伝えることを1つだけ出す。戻ってきた理由や、手続きの結果に使う。
+export const SettingsNotice = ({
+  action,
+  children,
+  icon,
+  title,
+  tone,
+}: {
+  action?: ReactNode;
+  children?: ReactNode;
+  icon?: ReactNode;
+  title: string;
+  tone: keyof typeof noticeToneClass;
+}) => (
+  <div className={cn("rounded-[14px] border p-4", noticeToneClass[tone])} role="status">
+    <div className="flex min-w-0 items-center gap-2">
+      {icon}
+      <p className="min-w-0 font-semibold text-brand-ink text-sm">{title}</p>
+    </div>
+    {children ? <p className="mt-1 text-brand-walnut text-sm leading-6">{children}</p> : null}
+    {action ? <div className="mt-3">{action}</div> : null}
+  </div>
+);
