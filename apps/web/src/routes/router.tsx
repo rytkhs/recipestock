@@ -448,14 +448,20 @@ const routeTree = rootRoute.addChildren([
 
 type AppRouterOptions = Omit<Parameters<typeof createRouter>[0], "routeTree">;
 
+// 戻る・進むでは、その画面を離れたときのスクロール位置に戻す。
 export const createAppRouter = (options?: AppRouterOptions) =>
-  createRouter({ routeTree, ...options });
+  createRouter({ routeTree, scrollRestoration: true, ...options });
 
 const router = createAppRouter();
 
 declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
+  }
+
+  interface HistoryState {
+    /** 一覧から開いた詳細の履歴に付ける。詳細の戻るで、履歴を戻って一覧の位置に帰すため。 */
+    openedFromRecipeList?: true;
   }
 }
 

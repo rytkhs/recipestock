@@ -15,9 +15,11 @@ import {
   imageOnlyRecipeContentFixture,
   importJobFixture,
   type LoginAccountFixture,
+  linkedShortcutCredentialsFixture,
   MOCK_RECIPE_SEED_COUNT,
   type MockTag,
   mockRecipeId,
+  passwordAndGoogleLoginAccountsFixture,
   passwordLoginAccountsFixture,
   proBillingStatusFixture,
   proPriceFixture,
@@ -63,6 +65,20 @@ export type MockState = {
   failures: {
     /** "always" は全ページ、"after-first-page" は2ページ目以降を500にする。 */
     listRecipes?: "always" | "after-first-page";
+    getViewer?: boolean;
+    listTags?: boolean;
+    getBillingStatus?: boolean;
+    getProPrice?: boolean;
+    createCheckout?: boolean;
+    createBillingPortal?: boolean;
+    listLoginAccounts?: boolean;
+    changeEmail?: boolean;
+    changePassword?: "generic" | "invalid-password";
+    signOut?: boolean;
+    getPushSubscriptions?: boolean;
+    listShortcutCredentials?: boolean;
+    issueShortcutCredential?: boolean;
+    revokeShortcutCredential?: boolean;
   };
 };
 
@@ -71,6 +87,7 @@ export const scenarioGroups = [
   { id: "base", label: "基本" },
   { id: "recipes", label: "レシピ一覧・詳細" },
   { id: "plan", label: "プラン・上限" },
+  { id: "settings", label: "設定・連携" },
   { id: "import", label: "取り込み" },
   { id: "account", label: "アカウント" },
   { id: "session", label: "セッション" },
@@ -228,6 +245,22 @@ export const scenarios: Scenario[] = [
     },
   },
   {
+    id: "pro-import-limit",
+    group: "plan",
+    label: "Pro(今月のAI取り込みが上限)",
+    build: () => {
+      const state = baseState();
+
+      return {
+        ...state,
+        viewer: {
+          ...state.viewer,
+          aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
+        },
+      };
+    },
+  },
+  {
     id: "checkout-pending",
     group: "plan",
     label: "決済から戻った直後(数秒でProに変わる)",
@@ -243,10 +276,100 @@ export const scenarios: Scenario[] = [
     }),
   },
   {
+    id: "pro-canceling-no-lock",
+    group: "plan",
+    label: "Pro(解約予約中・Free上限以内)",
+    build: () => {
+      const state = baseState();
+      const recipeCount = 3;
+
+      return {
+        ...state,
+        viewer: viewerFixture({ plan: "pro", recipeCount }),
+        billing: proBillingStatusFixture({ cancelAtPeriodEnd: true }),
+        recipes: recipeListFixture({ count: recipeCount }),
+        recipeTags: recipeTagsFixture({ count: recipeCount }),
+      };
+    },
+  },
+  {
     id: "pro-past-due",
     group: "plan",
     label: "Pro(支払いを確認できない)",
     build: () => ({ ...baseState(), billing: proBillingStatusFixture({ status: "past_due" }) }),
+  },
+  {
+    id: "billing-status-error",
+    group: "plan",
+    label: "契約状態の取得失敗",
+    build: () => ({ ...baseState(), failures: { getBillingStatus: true } }),
+  },
+  {
+    id: "pro-price-error",
+    group: "plan",
+    label: "Pro価格の取得失敗",
+    build: () => ({ ...freeState(2), failures: { getProPrice: true } }),
+  },
+  {
+    id: "checkout-error",
+    group: "plan",
+    label: "決済画面を開けない",
+    build: () => ({ ...freeState(2), failures: { createCheckout: true } }),
+  },
+  {
+    id: "billing-portal-error",
+    group: "plan",
+    label: "契約管理画面を開けない",
+    build: () => ({ ...baseState(), failures: { createBillingPortal: true } }),
+  },
+  {
+    id: "linked-devices",
+    group: "settings",
+    label: "共有を2台と連携中",
+    build: () => ({
+      ...baseState(),
+      shortcutCredentials: linkedShortcutCredentialsFixture(),
+    }),
+  },
+  {
+    id: "viewer-error",
+    group: "settings",
+    label: "プラン・利用状況の取得失敗",
+    build: () => ({ ...baseState(), failures: { getViewer: true } }),
+  },
+  {
+    id: "tags-error",
+    group: "settings",
+    label: "タグの取得失敗",
+    build: () => ({ ...baseState(), failures: { listTags: true } }),
+  },
+  {
+    id: "shortcut-credentials-error",
+    group: "settings",
+    label: "連携端末の取得失敗",
+    build: () => ({ ...baseState(), failures: { listShortcutCredentials: true } }),
+  },
+  {
+    id: "push-subscriptions-error",
+    group: "settings",
+    label: "通知状態の取得失敗",
+    build: () => ({ ...baseState(), failures: { getPushSubscriptions: true } }),
+  },
+  {
+    id: "shortcut-issue-error",
+    group: "settings",
+    label: "連携キーの発行失敗",
+    build: () => ({ ...baseState(), failures: { issueShortcutCredential: true } }),
+  },
+  {
+    id: "shortcut-revoke-error",
+    group: "settings",
+    label: "端末の連携解除失敗",
+    build: () => ({
+      ...baseState(),
+      shortcutCredentials: linkedShortcutCredentialsFixture(),
+      failures: { revokeShortcutCredential: true },
+    }),
   },
   {
     id: "importing",
@@ -302,6 +425,42 @@ export const scenarios: Scenario[] = [
     group: "account",
     label: "Googleだけでログイン(パスワードなし)",
     build: () => ({ ...baseState(), loginAccounts: googleLoginAccountsFixture() }),
+  },
+  {
+    id: "password-and-google",
+    group: "account",
+    label: "パスワードとGoogleでログイン",
+    build: () => ({
+      ...baseState(),
+      loginAccounts: passwordAndGoogleLoginAccountsFixture(),
+    }),
+  },
+  {
+    id: "login-methods-error",
+    group: "account",
+    label: "ログイン方法の取得失敗",
+    build: () => ({ ...baseState(), failures: { listLoginAccounts: true } }),
+  },
+  {
+    id: "account-write-error",
+    group: "account",
+    label: "メール・パスワード変更失敗",
+    build: () => ({
+      ...baseState(),
+      failures: { changeEmail: true, changePassword: "generic" },
+    }),
+  },
+  {
+    id: "invalid-current-password",
+    group: "account",
+    label: "現在のパスワードが不一致",
+    build: () => ({ ...baseState(), failures: { changePassword: "invalid-password" } }),
+  },
+  {
+    id: "sign-out-error",
+    group: "account",
+    label: "ログアウト失敗",
+    build: () => ({ ...baseState(), failures: { signOut: true } }),
   },
   {
     id: "signed-out",
