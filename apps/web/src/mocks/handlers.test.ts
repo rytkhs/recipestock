@@ -468,9 +468,31 @@ describe("mock handlers", () => {
 
     await send(handlers, "PUT", "/api/recipes/recipe_002/tags", { names: ["bbq"] });
     expect((await getRecipe(handlers, "recipe_002")).tags).toEqual([attached[1]]);
+    // 語彙は作った順に並び、付いている件数では動かない。
     expect(await listTags(handlers)).toEqual([
-      { ...attached[1], recipeCount: 2 },
       { ...attached[0], recipeCount: 1 },
+      { ...attached[1], recipeCount: 2 },
+    ]);
+  });
+
+  it("並べ替えで送ったタグを先頭に置き、送らなかったタグを後ろに残す", async () => {
+    const handlers = setup("no-tags");
+    await send(handlers, "PUT", "/api/recipes/recipe_001/tags", {
+      names: ["主菜", "作り置き", "お弁当"],
+    });
+    const created = await listTags(handlers);
+    expect(created.map((tag) => tag.name)).toEqual(["主菜", "作り置き", "お弁当"]);
+
+    const response = await send(handlers, "PUT", "/api/tags/order", {
+      tagIds: [created[2]?.id, created[2]?.id],
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect((await listTags(handlers)).map((tag) => tag.name)).toEqual([
+      "お弁当",
+      "主菜",
+      "作り置き",
     ]);
   });
 

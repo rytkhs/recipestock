@@ -1,4 +1,7 @@
 import {
+  ArrowDown,
+  ArrowLineUp,
+  ArrowUp,
   CaretLeft,
   DotsThreeVertical,
   PencilSimple,
@@ -32,19 +35,30 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import { invalidateRecipeLists, recipesQueryKeys } from "../features/recipes";
 import { readRecipeListFilters, writeRecipeListFilters } from "../features/recipes/list-search";
-import { deleteTag, listTags, mergeTag, renameTag, tagsQueryKeys } from "../features/tags";
+import {
+  deleteTag,
+  listTags,
+  mergeTag,
+  moveTagTo,
+  renameTag,
+  reorderTags,
+  tagsQueryKeys,
+} from "../features/tags";
 import { ApiClientError } from "../lib/api";
 
 type MergeRequest = {
   source: TagWithCount;
   target: RecipeTag;
 };
+
+const tagOrderMutationKey = ["tag-order"] as const;
 
 // 消したタグのidを、一覧へ戻るときに引き継ぐ絞り込み条件からも外す。
 const forgetTagInRecipeListFilters = (tagId: string) => {
@@ -62,6 +76,7 @@ export const TagsRoute = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const tagsQuery = useQuery({ queryKey: tagsQueryKeys.all(), queryFn: listTags });
+  const tags = tagsQuery.data;
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [mergeRequest, setMergeRequest] = useState<MergeRequest | null>(null);
@@ -96,6 +111,23 @@ export const TagsRoute = () => {
       setActionError("タグの名前を変更できませんでした。");
     },
   });
+  // 押すたびに並び全体を送る。同じ利用者の要求は順に送り、後から押した並びが最後に届くようにする。
+  const reorderMutation = useMutation({
+    mutationKey: tagOrderMutationKey,
+    scope: { id: "tag-order" },
+    mutationFn: (tagIds: string[]) => reorderTags(tagIds),
+    onError: () => {
+      setActionError("タグの並びを変えられませんでした。");
+    },
+    onSettled: async () => {
+      // 後に押した分が残っていれば、その結果で置き換わるので途中では取り直さない。
+      if (queryClient.isMutating({ mutationKey: tagOrderMutationKey }) > 1) {
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() });
+    },
+  });
   const mergeMutation = useMutation({
     mutationFn: ({ source, target }: MergeRequest) => mergeTag(source.id, target.id),
     onSuccess: async (_tag, { source }) => {
@@ -128,6 +160,17 @@ export const TagsRoute = () => {
     : countTagNameLength(normalizedEditingName.name) > MAX_TAG_NAME_LENGTH
       ? `タグ名は${MAX_TAG_NAME_LENGTH}文字までです。`
       : null;
+
+  const moveTag = (fromIndex: number, toIndex: number) => {
+    if (!tags) {
+      return;
+    }
+
+    setActionError(null);
+    const nextTags = moveTagTo(tags, fromIndex, toIndex);
+    queryClient.setQueryData<TagWithCount[]>(tagsQueryKeys.all(), nextTags);
+    reorderMutation.mutate(nextTags.map((tag) => tag.id));
+  };
 
   const startEditing = (tag: TagWithCount) => {
     setActionError(null);
@@ -185,18 +228,18 @@ export const TagsRoute = () => {
             タグを読み込めませんでした。
           </p>
         ) : null}
-        {tagsQuery.data?.length === 0 ? (
+        {tags?.length === 0 ? (
           <div className="mt-12 text-center">
             <p className="font-semibold text-brand-walnut text-lg">タグはまだありません</p>
             <p className="mt-2 text-brand-muted text-sm">レシピの詳細画面から付けられます。</p>
           </div>
         ) : null}
-        {tagsQuery.data && tagsQuery.data.length > 0 ? (
+        {tags && tags.length > 0 ? (
           <ul
             aria-label="タグ"
             className="divide-y divide-brand-line-soft overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm"
           >
-            {tagsQuery.data.map((tag) => (
+            {tags.map((tag, index) => (
               <li className="px-4 py-2.5" key={tag.id}>
                 {editingTagId === tag.id ? (
                   <form className="grid gap-1.5" onSubmit={(event) => submitRename(event, tag)}>
@@ -251,6 +294,34 @@ export const TagsRoute = () => {
                         <DotsThreeVertical weight="bold" />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-36">
+                        {tags.length > 1 ? (
+                          <>
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem
+                                disabled={index === 0}
+                                onClick={() => moveTag(index, 0)}
+                              >
+                                <ArrowLineUp weight="bold" />
+                                <span>先頭に移動</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={index === 0}
+                                onClick={() => moveTag(index, index - 1)}
+                              >
+                                <ArrowUp weight="bold" />
+                                <span>上に移動</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={index === tags.length - 1}
+                                onClick={() => moveTag(index, index + 1)}
+                              >
+                                <ArrowDown weight="bold" />
+                                <span>下に移動</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                            <DropdownMenuSeparator />
+                          </>
+                        ) : null}
                         <DropdownMenuGroup>
                           <DropdownMenuItem onClick={() => startEditing(tag)}>
                             <PencilSimple weight="bold" />
