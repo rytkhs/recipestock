@@ -1,7 +1,17 @@
-import { index, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { recipes } from "./recipes";
 
 // タグは利用者ごとの語彙。同じ利用者の中では、表示名を小文字にしたnormalized_nameで一つに収束させる。
+// positionは利用者が決めた並び。並びはposition, created_at, idで決まるので、
+// 同時に作って値が重なっても、消して隙間ができても困らない。一意制約も索引も置かない。
 export const tags = pgTable(
   "tags",
   {
@@ -9,6 +19,7 @@ export const tags = pgTable(
     userId: text("user_id").notNull(),
     name: text("name").notNull(),
     normalizedName: text("normalized_name").notNull(),
+    position: integer("position").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

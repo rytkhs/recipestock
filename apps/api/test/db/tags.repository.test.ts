@@ -145,10 +145,11 @@ describe("Tag repository with Neon Postgres", () => {
     await expect(recipeRepository.getRecipe(userId, recipeA)).resolves.toMatchObject({
       tags: [expect.objectContaining({ name: "お弁当" })],
     });
+    // 語彙は作った順に並び、付いている件数では動かない。
     await expect(tagRepository.listTags(userId)).resolves.toEqual([
-      expect.objectContaining({ name: "お弁当", recipeCount: 1 }),
       expect.objectContaining({ name: "作り置き", recipeCount: 0 }),
       expect.objectContaining({ name: "鶏肉", recipeCount: 0 }),
+      expect.objectContaining({ name: "お弁当", recipeCount: 1 }),
     ]);
 
     // 揃えた名前が同じなら既存のタグを使い、最初に付けたときの表示名のまま返す。
@@ -270,6 +271,44 @@ describe("Tag repository with Neon Postgres", () => {
     ]);
   });
 
+  it("並びは送った順になり、送られなかったタグは相対順のまま後ろに残る", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_tags_order_user_${runId}`;
+    const otherUserId = `dbtest_tags_order_other_${runId}`;
+    const recipeId = `dbtest_tags_order_recipe_${runId}`;
+    const otherRecipeId = `dbtest_tags_order_other_recipe_${runId}`;
+
+    await insertRecipes(userId, [{ id: recipeId, createdAt: minutesAfterBase(0) }]);
+    await insertRecipes(otherUserId, [{ id: otherRecipeId, createdAt: minutesAfterBase(0) }]);
+    await replaceTags(userId, recipeId, ["主菜", "副菜", "作り置き"], 1);
+    await replaceTags(otherUserId, otherRecipeId, ["主菜", "副菜"], 1);
+
+    const namesOf = (id: string) =>
+      tagRepository.listTags(id).then((listed) => listed.map((tag) => tag.name));
+
+    // 新しく作ったタグは語彙の末尾に入る。
+    await replaceTags(userId, recipeId, ["主菜", "副菜", "作り置き", "お弁当"], 2);
+    await expect(namesOf(userId)).resolves.toEqual(["主菜", "副菜", "作り置き", "お弁当"]);
+
+    const bento = await tagIdOf(userId, "お弁当");
+    const mealPrep = await tagIdOf(userId, "作り置き");
+    const otherMain = await tagIdOf(otherUserId, "主菜");
+
+    // 他人のタグと消えたidは無視し、送られなかった「主菜」「副菜」は今の順のまま後ろに回す。
+    await tagRepository.reorderTags({
+      userId,
+      tagIds: [bento, otherMain, `dbtest_tags_order_missing_${runId}`, mealPrep],
+      now: minutesAfterBase(3),
+    });
+
+    await expect(namesOf(userId)).resolves.toEqual(["お弁当", "作り置き", "主菜", "副菜"]);
+    await expect(namesOf(otherUserId)).resolves.toEqual(["主菜", "副菜"]);
+
+    // 並べ替えた後に作ったタグも末尾に入る。
+    await replaceTags(userId, recipeId, ["主菜", "汁物"], 4);
+    await expect(namesOf(userId)).resolves.toEqual(["お弁当", "作り置き", "主菜", "副菜", "汁物"]);
+  });
+
   it("名前の変更は、別のタグと重なれば変えずにそのタグを返す", async () => {
     const runId = crypto.randomUUID();
     const userId = `dbtest_tags_rename_user_${runId}`;
@@ -360,9 +399,10 @@ describe("Tag repository with Neon Postgres", () => {
     await expect(recipeRepository.getRecipe(userId, sourceOnly)).resolves.toMatchObject({
       tags: [{ id: target, name: "鶏肉" }],
     });
+    // 統合しても残ったタグの並びは変わらない。
     await expect(tagRepository.listTags(userId)).resolves.toEqual([
-      { id: target, name: "鶏肉", recipeCount: 2 },
       { id: mealPrep, name: "作り置き", recipeCount: 1 },
+      { id: target, name: "鶏肉", recipeCount: 2 },
     ]);
     await expect(
       tagRepository.mergeTag({ userId, tagId: source, intoTagId: target }),

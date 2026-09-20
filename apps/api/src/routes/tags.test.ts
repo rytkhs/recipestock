@@ -12,6 +12,9 @@ const createTagRepositoryStub = (overrides: Partial<TagRepository> = {}): TagRep
   renameTag: async () => {
     throw new Error("should not rename a tag");
   },
+  reorderTags: async () => {
+    throw new Error("should not reorder tags");
+  },
   mergeTag: async () => {
     throw new Error("should not merge tags");
   },
@@ -157,6 +160,61 @@ describe("Tag routes", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("未ログインではタグの並びを変えられない", async () => {
+    const testApp = createSilentTestApp({
+      auth: createTestAuth(null),
+      tagRepository: createTagRepositoryStub(),
+    });
+
+    const response = await testApp.request(
+      "/api/tags/order",
+      jsonRequest("PUT", { tagIds: ["tag_1"] }),
+      env,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("重複したidを落としてタグの並びを置き換える", async () => {
+    const calls: unknown[] = [];
+    const testApp = createSilentTestApp({
+      auth: createTestAuth(),
+      tagRepository: createTagRepositoryStub({
+        reorderTags: async (params) => {
+          calls.push(params);
+        },
+      }),
+    });
+
+    const response = await testApp.request(
+      "/api/tags/order",
+      jsonRequest("PUT", { tagIds: ["tag_2", "tag_1", "tag_2"] }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([
+      { userId: "user_123", tagIds: ["tag_2", "tag_1"], now: expect.any(Date) },
+    ]);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("形の合わない並びの要求は受け取らない", async () => {
+    const testApp = createSilentTestApp({
+      auth: createTestAuth(),
+      tagRepository: createTagRepositoryStub(),
+    });
+
+    for (const body of [{ tagIds: "tag_1" }, { tagIds: [""] }]) {
+      const response = await testApp.request("/api/tags/order", jsonRequest("PUT", body), env);
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "validation_failed" },
+      });
+    }
   });
 
   it("タグを別のタグへ統合し、統合先を返す", async () => {
