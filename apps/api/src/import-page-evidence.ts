@@ -317,9 +317,11 @@ const extractHtmlImportData = async (
   };
 };
 
-// microdata / RDFa の値は HTML 断片から起こすため、タグが表す区切りを自分で改行にする。
-// ブラウザと同じく区切りを生むのはブロック要素と <br> だけで、インライン要素の境界には何も足さない。
-// 未知の要素とカスタム要素はブラウザ既定が display: inline なので、ここでも境界にしない。
+// microdata / RDFa の値は HTML 断片から起こすため、タグが表す区切りを自分で補う。
+// 素の改行を使うと元テキストの折り返しと区別できず偽の区切りになるので、markdown 側と同じく
+// 非空白のマーカーを注入し、空白を畳んだあとで改行に戻す。
+// 区切りを生むのは UA 既定スタイルでブロック表示になる要素と <br> だけ。未知の要素と
+// カスタム要素はブラウザ既定が display: inline なので、ここでも境界にしない。
 const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "address",
   "article",
@@ -327,9 +329,11 @@ const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "blockquote",
   "br",
   "caption",
+  "center",
   "dd",
   "details",
   "dialog",
+  "dir",
   "div",
   "dl",
   "dt",
@@ -350,9 +354,12 @@ const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "legend",
   "li",
   "main",
+  "marquee",
   "menu",
   "nav",
   "ol",
+  "optgroup",
+  "option",
   "p",
   "pre",
   "search",
@@ -368,7 +375,24 @@ const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "ul",
 ]);
 
-const VOID_TEXT_BOUNDARY_TAG_NAMES = new Set(["br", "hr"]);
+// onEndTag は void 要素に登録すると例外を投げ、取り込み全体が落ちる。境界集合に何を足しても
+// 落ちないよう、HTML の void 要素を網羅して弾く。
+const VOID_TAG_NAMES = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
 
 const appendStructuredTextBoundary = (
   element: HtmlRewriterElement,
@@ -381,14 +405,14 @@ const appendStructuredTextBoundary = (
   if (!TEXT_BOUNDARY_TAG_NAMES.has(tagName)) return;
 
   for (const capture of structuredTextCaptures) {
-    capture.text += "\n";
+    capture.text += LINE_BREAK_MARKER;
   }
 
-  if (VOID_TEXT_BOUNDARY_TAG_NAMES.has(tagName)) return;
+  if (VOID_TAG_NAMES.has(tagName)) return;
 
   onHtmlElementEnd(element, () => {
     for (const capture of structuredTextCaptures) {
-      capture.text += "\n";
+      capture.text += LINE_BREAK_MARKER;
     }
   });
 };
@@ -631,10 +655,10 @@ const normalizeRecipeStructuredEvidence = (
     yieldText: builder.yieldText ? normalizeReadableText(builder.yieldText) : undefined,
     imageUrls: dedupeStrings(builder.imageUrls.map(normalizeReadableText).filter(Boolean)),
     rawIngredients: dedupeStrings(
-      builder.rawIngredients.map(normalizeReadableMultilineText).filter(Boolean),
+      builder.rawIngredients.map(normalizeMultilineText).filter(Boolean),
     ),
     rawInstructions: dedupeStrings(
-      builder.rawInstructions.map(normalizeReadableMultilineText).filter(Boolean),
+      builder.rawInstructions.map(normalizeMultilineText).filter(Boolean),
     ),
     structuredInstructions: builder.structuredInstructions,
   } satisfies ExtractedRecipeStructuredEvidence;
@@ -742,8 +766,15 @@ const normalizeMetaKey = (key: string | null) => {
 const normalizeReadableText = (value: string) =>
   decodeHtml(value).replace(/\s+/g, " ").trim().slice(0, 24_000);
 
+// 捕捉したテキストの仕上げ。ここだけがマーカーを知る。
 const normalizeReadableMultilineText = (value: string) =>
-  normalizeMultilineText(decodeHtml(value)).slice(0, 24_000);
+  decodeHtml(value)
+    .replace(/\s+/g, " ")
+    .replaceAll(LINE_BREAK_MARKER, "\n")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 24_000);
 
 const normalizeImageAlt = (value: string) => normalizeReadableText(value).slice(0, 120);
 

@@ -365,7 +365,9 @@ describe("Recipe page evidence", () => {
         `<h1 itemprop="name">Stew</h1>` +
         `<div itemprop="recipeInstructions">` +
         `<details><summary>Prep</summary>Slice.</details><dialog open>Serve.</dialog>` +
+        `<center>Rest.</center>` +
         `</div>` +
+        `<div itemprop="recipeIngredient"><select><option>Salt</option><option>Pepper</option></select></div>` +
         `</div></body></html>`,
     );
 
@@ -374,8 +376,60 @@ describe("Recipe page evidence", () => {
       name: "Stew",
       yieldText: undefined,
       imageUrls: [],
-      rawIngredients: [],
-      rawInstructions: ["Prep\nSlice.\n\nServe."],
+      rawIngredients: ["Salt\n\nPepper"],
+      rawInstructions: ["Prep\nSlice.\n\nServe.\n\nRest."],
+      structuredInstructions: [],
+    });
+  });
+
+  it("Microdataにvoid要素があっても取り込みが落ちない", async () => {
+    const evidence = await extractRecipeHtml(
+      `<html><body><div itemscope itemtype="https://schema.org/Recipe">` +
+        `<h1 itemprop="name">Soup</h1>` +
+        `<table itemprop="recipeIngredient"><colgroup><col><col></colgroup>` +
+        `<tr><td>Salt</td><td>1</td></tr></table>` +
+        `<div itemprop="recipeInstructions">Boil.<hr>Serve.</div>` +
+        `</div></body></html>`,
+    );
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Soup",
+      yieldText: undefined,
+      imageUrls: [],
+      rawIngredients: ["Salt\n\n1"],
+      rawInstructions: ["Boil.\nServe."],
+      structuredInstructions: [],
+    });
+  });
+
+  it("MicrodataでHTMLソースの折り返しを区切りとして扱わない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Batter</h1>
+            <div itemprop="recipeInstructions">
+              <p>Chop the
+                onion.</p>
+              <p>Fry it.</p>
+            </div>
+            <ul>
+              <li itemprop="recipeIngredient">plain flour,
+                sifted</li>
+            </ul>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Batter",
+      yieldText: undefined,
+      imageUrls: [],
+      rawIngredients: ["plain flour, sifted"],
+      rawInstructions: ["Chop the onion.\n\nFry it."],
       structuredInstructions: [],
     });
   });
