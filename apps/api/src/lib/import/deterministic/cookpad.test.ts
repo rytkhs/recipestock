@@ -144,6 +144,28 @@ describe("cookpadImportAdapter", () => {
     expect(consumeAiUsage).not.toHaveBeenCalled();
   });
 
+  it("手順の<br>とコツ・ポイントの段落区切りを改行として残す", async () => {
+    const stepTexts = ["じゃがいもを切る。<br>水にさらす。", ...STEP_TEXTS.slice(1)];
+
+    const result = await importCookpad({
+      printHtml: createCookpadPrintHtml({
+        stepTexts,
+        note: `
+          <div class="mb-rg">
+            <div>コツ・ポイント</div>
+            <div><p>水気をしっかり取ります。</p><p>油は少なめで大丈夫です。</p></div>
+          </div>
+        `,
+      }),
+      recipeHtml: createCookpadRecipeHtml({ stepTexts }),
+    });
+
+    expect(result.recipeDraftContent.steps[0].text).toBe("じゃがいもを切る。\n水にさらす。");
+    expect(result.recipeDraftContent.note).toBe(
+      "水気をしっかり取ります。\n油は少なめで大丈夫です。",
+    );
+  });
+
   it("同解像度ならq80を優先し、同一手順内の重複URLを除去する", async () => {
     const imageIdsByStep = [["duplicate", "duplicate"], [], [], [], [], []];
     const recipeHtml = createCookpadRecipeHtml({

@@ -1,4 +1,5 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
+import { normalizeMultilineText, normalizeTextForComparison } from "../text";
 import { type FetchedImportPage, RecipeImportError } from "../types";
 import {
   type DeterministicImportAdapter,
@@ -110,7 +111,7 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
     const ingredientGroups = buildIngredientGroups(printExtraction.ingredientRows);
     const title = normalizeText(printExtraction.title);
     const steps = printExtraction.steps.map((step, index) => ({
-      ...(normalizeText(step.text) ? { text: normalizeText(step.text) } : {}),
+      ...(normalizeMultilineText(step.text) ? { text: normalizeMultilineText(step.text) } : {}),
       images: (recipeExtraction.isPremium
         ? step.imageUrls
         : recipeExtraction.steps[index].imageUrls
@@ -147,7 +148,9 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
       referenceImages: [],
       ingredientGroups,
       steps,
-      ...(normalizeText(printExtraction.note) ? { note: normalizeText(printExtraction.note) } : {}),
+      ...(normalizeMultilineText(printExtraction.note)
+        ? { note: normalizeMultilineText(printExtraction.note) }
+        : {}),
     };
 
     return {
@@ -248,8 +251,16 @@ const extractCookpadPrintRecipe = async (
       },
     })
     .on("#recipe-print div.mb-rg p", {
+      element() {
+        if (extraction.note) extraction.note += "\n";
+      },
       text(text) {
         extraction.note += text.text;
+      },
+    })
+    .on("#recipe-print div.mb-rg br", {
+      element() {
+        extraction.note += "\n";
       },
     })
     .on("#recipe-print ol.grid > li", {
@@ -263,9 +274,19 @@ const extractCookpadPrintRecipe = async (
       },
     })
     .on("#recipe-print ol.grid > li p", {
+      element() {
+        const capture = stepStack.at(-1);
+        if (capture?.text) capture.text += "\n";
+      },
       text(text) {
         const capture = stepStack.at(-1);
         if (capture) capture.text += text.text;
+      },
+    })
+    .on("#recipe-print ol.grid > li p br", {
+      element() {
+        const capture = stepStack.at(-1);
+        if (capture) capture.text += "\n";
       },
     })
     .on("#recipe-print ol.grid > li picture", {
@@ -451,7 +472,7 @@ const assertCookpadExtractionsMatch = (
     const printFirstImageId = getCookpadStepImageId(printStep.imageUrls[0] ?? null);
     if (
       !recipeStep?.id ||
-      normalizeText(printStep.text) !== normalizeText(recipeStep.text) ||
+      normalizeTextForComparison(printStep.text) !== normalizeTextForComparison(recipeStep.text) ||
       (printFirstImageId &&
         getCookpadStepImageId(recipeStep.imageUrls[0] ?? null) !== printFirstImageId)
     ) {

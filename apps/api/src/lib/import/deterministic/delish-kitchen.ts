@@ -1,4 +1,5 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
+import { normalizeMultilineText, normalizeTextForComparison } from "../text";
 import { type FetchedImportPage, RecipeImportError } from "../types";
 import {
   type DeterministicImportAdapter,
@@ -139,7 +140,9 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
           const text = buildStepText(step);
           const structuredStep = structuredRecipe?.steps[index];
           const imageUrls =
-            structuredStep && normalizeText(step.text) === normalizeText(structuredStep.text)
+            structuredStep &&
+            normalizeTextForComparison(step.text) ===
+              normalizeTextForComparison(structuredStep.text)
               ? structuredStep.imageUrls
               : [];
           return {
@@ -301,9 +304,19 @@ const extractDelishKitchenRecipe = async (
       },
     })
     .on(".delish-recipe-steps .step-desc", {
+      element() {
+        const capture = stepStack.at(-1);
+        if (capture?.text) capture.text += "\n";
+      },
       text(text) {
         const capture = stepStack.at(-1);
         if (capture) capture.text += text.text;
+      },
+    })
+    .on(".delish-recipe-steps .step-desc br", {
+      element() {
+        const capture = stepStack.at(-1);
+        if (capture) capture.text += "\n";
       },
     })
     .on(".delish-recipe-steps .point", {
@@ -320,6 +333,12 @@ const extractDelishKitchenRecipe = async (
         if (index >= 0) pointStack[index] += text.text;
       },
     })
+    .on(".delish-recipe-steps .point br", {
+      element() {
+        const index = pointStack.length - 1;
+        if (index >= 0) pointStack[index] += "\n";
+      },
+    })
     .on(".delish-recipe-attention .attention-item-wrap p", {
       element(element) {
         attentionStack.push("");
@@ -331,6 +350,12 @@ const extractDelishKitchenRecipe = async (
       text(text) {
         const index = attentionStack.length - 1;
         if (index >= 0) attentionStack[index] += text.text;
+      },
+    })
+    .on(".delish-recipe-attention .attention-item-wrap p br", {
+      element() {
+        const index = attentionStack.length - 1;
+        if (index >= 0) attentionStack[index] += "\n";
       },
     })
     .on(".premium-service-section", {
@@ -472,14 +497,14 @@ const buildIngredientGroups = (rows: IngredientRow[]): RecipeDraftContent["ingre
 };
 
 const buildStepText = (step: StepCapture) => {
-  const text = normalizeText(step.text);
-  const points = step.points.map(normalizeText).filter(Boolean);
+  const text = normalizeMultilineText(step.text);
+  const points = step.points.map(normalizeMultilineText).filter(Boolean);
   if (points.length === 0) return text;
   return `${text}\n\nポイント: ${points.join("\n")}`;
 };
 
 const buildRecipeNote = (items: string[], isPartialImport: boolean) => {
-  const normalizedItems = items.map(normalizeText).filter(Boolean);
+  const normalizedItems = items.map(normalizeMultilineText).filter(Boolean);
   const sections = [
     ...(isPartialImport ? [RESTRICTED_RECIPE_NOTE] : []),
     ...(normalizedItems.length > 0 ? [`注意事項:\n${normalizedItems.join("\n")}`] : []),
