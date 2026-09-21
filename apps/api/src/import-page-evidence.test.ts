@@ -334,6 +334,128 @@ describe("Recipe page evidence", () => {
       "Scope outside ingredient",
     );
   });
+
+  it("Microdataの材料と手順でタグが表す区切りを改行として残す", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Onion soup</h1>
+            <ul><li itemprop="recipeIngredient">Onion<br>1 piece</li></ul>
+            <div itemprop="recipeInstructions"><p>Slice.</p><p>Fry.</p><p>Simmer.</p></div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Onion soup",
+      yieldText: undefined,
+      imageUrls: [],
+      rawIngredients: ["Onion\n1 piece"],
+      rawInstructions: ["Slice.\n\nFry.\n\nSimmer."],
+      structuredInstructions: [],
+    });
+  });
+
+  it("Microdataでdetailsなど見落としやすいブロック要素も区切りとして扱う", async () => {
+    const evidence = await extractRecipeHtml(
+      `<html><body><div itemscope itemtype="https://schema.org/Recipe">` +
+        `<h1 itemprop="name">Stew</h1>` +
+        `<div itemprop="recipeInstructions">` +
+        `<details><summary>Prep</summary>Slice.</details><dialog open>Serve.</dialog>` +
+        `<center>Rest.</center>` +
+        `</div>` +
+        `<div itemprop="recipeIngredient"><select><option>Salt</option><option>Pepper</option></select></div>` +
+        `</div></body></html>`,
+    );
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Stew",
+      yieldText: undefined,
+      imageUrls: [],
+      rawIngredients: ["Salt\n\nPepper"],
+      rawInstructions: ["Prep\nSlice.\n\nServe.\n\nRest."],
+      structuredInstructions: [],
+    });
+  });
+
+  it("Microdataにvoid要素があっても取り込みが落ちない", async () => {
+    const evidence = await extractRecipeHtml(
+      `<html><body><div itemscope itemtype="https://schema.org/Recipe">` +
+        `<h1 itemprop="name">Soup</h1>` +
+        `<table itemprop="recipeIngredient"><colgroup><col><col></colgroup>` +
+        `<tr><td>Salt</td><td>1</td></tr></table>` +
+        `<div itemprop="recipeInstructions">Boil.<hr>Serve.</div>` +
+        `</div></body></html>`,
+    );
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Soup",
+      yieldText: undefined,
+      imageUrls: [],
+      rawIngredients: ["Salt\n\n1"],
+      rawInstructions: ["Boil.\nServe."],
+      structuredInstructions: [],
+    });
+  });
+
+  it("MicrodataでHTMLソースの折り返しを区切りとして扱わない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Batter</h1>
+            <div itemprop="recipeInstructions">
+              <p>Chop the
+                onion.</p>
+              <p>Fry it.</p>
+            </div>
+            <ul>
+              <li itemprop="recipeIngredient">plain flour,
+                sifted</li>
+            </ul>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Batter",
+      yieldText: undefined,
+      imageUrls: [],
+      rawIngredients: ["plain flour, sifted"],
+      rawInstructions: ["Chop the onion.\n\nFry it."],
+      structuredInstructions: [],
+    });
+  });
+
+  it("Microdataのインライン要素の境界には区切りを足さない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Tea</h1>
+            <span itemprop="recipeIngredient">Sugar <b>1</b><i>tsp</i><marquee>, sifted</marquee></span>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Tea",
+      yieldText: undefined,
+      imageUrls: [],
+      rawIngredients: ["Sugar 1tsp, sifted"],
+      rawInstructions: [],
+      structuredInstructions: [],
+    });
+  });
 });
 
 const extractRecipeHtml = (body: string) =>
