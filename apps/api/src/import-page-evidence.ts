@@ -319,13 +319,17 @@ const extractHtmlImportData = async (
 
 // microdata / RDFa の値は HTML 断片から起こすため、タグが表す区切りを自分で改行にする。
 // ブラウザと同じく区切りを生むのはブロック要素と <br> だけで、インライン要素の境界には何も足さない。
+// 未知の要素とカスタム要素はブラウザ既定が display: inline なので、ここでも境界にしない。
 const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "address",
   "article",
   "aside",
   "blockquote",
   "br",
+  "caption",
   "dd",
+  "details",
+  "dialog",
   "div",
   "dl",
   "dt",
@@ -341,14 +345,19 @@ const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "h5",
   "h6",
   "header",
+  "hgroup",
   "hr",
+  "legend",
   "li",
   "main",
+  "menu",
   "nav",
   "ol",
   "p",
   "pre",
+  "search",
   "section",
+  "summary",
   "table",
   "tbody",
   "td",

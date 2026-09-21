@@ -359,6 +359,27 @@ describe("Recipe page evidence", () => {
     });
   });
 
+  it("Microdataでdetailsなど見落としやすいブロック要素も区切りとして扱う", async () => {
+    const evidence = await extractRecipeHtml(
+      `<html><body><div itemscope itemtype="https://schema.org/Recipe">` +
+        `<h1 itemprop="name">Stew</h1>` +
+        `<div itemprop="recipeInstructions">` +
+        `<details><summary>Prep</summary>Slice.</details><dialog open>Serve.</dialog>` +
+        `</div>` +
+        `</div></body></html>`,
+    );
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual({
+      format: "microdata",
+      name: "Stew",
+      yieldText: undefined,
+      imageUrls: [],
+      rawIngredients: [],
+      rawInstructions: ["Prep\nSlice.\n\nServe."],
+      structuredInstructions: [],
+    });
+  });
+
   it("Microdataのインライン要素の境界には区切りを足さない", async () => {
     const evidence = await extractRecipeHtml(`
       <html>
