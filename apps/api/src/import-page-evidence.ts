@@ -30,6 +30,11 @@ export type RecipePageEvidence = {
   imageCandidates: RecipeImportImageCandidate[];
 };
 
+// html2md4llm はテキストノードを trim するため、素の改行や空白では要素境界で区切りが消える。
+// 区切りを非空白のマーカーとして埋め込み、normalizeMarkdownContent で復元する。
+const LINE_BREAK_MARKER = "";
+const SPACE_MARKER = "";
+
 export const extractRecipePageEvidence = async (
   page: FetchedImportPage,
   baseUrl: string,
@@ -258,6 +263,38 @@ const extractHtmlImportData = async (
         const alt = element.getAttribute("alt") ?? undefined;
         const candidate = imageRegistry.getOrCreate(rawUrl, alt);
         element.replace(candidate ? formatMarkdownImage(candidate.url, alt) : "", {
+          html: false,
+        });
+      },
+    })
+    .on("br", {
+      element(element) {
+        element.replace(LINE_BREAK_MARKER, { html: false });
+      },
+    })
+    .on("dt", {
+      element(element) {
+        element.before(LINE_BREAK_MARKER, { html: false });
+      },
+    })
+    .on("dd", {
+      element(element) {
+        element.before(SPACE_MARKER, { html: false });
+      },
+    })
+    .on("li > *", {
+      element(element) {
+        element.before(SPACE_MARKER, { html: false });
+      },
+    })
+    .on("*", {
+      text(text) {
+        if (ignoredTextDepth > 0 || text.removed) return;
+
+        const chunk = text.text;
+        if (!chunk.trim() || !/^\s|\s$/.test(chunk)) return;
+
+        text.replace(chunk.replace(/^\s+/, SPACE_MARKER).replace(/\s+$/, SPACE_MARKER), {
           html: false,
         });
       },
@@ -630,7 +667,7 @@ const normalizeImageAlt = (value: string) => normalizeReadableText(value).slice(
 
 const formatMarkdownImage = (url: string, alt?: string) => {
   const normalizedAlt = alt ? normalizeImageAlt(alt) : "";
-  return `\n![${escapeMarkdownImageAlt(normalizedAlt)}](<${url}>)\n`;
+  return `${LINE_BREAK_MARKER}![${escapeMarkdownImageAlt(normalizedAlt)}](<${url}>)${LINE_BREAK_MARKER}`;
 };
 
 const escapeMarkdownImageAlt = (value: string) =>
@@ -639,7 +676,10 @@ const escapeMarkdownImageAlt = (value: string) =>
 const normalizeMarkdownContent = (value: string) =>
   value
     .replace(/\r\n?/g, "\n")
+    .replaceAll(LINE_BREAK_MARKER, "\n")
+    .replaceAll(SPACE_MARKER, " ")
     .replace(/[^\S\n]+/g, " ")
+    .replace(/[^\S\n]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
     .slice(0, 24_000);

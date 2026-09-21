@@ -123,6 +123,21 @@ describe("delishKitchenImportAdapter", () => {
     });
   });
 
+  it("手順とポイントの<br>を改行として残し、JSON-LD照合を維持する", async () => {
+    const result = await importDelishKitchen({
+      stepTexts: ["玉ねぎを切る。<br>薄切りにする。", ...DEFAULT_STEP_TEXTS.slice(1)],
+      jsonLdStepTexts: ["玉ねぎを切る。\n薄切りにする。", ...DEFAULT_STEP_TEXTS.slice(1)],
+      points: ["加熱する直前に切りましょう。<br>繊維に沿って切ります。"],
+      attentionItems: ["調理中は<br>火元を離れないでください。"],
+    });
+
+    expect(result.recipeDraftContent.steps[0]).toEqual({
+      text: "玉ねぎを切る。\n薄切りにする。\n\nポイント: 加熱する直前に切りましょう。\n繊維に沿って切ります。",
+      images: [{ type: "externalImageUrl", url: STEP_IMAGE_URL }],
+    });
+    expect(result.recipeDraftContent.note).toBe("注意事項:\n調理中は\n火元を離れないでください。");
+  });
+
   it("SEO向けJSON-LD名と表示タイトルが異なっても成功する", async () => {
     const result = await importDelishKitchen({
       jsonLdName: "自宅で作る！牛丼の王道レシピ",
