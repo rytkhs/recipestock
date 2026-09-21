@@ -1,6 +1,7 @@
 /// <reference path="./html2md4llm.d.ts" />
 
 import html2md4llm from "html2md4llm";
+import { normalizeMultilineText } from "./lib/import/text";
 import {
   type FetchedImportPage,
   type RecipeImportImageCandidate,
@@ -316,6 +317,73 @@ const extractHtmlImportData = async (
   };
 };
 
+// microdata / RDFa の値は HTML 断片から起こすため、タグが表す区切りを自分で改行にする。
+// ブラウザと同じく区切りを生むのはブロック要素と <br> だけで、インライン要素の境界には何も足さない。
+const TEXT_BOUNDARY_TAG_NAMES = new Set([
+  "address",
+  "article",
+  "aside",
+  "blockquote",
+  "br",
+  "dd",
+  "div",
+  "dl",
+  "dt",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "header",
+  "hr",
+  "li",
+  "main",
+  "nav",
+  "ol",
+  "p",
+  "pre",
+  "section",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "tr",
+  "ul",
+]);
+
+const VOID_TEXT_BOUNDARY_TAG_NAMES = new Set(["br", "hr"]);
+
+const appendStructuredTextBoundary = (
+  element: HtmlRewriterElement,
+  structuredTextCaptures: RecipeStructuredTextCapture[],
+  onHtmlElementEnd: HtmlElementEndTagRegistrar,
+) => {
+  if (structuredTextCaptures.length === 0) return;
+
+  const tagName = element.tagName.toLowerCase();
+  if (!TEXT_BOUNDARY_TAG_NAMES.has(tagName)) return;
+
+  for (const capture of structuredTextCaptures) {
+    capture.text += "\n";
+  }
+
+  if (VOID_TEXT_BOUNDARY_TAG_NAMES.has(tagName)) return;
+
+  onHtmlElementEnd(element, () => {
+    for (const capture of structuredTextCaptures) {
+      capture.text += "\n";
+    }
+  });
+};
+
 const extractRecipeHtmlStructuredEvidence = async (
   page: FetchedImportPage,
   baseUrl: string,
@@ -351,6 +419,8 @@ const extractRecipeHtmlStructuredEvidence = async (
   await new HTMLRewriter()
     .on("*", {
       element(element) {
+        appendStructuredTextBoundary(element, structuredTextCaptures, onHtmlElementEnd);
+
         const microdataRecipe = createMicrodataRecipeBuilder(element);
         if (microdataRecipe) {
           microdataRecipeStack.push(microdataRecipe);
@@ -496,7 +566,7 @@ const startRecipeStructuredTextCapture = (
   const capture: RecipeStructuredTextCapture = { builder, properties, text: "" };
   structuredTextCaptures.push(capture);
   onHtmlElementEnd(element, () => {
-    const normalizedText = normalizeReadableText(capture.text);
+    const normalizedText = normalizeReadableMultilineText(capture.text);
     if (normalizedText) {
       appendRecipeStructuredValue(builder, properties, normalizedText, "");
     }
@@ -552,10 +622,10 @@ const normalizeRecipeStructuredEvidence = (
     yieldText: builder.yieldText ? normalizeReadableText(builder.yieldText) : undefined,
     imageUrls: dedupeStrings(builder.imageUrls.map(normalizeReadableText).filter(Boolean)),
     rawIngredients: dedupeStrings(
-      builder.rawIngredients.map(normalizeReadableText).filter(Boolean),
+      builder.rawIngredients.map(normalizeReadableMultilineText).filter(Boolean),
     ),
     rawInstructions: dedupeStrings(
-      builder.rawInstructions.map(normalizeReadableText).filter(Boolean),
+      builder.rawInstructions.map(normalizeReadableMultilineText).filter(Boolean),
     ),
     structuredInstructions: builder.structuredInstructions,
   } satisfies ExtractedRecipeStructuredEvidence;
@@ -662,6 +732,9 @@ const normalizeMetaKey = (key: string | null) => {
 
 const normalizeReadableText = (value: string) =>
   decodeHtml(value).replace(/\s+/g, " ").trim().slice(0, 24_000);
+
+const normalizeReadableMultilineText = (value: string) =>
+  normalizeMultilineText(decodeHtml(value)).slice(0, 24_000);
 
 const normalizeImageAlt = (value: string) => normalizeReadableText(value).slice(0, 120);
 
