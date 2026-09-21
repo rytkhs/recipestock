@@ -440,7 +440,7 @@ describe("Recipe page evidence", () => {
         <body>
           <div itemscope itemtype="https://schema.org/Recipe">
             <h1 itemprop="name">Tea</h1>
-            <span itemprop="recipeIngredient">Sugar <b>1</b><i>tsp</i></span>
+            <span itemprop="recipeIngredient">Sugar <b>1</b><i>tsp</i><marquee>, sifted</marquee></span>
           </div>
         </body>
       </html>
@@ -451,7 +451,7 @@ describe("Recipe page evidence", () => {
       name: "Tea",
       yieldText: undefined,
       imageUrls: [],
-      rawIngredients: ["Sugar 1tsp"],
+      rawIngredients: ["Sugar 1tsp, sifted"],
       rawInstructions: [],
       structuredInstructions: [],
     });

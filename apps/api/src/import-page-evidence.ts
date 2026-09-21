@@ -320,8 +320,10 @@ const extractHtmlImportData = async (
 // microdata / RDFa の値は HTML 断片から起こすため、タグが表す区切りを自分で補う。
 // 素の改行を使うと元テキストの折り返しと区別できず偽の区切りになるので、markdown 側と同じく
 // 非空白のマーカーを注入し、空白を畳んだあとで改行に戻す。
-// 区切りを生むのは UA 既定スタイルでブロック表示になる要素と <br> だけ。未知の要素と
-// カスタム要素はブラウザ既定が display: inline なので、ここでも境界にしない。
+// 区切りを生むのは WHATWG HTML Rendering の UA スタイルシートでブロック表示になる要素と
+// <br> だけ。inline-block の marquee は含めない。col / colgroup はテキストボックスを作らず、
+// col は void なので onEndTag が投げる。html / body / frameset は捕捉が跨がないため除く。
+// 未知の要素とカスタム要素はブラウザ既定が display: inline なので、ここでも境界にしない。
 const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "address",
   "article",
@@ -353,14 +355,15 @@ const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "hr",
   "legend",
   "li",
+  "listing",
   "main",
-  "marquee",
   "menu",
   "nav",
   "ol",
   "optgroup",
   "option",
   "p",
+  "plaintext",
   "pre",
   "search",
   "section",
@@ -373,6 +376,7 @@ const TEXT_BOUNDARY_TAG_NAMES = new Set([
   "thead",
   "tr",
   "ul",
+  "xmp",
 ]);
 
 // onEndTag は void 要素に登録すると例外を投げ、取り込み全体が落ちる。境界集合に何を足しても
