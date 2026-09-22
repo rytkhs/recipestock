@@ -32,13 +32,27 @@ const createErrorReporter = () => {
   return { errorReporter, reports };
 };
 
-const env = {
-  APP_ENV: "development",
-  APP_ORIGIN: "https://app.example.com",
+const requiredStringBindings = {
   DATABASE_URL: "postgresql://example",
+  APP_ORIGIN: "https://app.example.com",
+  BETTER_AUTH_SECRET: "secret",
+  AUTH_EMAIL_FROM: "Recipe Stock <login@example.com>",
+  RESEND_API_KEY: "re_test",
   STRIPE_PRO_PRICE_ID: "price_pro",
   STRIPE_SECRET_KEY: "sk_test",
   STRIPE_WEBHOOK_SECRET: "whsec_test",
+  CLOUDFLARE_ACCOUNT_ID: "account",
+  R2_BUCKET_NAME: "recipestock-images-test",
+  R2_ACCESS_KEY_ID: "access-key",
+  R2_SECRET_ACCESS_KEY: "secret-key",
+  VAPID_PUBLIC_KEY: "public-key",
+  VAPID_PRIVATE_KEY: "private-key",
+  VAPID_SUBJECT: "https://github.com/rytkhs/recipestock",
+} satisfies Partial<Bindings>;
+
+const env = {
+  APP_ENV: "development",
+  ...requiredStringBindings,
 };
 
 describe("API app composition", () => {
@@ -700,7 +714,7 @@ describe("cron handler", () => {
 
     await worker.scheduled?.(
       { cron: "*/5 * * * *", scheduledTime: Date.now(), noRetry: () => undefined },
-      workerEnv as Bindings,
+      { ...(workerEnv as Bindings), ...requiredStringBindings },
       ctx,
     );
     await Promise.all(pending);
