@@ -1,8 +1,10 @@
+import { env as workerEnv } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "./billing";
 import { type PushSender } from "./completion-notifications";
+import { type Bindings } from "./env";
 import { type ImportJobRecord, type ImportJobRepository } from "./import-jobs";
-import {
+import worker, {
   handleDeadLetteredImportJobMessage,
   handleImportQueueMessage,
   handleImportQueueMessageError,
@@ -678,5 +680,34 @@ describe("import dead letter queue handler", () => {
     ).rejects.toBe(error);
 
     expect(events).toEqual([]);
+  });
+});
+
+describe("cron handler", () => {
+  // withSentryはenvのQueueをProxyで包み、Proxy越しのmetrics()はIllegal invocationで落ちる。
+  // default exportを通して、包まれた状態でも滞留の確認がcheck-inまで進むことを固定する。
+  it("withSentryで包んだscheduledでもImport Queueのmetricsを読める", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const pending: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (promise: Promise<unknown>) => {
+        pending.push(promise);
+      },
+      passThroughOnException: () => undefined,
+      props: {},
+    } as unknown as ExecutionContext;
+
+    await worker.scheduled?.(
+      { cron: "*/5 * * * *", scheduledTime: Date.now(), noRetry: () => undefined },
+      workerEnv as Bindings,
+      ctx,
+    );
+    await Promise.all(pending);
+
+    const events = [...info.mock.calls, ...error.mock.calls].map(
+      ([line]) => JSON.parse(String(line)).event,
+    );
+    expect(events).toContain("import_queue_health_checked");
   });
 });

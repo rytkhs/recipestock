@@ -1,3 +1,4 @@
+import { env as workerEnv } from "cloudflare:workers";
 import { createDb } from "@recipestock/db";
 import * as Sentry from "@sentry/cloudflare";
 import { Hono } from "hono";
@@ -573,13 +574,18 @@ const handleImportDeadLetterQueue = async (
 
 /**
  * cronは`wrangler.jsonc`の`triggers.crons`の1本だけで、Import Queueの滞留を見る。
+ *
+ * Queueはhandlerに渡るenvでなく`cloudflare:workers`のenvから取る。`withSentry`はenvのQueueを
+ * Proxyで包み、本物に結び直すのは`send`と`sendBatch`だけなので、Proxy越しの`metrics()`は
+ * Illegal invocationで落ちる（@sentry/cloudflare 10.75.1）。SDKが直ればhandlerのenvに戻す。
  */
 const handleScheduled = (controller: ScheduledController, env: Bindings) =>
   checkImportQueueHealth({
     jobTimeoutMs: resolveImportJobTimeoutMs(env),
     logger: createLogger(),
     now: () => new Date(),
-    queue: env.IMPORT_QUEUE,
+    // `cloudflare:workers`のenvはhandlerに渡るenvと同じものだが、型は空の`Env`なので`Bindings`として読む。
+    queue: (workerEnv as Bindings).IMPORT_QUEUE,
     reportCheckIn: createSentryCheckInReporter({
       monitorSlug: IMPORT_QUEUE_HEALTH_MONITOR_SLUG,
       cron: controller.cron,
