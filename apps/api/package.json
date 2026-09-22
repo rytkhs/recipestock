@@ -8,7 +8,7 @@
   "scripts": {
     "analyze:bundle": "node scripts/analyze-bundle.mjs",
     "build": "tsc --noEmit",
-    "deploy": "wrangler deploy",
+    "deploy": "node --env-file-if-exists=../../.env scripts/deploy.mjs",
     "dev": "wrangler dev --port 8787",
     "test": "vitest run",
     "test:db": "node --env-file-if-exists=../../.env.test.local test/db/run.mjs",
@@ -24,6 +24,7 @@
     "@recipestock/db": "workspace:*",
     "@recipestock/schemas": "workspace:*",
     "@recipestock/shared": "workspace:*",
+    "@sentry/cloudflare": "^10.75.1",
     "ai": "^6.0.0",
     "aws4fetch": "^1.0.20",
     "better-auth": "^1.6.11",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.10",
     "@cloudflare/workers-types": "^4.20251209.0",
+    "@sentry/cli": "^3.8.0",
     "@types/web-push": "^3.6.4",
     "vitest": "^4.0.14",
     "wrangler": "^4.55.0"

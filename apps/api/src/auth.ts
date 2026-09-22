@@ -12,6 +12,7 @@ import { type EmailOTPOptions, emailOTP } from "better-auth/plugins/email-otp";
 import { type BillingRepository, createBillingRepository } from "./billing";
 import { type Bindings } from "./env";
 import { createResendEmailSender, type EmailSender } from "./lib/email/resend";
+import { createLogger, type Logger } from "./logger";
 import { createStripeBillingClient, type StripeBillingClient } from "./stripe-billing";
 
 export type AuthSession = {
@@ -37,13 +38,9 @@ type AuthFactory = (env: Bindings) => AuthInstance;
 
 type SendVerificationOTPData = Parameters<EmailOTPOptions["sendVerificationOTP"]>[0];
 
-type StripeCustomerEmailSyncLogger = {
-  error(...data: unknown[]): void;
-};
-
 export type SyncStripeCustomerEmailForUserParams = {
   email: string;
-  logger?: StripeCustomerEmailSyncLogger;
+  logger?: Logger;
   repository: Pick<BillingRepository, "getOrCreateAppUserBillingState">;
   stripeClient: Pick<StripeBillingClient, "updateCustomerEmail">;
   userId: string;
@@ -51,10 +48,10 @@ export type SyncStripeCustomerEmailForUserParams = {
 
 export const syncStripeCustomerEmailForUser = async ({
   email,
-  logger = console,
   repository,
   stripeClient,
   userId,
+  logger = createLogger({ userId }),
 }: SyncStripeCustomerEmailForUserParams) => {
   const appUser = await repository.getOrCreateAppUserBillingState(userId);
 
@@ -69,7 +66,7 @@ export const syncStripeCustomerEmailForUser = async ({
       userId,
     });
   } catch (error) {
-    logger.error("[auth] Stripe customer email sync failed", {
+    logger.error("stripe_customer_email_sync_failed", {
       error,
       stripeCustomerId: appUser.stripeCustomerId,
       userId,
@@ -200,9 +197,8 @@ const createAuth = (env: Bindings) => {
                 userId: user.id,
               });
             } catch (error) {
-              console.error("[auth] Stripe customer email sync hook failed", {
+              createLogger({ userId: user.id }).error("stripe_customer_email_sync_failed", {
                 error,
-                userId: user.id,
               });
             }
           },

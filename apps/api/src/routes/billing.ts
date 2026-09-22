@@ -15,6 +15,7 @@ import {
   derivePlanFromSubscriptions,
 } from "../billing";
 import { type ApiEnv } from "../context";
+import { type Logger } from "../logger";
 import { requireAuth } from "../middleware/auth";
 import {
   createStripeBillingClient,
@@ -48,12 +49,14 @@ const toProPrice = (price: StripePriceState): GetProPriceResponse => {
 
 const ensureStripeCustomerId = async ({
   appUserStripeCustomerId,
+  logger,
   repository,
   stripeClient,
   userEmail,
   userId,
 }: {
   appUserStripeCustomerId: string | null;
+  logger: Logger;
   repository: BillingRepository;
   stripeClient: StripeBillingClient;
   userEmail: string;
@@ -67,7 +70,7 @@ const ensureStripeCustomerId = async ({
         userId,
       });
     } catch (error) {
-      console.error("[billing] Stripe customer email sync failed", {
+      logger.error("stripe_customer_email_sync_failed", {
         error,
         stripeCustomerId: appUserStripeCustomerId,
         userId,
@@ -122,6 +125,7 @@ export const createBillingRoutes = ({
 
       const stripeCustomerId = await ensureStripeCustomerId({
         appUserStripeCustomerId: appUser.stripeCustomerId,
+        logger: c.var.logger,
         repository,
         stripeClient,
         userEmail,
@@ -146,6 +150,7 @@ export const createBillingRoutes = ({
       const appUser = await repository.getOrCreateAppUserBillingState(userId);
       const stripeCustomerId = await ensureStripeCustomerId({
         appUserStripeCustomerId: appUser.stripeCustomerId,
+        logger: c.var.logger,
         repository,
         stripeClient,
         userEmail,

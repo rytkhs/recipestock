@@ -2,8 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "./billing";
 import { type PushSender } from "./completion-notifications";
 import { type ImportJobRecord, type ImportJobRepository } from "./import-jobs";
-import { handleImportQueueMessage, handleImportQueueMessageError } from "./index";
+import {
+  handleDeadLetteredImportJobMessage,
+  handleImportQueueMessage,
+  handleImportQueueMessageError,
+  ImportJobDeadLetteredError,
+} from "./index";
 import { createLogger, createMemoryLogSink } from "./logger";
+import { type ErrorReporter } from "./monitoring";
 import { type StripeBillingClient, StripeWebhookSignatureError } from "./stripe-billing";
 import { createSilentTestApp, createTestAuth } from "./test-helpers";
 
@@ -12,6 +18,17 @@ afterEach(() => {
 });
 
 const auth = createTestAuth(null);
+
+const createErrorReporter = () => {
+  const reports: { error: unknown; context: Parameters<ErrorReporter["report"]>[1] }[] = [];
+  const errorReporter: ErrorReporter = {
+    report: (error, context) => {
+      reports.push({ error, context });
+    },
+  };
+
+  return { errorReporter, reports };
+};
 
 const env = {
   APP_ENV: "development",
@@ -52,6 +69,91 @@ describe("API app composition", () => {
         status: 401,
       }),
     ]);
+  });
+
+  it("外形監視用のhealthは依存先に触れずno-storeで200を返す", async () => {
+    const testApp = createSilentTestApp({
+      auth: {
+        getSession: async () => {
+          throw new Error("should not get session");
+        },
+        handleAuthRequest: async () => {
+          throw new Error("should not handle auth");
+        },
+      },
+    });
+
+    const response = await testApp.request("/api/health", {}, env);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ status: "ok" });
+  });
+
+  it("ログのrequestIdをX-Request-IDとして返す", async () => {
+    const sink = createMemoryLogSink();
+    const testApp = createSilentTestApp({
+      auth,
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+    });
+
+    const response = await testApp.request("/api/me", {}, env);
+
+    expect(response.headers.get("x-request-id")).toEqual(expect.any(String));
+    expect(sink.entries).toEqual([
+      expect.objectContaining({
+        event: "api_request_completed",
+        requestId: response.headers.get("x-request-id"),
+      }),
+    ]);
+  });
+
+  it("予期しない例外は500にしてrequestIdとroute付きでerror reporterへ送る", async () => {
+    const { errorReporter, reports } = createErrorReporter();
+    const error = new Error("session store failed");
+    const testApp = createSilentTestApp({
+      auth: {
+        getSession: async () => {
+          throw error;
+        },
+        handleAuthRequest: async () => new Response(null, { status: 404 }),
+      },
+      errorReporter,
+    });
+
+    const response = await testApp.request("/api/me", {}, env);
+
+    expect(response.status).toBe(500);
+    expect(reports).toEqual([
+      {
+        error,
+        context: {
+          tags: { request_id: response.headers.get("x-request-id"), route: "/api/me" },
+          userId: undefined,
+        },
+      },
+    ]);
+  });
+
+  it("4xxのHTTPExceptionはerror reporterへ送らない", async () => {
+    const { errorReporter, reports } = createErrorReporter();
+    const testApp = createSilentTestApp({ auth, errorReporter });
+
+    const response = await testApp.request(
+      "/api/billing/checkout",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: "https://evil.example.com",
+          "sec-fetch-site": "cross-site",
+        },
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(reports).toEqual([]);
   });
 
   it("CSRF対象APIへのcross-site form POSTは403を返す", async () => {
@@ -455,13 +557,15 @@ describe("import queue handler", () => {
     expect(events).toEqual(["ack"]);
   });
 
-  it("最終リトライ未満の予期しない例外はmessage.retryする", async () => {
+  it("最終リトライ未満の予期しない例外はmessage.retryし、error reporterへは送らない", async () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { errorReporter, reports } = createErrorReporter();
     const { events, message } = createMessage(3);
     const repositoryEvents: string[] = [];
 
     await handleImportQueueMessageError({
       error: new Error("database failed"),
+      errorReporter,
       importJobRepository: createRepository(repositoryEvents),
       message,
       now: new Date("2026-06-01T00:00:00.000Z"),
@@ -469,22 +573,110 @@ describe("import queue handler", () => {
 
     expect(events).toEqual(["retry:240"]);
     expect(repositoryEvents).toEqual([]);
+    expect(reports).toEqual([]);
     expect(consoleSpy).toHaveBeenCalled();
   });
 
-  it("最終リトライの予期しない例外はjobをfailedにしてackする", async () => {
+  it("最終リトライの予期しない例外はerror reporterへ送り、jobをfailedにしてackする", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { errorReporter, reports } = createErrorReporter();
     const { events, message } = createMessage(4);
     const repositoryEvents: string[] = [];
+    const error = new Error("database failed");
 
     await handleImportQueueMessageError({
-      error: new Error("database failed"),
+      error,
+      errorReporter,
       importJobRepository: createRepository(repositoryEvents),
       message,
       now: new Date("2026-06-01T00:00:00.000Z"),
     });
 
+    expect(reports).toEqual([{ error, context: { tags: { attempts: 4, job_id: "job_123" } } }]);
     expect(repositoryEvents).toEqual(["failed:unknown:database failed"]);
     expect(events).toEqual(["ack"]);
+  });
+});
+
+describe("import dead letter queue handler", () => {
+  const createMessage = () => {
+    const events: string[] = [];
+
+    return {
+      events,
+      message: {
+        id: "message_123",
+        attempts: 1,
+        body: { jobId: "job_123" },
+        ack: () => {
+          events.push("ack");
+        },
+        retry: () => {
+          events.push("retry");
+        },
+      },
+    };
+  };
+
+  it("DLQに落ちたJobを送信・ログしてから失敗に確定し、完了通知してackする", async () => {
+    const sink = createMemoryLogSink();
+    const { errorReporter, reports } = createErrorReporter();
+    const { events, message } = createMessage();
+    const now = new Date("2026-06-01T00:10:00.000Z");
+
+    await handleDeadLetteredImportJobMessage({
+      errorReporter,
+      importJobRepository: {
+        markJobFailed: async (params: Parameters<ImportJobRepository["markJobFailed"]>[0]) => {
+          events.push(`failed:${params.jobId}:${params.errorCode}:${params.now.toISOString()}`);
+        },
+      } as ImportJobRepository,
+      message,
+      logger: createLogger({ jobId: "job_123", messageId: "message_123" }, { sink }),
+      notifyCompletion: async () => {
+        events.push("notified");
+      },
+      now,
+    });
+
+    expect(reports).toEqual([
+      {
+        error: expect.any(ImportJobDeadLetteredError),
+        context: { tags: { area: "import_dlq", job_id: "job_123" } },
+      },
+    ]);
+    expect(sink.entries).toEqual([
+      expect.objectContaining({
+        event: "import_job_dead_lettered",
+        level: "error",
+        jobId: "job_123",
+        messageId: "message_123",
+      }),
+    ]);
+    expect(events).toEqual(["failed:job_123:unknown:2026-06-01T00:10:00.000Z", "notified", "ack"]);
+  });
+
+  it("失敗に確定できなければackせずthrowしてDLQの再試行に任せる", async () => {
+    const { errorReporter } = createErrorReporter();
+    const { events, message } = createMessage();
+    const error = new Error("database failed");
+
+    await expect(
+      handleDeadLetteredImportJobMessage({
+        errorReporter,
+        importJobRepository: {
+          markJobFailed: async () => {
+            throw error;
+          },
+        } as unknown as ImportJobRepository,
+        message,
+        logger: createLogger({}, { sink: createMemoryLogSink() }),
+        notifyCompletion: async () => {
+          events.push("notified");
+        },
+      }),
+    ).rejects.toBe(error);
+
+    expect(events).toEqual([]);
   });
 });

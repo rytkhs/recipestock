@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { isNotFoundError } from "./lib/api";
+import { initMonitoring } from "./lib/monitoring";
 import { registerAppServiceWorker } from "./pwa/browser";
 import { AppRouter } from "./routes/router";
 import "./styles.css";
@@ -20,8 +21,11 @@ if (!rootElement) {
   throw new Error("Root element was not found.");
 }
 
+// 描画より前に初期化し、最初の描画で起きた例外から送れるようにする。
+const rootOptions = initMonitoring();
+
 const renderApp = () => {
-  createRoot(rootElement).render(
+  createRoot(rootElement, rootOptions).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <AppRouter />
