@@ -1,3 +1,4 @@
+import { PLAN_NAMES } from "@recipestock/shared";
 import { z } from "zod";
 
 export const createCheckoutResponseSchema = z.object({
@@ -13,7 +14,7 @@ export const createBillingPortalResponseSchema = z.object({
 export type CreateBillingPortalResponse = z.infer<typeof createBillingPortalResponseSchema>;
 
 export const getBillingStatusResponseSchema = z.object({
-  plan: z.enum(["free", "pro"]),
+  plan: z.enum(PLAN_NAMES),
   subscription: z
     .object({
       status: z.string(),

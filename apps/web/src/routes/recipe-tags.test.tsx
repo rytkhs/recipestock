@@ -42,6 +42,12 @@ const requestBodyOf = (fetchMock: ReturnType<typeof mockFetch>, path: string, me
   return call ? JSON.parse(String(call[1]?.body)) : undefined;
 };
 
+// /tags の行に出ているタグ名を、並んでいる順に読む。
+const listedTagNames = () =>
+  within(screen.getByRole("list", { name: "タグ" }))
+    .getAllByRole("listitem")
+    .map((item) => item.querySelector("p")?.textContent);
+
 // URLのtagsはTanStack RouterがJSONとして書く。
 const recipesPathWithTags = (tagIds: string[]) =>
   `/recipes?tags=${encodeURIComponent(JSON.stringify(tagIds))}`;
@@ -529,6 +535,88 @@ describe("タグ", () => {
         });
       });
       expect(requestBodyOf(fetchMock, "/api/tags/tag_1", "PATCH")).toEqual({ name: "鶏肉" });
+    });
+
+    it("先頭に移動すると並び全体を送り、その並びで出す", async () => {
+      let tags: TagFixture[] = [
+        { id: "tag_1", name: "主菜", recipeCount: 3 },
+        { id: "tag_2", name: "作り置き", recipeCount: 1 },
+        { id: "tag_3", name: "お弁当", recipeCount: 1 },
+      ];
+      const fetchMock = mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/tags/order" && init?.method === "PUT") {
+            const { tagIds } = JSON.parse(String(init.body)) as { tagIds: string[] };
+            tags = tagIds.flatMap((tagId) => tags.find((tag) => tag.id === tagId) ?? []);
+            return jsonResponse({ ok: true });
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      await renderApp("/tags");
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "「お弁当」の操作メニュー" }),
+      );
+      await userEvent.click(await screen.findByRole("menuitem", { name: "先頭に移動" }));
+
+      await waitFor(() => {
+        expect(requestBodyOf(fetchMock, "/api/tags/order", "PUT")).toEqual({
+          tagIds: ["tag_3", "tag_1", "tag_2"],
+        });
+      });
+      await waitFor(() => {
+        expect(listedTagNames()).toEqual(["お弁当", "主菜", "作り置き"]);
+      });
+    });
+
+    it("並びを変えられなければエラーを出し、元の並びに戻す", async () => {
+      const tags: TagFixture[] = [
+        { id: "tag_1", name: "主菜", recipeCount: 3 },
+        { id: "tag_2", name: "作り置き", recipeCount: 1 },
+      ];
+      mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/tags/order" && init?.method === "PUT") {
+            return jsonResponse(
+              { error: { code: "unknown", message: "Failed to reorder tags." } },
+              { status: 500 },
+            );
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      await renderApp("/tags");
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "「作り置き」の操作メニュー" }),
+      );
+      await userEvent.click(await screen.findByRole("menuitem", { name: "上に移動" }));
+
+      await expect(
+        screen.findByText("タグの並びを変えられませんでした。"),
+      ).resolves.toBeInTheDocument();
+      await waitFor(() => {
+        expect(listedTagNames()).toEqual(["主菜", "作り置き"]);
+      });
     });
 
     it("削除したタグは、一覧へ戻るときに引き継ぐ絞り込みからも外す", async () => {

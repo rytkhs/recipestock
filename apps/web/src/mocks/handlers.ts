@@ -11,6 +11,7 @@ import {
   type RecipeDetail,
   type RecipeListItem,
   renameTagRequestSchema,
+  reorderTagsRequestSchema,
   replaceRecipeTagsRequestSchema,
   type ShortcutCredential,
   updateRecipeRequestSchema,
@@ -179,6 +180,8 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
   let viewer = state.viewer;
   let billing = state.billing;
   let billingReads = 0;
+  let recipeDetailReads = 0;
+  let imageUploadWrites = 0;
   // Recipeのidごとに、付けたタグのidを付けた順に持つ。
   const recipeTags = new Map(
     Object.entries(state.recipeTags).map(([recipeId, tagIds]) => [recipeId, [...tagIds]]),
@@ -190,16 +193,12 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       return tag ? [{ id: tag.id, name: tag.name }] : [];
     });
 
-  // APIと同じく件数の多い順、同数なら作った順（配列の順）に並べる。
+  // APIと同じく、tagsの配列の順（＝利用者が決めた語彙の並び）のまま件数を付ける。
   const tagsWithCount = () =>
-    tags
-      .map((tag, order) => ({
-        ...tag,
-        order,
-        recipeCount: recipes.filter((recipe) => recipeTags.get(recipe.id)?.includes(tag.id)).length,
-      }))
-      .sort((a, b) => b.recipeCount - a.recipeCount || a.order - b.order)
-      .map(({ id, name, recipeCount }) => ({ id, name, recipeCount }));
+    tags.map((tag) => ({
+      ...tag,
+      recipeCount: recipes.filter((recipe) => recipeTags.get(recipe.id)?.includes(tag.id)).length,
+    }));
 
   const requireSession = () =>
     session ? null : apiError(401, "unauthorized", "Sign in is required.");
@@ -209,6 +208,17 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
 
   const recipeLimitExceeded = () =>
     apiError(403, "recipe_limit_exceeded", "Recipe limit exceeded.");
+
+  const configuredRecipeSaveFailure = () => {
+    if (state.failures.saveRecipe === "generic") {
+      return apiError(500, "unknown", "Failed to save recipe.");
+    }
+    if (state.failures.saveRecipe === "image-finalize") {
+      return apiError(422, "image_finalize_failed", "Image could not be saved.");
+    }
+
+    return null;
+  };
 
   // 作成・更新したRecipeの中身。シナリオや取り込みで一覧に入ったものは、初めて読むときに一覧の値からfixtureで作る。
   const recipeDetails = new Map<string, RecipeDetail>();
@@ -421,6 +431,9 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         return recipeLimitExceeded();
       }
 
+      const configuredFailure = configuredRecipeSaveFailure();
+      if (configuredFailure) return configuredFailure;
+
       const recipeId = `recipe_mock_${nextId++}`;
       const content = resolveDraftContent({
         recipeId,
@@ -464,6 +477,14 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         return apiError(404, "not_found", "Recipe was not found.");
       }
 
+      recipeDetailReads += 1;
+      if (
+        state.failures.getRecipe === "always" ||
+        (state.failures.getRecipe === "once" && recipeDetailReads === 1)
+      ) {
+        return apiError(500, "unknown", "Failed to load recipe.");
+      }
+
       return HttpResponse.json({
         recipe: listed.locked
           ? { id: recipeId, locked: true }
@@ -485,6 +506,9 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       if (!body.success) {
         return apiError(400, "validation_failed", "Request validation failed.");
       }
+
+      const configuredFailure = configuredRecipeSaveFailure();
+      if (configuredFailure) return configuredFailure;
 
       const current = detailOf(listed);
       const content = resolveDraftContent({
@@ -516,6 +540,10 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       if (unauthorized) return unauthorized;
 
       const recipeId = String(params.recipeId);
+      if (state.failures.deleteRecipe) {
+        return apiError(500, "unknown", "Failed to delete recipe.");
+      }
+
       recipes = recipes.filter((recipe) => recipe.id !== recipeId);
       recipeDetails.delete(recipeId);
       recipeTags.delete(recipeId);
@@ -542,6 +570,9 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
 
       if (listed.locked) {
         return apiError(403, "locked_recipe", "Recipe is locked.");
+      }
+      if (state.failures.replaceRecipeTags) {
+        return apiError(500, "unknown", "Failed to save recipe tags.");
       }
 
       // 揃えた名前が同じなら既存のタグを使い、なければ作る。
@@ -581,6 +612,23 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       }
 
       return HttpResponse.json({ tags: tagsWithCount() });
+    }),
+    http.put("/api/tags/order", async ({ request }) => {
+      const unauthorized = requireSession();
+      if (unauthorized) return unauthorized;
+
+      const body = reorderTagsRequestSchema.safeParse(await request.json());
+
+      if (!body.success) {
+        return tagsInvalid();
+      }
+
+      // 送られたタグを先頭から並べ、送られなかったタグは今の相対順のまま後ろに残す。
+      const requestedIds = [...new Set(body.data.tagIds)];
+      const requested = requestedIds.flatMap((tagId) => tags.find((tag) => tag.id === tagId) ?? []);
+      tags = [...requested, ...tags.filter((tag) => !requestedIds.includes(tag.id))];
+
+      return HttpResponse.json({ ok: true });
     }),
     http.patch("/api/tags/:tagId", async ({ params, request }) => {
       const unauthorized = requireSession();
@@ -927,7 +975,17 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       });
     }),
     // upload-urlが返す署名URLへの書き込み。オリジン外なのでワイルドカードで受ける。
-    http.put(`${MOCK_UPLOAD_ORIGIN}/*`, () => new HttpResponse(null, { status: 200 })),
+    http.put(`${MOCK_UPLOAD_ORIGIN}/*`, () => {
+      imageUploadWrites += 1;
+      if (
+        state.failures.uploadImage === "always" ||
+        (state.failures.uploadImage === "after-first" && imageUploadWrites > 1)
+      ) {
+        return new HttpResponse(null, { status: 500 });
+      }
+
+      return new HttpResponse(null, { status: 200 });
+    }),
     http.get("/api/images/thumbnail/:version/*", ({ request }) => {
       const objectKey = objectKeyFromPath(request.url, "/api/images/thumbnail/v1/");
 

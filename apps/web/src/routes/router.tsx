@@ -401,9 +401,17 @@ const settingsShareRoute = createRoute({
   pendingMs: 0,
 });
 
+// 確認メールのリンクから戻ったときの結果（lib/auth.tsのchangeEmail）。ページは一度だけ読んでURLから消す。
+const settingsEmailSearchSchema = z.object({
+  from: z.literal("verify-link").optional().catch(undefined),
+  // リンクを開けなかったときに、better-authが足すエラーコード。
+  error: z.string().optional().catch(undefined),
+});
+
 const settingsEmailRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings/email",
+  validateSearch: settingsEmailSearchSchema,
   component: SettingsEmailRoute,
   errorComponent: RouteChunkError,
   pendingComponent: SettingsPageSkeleton,

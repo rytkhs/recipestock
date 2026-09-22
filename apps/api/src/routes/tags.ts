@@ -6,6 +6,8 @@ import {
   mergeTagResponseSchema,
   renameTagRequestSchema,
   renameTagResponseSchema,
+  reorderTagsRequestSchema,
+  reorderTagsResponseSchema,
 } from "@recipestock/schemas";
 import { Hono } from "hono";
 import {
@@ -33,6 +35,24 @@ export const createTagRoutes = ({ auth, tagRepository }: TagRouteDependencies) =
       const tags = await repository.listTags(c.get("userId"));
 
       return c.json(listTagsResponseSchema.parse({ tags }));
+    })
+    .put("/order", requireAuth(auth), async (c) => {
+      const rawBody = await c.req.json().catch(() => null);
+      const request = reorderTagsRequestSchema.safeParse(rawBody);
+
+      if (!request.success) {
+        return validationFailedResponse(request.error.flatten());
+      }
+
+      const repository = tagRepository ?? createTagRepository(createDb(c.env.DATABASE_URL));
+      // 同じidが二度載るとjoinが増えるので、先に出てきた方だけを残す。
+      await repository.reorderTags({
+        userId: c.get("userId"),
+        tagIds: [...new Set(request.data.tagIds)],
+        now: new Date(),
+      });
+
+      return c.json(reorderTagsResponseSchema.parse({ ok: true }));
     })
     .patch("/:tagId", requireAuth(auth), async (c) => {
       const rawBody = await c.req.json().catch(() => null);

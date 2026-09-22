@@ -8,7 +8,7 @@ ADR 0014 が定めたとおり yt-dlp と Container には依存しません。A
 
 Cloudflare Workers 実測（12 サンプル）で、oEmbed `/oembed?url=` は photo carousel に対して 400 を返し、watch ページ HTML は photo carousel で必要データを返さないうえ実行元 IP によって captcha shell に化けました。embed v2 は video / photo の両方を 200 で返し、caption は oEmbed および watch ページと完全一致したため、経路を 1 本に絞っています。
 
-caption の改行は TikTok 側でスペースへ正規化されており、これは経路選択では改善できません。材料行の区切りが記号のみになるため、social prompt での変換品質は実サンプルで継続的に確認する必要があります。
+caption の改行は embed v2 の `itemInfos.text`、oEmbed の `title`、watch ページ HTML の `__UNIVERSAL_DATA_FOR_REHYDRATION__` が持つ `itemStruct.desc` のいずれでも半角スペースへ正規化されています。HTTP fetch で到達できる範囲に改行は残りません。材料行の区切りが記号のみになるため、social prompt での変換品質は実サンプルで継続的に確認する必要があります。
 
 ## 対応範囲と失敗の扱い
 
@@ -25,3 +25,17 @@ video と photo の区別も同じ理由で、URL パスではなく `imagePostI
 ## リスク
 
 `__FRONTITY_CONNECT_STATE__` は TikTok の非公開な内部契約です。構造が変われば静かに壊れるため、TikTok import の `extraction_failed` 発生を監視対象とします。oEmbed が公式提供であるのに対し、embed ページの JSON 読み取りは非公式利用にあたります。
+
+## 追記: watch ページの DOM には改行が残る (2026-09-21)
+
+上の「経路選択では改善できません」という記述は、HTTP fetch で到達できる範囲に限れば正しく、描画後の DOM については誤りでした。Browser Run (`BROWSER` binding の `quickAction("content")`) で watch ページを取得すると、caption は 1 行ごとに `<span data-e2e="desc-span-N">` へ分割され、span の間に `<br>` が入ります。連番から行順を復元できます。同じページの `itemStruct.desc` は空白正規化済みのままなので、改行を得るには JSON ではなく DOM を読む必要があります。
+
+`BROWSER` binding 自体は generic 経路の `IMPORT_FETCH_MODE=browser-run` のために既に存在しますが、source extraction は `deterministicFetcher` を通るため現在も標準 fetch のままです。
+
+実測（3 投稿、いずれも初回で取得成功、所要 13.6 / 19.3 / 20.5 秒）で分かった制約は次のとおりです。
+
+- `gotoOptions.waitUntil` は `networkidle0` が必要です。`networkidle2` と `load` は `execution context was destroyed` (code 6000) を返し、`domcontentloaded` は中身のない 1.6KB を返します。`BrowserRunBinding` 型は `waitUntil: "networkidle2"` をリテラルで固定しているため、採用するなら型から変更が要ります。
+- `networkidle0` でも同じ失敗が断続的に発生します（観測は成功 4 / 失敗 1）。リトライが前提になります。
+- `resolveImportTimeoutMs` の既定 10,000ms では足りません。job 全体の `DEFAULT_IMPORT_JOB_TIMEOUT_MS` は 600,000ms なので、fetch 側の引き上げで収まります。
+
+それでも embed v2 を単一経路とする決定は維持します。改行が畳まれた caption でも、記号マーカーをグループラベルとして扱う指示を prompt の `ingredientGroups` ルールへ加えることで材料グループを抽出できると確認したためです。DOM 取得が上積みする 13〜20 秒のレイテンシ、Browser Rendering の費用、断続的な失敗は、その差分に見合いません。social prompt で品質を確保できなくなった場合に再訪します。

@@ -1,5 +1,5 @@
 import { EnvelopeSimple, GoogleLogo, Key } from "@phosphor-icons/react";
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/schemas";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, OTP_LENGTH } from "@recipestock/shared";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -250,9 +250,9 @@ export const LoginRoute = ({
                     autoComplete="one-time-code"
                     className="w-full min-w-0 text-center text-lg tracking-[0.3em] font-bold"
                     inputMode="numeric"
-                    maxLength={6}
-                    minLength={6}
-                    pattern="[0-9]{6}"
+                    maxLength={OTP_LENGTH}
+                    minLength={OTP_LENGTH}
+                    pattern={`[0-9]{${OTP_LENGTH}}`}
                     value={otp}
                     onChange={(event) => setOtp(event.target.value)}
                   />
@@ -302,9 +302,9 @@ export const LoginRoute = ({
                     autoComplete="one-time-code"
                     className="w-full min-w-0 text-center text-lg tracking-[0.3em] font-bold"
                     inputMode="numeric"
-                    maxLength={6}
-                    minLength={6}
-                    pattern="[0-9]{6}"
+                    maxLength={OTP_LENGTH}
+                    minLength={OTP_LENGTH}
+                    pattern={`[0-9]{${OTP_LENGTH}}`}
                     value={otp}
                     onChange={(event) => setOtp(event.target.value)}
                   />

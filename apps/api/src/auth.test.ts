@@ -29,7 +29,7 @@ describe("createAuthEmailCallbacks", () => {
         "",
         "https://recipestock.example/verify/token",
         "",
-        "リンクを開くまで、Recipe Stockのメールアドレスは変わりません。",
+        "リンクの有効期限は1時間です。開くまで、Recipe Stockのメールアドレスは変わりません。",
         "心当たりがない場合は、このメールを破棄してください。",
       ].join("\n"),
     });

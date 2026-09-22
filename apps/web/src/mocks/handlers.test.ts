@@ -137,6 +137,106 @@ describe("mock handlers", () => {
     expect((await getRecipe(handlers, "recipe_001")).title).not.toBe("編集したタイトル");
   });
 
+  it("詳細の初回取得だけ失敗し、再読み込みでは同じRecipeを返す", async () => {
+    const handlers = setup("detail-error");
+
+    const failed = await send(handlers, "GET", "/api/recipes/recipe_001");
+    expect(failed.status).toBe(500);
+    expect(await errorCodeOf(failed)).toBe("unknown");
+
+    const recipe = await getRecipe(handlers, "recipe_001");
+    expect(recipe.id).toBe("recipe_001");
+  });
+
+  it("作成・更新失敗シナリオではRecipeを変更しない", async () => {
+    const handlers = setup("recipe-save-error");
+    const before = await getRecipe(handlers, "recipe_001");
+    const created = await send(handlers, "POST", "/api/recipes", {
+      content: { title: "作成できないレシピ" },
+      source: {},
+    });
+    const updated = await send(handlers, "PUT", "/api/recipes/recipe_001", {
+      content: { title: "更新できないレシピ" },
+    });
+
+    expect(created.status).toBe(500);
+    expect(await errorCodeOf(created)).toBe("unknown");
+    expect(updated.status).toBe(500);
+    expect(await errorCodeOf(updated)).toBe("unknown");
+    expect((await getRecipe(handlers, "recipe_001")).title).toBe(before.title);
+    expect((await listFirstPage(handlers)).items).toHaveLength(20);
+  });
+
+  it("画像確定失敗シナリオでは作成・更新の専用エラーを返す", async () => {
+    const handlers = setup("image-finalize-error");
+    const created = await send(handlers, "POST", "/api/recipes", {
+      content: { title: "画像を保存できないレシピ" },
+      source: {},
+    });
+    const updated = await send(handlers, "PUT", "/api/recipes/recipe_001", {
+      content: { title: "画像を保存できないレシピ" },
+    });
+
+    expect(created.status).toBe(422);
+    expect(await errorCodeOf(created)).toBe("image_finalize_failed");
+    expect(updated.status).toBe(422);
+    expect(await errorCodeOf(updated)).toBe("image_finalize_failed");
+  });
+
+  it("削除失敗シナリオではRecipeを一覧と詳細に残す", async () => {
+    const handlers = setup("recipe-delete-error");
+    const response = await send(handlers, "DELETE", "/api/recipes/recipe_001");
+
+    expect(response.status).toBe(500);
+    expect(await errorCodeOf(response)).toBe("unknown");
+    expect((await getRecipe(handlers, "recipe_001")).id).toBe("recipe_001");
+    expect((await listFirstPage(handlers)).items[0]?.id).toBe("recipe_001");
+  });
+
+  it("タグ保存失敗シナリオでは現在のタグを保つ", async () => {
+    const handlers = setup("recipe-tag-save-error");
+    const before = (await getRecipe(handlers, "recipe_001")).tags;
+    const response = await send(handlers, "PUT", "/api/recipes/recipe_001/tags", {
+      names: ["新しいタグ"],
+    });
+
+    expect(response.status).toBe(500);
+    expect(await errorCodeOf(response)).toBe("unknown");
+    expect((await getRecipe(handlers, "recipe_001")).tags).toEqual(before);
+  });
+
+  it("画像アップロード失敗シナリオでは署名URLへのPUTを失敗させる", async () => {
+    const handlers = setup("image-upload-error");
+    const upload = (await (
+      await send(handlers, "POST", "/api/images/upload-url", {
+        contentType: "image/webp",
+        sizeBytes: 100,
+      })
+    ).json()) as { uploadUrl: string };
+
+    const response = await send(handlers, "PUT", upload.uploadUrl);
+    expect(response.status).toBe(500);
+  });
+
+  it("画像の一部失敗シナリオでは最初のPUTだけ成功させる", async () => {
+    const handlers = setup("image-upload-partial-error");
+    const uploadUrls: string[] = [];
+
+    for (let index = 0; index < 3; index += 1) {
+      const body = (await (
+        await send(handlers, "POST", "/api/images/upload-url", {
+          contentType: "image/webp",
+          sizeBytes: 100,
+        })
+      ).json()) as { uploadUrl: string };
+      uploadUrls.push(body.uploadUrl);
+    }
+
+    expect((await send(handlers, "PUT", uploadUrls[0])).status).toBe(200);
+    expect((await send(handlers, "PUT", uploadUrls[1])).status).toBe(500);
+    expect((await send(handlers, "PUT", uploadUrls[2])).status).toBe(500);
+  });
+
   it("保存上限に達していると作成とURL取り込みはrecipe_limit_exceededになる", async () => {
     const handlers = setup("limit-reached");
 
@@ -368,9 +468,31 @@ describe("mock handlers", () => {
 
     await send(handlers, "PUT", "/api/recipes/recipe_002/tags", { names: ["bbq"] });
     expect((await getRecipe(handlers, "recipe_002")).tags).toEqual([attached[1]]);
+    // 語彙は作った順に並び、付いている件数では動かない。
     expect(await listTags(handlers)).toEqual([
-      { ...attached[1], recipeCount: 2 },
       { ...attached[0], recipeCount: 1 },
+      { ...attached[1], recipeCount: 2 },
+    ]);
+  });
+
+  it("並べ替えで送ったタグを先頭に置き、送らなかったタグを後ろに残す", async () => {
+    const handlers = setup("no-tags");
+    await send(handlers, "PUT", "/api/recipes/recipe_001/tags", {
+      names: ["主菜", "作り置き", "お弁当"],
+    });
+    const created = await listTags(handlers);
+    expect(created.map((tag) => tag.name)).toEqual(["主菜", "作り置き", "お弁当"]);
+
+    const response = await send(handlers, "PUT", "/api/tags/order", {
+      tagIds: [created[2]?.id, created[2]?.id],
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect((await listTags(handlers)).map((tag) => tag.name)).toEqual([
+      "お弁当",
+      "主菜",
+      "作り置き",
     ]);
   });
 

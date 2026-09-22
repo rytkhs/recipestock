@@ -1,5 +1,9 @@
 export const FREE_RECIPE_LIMIT = 5;
 
+export const PLAN_NAMES = ["free", "pro"] as const;
+
+export type Plan = (typeof PLAN_NAMES)[number];
+
 export const PLAN_LIMITS = {
   free: {
     savedRecipes: FREE_RECIPE_LIMIT,
@@ -9,6 +13,4 @@ export const PLAN_LIMITS = {
     savedRecipes: null,
     monthlyAiImports: 300,
   },
-} as const;
-
-export type Plan = keyof typeof PLAN_LIMITS;
+} as const satisfies Record<Plan, { savedRecipes: number | null; monthlyAiImports: number }>;

@@ -1,6 +1,7 @@
 /// <reference path="./html2md4llm.d.ts" />
 
 import html2md4llm from "html2md4llm";
+import { normalizeMultilineText } from "./lib/import/text";
 import {
   type FetchedImportPage,
   type RecipeImportImageCandidate,
@@ -29,6 +30,11 @@ export type RecipePageEvidence = {
   recipeStructuredEvidence: RecipeImportStructuredEvidence[];
   imageCandidates: RecipeImportImageCandidate[];
 };
+
+// html2md4llm はテキストノードを trim するため、素の改行や空白では要素境界で区切りが消える。
+// 区切りを非空白のマーカーとして埋め込み、normalizeMarkdownContent で復元する。
+const LINE_BREAK_MARKER = "";
+const SPACE_MARKER = "";
 
 export const extractRecipePageEvidence = async (
   page: FetchedImportPage,
@@ -262,6 +268,38 @@ const extractHtmlImportData = async (
         });
       },
     })
+    .on("br", {
+      element(element) {
+        element.replace(LINE_BREAK_MARKER, { html: false });
+      },
+    })
+    .on("dt", {
+      element(element) {
+        element.before(LINE_BREAK_MARKER, { html: false });
+      },
+    })
+    .on("dd", {
+      element(element) {
+        element.before(SPACE_MARKER, { html: false });
+      },
+    })
+    .on("li > *", {
+      element(element) {
+        element.before(SPACE_MARKER, { html: false });
+      },
+    })
+    .on("*", {
+      text(text) {
+        if (ignoredTextDepth > 0 || text.removed) return;
+
+        const chunk = text.text;
+        if (!chunk.trim() || !/^\s|\s$/.test(chunk)) return;
+
+        text.replace(chunk.replace(/^\s+/, SPACE_MARKER).replace(/\s+$/, SPACE_MARKER), {
+          html: false,
+        });
+      },
+    })
     .transform(importPageBodyToResponse(page))
     .text();
 
@@ -277,6 +315,110 @@ const extractHtmlImportData = async (
       extraction.recipeStructuredEvidence,
     ).slice(0, 20),
   };
+};
+
+// microdata / RDFa の値は HTML 断片から起こすため、タグが表す区切りを自分で補う。
+// 素の改行を使うと元テキストの折り返しと区別できず偽の区切りになるので、markdown 側と同じく
+// 非空白のマーカーを注入し、空白を畳んだあとで改行に戻す。
+// 区切りを生むのは WHATWG HTML Rendering の UA スタイルシートでブロック表示になる要素と
+// <br> だけ。inline-block の marquee は含めない。col / colgroup はテキストボックスを作らず、
+// col は void なので onEndTag が投げる。html / body / frameset は捕捉が跨がないため除く。
+// 未知の要素とカスタム要素はブラウザ既定が display: inline なので、ここでも境界にしない。
+const TEXT_BOUNDARY_TAG_NAMES = new Set([
+  "address",
+  "article",
+  "aside",
+  "blockquote",
+  "br",
+  "caption",
+  "center",
+  "dd",
+  "details",
+  "dialog",
+  "dir",
+  "div",
+  "dl",
+  "dt",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "header",
+  "hgroup",
+  "hr",
+  "legend",
+  "li",
+  "listing",
+  "main",
+  "menu",
+  "nav",
+  "ol",
+  "optgroup",
+  "option",
+  "p",
+  "plaintext",
+  "pre",
+  "search",
+  "section",
+  "summary",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "tr",
+  "ul",
+  "xmp",
+]);
+
+// onEndTag は void 要素に登録すると例外を投げ、取り込み全体が落ちる。境界集合に何を足しても
+// 落ちないよう、HTML の void 要素を網羅して弾く。
+const VOID_TAG_NAMES = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
+
+const appendStructuredTextBoundary = (
+  element: HtmlRewriterElement,
+  structuredTextCaptures: RecipeStructuredTextCapture[],
+  onHtmlElementEnd: HtmlElementEndTagRegistrar,
+) => {
+  if (structuredTextCaptures.length === 0) return;
+
+  const tagName = element.tagName.toLowerCase();
+  if (!TEXT_BOUNDARY_TAG_NAMES.has(tagName)) return;
+
+  for (const capture of structuredTextCaptures) {
+    capture.text += LINE_BREAK_MARKER;
+  }
+
+  if (VOID_TAG_NAMES.has(tagName)) return;
+
+  onHtmlElementEnd(element, () => {
+    for (const capture of structuredTextCaptures) {
+      capture.text += LINE_BREAK_MARKER;
+    }
+  });
 };
 
 const extractRecipeHtmlStructuredEvidence = async (
@@ -314,6 +456,8 @@ const extractRecipeHtmlStructuredEvidence = async (
   await new HTMLRewriter()
     .on("*", {
       element(element) {
+        appendStructuredTextBoundary(element, structuredTextCaptures, onHtmlElementEnd);
+
         const microdataRecipe = createMicrodataRecipeBuilder(element);
         if (microdataRecipe) {
           microdataRecipeStack.push(microdataRecipe);
@@ -459,7 +603,7 @@ const startRecipeStructuredTextCapture = (
   const capture: RecipeStructuredTextCapture = { builder, properties, text: "" };
   structuredTextCaptures.push(capture);
   onHtmlElementEnd(element, () => {
-    const normalizedText = normalizeReadableText(capture.text);
+    const normalizedText = normalizeReadableMultilineText(capture.text);
     if (normalizedText) {
       appendRecipeStructuredValue(builder, properties, normalizedText, "");
     }
@@ -515,10 +659,10 @@ const normalizeRecipeStructuredEvidence = (
     yieldText: builder.yieldText ? normalizeReadableText(builder.yieldText) : undefined,
     imageUrls: dedupeStrings(builder.imageUrls.map(normalizeReadableText).filter(Boolean)),
     rawIngredients: dedupeStrings(
-      builder.rawIngredients.map(normalizeReadableText).filter(Boolean),
+      builder.rawIngredients.map(normalizeMultilineText).filter(Boolean),
     ),
     rawInstructions: dedupeStrings(
-      builder.rawInstructions.map(normalizeReadableText).filter(Boolean),
+      builder.rawInstructions.map(normalizeMultilineText).filter(Boolean),
     ),
     structuredInstructions: builder.structuredInstructions,
   } satisfies ExtractedRecipeStructuredEvidence;
@@ -626,11 +770,21 @@ const normalizeMetaKey = (key: string | null) => {
 const normalizeReadableText = (value: string) =>
   decodeHtml(value).replace(/\s+/g, " ").trim().slice(0, 24_000);
 
+// 捕捉したテキストの仕上げ。ここだけがマーカーを知る。
+const normalizeReadableMultilineText = (value: string) =>
+  decodeHtml(value)
+    .replace(/\s+/g, " ")
+    .replaceAll(LINE_BREAK_MARKER, "\n")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 24_000);
+
 const normalizeImageAlt = (value: string) => normalizeReadableText(value).slice(0, 120);
 
 const formatMarkdownImage = (url: string, alt?: string) => {
   const normalizedAlt = alt ? normalizeImageAlt(alt) : "";
-  return `\n![${escapeMarkdownImageAlt(normalizedAlt)}](<${url}>)\n`;
+  return `${LINE_BREAK_MARKER}![${escapeMarkdownImageAlt(normalizedAlt)}](<${url}>)${LINE_BREAK_MARKER}`;
 };
 
 const escapeMarkdownImageAlt = (value: string) =>
@@ -639,7 +793,10 @@ const escapeMarkdownImageAlt = (value: string) =>
 const normalizeMarkdownContent = (value: string) =>
   value
     .replace(/\r\n?/g, "\n")
+    .replaceAll(LINE_BREAK_MARKER, "\n")
+    .replaceAll(SPACE_MARKER, " ")
     .replace(/[^\S\n]+/g, " ")
+    .replace(/[^\S\n]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
     .slice(0, 24_000);

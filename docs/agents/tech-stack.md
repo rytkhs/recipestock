@@ -55,7 +55,7 @@ Browser / PWA
 
 - Prefer the chosen stack before adding a new library.
 - Put shared validation and API types in `packages/schemas`.
-- Put shared deterministic business logic in `packages/shared`.
+- Put shared deterministic business logic and Zod-free shared constants in `packages/shared`.
 - Use Zod for request and response validation at API boundaries.
 - Use Drizzle for database schema and migrations.
 - Use TanStack Query for server state in the frontend.
