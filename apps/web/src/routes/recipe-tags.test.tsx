@@ -1,4 +1,5 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { focusManager } from "@tanstack/react-query";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { tagsQueryKeys } from "../features/tags";
@@ -34,6 +35,43 @@ const detailResponse = (tags: { id: string; name: string }[]) => ({
   },
 });
 
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((settle) => {
+    resolve = settle;
+  });
+
+  return { promise, resolve };
+};
+
+const tagVocabulary: TagFixture[] = [
+  { id: "tag_1", name: "主菜", recipeCount: 0 },
+  { id: "tag_2", name: "副菜", recipeCount: 0 },
+];
+
+const vocabularyTagsNamed = (names: readonly string[]) =>
+  names.flatMap((name) => {
+    const tag = tagVocabulary.find((candidate) => candidate.name === name);
+    return tag ? [{ id: tag.id, name: tag.name }] : [];
+  });
+
+const requestedTagNames = (init: RequestInit | undefined) =>
+  (JSON.parse(String(init?.body)) as { names: string[] }).names;
+
+const savedTagSets = (fetchMock: ReturnType<typeof mockFetch>) =>
+  fetchMock.mock.calls
+    .filter(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/recipes/recipe_1/tags" && init?.method === "PUT",
+    )
+    .map(([, init]) => requestedTagNames(init));
+
+const serverErrorResponse = () =>
+  jsonResponse(
+    { error: { code: "unknown", message: "Unexpected error occurred." } },
+    { status: 500 },
+  );
+
 const requestBodyOf = (fetchMock: ReturnType<typeof mockFetch>, path: string, method: string) => {
   const call = fetchMock.mock.calls.find(
     ([input, init]) => getRequestPath(input) === path && init?.method === method,
@@ -55,6 +93,7 @@ const recipesPathWithTags = (tagIds: string[]) =>
 describe("タグ", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    focusManager.setFocused(undefined);
   });
 
   describe("一覧のチップ列", () => {
@@ -428,17 +467,16 @@ describe("タグ", () => {
       expect(within(sheet).getByLabelText("タグを探す・作る")).toHaveValue("");
     });
 
-    it("保存に失敗したら詳細を取り直してエラーを出す", async () => {
+    it("サーバー側の失敗は送り直し、それでも保存できなければ詳細を取り直してエラーを出す", async () => {
       let detailRequests = 0;
+      let putRequests = 0;
       mockFetch(
         async (input, init) => {
           const path = getRequestPath(input);
 
           if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
-            return jsonResponse(
-              { error: { code: "unknown", message: "Unexpected error occurred." } },
-              { status: 500 },
-            );
+            putRequests += 1;
+            return serverErrorResponse();
           }
 
           if (path === "/api/recipes/recipe_1") {
@@ -464,6 +502,7 @@ describe("タグ", () => {
       await expect(within(sheet).findByRole("alert")).resolves.toHaveTextContent(
         "タグを保存できませんでした。",
       );
+      expect(putRequests).toBe(3);
       await waitFor(() => {
         expect(detailRequests).toBe(2);
       });
@@ -473,6 +512,306 @@ describe("タグ", () => {
           "false",
         );
       });
+    });
+
+    it("保存より前に始まった詳細の取得が保存の後に届いても、付けたタグを外さず次の組にも残す", async () => {
+      let savedNames: string[] = [];
+      let detailRequests = 0;
+      const staleDetail = deferred();
+      const fetchMock = mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
+            savedNames = requestedTagNames(init);
+            return jsonResponse({ tags: vocabularyTagsNamed(savedNames) });
+          }
+
+          if (path === "/api/recipes/recipe_1") {
+            detailRequests += 1;
+            const response = jsonResponse(detailResponse(vocabularyTagsNamed(savedNames)));
+
+            // 2回目はアプリへ戻ったときの取得で、保存より前の状態を読んだまま遅れて届く。
+            if (detailRequests === 2) {
+              await staleDetail.promise;
+            }
+
+            return response;
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: tagVocabulary });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      const { queryClient } = await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await within(sheet).findByRole("button", { name: /^主菜/ });
+
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => {
+        expect(detailRequests).toBe(2);
+      });
+
+      await userEvent.click(within(sheet).getByRole("button", { name: /^主菜/ }));
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+      });
+      await act(async () => {
+        staleDetail.resolve();
+      });
+
+      expect(within(sheet).getByRole("button", { name: /^主菜/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+
+      await userEvent.click(within(sheet).getByRole("button", { name: /^副菜/ }));
+
+      await waitFor(() => {
+        expect(savedTagSets(fetchMock)).toEqual([["主菜"], ["主菜", "副菜"]]);
+      });
+    });
+
+    it("保存中に古い詳細が届いても、続けて押した組は前に押した組に積み上げる", async () => {
+      let savedNames: string[] = [];
+      const firstSave = deferred();
+      const fetchMock = mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
+            const names = requestedTagNames(init);
+
+            if (names.length === 1) {
+              await firstSave.promise;
+            }
+
+            savedNames = names;
+            return jsonResponse({ tags: vocabularyTagsNamed(savedNames) });
+          }
+
+          if (path === "/api/recipes/recipe_1") {
+            return jsonResponse(detailResponse(vocabularyTagsNamed(savedNames)));
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: tagVocabulary });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      const { queryClient } = await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await userEvent.click(await within(sheet).findByRole("button", { name: /^主菜/ }));
+      await waitFor(() => {
+        expect(savedTagSets(fetchMock)).toHaveLength(1);
+      });
+
+      // 最初の保存を待っている間に取り直しが走り、まだ何も付いていない詳細が届く。
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => {
+        expect(queryClient.getQueryState(["recipe", "recipe_1"])?.fetchStatus).toBe("idle");
+      });
+
+      expect(within(sheet).getByRole("button", { name: /^主菜/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await userEvent.click(within(sheet).getByRole("button", { name: /^副菜/ }));
+      await act(async () => {
+        firstSave.resolve();
+      });
+
+      await waitFor(() => {
+        expect(savedTagSets(fetchMock)).toEqual([["主菜"], ["主菜", "副菜"]]);
+      });
+      await waitFor(() => {
+        expect(within(sheet).getByRole("button", { name: /^副菜/ })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      });
+      expect(within(sheet).getByRole("button", { name: /^主菜/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+
+    it("途中の保存が失敗しても、後から押した組を保存できればエラーを出さない", async () => {
+      let savedNames: string[] = [];
+      const firstSave = deferred();
+      const fetchMock = mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
+            const names = requestedTagNames(init);
+
+            // 最初に押した組の保存は、送り直しても失敗する。
+            if (names.length === 1) {
+              await firstSave.promise;
+              return serverErrorResponse();
+            }
+
+            savedNames = names;
+            return jsonResponse({ tags: vocabularyTagsNamed(savedNames) });
+          }
+
+          if (path === "/api/recipes/recipe_1") {
+            return jsonResponse(detailResponse(vocabularyTagsNamed(savedNames)));
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: tagVocabulary });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      const { queryClient } = await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await userEvent.click(await within(sheet).findByRole("button", { name: /^主菜/ }));
+      await waitFor(() => {
+        expect(savedTagSets(fetchMock)).toHaveLength(1);
+      });
+      await userEvent.click(within(sheet).getByRole("button", { name: /^副菜/ }));
+      await act(async () => {
+        firstSave.resolve();
+      });
+
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+      });
+      expect(savedNames).toEqual(["主菜", "副菜"]);
+      expect(within(sheet).getByRole("button", { name: /^副菜/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(within(sheet).queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("応答が届かない保存は時間で区切って送り直す", async () => {
+      const timeouts: AbortController[] = [];
+      vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+        const controller = new AbortController();
+        timeouts.push(controller);
+        return controller.signal;
+      });
+      let savedNames: string[] = [];
+      let putRequests = 0;
+      mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
+            putRequests += 1;
+
+            // 最初の送信は応答が届かず、時間切れで打ち切られる。
+            if (putRequests === 1) {
+              return new Promise<Response>((_resolve, reject) => {
+                init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+              });
+            }
+
+            savedNames = requestedTagNames(init);
+            return jsonResponse({ tags: vocabularyTagsNamed(savedNames) });
+          }
+
+          if (path === "/api/recipes/recipe_1") {
+            return jsonResponse(detailResponse(vocabularyTagsNamed(savedNames)));
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: tagVocabulary });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      const { queryClient } = await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await userEvent.click(await within(sheet).findByRole("button", { name: /^主菜/ }));
+      await waitFor(() => {
+        expect(putRequests).toBe(1);
+      });
+
+      act(() => {
+        timeouts[0]?.abort(new DOMException("The operation timed out.", "TimeoutError"));
+      });
+
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+      });
+      expect(putRequests).toBe(2);
+      expect(savedNames).toEqual(["主菜"]);
+      expect(within(sheet).queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("保存の応答が失敗でも、読み直した組が押した組と同じならエラーを出さない", async () => {
+      let savedNames: string[] = [];
+      mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          // DBでは確定したが、応答は失敗として届く。
+          if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
+            savedNames = requestedTagNames(init);
+            return serverErrorResponse();
+          }
+
+          if (path === "/api/recipes/recipe_1") {
+            return jsonResponse(detailResponse(vocabularyTagsNamed(savedNames)));
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: tagVocabulary });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      const { queryClient } = await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await userEvent.click(await within(sheet).findByRole("button", { name: /^主菜/ }));
+
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+      });
+      expect(within(sheet).getByRole("button", { name: /^主菜/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(within(sheet).queryByRole("alert")).not.toBeInTheDocument();
     });
   });
 

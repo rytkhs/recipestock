@@ -6,7 +6,7 @@ import {
   type RecipeTag,
 } from "@recipestock/schemas";
 import { countTagNameLength, normalizeTagName } from "@recipestock/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -20,8 +20,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { ApiClientError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { invalidateRecipeLists, recipesQueryKeys } from "../recipes";
+import { getRecipe, invalidateRecipeLists, recipesQueryKeys } from "../recipes";
 import { listTags, replaceRecipeTags } from "./api";
 import { tagsQueryKeys } from "./query-keys";
 import { STARTER_TAG_NAMES } from "./starter-tags";
@@ -41,6 +42,30 @@ export const isPendingTagId = (tagId: string) => tagId.startsWith(pendingTagIdPr
 const tagKey = (name: string) => normalizeTagName(name)?.normalizedName ?? "";
 
 const recipeTagsMutationKey = (recipeId: string) => ["recipe-tags", recipeId] as const;
+
+// 組を丸ごと送るので、送り直しても結果は変わらない。届かなかった要求とサーバー側の失敗だけ送り直す。
+const MAX_TAG_SAVE_RETRIES = 2;
+
+const isRetryableTagSaveError = (error: unknown) =>
+  error instanceof ApiClientError ? error.status >= 500 : true;
+
+const hasSameTags = (left: readonly RecipeTag[], right: readonly RecipeTag[]) => {
+  const leftKeys = new Set(left.map((tag) => tagKey(tag.name)));
+  const rightKeys = new Set(right.map((tag) => tagKey(tag.name)));
+
+  return leftKeys.size === rightKeys.size && [...rightKeys].every((key) => leftKeys.has(key));
+};
+
+// 保存中は最後に押した組を出す。詳細のキャッシュには保存の結果だけを書くので、
+// 保存の途中で届いた取得が、付けたばかりのタグを消したり次に送る組の元になったりしない。
+export const useDisplayedRecipeTags = (recipeId: string, savedTags: readonly RecipeTag[]) => {
+  const pendingTags = useMutationState({
+    filters: { mutationKey: recipeTagsMutationKey(recipeId), status: "pending" },
+    select: (mutation) => mutation.state.variables as RecipeTag[],
+  });
+
+  return pendingTags.at(-1) ?? savedTags;
+};
 
 const candidateRowClass =
   "flex min-h-11 w-full items-center gap-3 rounded-[12px] px-2 text-left text-brand-ink text-sm outline-none transition-colors hover:bg-brand-paper-muted focus-visible:bg-brand-paper-muted disabled:opacity-50";
@@ -66,10 +91,14 @@ export const RecipeTagSheet = ({
     enabled: open,
   });
 
+  const detailQueryKey = recipesQueryKeys.detail(recipeId);
+  // 後に押した組が残っていれば、その組がこの組の変更も含めて送り直すので、途中の結果は当てない。
+  const isLastTagSave = () =>
+    queryClient.isMutating({ mutationKey: recipeTagsMutationKey(recipeId) }) === 1;
+
   const setDetailTags = (nextTags: RecipeTag[]) => {
-    queryClient.setQueryData<GetRecipeResponse["recipe"]>(
-      recipesQueryKeys.detail(recipeId),
-      (current) => (current && !current.locked ? { ...current, tags: nextTags } : current),
+    queryClient.setQueryData<GetRecipeResponse["recipe"]>(detailQueryKey, (current) =>
+      current && !current.locked ? { ...current, tags: nextTags } : current,
     );
   };
 
@@ -77,31 +106,57 @@ export const RecipeTagSheet = ({
   const mutation = useMutation({
     mutationKey: recipeTagsMutationKey(recipeId),
     scope: { id: `recipe-tags:${recipeId}` },
-    mutationFn: (names: string[]) => replaceRecipeTags(recipeId, names),
-    onSuccess: (savedTags) => {
-      // 後に押した分が残っていれば、その結果で置き換わるので途中の結果は当てない。
-      if (queryClient.isMutating({ mutationKey: recipeTagsMutationKey(recipeId) }) > 1) {
+    mutationFn: (nextTags: RecipeTag[]) =>
+      replaceRecipeTags(
+        recipeId,
+        nextTags.map((tag) => tag.name),
+      ),
+    retry: (failureCount, error) =>
+      failureCount < MAX_TAG_SAVE_RETRIES && isRetryableTagSaveError(error),
+    onSuccess: async (savedTags) => {
+      if (!isLastTagSave()) {
         return;
       }
 
+      // 保存の途中で始まった取得は、保存より前の状態を読んでいることがあるので当てさせない。
+      await queryClient.cancelQueries({ queryKey: detailQueryKey });
       setDetailTags(savedTags);
+      setSaveError(null);
     },
-    onError: async () => {
-      setSaveError("タグを保存できませんでした。");
-      await queryClient.invalidateQueries({ queryKey: recipesQueryKeys.detail(recipeId) });
+    onError: async (_error, attemptedTags) => {
+      if (!isLastTagSave()) {
+        return;
+      }
+
+      // 応答が届かなかっただけで、保存は済んでいることがある。読み直した組が押した組と同じなら失敗にしない。
+      await queryClient.cancelQueries({ queryKey: detailQueryKey });
+      const recipe = await queryClient
+        .fetchQuery({
+          queryKey: detailQueryKey,
+          queryFn: () => getRecipe(recipeId),
+          staleTime: 0,
+          retry: false,
+        })
+        .catch(() => undefined);
+
+      if (!recipe || recipe.locked || !hasSameTags(recipe.tags, attemptedTags)) {
+        setSaveError("タグを保存できませんでした。");
+      }
     },
-    onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() }),
-        invalidateRecipeLists(queryClient),
-      ]);
+    onSettled: () => {
+      if (!isLastTagSave()) {
+        return;
+      }
+
+      // 件数とタグの付いた一覧が変わるので取り直させる。取り直しを待つと、次に押した組の送信が遅れる。
+      void queryClient.invalidateQueries({ queryKey: tagsQueryKeys.all() });
+      void invalidateRecipeLists(queryClient);
     },
   });
 
   const saveTags = (nextTags: RecipeTag[]) => {
     setSaveError(null);
-    setDetailTags(nextTags);
-    mutation.mutate(nextTags.map((tag) => tag.name));
+    mutation.mutate(nextTags);
   };
 
   const normalizedInput = normalizeTagName(input);
