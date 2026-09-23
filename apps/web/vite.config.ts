@@ -29,6 +29,9 @@ export default defineConfig({
           "assets/**/*.{js,css}",
         ],
         manifestTransforms: [validateAppShellManifest],
+        // SWはSentryへ送らないのでsource mapは要らない。既定ではbuild.sourcemapを引き継ぐが、
+        // SWのbuildはSentryのpluginがsource mapを消したあとに走るので、distに残って公開される。
+        sourcemap: false,
       },
     }),
     sentryVitePlugin({

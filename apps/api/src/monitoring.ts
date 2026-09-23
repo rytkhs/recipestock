@@ -86,6 +86,10 @@ const originOf = (value: string) => {
  * eventへのheaderの付与は`allow`で絞れず、`false`にするしかない。
  * request bodyは`httpBodies`を見ずに`httpServerIntegration`が付けるので、そちらでも止める
  * （@sentry/cloudflare 10.75.1）。
+ *
+ * SDKはtracingを使わなくても、外部へのfetchすべてに`sentry-trace`・`baggage`を付ける。
+ * `baggage`にはrelease・environment・DSNの公開鍵が入り、取り込み元のサイトにも渡る。
+ * 宛先にSentryで受ける相手はいないので、どこにも付けない。
  */
 export const createSentryOptions = (): Sentry.CloudflareOptions => ({
   dataCollection: {
@@ -96,6 +100,7 @@ export const createSentryOptions = (): Sentry.CloudflareOptions => ({
     userInfo: false,
   },
   integrations: [Sentry.httpServerIntegration({ maxRequestBodySize: "none" })],
+  tracePropagationTargets: [],
   beforeSend: (event) => {
     if (event.request?.url) {
       event.request.url = withoutQuery(event.request.url);
