@@ -83,11 +83,9 @@ const originOf = (value: string) => {
  * breadcrumbにはoriginだけを残す（ログの`sourceHost`と同じ扱い）。
  * 失敗したqueryのメッセージには引数（利用者の入力やtokenのハッシュ）が入るので、例外のメッセージから除く。
  *
- * `dataCollection`を渡すと、書かなかった項目はすべて送る側の既定になる。IPを送らない
- * `userInfo: false`も明示する。request headerは`Authorization`（iOS共有のtoken）を含むので送らない。
+ * `dataCollection`は書かなかった項目を送る側の既定にするので、IPを送らない`userInfo: false`も明示する。
+ * request headerは`Authorization`（iOS共有のtoken）を含むので送らない。
  * eventへのheaderの付与は`allow`で絞れず、`false`にするしかない。
- * request bodyは`httpBodies`を見ずに`httpServerIntegration`が付けるので、そちらでも止める
- * （@sentry/cloudflare 10.75.1）。
  *
  * SDKはtracingを使わなくても、外部へのfetchすべてに`sentry-trace`・`baggage`を付ける。
  * `baggage`にはrelease・environment・DSNの公開鍵が入り、取り込み元のサイトにも渡る。
@@ -101,7 +99,6 @@ export const createSentryOptions = (): Sentry.CloudflareOptions => ({
     urlQueryParams: false,
     userInfo: false,
   },
-  integrations: [Sentry.httpServerIntegration({ maxRequestBodySize: "none" })],
   tracePropagationTargets: [],
   beforeSend: (event, hint) => {
     if (event.request?.url) {

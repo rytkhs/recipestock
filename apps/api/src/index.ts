@@ -1,4 +1,3 @@
-import { env as workerEnv } from "cloudflare:workers";
 import { createDb, withoutQueryParams } from "@recipestock/db";
 import * as Sentry from "@sentry/cloudflare";
 import { Hono } from "hono";
@@ -574,18 +573,13 @@ const handleImportDeadLetterQueue = async (
 
 /**
  * cronは`wrangler.jsonc`の`triggers.crons`の1本だけで、Import Queueの滞留を見る。
- *
- * Queueはhandlerに渡るenvでなく`cloudflare:workers`のenvから取る。`withSentry`はenvのQueueを
- * Proxyで包み、本物に結び直すのは`send`と`sendBatch`だけなので、Proxy越しの`metrics()`は
- * Illegal invocationで落ちる（@sentry/cloudflare 10.75.1）。SDKが直ればhandlerのenvに戻す。
  */
 const handleScheduled = (controller: ScheduledController, env: Bindings) =>
   checkImportQueueHealth({
     jobTimeoutMs: resolveImportJobTimeoutMs(env),
     logger: createLogger(),
     now: () => new Date(),
-    // `cloudflare:workers`のenvはhandlerに渡るenvと同じものだが、型は空の`Env`なので`Bindings`として読む。
-    queue: (workerEnv as Bindings).IMPORT_QUEUE,
+    queue: env.IMPORT_QUEUE,
     reportCheckIn: createSentryCheckInReporter({
       monitorSlug: IMPORT_QUEUE_HEALTH_MONITOR_SLUG,
       cron: controller.cron,
@@ -618,12 +612,7 @@ const throwWithoutQueryParams = (error: unknown): never => {
   throw error;
 };
 
-/**
- * Sentryの初期化はfetch・queue・cronを1つにまとめて包む。送るかどうかの判断は
- * `onError`とqueueの処理が`ErrorReporter`で行い、ここからhandlerの外へ漏れた例外は
- * SDKがそのまま拾う。
- */
-export default Sentry.withSentry<Bindings, { jobId: string }>(createSentryOptions, {
+const handler: ExportedHandler<Bindings, { jobId: string }> = {
   fetch: (request, env, ctx) => {
     validateBindings(env);
     return app.fetch(request, env, ctx);
@@ -640,4 +629,11 @@ export default Sentry.withSentry<Bindings, { jobId: string }>(createSentryOption
     validateBindings(env);
     return handleScheduled(controller, env);
   },
-} satisfies ExportedHandler<Bindings, { jobId: string }>);
+};
+
+/**
+ * Sentryの初期化はfetch・queue・cronを1つにまとめて包む。送るかどうかの判断は
+ * `onError`とqueueの処理が`ErrorReporter`で行い、ここからhandlerの外へ漏れた例外は
+ * SDKがそのまま拾う。
+ */
+export default Sentry.withSentry(createSentryOptions, handler);
