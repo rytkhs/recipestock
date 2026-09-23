@@ -46,6 +46,9 @@ export const redactBreadcrumb = (breadcrumb: Sentry.Breadcrumb): Sentry.Breadcru
  *
  * 送るのはブラウザで起きた予期しない例外だけにする。APIの失敗はTanStack Queryが画面で扱い、
  * 5xxはWorker側で送る。releaseはbuild時に`@sentry/vite-plugin`が埋め込む。
+ *
+ * `dataCollection`の既定では、SentryがeventとsessionのIPを送信元から推定するので、`userInfo: false`で止める。
+ * headerはSDKが`Referer`と`User-Agent`しか付けないので既定のままにする（ADR 0029）。
  */
 export const initMonitoring = (): RootOptions => {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
@@ -56,6 +59,7 @@ export const initMonitoring = (): RootOptions => {
 
   Sentry.init({
     dsn,
+    dataCollection: { userInfo: false },
     beforeSend: redactEvent,
     beforeBreadcrumb: redactBreadcrumb,
   });

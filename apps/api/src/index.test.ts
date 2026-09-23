@@ -746,8 +746,8 @@ describe("import dead letter queue handler", () => {
 });
 
 describe("cron handler", () => {
-  // withSentryはenvのQueueをProxyで包み、Proxy越しのmetrics()はIllegal invocationで落ちる。
-  // default exportを通して、包まれた状態でも滞留の確認がcheck-inまで進むことを固定する。
+  // withSentryはenvのQueueをProxyで包む。@sentry/cloudflare 10ではProxy越しのmetrics()が
+  // Illegal invocationで落ちた。default exportを通して、包まれた状態でも滞留の確認がcheck-inまで進むことを固定する。
   it("withSentryで包んだscheduledでもImport Queueのmetricsを読める", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);

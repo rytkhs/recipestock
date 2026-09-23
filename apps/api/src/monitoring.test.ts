@@ -1,30 +1,31 @@
 import { NeonDbError } from "@neondatabase/serverless";
 import { type Breadcrumb, type ErrorEvent, withSentry } from "@sentry/cloudflare";
 import { DrizzleQueryError } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSentryOptions } from "./monitoring";
 
 const { beforeBreadcrumb } = createSentryOptions();
 
-// SDKはisolateで最初に初期化したときのfetchを1度だけ包み、nativeでないfetchは包まない
-// （@sentry/core 10.75.1の`supportsNativeFetch`）。初期化より先にnativeに見せたfetchへ差し替え、
+// SDKはisolateで最初に初期化したときのfetchを1度だけ包む。初期化より先にfetchを差し替え、
 // SDKが外部へのfetchに付けたheaderをここで受け取る。
 const outgoingRequests: Request[] = [];
 
 beforeAll(() => {
-  vi.stubGlobal(
-    "fetch",
-    Object.assign(
-      async (...args: ConstructorParameters<typeof Request>) => {
-        outgoingRequests.push(new Request(...args));
-        return new Response(null);
-      },
-      { toString: () => "function fetch() { [native code] }" },
-    ),
-  );
+  vi.stubGlobal("fetch", async (...args: ConstructorParameters<typeof Request>) => {
+    outgoingRequests.push(new Request(...args));
+    return new Response(null);
+  });
 });
 
-const createTestWorker = (handler: ExportedHandler, events: ErrorEvent[]) =>
+// SDKはisolateで最初の呼び出しのoptionsからclientを1つだけ作り、以後の呼び出しでも使い回す。
+// transportはそのとき1度だけ作られるので、送られたeventはテストごとでなくここで受け取る。
+const events: ErrorEvent[] = [];
+
+beforeEach(() => {
+  events.length = 0;
+});
+
+const createTestWorker = (handler: ExportedHandler) =>
   withSentry(
     () => ({
       ...createSentryOptions(),
@@ -56,7 +57,6 @@ const createTestContext = (pending: Promise<unknown>[]) =>
 describe("createSentryOptions", () => {
   // `dataCollection`の既定はSDKの解釈で決まるので、設定値でなくSDKが組み立てたeventを見る。
   it("requestの失敗を送るeventに利用者のIP・header・body・queryを載せない", async () => {
-    const events: ErrorEvent[] = [];
     const pending: Promise<unknown>[] = [];
     const request = new Request(
       "https://app.example.com/api/ios-share/imports?q=%E5%91%B3%E5%99%8C#top",
@@ -78,7 +78,7 @@ describe("createSentryOptions", () => {
         throw new Error("boom");
       },
     };
-    const worker = createTestWorker(handler, events);
+    const worker = createTestWorker(handler);
 
     await expect(worker.fetch?.(request, {}, createTestContext(pending))).rejects.toThrow("boom");
     await Promise.all(pending);
@@ -92,7 +92,6 @@ describe("createSentryOptions", () => {
   });
 
   it("失敗したqueryの引数を送らず、Neonに届かない障害は1つのissueにまとめる", async () => {
-    const events: ErrorEvent[] = [];
     const pending: Promise<unknown>[] = [];
     const request = new Request("https://app.example.com/api/tags") as Request<
       unknown,
@@ -107,7 +106,7 @@ describe("createSentryOptions", () => {
         );
       },
     };
-    const worker = createTestWorker(handler, events);
+    const worker = createTestWorker(handler);
 
     await expect(worker.fetch?.(request, {}, createTestContext(pending))).rejects.toThrow(
       "Failed query",
@@ -124,7 +123,6 @@ describe("createSentryOptions", () => {
   });
 
   it("SQLの誤りは呼び出した場所ごとのissueのままにする", async () => {
-    const events: ErrorEvent[] = [];
     const pending: Promise<unknown>[] = [];
     const request = new Request("https://app.example.com/api/tags") as Request<
       unknown,
@@ -139,18 +137,18 @@ describe("createSentryOptions", () => {
         );
       },
     };
-    const worker = createTestWorker(handler, events);
+    const worker = createTestWorker(handler);
 
     await expect(worker.fetch?.(request, {}, createTestContext(pending))).rejects.toThrow(
       "Failed query",
     );
     await Promise.all(pending);
 
+    expect(events).toHaveLength(1);
     expect(events[0]?.fingerprint).toBeUndefined();
   });
 
   it("外部へのfetchにtraceのheaderを付けない", async () => {
-    const events: ErrorEvent[] = [];
     const pending: Promise<unknown>[] = [];
     const request = new Request("https://app.example.com/api/import/url", {
       method: "POST",
@@ -162,7 +160,7 @@ describe("createSentryOptions", () => {
         throw new Error("boom");
       },
     };
-    const worker = createTestWorker(handler, events);
+    const worker = createTestWorker(handler);
     outgoingRequests.length = 0;
 
     await expect(worker.fetch?.(request, {}, createTestContext(pending))).rejects.toThrow("boom");
