@@ -1,4 +1,6 @@
+import { NeonDbError } from "@neondatabase/serverless";
 import { type Breadcrumb, type ErrorEvent, withSentry } from "@sentry/cloudflare";
+import { DrizzleQueryError } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createSentryOptions } from "./monitoring";
 
@@ -87,6 +89,64 @@ describe("createSentryOptions", () => {
       method: "POST",
       url: "https://app.example.com/api/ios-share/imports",
     });
+  });
+
+  it("失敗したqueryの引数を送らず、Neonに届かない障害は1つのissueにまとめる", async () => {
+    const events: ErrorEvent[] = [];
+    const pending: Promise<unknown>[] = [];
+    const request = new Request("https://app.example.com/api/tags") as Request<
+      unknown,
+      IncomingRequestCfProperties
+    >;
+    const handler: ExportedHandler = {
+      fetch: () => {
+        throw new DrizzleQueryError(
+          "select id from shortcut_credentials where token_hash = $1",
+          ["token-hash"],
+          new NeonDbError("Server error (HTTP status 520): error code: 520"),
+        );
+      },
+    };
+    const worker = createTestWorker(handler, events);
+
+    await expect(worker.fetch?.(request, {}, createTestContext(pending))).rejects.toThrow(
+      "Failed query",
+    );
+    await Promise.all(pending);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.exception?.values?.map((exception) => exception.value)).toEqual([
+      "Server error (HTTP status 520): error code: 520",
+      "Failed query: select id from shortcut_credentials where token_hash = $1",
+    ]);
+    expect(JSON.stringify(events[0])).not.toContain("token-hash");
+    expect(events[0]?.fingerprint).toEqual(["database-unavailable"]);
+  });
+
+  it("SQLの誤りは呼び出した場所ごとのissueのままにする", async () => {
+    const events: ErrorEvent[] = [];
+    const pending: Promise<unknown>[] = [];
+    const request = new Request("https://app.example.com/api/tags") as Request<
+      unknown,
+      IncomingRequestCfProperties
+    >;
+    const handler: ExportedHandler = {
+      fetch: () => {
+        throw new DrizzleQueryError(
+          "select missing from tags",
+          [],
+          new NeonDbError("column does not exist"),
+        );
+      },
+    };
+    const worker = createTestWorker(handler, events);
+
+    await expect(worker.fetch?.(request, {}, createTestContext(pending))).rejects.toThrow(
+      "Failed query",
+    );
+    await Promise.all(pending);
+
+    expect(events[0]?.fingerprint).toBeUndefined();
   });
 
   it("外部へのfetchにtraceのheaderを付けない", async () => {
