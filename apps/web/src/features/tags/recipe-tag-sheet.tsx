@@ -23,7 +23,7 @@ import {
 import { ApiClientError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getRecipe, invalidateRecipeLists, recipesQueryKeys } from "../recipes";
-import { listTags, replaceRecipeTags } from "./api";
+import { listTags, RECIPE_TAGS_SAVE_TIMEOUT_MS, replaceRecipeTags } from "./api";
 import { tagsQueryKeys } from "./query-keys";
 import { STARTER_TAG_NAMES } from "./starter-tags";
 import { tagChipClass } from "./tag-chip";
@@ -133,11 +133,17 @@ export const RecipeTagSheet = ({
       const recipe = await queryClient
         .fetchQuery({
           queryKey: detailQueryKey,
-          queryFn: () => getRecipe(recipeId),
+          queryFn: () =>
+            getRecipe(recipeId, { signal: AbortSignal.timeout(RECIPE_TAGS_SAVE_TIMEOUT_MS) }),
           staleTime: 0,
           retry: false,
         })
         .catch(() => undefined);
+
+      // 読み直しの間に押された組があれば、その組の保存に任せる。
+      if (!isLastTagSave()) {
+        return;
+      }
 
       if (!recipe || recipe.locked || !hasSameTags(recipe.tags, attemptedTags)) {
         setSaveError("タグを保存できませんでした。");

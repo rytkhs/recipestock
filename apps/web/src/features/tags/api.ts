@@ -8,8 +8,9 @@ import {
 } from "@recipestock/schemas";
 import { api, parseApiResponse } from "../../lib/api";
 
-// 応答が届かないまま待つと、同じRecipeへ後から押した組も送れずに溜まる。時間で区切って送り直させる。
-const RECIPE_TAGS_SAVE_TIMEOUT_MS = 10_000;
+// 応答が届かないまま待つと、同じRecipeへ後から押した組も送れずに溜まる。
+// 保存と、保存に失敗した後の読み直しは、この時間で区切る。
+export const RECIPE_TAGS_SAVE_TIMEOUT_MS = 10_000;
 
 // パスパラメータのあるルートは、RPCの型が本文を受け付けないので、レシピの更新と同じくfetchで送る。
 const sendJson = (

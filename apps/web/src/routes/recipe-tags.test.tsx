@@ -813,6 +813,146 @@ describe("タグ", () => {
       );
       expect(within(sheet).queryByRole("alert")).not.toBeInTheDocument();
     });
+
+    it("保存に失敗した後の読み直しの間に押した組があれば、その組を保存している間は失敗を出さない", async () => {
+      let savedNames: string[] = [];
+      let detailRequests = 0;
+      const verification = deferred();
+      const secondSave = deferred();
+      const fetchMock = mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
+            const names = requestedTagNames(init);
+
+            // 最初に押した組の保存は、送り直しても失敗する。
+            if (names.length === 1) {
+              return serverErrorResponse();
+            }
+
+            await secondSave.promise;
+            savedNames = names;
+            return jsonResponse({ tags: vocabularyTagsNamed(savedNames) });
+          }
+
+          if (path === "/api/recipes/recipe_1") {
+            detailRequests += 1;
+
+            // 失敗した後の読み直しは、押した組を保存する前の詳細を返す。
+            if (detailRequests === 2) {
+              await verification.promise;
+            }
+
+            return jsonResponse(detailResponse(vocabularyTagsNamed(savedNames)));
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: tagVocabulary });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      const { queryClient } = await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await userEvent.click(await within(sheet).findByRole("button", { name: /^主菜/ }));
+      await waitFor(() => {
+        expect(detailRequests).toBe(2);
+      });
+      await userEvent.click(within(sheet).getByRole("button", { name: /^副菜/ }));
+      await act(async () => {
+        verification.resolve();
+      });
+
+      await waitFor(() => {
+        expect(savedTagSets(fetchMock).at(-1)).toEqual(["主菜", "副菜"]);
+      });
+      expect(within(sheet).queryByRole("alert")).not.toBeInTheDocument();
+
+      await act(async () => {
+        secondSave.resolve();
+      });
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+      });
+      expect(savedNames).toEqual(["主菜", "副菜"]);
+      expect(within(sheet).queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("保存に失敗した後の読み直しが届かなくても、時間で区切って後から押した組を送る", async () => {
+      const timeouts: AbortController[] = [];
+      vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+        const controller = new AbortController();
+        timeouts.push(controller);
+        return controller.signal;
+      });
+      let savedNames: string[] = [];
+      let detailRequests = 0;
+      const fetchMock = mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
+            const names = requestedTagNames(init);
+
+            // 最初に押した組の保存は、送り直しても失敗する。
+            if (names.length === 1) {
+              return serverErrorResponse();
+            }
+
+            savedNames = names;
+            return jsonResponse({ tags: vocabularyTagsNamed(savedNames) });
+          }
+
+          if (path === "/api/recipes/recipe_1") {
+            detailRequests += 1;
+
+            // 失敗した後の読み直しは応答が届かず、時間切れで打ち切られる。
+            if (detailRequests === 2) {
+              return new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+              });
+            }
+
+            return jsonResponse(detailResponse(vocabularyTagsNamed(savedNames)));
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: tagVocabulary });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      const { queryClient } = await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await userEvent.click(await within(sheet).findByRole("button", { name: /^主菜/ }));
+      await waitFor(() => {
+        expect(detailRequests).toBe(2);
+      });
+      await userEvent.click(within(sheet).getByRole("button", { name: /^副菜/ }));
+
+      // 最後に時間で区切ったのは、読み直しの要求。
+      act(() => {
+        timeouts.at(-1)?.abort(new DOMException("The operation timed out.", "TimeoutError"));
+      });
+
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+      });
+      expect(savedTagSets(fetchMock).at(-1)).toEqual(["主菜", "副菜"]);
+      expect(savedNames).toEqual(["主菜", "副菜"]);
+      expect(within(sheet).queryByRole("alert")).not.toBeInTheDocument();
+    });
   });
 
   describe("タグの管理", () => {
