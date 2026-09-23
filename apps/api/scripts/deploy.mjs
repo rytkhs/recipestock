@@ -4,6 +4,8 @@
 // 必要な環境変数（`../../.env`から読む）:
 // - SENTRY_AUTH_TOKEN: source mapの upload とreleaseの作成に使う
 // - VITE_SENTRY_DSN: webのbundleに埋め込む。無ければブラウザのエラーが送られない
+//
+// WorkerのDSNは`SENTRY_DSN`のsecretとしてCloudflareに置き、deployの前に有無を確かめる。
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -18,8 +20,8 @@ const fail = (message) => {
   process.exit(1);
 };
 
-const read = (command, args) =>
-  execFileSync(command, args, { cwd: repoRoot, encoding: "utf8" }).trim();
+const read = (command, args, options) =>
+  execFileSync(command, args, { cwd: repoRoot, encoding: "utf8", ...options }).trim();
 
 const run = (command, args, options) =>
   execFileSync(command, args, { stdio: "inherit", ...options });
@@ -34,6 +36,16 @@ for (const name of ["SENTRY_AUTH_TOKEN", "VITE_SENTRY_DSN"]) {
   if (!process.env[name]) {
     fail(`${name} must be set in the repository root .env before deploying.`);
   }
+}
+
+// secretが無くてもWorkerは動き、APIのエラーだけが黙ってSentryへ届かなくなる。
+const workerSecrets = JSON.parse(
+  read("pnpm", ["exec", "wrangler", "secret", "list"], { cwd: apiDir }),
+);
+if (!workerSecrets.some(({ name }) => name === "SENTRY_DSN")) {
+  fail(
+    "SENTRY_DSN must be set as a Worker secret before deploying. Run `wrangler secret put SENTRY_DSN`.",
+  );
 }
 
 const release = read("git", ["rev-parse", "HEAD"]);

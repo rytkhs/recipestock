@@ -80,17 +80,22 @@ const originOf = (value: string) => {
  * 送る内容はログと同じ線に揃える。request bodyはレシピ本文やStripeのpayloadを含み、
  * queryは検索語を含むので送らない。外部へのfetchは取り込み元のURLや署名付きURLを含むため、
  * breadcrumbにはoriginだけを残す（ログの`sourceHost`と同じ扱い）。
+ *
+ * `dataCollection`を渡すと、書かなかった項目はすべて送る側の既定になる。IPを送らない
+ * `userInfo: false`も明示する。request headerは`Authorization`（iOS共有のtoken）を含むので送らない。
+ * eventへのheaderの付与は`allow`で絞れず、`false`にするしかない。
+ * request bodyは`httpBodies`を見ずに`httpServerIntegration`が付けるので、そちらでも止める
+ * （@sentry/cloudflare 10.75.1）。
  */
 export const createSentryOptions = (): Sentry.CloudflareOptions => ({
   dataCollection: {
     cookies: false,
     httpBodies: [],
-    httpHeaders: {
-      request: { allow: ["cf-ray", "content-type", "user-agent"] },
-      response: false,
-    },
+    httpHeaders: false,
     urlQueryParams: false,
+    userInfo: false,
   },
+  integrations: [Sentry.httpServerIntegration({ maxRequestBodySize: "none" })],
   beforeSend: (event) => {
     if (event.request?.url) {
       event.request.url = withoutQuery(event.request.url);

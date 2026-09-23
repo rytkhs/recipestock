@@ -1,28 +1,69 @@
-import { type Breadcrumb, type ErrorEvent } from "@sentry/cloudflare";
+import { type Breadcrumb, type ErrorEvent, withSentry } from "@sentry/cloudflare";
 import { describe, expect, it } from "vitest";
 import { createSentryOptions } from "./monitoring";
 
-const { beforeBreadcrumb, beforeSend, dataCollection } = createSentryOptions();
+const { beforeBreadcrumb } = createSentryOptions();
 
 describe("createSentryOptions", () => {
-  it("request bodyとcookieとqueryを送らない", () => {
-    expect(dataCollection).toMatchObject({
-      cookies: false,
-      httpBodies: [],
-      urlQueryParams: false,
-    });
-  });
-
-  it("eventのrequest URLからqueryとhashを落とす", () => {
-    const event = beforeSend?.(
+  // `dataCollection`の既定はSDKの解釈で決まるので、設定値でなくSDKが組み立てたeventを見る。
+  it("requestの失敗を送るeventに利用者のIP・header・body・queryを載せない", async () => {
+    const events: ErrorEvent[] = [];
+    const pending: Promise<unknown>[] = [];
+    const request = new Request(
+      "https://app.example.com/api/ios-share/imports?q=%E5%91%B3%E5%99%8C#top",
       {
-        type: undefined,
-        request: { url: "https://app.example.com/api/recipes?q=%E5%91%B3%E5%99%8C#top" },
-      } as ErrorEvent,
-      {},
-    ) as ErrorEvent;
+        method: "POST",
+        headers: {
+          authorization: "Bearer shortcut-token",
+          "cf-connecting-ip": "203.0.113.7",
+          "content-type": "application/json",
+          cookie: "session=secret",
+          "user-agent": "RecipeStock/1.0",
+        },
+        body: JSON.stringify({ url: "https://recipes.example.com/private" }),
+      },
+    ) as Request<unknown, IncomingRequestCfProperties>;
 
-    expect(event.request?.url).toBe("https://app.example.com/api/recipes");
+    const handler: ExportedHandler = {
+      fetch: () => {
+        throw new Error("boom");
+      },
+    };
+    const worker = withSentry(
+      () => ({
+        ...createSentryOptions(),
+        dsn: "https://public@o0.ingest.sentry.io/0",
+        transport: () => ({
+          send: async ([, items]) => {
+            for (const [header, payload] of items) {
+              if (header.type === "event") {
+                events.push(payload as ErrorEvent);
+              }
+            }
+            return {};
+          },
+          flush: async () => true,
+        }),
+      }),
+      handler,
+    );
+    const ctx = {
+      waitUntil: (promise: Promise<unknown>) => {
+        pending.push(promise);
+      },
+      passThroughOnException: () => undefined,
+      props: {},
+    } as unknown as ExecutionContext;
+
+    await expect(worker.fetch?.(request, {}, ctx)).rejects.toThrow("boom");
+    await Promise.all(pending);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.user).toBeUndefined();
+    expect(events[0]?.request).toEqual({
+      method: "POST",
+      url: "https://app.example.com/api/ios-share/imports",
+    });
   });
 
   it("外部へのfetchのbreadcrumbはoriginだけを残す", () => {

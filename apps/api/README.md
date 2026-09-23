@@ -133,7 +133,8 @@ pnpm --filter @recipestock/api exec wrangler secret put YOUTUBE_DATA_API_KEY
 ```
 
 Error reporting is not a validated binding, because a missing DSN should not take the API down. Set it
-on every production environment; without it the Worker sends nothing to Sentry:
+on every production environment; without it the Worker sends nothing to Sentry. The deploy script stops
+when it is missing:
 
 ```bash
 pnpm --filter @recipestock/api exec wrangler secret put SENTRY_DSN
@@ -169,5 +170,7 @@ is missing or when the working tree has uncommitted changes:
 
 - `SENTRY_AUTH_TOKEN`: uploads source maps and creates the release
 - `VITE_SENTRY_DSN`: embedded in the web bundle
+
+It also stops when the Worker has no `SENTRY_DSN` secret.
 
 Do not commit `.dev.vars` or other secret files.

@@ -15,7 +15,7 @@
 
 Stripe webhookの失敗は`onError`の経路で送り、`route` tagで見分けてアラートにする。署名検証の失敗は400を返すだけで送らない。インターネットから届く不正なリクエストは異常ではない。
 
-送る内容はログと同じ線に揃える。request body（レシピ本文、Stripeのpayload）、cookie、URLのqueryは送らない。Workerの外部fetchのbreadcrumbは取り込み元のURLや署名付きURLを含むので、originだけを残す。これはログに`sourceHost`だけを残すのと同じ扱いである。利用者はidだけを載せる。
+送る内容はログと同じ線に揃える。request body（レシピ本文、Stripeのpayload）、request header（cookie、iOS共有のtoken）、利用者のIP、URLのqueryは送らない。Workerの外部fetchのbreadcrumbは取り込み元のURLや署名付きURLを含むので、originだけを残す。これはログに`sourceHost`だけを残すのと同じ扱いである。利用者はidだけを載せる。
 
 Sentryのtracingは使わない。WorkerのspanはWorkers Tracesがbindingまで自動で取るので、二つ持つと同じものを二重に計装することになる。
 
@@ -41,7 +41,7 @@ Neonは何もしない状態が5分続くとcomputeを止める。1分ごとの�
 
 ## releaseとsource map
 
-webとWorkerは1回のdeployで同時に出るので、releaseはgit SHAにして両方で使う。どちらもminifyしているので、source mapが無いとSentryのstack traceは読めない。deployは`apps/api/scripts/deploy.mjs`にまとめ、webのsource mapは`@sentry/vite-plugin`が、Workerのsource mapは`sentry-cli`が上げる。webの`dist`はそのまま公開されるので、上げたsource mapは`dist`から消す。commitしていない変更がある状態と、tokenやDSNが無い状態ではdeployしない。
+webとWorkerは1回のdeployで同時に出るので、releaseはgit SHAにして両方で使う。どちらもminifyしているので、source mapが無いとSentryのstack traceは読めない。deployは`apps/api/scripts/deploy.mjs`にまとめ、webのsource mapは`@sentry/vite-plugin`が、Workerのsource mapは`sentry-cli`が上げる。webの`dist`はそのまま公開されるので、上げたsource mapは`dist`から消す。commitしていない変更がある状態と、tokenやDSN（webの`VITE_SENTRY_DSN`とWorkerのsecretの`SENTRY_DSN`）が無い状態ではdeployしない。
 
 ## 採らなかった案
 
