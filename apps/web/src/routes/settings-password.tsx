@@ -1,6 +1,5 @@
 import { CheckCircle, Circle } from "@phosphor-icons/react";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@recipestock/shared";
-import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -29,6 +28,7 @@ import {
 } from "../features/settings/settings-page";
 import { useSignOut } from "../features/settings/use-sign-out";
 import { AuthRequestError, changePassword, useAuthSession } from "../lib/auth";
+import { useGoBack } from "../lib/navigation";
 
 type ChangePasswordError = {
   /** 直す欄が決まる失敗は、その欄の下に出す。決まらないものはボタンの下に出す。 */
@@ -57,7 +57,7 @@ const changePasswordError = (error: unknown): ChangePasswordError => {
 };
 
 export const SettingsPasswordRoute = () => {
-  const navigate = useNavigate();
+  const goBack = useGoBack({ to: "/settings" });
   const session = useAuthSession();
   const loginMethods = useLoginMethods();
   const { clearSignOutError, isSigningOut, signOutAndGoToLogin, signOutError } = useSignOut();
@@ -151,14 +151,7 @@ export const SettingsPasswordRoute = () => {
           <div className="outline-none" ref={changedNoticeRef} tabIndex={-1}>
             <SettingsNotice
               action={
-                <Button
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    void navigate({ to: "/settings" });
-                  }}
-                >
+                <Button size="sm" type="button" variant="outline" onClick={goBack}>
                   設定に戻る
                 </Button>
               }

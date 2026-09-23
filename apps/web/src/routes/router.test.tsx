@@ -275,7 +275,7 @@ describe("AppRouter", () => {
 
     const { appRouter } = await renderApp("/settings");
 
-    await userEvent.click(await screen.findByRole("button", { name: "レシピ一覧へ戻る" }));
+    await userEvent.click(await screen.findByRole("button", { name: "戻る" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(appRouter.state.location.pathname).toBe("/recipes");

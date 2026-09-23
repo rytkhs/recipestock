@@ -65,7 +65,7 @@ import {
   recipesQueryKeys,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
-import { writeRecipeListFilters, writeRecipeListSort } from "../features/recipes/list-search";
+import { writeRecipeListSort } from "../features/recipes/list-search";
 import { LockedShelfNotice, RecipeCard } from "../features/recipes/recipe-card";
 import { groupRecipesByPeriod, recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
 import {
@@ -259,7 +259,6 @@ const ImportJobIsland = () => {
                   <Link
                     className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
                     params={{ recipeId: job.recipeId }}
-                    state={{ openedFromRecipeList: true }}
                     to="/recipes/$recipeId"
                     onClick={() => dismissImportJob(job.id)}
                   >
@@ -380,19 +379,10 @@ export const RecipesIndexRoute = () => {
     writeRecipeViewMode(viewMode);
   }, [viewMode]);
 
-  // URLで開いた並び順も、詳細などから一覧へ戻るときに引き継ぐ。
+  // URLで開いた並び順も、並び順を指定せずに一覧へ移るとき（ヘッダーのリンクなど）に引き継ぐ。
   useEffect(() => {
     writeRecipeListSort(sort);
   }, [sort]);
-
-  // 検索語とタグの条件は戻る操作で引き継ぐ。
-  useEffect(() => {
-    writeRecipeListFilters({
-      q: query || undefined,
-      tags: tagIds.length > 0 ? tagIds : undefined,
-      untagged: untagged || undefined,
-    });
-  }, [query, tagIds, untagged]);
 
   // ヘッダーのリンクなどでURLから検索語が外れたら、入力欄も合わせる。
   useEffect(() => {

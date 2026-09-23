@@ -3,18 +3,19 @@ import { type RecipeTag } from "@recipestock/schemas";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { isPendingTagId, RecipeTagSheet } from "./recipe-tag-sheet";
+import { isPendingTagId, RecipeTagSheet, useDisplayedRecipeTags } from "./recipe-tag-sheet";
 import { tagChipClass } from "./tag-chip";
 
 // 詳細のタイトルの下に置くタグの行。タグを押すとそのタグで絞った一覧を開く。
 export const RecipeTags = ({
   recipeId,
-  tags,
+  tags: savedTags,
 }: {
   recipeId: string;
   tags: readonly RecipeTag[];
 }) => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const tags = useDisplayedRecipeTags(recipeId, savedTags);
 
   return (
     <>

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { act, render } from "@testing-library/react";
 import { vi } from "vitest";
-import { writeRecipeListFilters, writeRecipeListSort } from "../features/recipes/list-search";
+import { writeRecipeListSort } from "../features/recipes/list-search";
 import { authClient } from "../lib/auth";
 import {
   billingStatusFixture,
@@ -125,12 +125,13 @@ export const renderApp = async (
   setupQueryClient?: (queryClient: QueryClient) => void,
 ) => {
   resetAuthSessionStore();
-  // 一覧の並び順と絞り込み条件はモジュールに覚えるので、アプリを開き直した状態に戻す。
+  // 一覧の並び順はモジュールに覚えるので、アプリを開き直した状態に戻す。
   writeRecipeListSort("newest");
-  writeRecipeListFilters({});
+  // 送り直す保存も、テストでは待たずに送り直させる。
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
+      mutations: { retryDelay: 0 },
     },
   });
   setupQueryClient?.(queryClient);

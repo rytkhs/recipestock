@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { getAuthSession, getFreshAuthSession, useAuthSession } from "./auth";
+import { setMonitoringUser } from "./monitoring";
 
 export type AuthCheckResult = "authenticated" | "unauthenticated" | "unavailable";
 export type AuthStatus = "pending" | AuthCheckResult;
@@ -55,6 +56,12 @@ export const AuthStateProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     setStatus(statusForSession(session.data, session.error, hasCompletedInitialCheck));
   }, [hasCompletedInitialCheck, session.data, session.error]);
+
+  const userId = session.data?.user.id ?? null;
+
+  useEffect(() => {
+    setMonitoringUser(userId);
+  }, [userId]);
 
   const recheck = useCallback((mode: AuthRecheckMode = "cache-aware") => {
     const inFlight = recheckPromises.current[mode];

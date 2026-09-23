@@ -641,7 +641,7 @@ describe("RecipesRoute", () => {
 
     await userEvent.click(await screen.findByRole("link", { name: /Potato salad/ }));
     await screen.findByRole("button", { name: "操作メニュー" });
-    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
 
     await expect(
       screen.findByRole("button", { name: "表示の設定（古い順）" }),
@@ -672,7 +672,7 @@ describe("RecipesRoute", () => {
     await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
     await userEvent.click(await screen.findByRole("link", { name: "編集" }));
     await userEvent.click(await screen.findByRole("button", { name: "閉じる" }));
-    await userEvent.click(await screen.findByRole("button", { name: "レシピ一覧へ戻る" }));
+    await userEvent.click(await screen.findByRole("button", { name: "戻る" }));
 
     await waitFor(() => {
       expect(appRouter.state.location.pathname).toBe("/recipes");
@@ -743,7 +743,7 @@ describe("RecipesRoute", () => {
 
     await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
     await screen.findByRole("button", { name: "操作メニュー" });
-    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
 
     await expect(screen.findByRole("button", { name: "表示の設定" })).resolves.toBeInTheDocument();
     expect(appRouter.state.location.searchStr).toBe("");
@@ -931,7 +931,7 @@ describe("RecipesRoute", () => {
 
     await userEvent.click(await screen.findByRole("link", { name: /Tomato pasta/ }));
     await screen.findByRole("button", { name: "操作メニュー" });
-    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
 
     await expect(
       screen.findByRole("heading", { name: "Tomato pasta" }),
@@ -2691,7 +2691,7 @@ describe("RecipesRoute", () => {
     expect(screen.queryByRole("link", { name: "編集" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "材料" })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
     expect(appRouter.state.location.pathname).toBe("/recipes");
   });
 
@@ -2736,7 +2736,7 @@ describe("RecipesRoute", () => {
     ).resolves.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更新" })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "レシピ詳細へ戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
     expect(appRouter.state.location.pathname).toBe("/recipes/recipe_locked");
   });
 
@@ -3467,7 +3467,7 @@ describe("RecipesRoute", () => {
     await expect(
       screen.findByRole("heading", { name: "レシピを表示できません" }),
     ).resolves.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "レシピ一覧へ戻る" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "戻る" })).toBeInTheDocument();
     expect(screen.queryByText("レシピを更新できませんでした。")).not.toBeInTheDocument();
   });
 

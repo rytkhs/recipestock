@@ -6,6 +6,7 @@ import {
 } from "./auth";
 import { type Bindings } from "./env";
 import { type EmailSender } from "./lib/email/resend";
+import { createLogger, createMemoryLogSink } from "./logger";
 
 describe("createAuthEmailCallbacks", () => {
   it("email verification linkを送る", async () => {
@@ -157,7 +158,8 @@ describe("syncStripeCustomerEmailForUser", () => {
 
   it("Stripe更新失敗時は例外を漏らさずログへ残す", async () => {
     const error = new Error("Stripe update failed.");
-    const logger = { error: vi.fn() };
+    const sink = createMemoryLogSink();
+    const logger = createLogger({}, { sink });
 
     await expect(
       syncStripeCustomerEmailForUser({
@@ -179,11 +181,15 @@ describe("syncStripeCustomerEmailForUser", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(logger.error).toHaveBeenCalledWith("[auth] Stripe customer email sync failed", {
-      error,
-      stripeCustomerId: "cus_123",
-      userId: "user_123",
-    });
+    expect(sink.entries).toEqual([
+      expect.objectContaining({
+        event: "stripe_customer_email_sync_failed",
+        level: "error",
+        error: { message: "Stripe update failed.", name: "Error", stack: expect.any(String) },
+        stripeCustomerId: "cus_123",
+        userId: "user_123",
+      }),
+    ]);
   });
 });
 

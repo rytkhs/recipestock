@@ -1,8 +1,10 @@
-import { createDb } from "@recipestock/db";
+import { createDb, withoutQueryParams } from "@recipestock/db";
+import * as Sentry from "@sentry/cloudflare";
 import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
+import { routePath } from "hono/route";
 import { secureHeaders } from "hono/secure-headers";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
@@ -19,15 +21,23 @@ import {
   createImportJobRepository,
   type ImportJobRepository,
   processImportJob,
+  resolveImportJobTimeoutMs,
 } from "./import-jobs";
+import { checkImportQueueHealth } from "./import-queue-health";
 import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
 import { createTextImportJobSubmission } from "./lib/import/text-import-job-submission";
 import {
   createUrlImportJobSubmission,
   type UrlImportJobSubmission,
 } from "./lib/import/url-import-job-submission";
-import { createLogger, type LoggerFactory } from "./logger";
+import { createLogger, type Logger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
+import {
+  createSentryCheckInReporter,
+  createSentryOptions,
+  type ErrorReporter,
+  sentryErrorReporter,
+} from "./monitoring";
 import {
   createPushSubscriptionRepository,
   type PushSubscriptionRepository,
@@ -55,9 +65,13 @@ import { type TagRepository } from "./tags";
 import { createUsageRepository, type UsageRepository } from "./usage";
 
 const IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS = 4;
+// `wrangler.jsonc`の`queues.consumers`と同じ名前。queue handlerはこの名前で振り分ける。
+const IMPORT_DEAD_LETTER_QUEUE = "recipestock-import-jobs-dlq";
+const IMPORT_QUEUE_HEALTH_MONITOR_SLUG = "import-queue-health";
 
 export type AppDependencies = {
   auth?: AuthService;
+  errorReporter?: ErrorReporter;
   loggerFactory?: LoggerFactory;
   meRepository?: MeRepository;
   usageRepository?: UsageRepository;
@@ -97,6 +111,9 @@ const createLoggerMiddleware = (loggerFactory: LoggerFactory) =>
 
     await next();
 
+    // 問い合わせで受け取った値から、そのままログを引けるようにする。
+    c.res.headers.set("X-Request-ID", requestId);
+
     const status = c.res.status;
     const fields = {
       durationMs: Date.now() - startedAt,
@@ -121,6 +138,7 @@ const createLoggerMiddleware = (loggerFactory: LoggerFactory) =>
 export const createApp = (dependencies: AppDependencies = {}) => {
   const app = new Hono<ApiEnv>().basePath("/api");
   const auth = dependencies.auth ?? authService;
+  const errorReporter = dependencies.errorReporter ?? sentryErrorReporter;
   const loggerFactory = dependencies.loggerFactory ?? createLogger;
   const csrfProtection = csrf();
   const shortcutCredentialsFor = (env: Bindings) =>
@@ -167,6 +185,14 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       userId: c.var.userId,
     });
 
+    // 4xxのHTTPExceptionは入力や権限による想定内の失敗なので送らない。
+    if (response.status >= 500) {
+      errorReporter.report(error, {
+        tags: { request_id: c.var.requestId, route: routePath(c) },
+        userId: c.var.userId,
+      });
+    }
+
     return response;
   });
   app.use("*", createLoggerMiddleware(loggerFactory));
@@ -181,6 +207,10 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   app.use("/push-subscriptions", csrfProtection);
   app.use("/tags", csrfProtection);
   app.use("/tags/*", csrfProtection);
+
+  // 外形監視の宛先。Workerが応答できることだけを示し、DBなど依存先には触れない。
+  // bindingの検証はfetchの入口で先に走るので、設定の誤りはここでも500として見える。
+  app.get("/health", (c) => c.json({ status: "ok" }, 200, { "Cache-Control": "no-store" }));
 
   return app
     .route("/auth", createAuthRoutes({ auth }))
@@ -316,25 +346,31 @@ const notifyImportJobCompletionBestEffort = async ({
 
 export const handleImportQueueMessageError = async ({
   error,
+  errorReporter = sentryErrorReporter,
   importJobRepository,
   message,
+  logger = createLogger({ jobId: message.body.jobId, messageId: message.id }),
   notifyCompletion,
   now = new Date(),
 }: {
   error: unknown;
+  errorReporter?: ErrorReporter;
   importJobRepository: ImportJobRepository;
   message: ImportQueueMessage;
+  logger?: Logger;
   notifyCompletion?: () => Promise<void>;
   now?: Date;
 }) => {
-  createLogger().error("import_job_queue_error", {
+  logger.error("import_job_queue_error", {
     attempts: message.attempts,
     error,
-    jobId: message.body.jobId,
-    messageId: message.id,
   });
 
   if (message.attempts >= IMPORT_QUEUE_MAX_DELIVERY_ATTEMPTS) {
+    // 再試行で直った失敗は利用者に見えないので送らない。Jobを失敗にする最後の配信だけを送る。
+    errorReporter.report(error, {
+      tags: { attempts: message.attempts, job_id: message.body.jobId },
+    });
     await importJobRepository.markJobFailed({
       jobId: message.body.jobId,
       errorCode: "unknown",
@@ -350,6 +386,7 @@ export const handleImportQueueMessageError = async ({
 };
 
 export const handleImportQueueMessage = async ({
+  errorReporter,
   importJobRepository,
   message,
   processJob,
@@ -357,12 +394,13 @@ export const handleImportQueueMessage = async ({
   now,
   logger = createLogger({ jobId: message.body.jobId, messageId: message.id }),
 }: {
+  errorReporter?: ErrorReporter;
   importJobRepository: ImportJobRepository;
   message: ImportQueueMessage;
   processJob: (jobId: string) => Promise<void>;
   pushSender: PushSender;
   now?: Date;
-  logger?: ReturnType<typeof createLogger>;
+  logger?: Logger;
 }) => {
   const notifyCompletion = () =>
     notifyImportJobCompletionBestEffort({
@@ -380,13 +418,77 @@ export const handleImportQueueMessage = async ({
   } catch (error) {
     await handleImportQueueMessageError({
       error,
+      errorReporter,
       importJobRepository,
       message,
+      logger,
       notifyCompletion,
       now: now ?? new Date(),
     });
   }
 };
+
+export class ImportJobDeadLetteredError extends Error {
+  constructor() {
+    super("Import job message was moved to the dead letter queue.");
+    this.name = "ImportJobDeadLetteredError";
+  }
+}
+
+/**
+ * 通常の失敗は最後の配信でJobを失敗にしてackするので、DLQには届かない。届くのはconsumer自体が
+ * 落ちたとき（最後の配信でのDB障害、実行時間の上限など）で、Jobはqueued/runningのまま残っている。
+ * ここで失敗に確定させて完了通知を出す。`markJobFailed`は進行中のJobしか書き換えないので、
+ * 既に終わったJobの結果は変わらない。DBに書けなければthrowし、DLQ側の再試行に任せる。
+ */
+export const handleDeadLetteredImportJobMessage = async ({
+  errorReporter = sentryErrorReporter,
+  importJobRepository,
+  message,
+  logger = createLogger({ jobId: message.body.jobId, messageId: message.id }),
+  notifyCompletion,
+  now = new Date(),
+}: {
+  errorReporter?: ErrorReporter;
+  importJobRepository: ImportJobRepository;
+  message: ImportQueueMessage;
+  logger?: Logger;
+  notifyCompletion?: () => Promise<void>;
+  now?: Date;
+}) => {
+  logger.error("import_job_dead_lettered", { attempts: message.attempts });
+  errorReporter.report(new ImportJobDeadLetteredError(), {
+    tags: { area: "import_dlq", job_id: message.body.jobId },
+  });
+
+  await importJobRepository.markJobFailed({
+    jobId: message.body.jobId,
+    errorCode: "unknown",
+    errorMessage: "Import job could not be processed.",
+    now,
+  });
+  await notifyCompletion?.();
+  message.ack();
+};
+
+const createImportCompletionPushSender = ({
+  env,
+  logger,
+  repository,
+}: {
+  env: Bindings;
+  logger: Logger;
+  repository: PushSubscriptionRepository;
+}) =>
+  createPushSender({
+    repository,
+    logger,
+    vapid: {
+      subject: env.VAPID_SUBJECT,
+      publicKey: env.VAPID_PUBLIC_KEY,
+      privateKey: env.VAPID_PRIVATE_KEY,
+    },
+  });
 
 const handleImportQueue = async (
   batch: MessageBatch<{ jobId: string }>,
@@ -406,14 +508,10 @@ const handleImportQueue = async (
       messageId: message.id,
     });
 
-    const pushSender = createPushSender({
-      repository: pushSubscriptionRepository,
+    const pushSender = createImportCompletionPushSender({
+      env,
       logger,
-      vapid: {
-        subject: env.VAPID_SUBJECT,
-        publicKey: env.VAPID_PUBLIC_KEY,
-        privateKey: env.VAPID_PRIVATE_KEY,
-      },
+      repository: pushSubscriptionRepository,
     });
     await handleImportQueueMessage({
       importJobRepository,
@@ -434,19 +532,108 @@ const handleImportQueue = async (
   }
 };
 
+const handleImportDeadLetterQueue = async (
+  batch: MessageBatch<{ jobId: string }>,
+  env: Bindings,
+): Promise<void> => {
+  const db = createDb(env.DATABASE_URL);
+  const importJobRepository = createImportJobRepository(db, {
+    proPriceId: env.STRIPE_PRO_PRICE_ID,
+  });
+  const pushSubscriptionRepository = createPushSubscriptionRepository(db);
+
+  for (const message of batch.messages) {
+    const logger = createLogger({
+      jobId: message.body.jobId,
+      messageId: message.id,
+    });
+    const pushSender = createImportCompletionPushSender({
+      env,
+      logger,
+      repository: pushSubscriptionRepository,
+    });
+    const now = new Date();
+
+    await handleDeadLetteredImportJobMessage({
+      importJobRepository,
+      message,
+      logger,
+      notifyCompletion: () =>
+        notifyImportJobCompletionBestEffort({
+          importJobRepository,
+          jobId: message.body.jobId,
+          logger,
+          now,
+          pushSender,
+        }),
+      now,
+    });
+  }
+};
+
 /**
- * bindingの検証はここだけで行う。routeとqueueの各処理は、検証済みの前提で
+ * cronは`wrangler.jsonc`の`triggers.crons`の1本だけで、Import Queueの滞留を見る。
+ */
+const handleScheduled = (controller: ScheduledController, env: Bindings) =>
+  checkImportQueueHealth({
+    jobTimeoutMs: resolveImportJobTimeoutMs(env),
+    logger: createLogger(),
+    now: () => new Date(),
+    queue: env.IMPORT_QUEUE,
+    reportCheckIn: createSentryCheckInReporter({
+      monitorSlug: IMPORT_QUEUE_HEALTH_MONITOR_SLUG,
+      cron: controller.cron,
+    }),
+  });
+
+/**
+ * bindingの検証はここだけで行う。route・queue・cronの各処理は、検証済みの前提で
  * 形式を再確認しない。
  */
 const validateBindings = createBindingValidationGuard();
 
-export default {
+/**
+ * queueの処理は、最後の配信やDLQでJobを失敗にできなかった例外をhandlerの外へ投げる。
+ * 外へ出た例外のメッセージはWorkers Logsにも残るので、ログやSentryと同じく失敗したqueryの引数を除く。
+ * 作り直すと例外の型とstackが変わってSentryのissueが分かれるので、同じ例外を書き換える。
+ */
+const throwWithoutQueryParams = (error: unknown): never => {
+  if (error instanceof Error) {
+    const message = withoutQueryParams(error.message);
+
+    if (message !== error.message) {
+      if (error.stack) {
+        error.stack = error.stack.replace(error.message, message);
+      }
+      error.message = message;
+    }
+  }
+
+  throw error;
+};
+
+const handler: ExportedHandler<Bindings, { jobId: string }> = {
   fetch: (request, env, ctx) => {
     validateBindings(env);
     return app.fetch(request, env, ctx);
   },
   queue: (batch, env) => {
     validateBindings(env);
-    return handleImportQueue(batch, env);
+    return (
+      batch.queue === IMPORT_DEAD_LETTER_QUEUE
+        ? handleImportDeadLetterQueue(batch, env)
+        : handleImportQueue(batch, env)
+    ).catch(throwWithoutQueryParams);
   },
-} satisfies ExportedHandler<Bindings, { jobId: string }>;
+  scheduled: (controller, env) => {
+    validateBindings(env);
+    return handleScheduled(controller, env);
+  },
+};
+
+/**
+ * Sentryの初期化はfetch・queue・cronを1つにまとめて包む。送るかどうかの判断は
+ * `onError`とqueueの処理が`ErrorReporter`で行い、ここからhandlerの外へ漏れた例外は
+ * SDKがそのまま拾う。
+ */
+export default Sentry.withSentry(createSentryOptions, handler);

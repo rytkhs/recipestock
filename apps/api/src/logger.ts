@@ -1,3 +1,5 @@
+import { withoutQueryParams } from "@recipestock/db";
+
 type LogLevel = "info" | "warn" | "error";
 
 type ErrorLogValue = {
@@ -40,11 +42,16 @@ export type MemoryLogSink = LogSink & {
   entries: LogEntry[];
 };
 
-const normalizeError = (error: Error): ErrorLogValue => ({
-  message: error.message,
-  name: error.name,
-  stack: error.stack,
-});
+// 失敗したqueryの引数は、stackの先頭にもメッセージとして入っているので両方から除く。
+const normalizeError = (error: Error): ErrorLogValue => {
+  const message = withoutQueryParams(error.message);
+
+  return {
+    message,
+    name: error.name,
+    stack: error.stack?.replace(error.message, message),
+  };
+};
 
 const normalizeLogValue = (value: unknown, seen = new WeakSet<object>()): unknown => {
   if (value === undefined) {

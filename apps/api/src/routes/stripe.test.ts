@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "../billing";
+import { createLogger, createMemoryLogSink, type LoggerFactory } from "../logger";
+import { type ErrorReporter } from "../monitoring";
 import {
   type StripeBillingClient,
   type StripeSubscriptionState,
@@ -104,6 +106,8 @@ const createStripeClient = (
 const requestWebhook = (
   dependencies: {
     billingRepository?: BillingRepository;
+    errorReporter?: ErrorReporter;
+    loggerFactory?: LoggerFactory;
     stripeBillingClient?: StripeBillingClient;
   },
   init: RequestInit = {},
@@ -160,6 +164,61 @@ describe("Stripe webhook route", () => {
     expect(setStripeCustomerId).not.toHaveBeenCalled();
     expect(retrieveSubscription).not.toHaveBeenCalled();
     expect(markStripeEventProcessed).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, false],
+    [true, true],
+  ])("処理済みにしたeventをevent IDと重複かどうか付きでログに残す(既処理: %s)", async (processed, duplicate) => {
+    const sink = createMemoryLogSink();
+    const response = await requestWebhook({
+      billingRepository: createRepository({ hasProcessedStripeEvent: async () => processed }),
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+      stripeBillingClient: createStripeClient(checkoutCompletedEvent()),
+    });
+
+    expect(response.status).toBe(200);
+    expect(sink.entries).toContainEqual(
+      expect.objectContaining({
+        event: "stripe_webhook_processed",
+        level: "info",
+        eventId: "evt_checkout",
+        kind: "checkout_completed",
+        duplicate,
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("署名検証後の処理の失敗はevent ID付きでログに残し、500を返してerror reporterへ送る", async () => {
+    const sink = createMemoryLogSink();
+    const reports: unknown[] = [];
+    const error = new Error("database failed");
+    const response = await requestWebhook({
+      billingRepository: createRepository({
+        setStripeCustomerId: async () => {
+          throw error;
+        },
+      }),
+      errorReporter: {
+        report: (reportedError, context) => {
+          reports.push({ error: reportedError, route: context?.tags?.route });
+        },
+      },
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+      stripeBillingClient: createStripeClient(checkoutCompletedEvent()),
+    });
+
+    expect(response.status).toBe(500);
+    expect(sink.entries).toContainEqual(
+      expect.objectContaining({
+        event: "stripe_webhook_failed",
+        level: "error",
+        eventId: "evt_checkout",
+        kind: "checkout_completed",
+      }),
+    );
+    expect(reports).toEqual([{ error, route: "/api/stripe/webhook" }]);
   });
 
   it("checkout.session.completedはcustomer idを保存しeventを処理済みにする", async () => {

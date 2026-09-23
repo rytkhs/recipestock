@@ -9,7 +9,6 @@ import {
   Tag,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   AlertDialog,
@@ -25,7 +24,6 @@ import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-b
 import { billingStatusQueryKey, fetchBillingStatus } from "../features/billing/api";
 import { derivePlanState, planRowValue } from "../features/billing/plan-state";
 import { listShortcutCredentials, shortcutCredentialsQueryKey } from "../features/ios-share/api";
-import { readRecipeListFilters } from "../features/recipes/list-search";
 import { useLoginMethods } from "../features/settings/login-methods";
 import {
   SettingsActionRow,
@@ -38,6 +36,7 @@ import { settingsPageBodyClass, settingsPageClass } from "../features/settings/s
 import { useSignOut } from "../features/settings/use-sign-out";
 import { listTags, tagsQueryKeys } from "../features/tags";
 import { useAuthSession } from "../lib/auth";
+import { useGoBack } from "../lib/navigation";
 import { useViewer } from "../lib/viewer";
 
 const rowIconSize = 20;
@@ -110,7 +109,7 @@ const AccountRows = ({
 };
 
 export const SettingsIndexRoute = () => {
-  const navigate = useNavigate();
+  const goBack = useGoBack({ to: "/recipes" });
   const session = useAuthSession();
   const viewer = useViewer({ enabled: true });
   const isPro = viewer.data?.plan === "pro";
@@ -140,12 +139,7 @@ export const SettingsIndexRoute = () => {
     <section className={settingsPageClass}>
       <ScreenTopBar
         leading={
-          <ScreenTopBarIconButton
-            aria-label="レシピ一覧へ戻る"
-            onPress={() => {
-              void navigate({ to: "/recipes", search: readRecipeListFilters() });
-            }}
-          >
+          <ScreenTopBarIconButton aria-label="戻る" onPress={goBack}>
             <CaretLeft size={21} weight="bold" />
           </ScreenTopBarIconButton>
         }

@@ -10,7 +10,7 @@ import {
 import { type RecipeDetail } from "@recipestock/schemas";
 import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import {
   type ReactNode,
   type RefObject,
@@ -59,7 +59,6 @@ import {
   syncDeletedRecipeCaches,
 } from "../features/recipes";
 import { KeepScreenOnToggle } from "../features/recipes/keep-screen-on";
-import { readRecipeListFilters } from "../features/recipes/list-search";
 import {
   type RecipeDetailImage,
   RecipeHero,
@@ -73,6 +72,7 @@ import { RecipeSteps } from "../features/recipes/recipe-steps";
 import { tagsQueryKeys } from "../features/tags";
 import { RecipeTags } from "../features/tags/recipe-tags";
 import { isNotFoundError } from "../lib/api";
+import { useGoBack } from "../lib/navigation";
 
 const detailPageClass = "mx-auto w-full max-w-5xl pb-12 sm:px-6 lg:px-10";
 
@@ -210,11 +210,7 @@ const RecipeDetailNotice = ({
 
 export const RecipeDetailRoute = () => {
   const { recipeId } = useParams({ from: "/_protected/recipes/$recipeId" });
-  const navigate = useNavigate();
-  const router = useRouter();
-  const isOpenedFromRecipeList = useLocation({
-    select: (location) => location.state.openedFromRecipeList === true,
-  });
+  const returnToRecipeList = useGoBack({ to: "/recipes" });
   const {
     data: recipe,
     error,
@@ -225,18 +221,8 @@ export const RecipeDetailRoute = () => {
     queryKey: recipesQueryKeys.detail(recipeId),
     queryFn: () => getRecipe(recipeId),
   });
-  // 一覧から開いたときは履歴を戻り、一覧を離れたときのスクロール位置に帰す。
-  // 直接開いたときや編集から来たときは、戻る先が一覧とは限らないので一覧を開く。
-  const returnToRecipeList = () => {
-    if (isOpenedFromRecipeList) {
-      router.history.back();
-      return;
-    }
-
-    void navigate({ to: "/recipes", search: readRecipeListFilters() });
-  };
   const backButton = (
-    <ScreenTopBarIconButton aria-label="レシピ一覧へ戻る" onPress={returnToRecipeList}>
+    <ScreenTopBarIconButton aria-label="戻る" onPress={returnToRecipeList}>
       <CaretLeft size={21} weight="bold" />
     </ScreenTopBarIconButton>
   );

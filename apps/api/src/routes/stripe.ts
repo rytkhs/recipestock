@@ -60,15 +60,15 @@ export const processStripeWebhookEvent = async ({
   proPriceId: string;
   repository: BillingRepository;
   stripeClient: StripeBillingClient;
-}) => {
+}): Promise<{ duplicate: boolean }> => {
   if (await repository.hasProcessedStripeEvent(event.eventId)) {
-    return;
+    return { duplicate: true };
   }
 
   if (event.kind === "checkout_completed") {
     await repository.setStripeCustomerId(event.userId, event.stripeCustomerId);
     await repository.markStripeEventProcessed(event.eventId);
-    return;
+    return { duplicate: false };
   }
 
   if (event.kind === "subscription_changed") {
@@ -87,10 +87,11 @@ export const processStripeWebhookEvent = async ({
     });
 
     await repository.markStripeEventProcessed(event.eventId);
-    return;
+    return { duplicate: false };
   }
 
   await repository.markStripeEventProcessed(event.eventId);
+  return { duplicate: false };
 };
 
 export const createStripeRoutes = ({
@@ -126,11 +127,32 @@ export const createStripeRoutes = ({
       throw error;
     }
 
-    await processStripeWebhookEvent({
-      event,
-      proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-      repository,
-      stripeClient,
+    // Stripeのダッシュボードに出るevent IDからログを引けるようにする。失敗はthrowして
+    // onErrorに任せ、500を返してStripeに再送させる。
+    const eventFields = { eventId: event.eventId, kind: event.kind };
+    const startedAt = Date.now();
+    let result: { duplicate: boolean };
+
+    try {
+      result = await processStripeWebhookEvent({
+        event,
+        proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+        repository,
+        stripeClient,
+      });
+    } catch (error) {
+      c.var.logger.error("stripe_webhook_failed", {
+        ...eventFields,
+        durationMs: Date.now() - startedAt,
+        error,
+      });
+      throw error;
+    }
+
+    c.var.logger.info("stripe_webhook_processed", {
+      ...eventFields,
+      duplicate: result.duplicate,
+      durationMs: Date.now() - startedAt,
     });
 
     return receivedResponse();

@@ -9,8 +9,8 @@ import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-b
 import { PlanLink } from "../features/billing/plan-link";
 import { isResolvedByUpgrade } from "../features/billing/plan-state";
 import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
-import { readRecipeListFilters } from "../features/recipes/list-search";
 import { ApiClientError } from "../lib/api";
+import { useGoBack } from "../lib/navigation";
 import { useViewer } from "../lib/viewer";
 
 export type ImportUrlSearch = {
@@ -31,6 +31,7 @@ export const getInitialImportUrl = ({ text, url }: ImportUrlSearch) => {
 
 export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) => {
   const navigate = useNavigate();
+  const goBack = useGoBack({ to: "/recipes" });
   const [url, setUrl] = useState(() => getInitialImportUrl(search));
   // 上限のエラーのうち、プランを変えれば直るものにだけプランのページへの入口を添える。
   // プランはviewerを読み終える前に送ることもあるので、描画のときに今のviewerで決める。
@@ -65,7 +66,8 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
     try {
       await createImportUrlJob(url);
 
-      await navigate({ to: "/recipes" });
+      // 取り込み状況は一覧に出す。取り込みの画面は履歴から外し、一覧から戻っても着かないようにする。
+      await navigate({ to: "/recipes", replace: true });
     } catch (submitError) {
       setError({
         message: getCreateImportUrlJobErrorMessage(submitError),
@@ -80,12 +82,7 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
     <section className="mx-auto w-full max-w-3xl px-0 pb-10 sm:px-6 lg:px-10">
       <ScreenTopBar
         leading={
-          <ScreenTopBarIconButton
-            aria-label="レシピ一覧へ戻る"
-            onPress={() => {
-              void navigate({ to: "/recipes", search: readRecipeListFilters() });
-            }}
-          >
+          <ScreenTopBarIconButton aria-label="戻る" onPress={goBack}>
             <CaretLeft size={21} weight="bold" />
           </ScreenTopBarIconButton>
         }
