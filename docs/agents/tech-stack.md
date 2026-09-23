@@ -30,8 +30,9 @@ Browser / PWA
 | UI components | shadcn/ui — Base UI base, `base-nova` style.`apps/web/src/components/ui/` にベンダリング |
 | Icons | `@phosphor-icons/react` |
 | Fonts | Google Fonts。本文・UI・見出しとも Noto Sans JP。`apps/web/index.html` から `media="print"` + `onload` で描画を止めずに読み込む |
+| Toast | `sonner`（shadcn/ui の `sonner`）。`<Toaster />` は `routes/router.tsx` のルートに1つだけ置く。ダークモードがないので `next-themes` は入れず、明るい配色に固定する |
 | Image lightbox | `yet-another-react-lightbox`（Counter / Zoom プラグイン）。アイコンは既定のまま使い、配色・z-index・safe-areaは `--yarl__*` CSS変数で上書きする。`render.icon*` で差し替えると `yarl__icon` クラスが付かずタップ領域が縮む |
-| Routing | TanStack Router |
+| Routing | TanStack Router。画面の戻る・閉じるは `lib/navigation.ts` の `useGoBack` で履歴を戻り、戻る先がなければ親の画面に置き換える（ADR 0030） |
 | Server state | TanStack Query |
 | Forms | React Hook Form + Zod |
 | API | Hono |

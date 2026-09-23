@@ -2,6 +2,7 @@ import { CaretLeft } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import { RecipeFormSkeleton } from "../components/loading";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import {
@@ -21,10 +22,11 @@ import {
   removeRecipeDetail,
   updateRecipe,
 } from "../features/recipes";
-import { readRecipeListFilters } from "../features/recipes/list-search";
+import { useGoBack } from "../lib/navigation";
 
 export const NewRecipeRoute = () => {
   const navigate = useNavigate();
+  const close = useGoBack({ to: "/recipes" });
   const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -35,7 +37,12 @@ export const NewRecipeRoute = () => {
       const response = await createRecipe(formValuesToCreateRecipeRequest(values));
       markSaved();
       await invalidateRecipeLists(queryClient);
-      await navigate({ to: "/recipes/$recipeId", params: { recipeId: response.recipe.id } });
+      // 作ったレシピを見せる。新規作成は履歴から外し、詳細の戻るで来た画面へ帰す。
+      await navigate({
+        to: "/recipes/$recipeId",
+        params: { recipeId: response.recipe.id },
+        replace: true,
+      });
     } catch (error) {
       setSubmitError(recipeMutationErrorMessage(error, "レシピを保存できませんでした。"));
     }
@@ -47,7 +54,7 @@ export const NewRecipeRoute = () => {
       submitError={submitError}
       submitLabel="保存"
       title="新しいレシピを追加"
-      onClose={() => void navigate({ to: "/recipes", search: readRecipeListFilters() })}
+      onClose={close}
       onSubmit={onSubmit}
     />
   );
@@ -55,7 +62,7 @@ export const NewRecipeRoute = () => {
 
 export const EditRecipeRoute = () => {
   const { recipeId } = useParams({ from: "/_protected/recipes/$recipeId/edit" });
-  const navigate = useNavigate();
+  const close = useGoBack({ to: "/recipes/$recipeId", params: { recipeId } });
   const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const {
@@ -70,10 +77,8 @@ export const EditRecipeRoute = () => {
   const onSubmit = async (values: RecipeDraftFormValues, markSaved: () => void) => {
     setSubmitError(null);
 
-    let updatedRecipeId: string;
     try {
-      const response = await updateRecipe(recipeId, formValuesToRecipeDraftContent(values));
-      updatedRecipeId = response.recipe.id;
+      await updateRecipe(recipeId, formValuesToRecipeDraftContent(values));
       markSaved();
     } catch (error) {
       setSubmitError(recipeMutationErrorMessage(error, "レシピを更新できませんでした。"));
@@ -82,7 +87,9 @@ export const EditRecipeRoute = () => {
 
     void invalidateRecipeLists(queryClient);
     removeRecipeDetail(queryClient, recipeId);
-    await navigate({ to: "/recipes/$recipeId", params: { recipeId: updatedRecipeId } });
+    // 一覧から編集したなら一覧へ、詳細から編集したなら詳細へ帰す。
+    toast.success("保存しました");
+    close();
   };
 
   if (isLoading) {
@@ -94,12 +101,7 @@ export const EditRecipeRoute = () => {
       <section className="mx-auto w-full max-w-5xl pb-12 sm:px-6 lg:px-10">
         <ScreenTopBar
           leading={
-            <ScreenTopBarIconButton
-              aria-label="レシピ詳細へ戻る"
-              onPress={() => {
-                void navigate({ to: "/recipes/$recipeId", params: { recipeId } });
-              }}
-            >
+            <ScreenTopBarIconButton aria-label="戻る" onPress={close}>
               <CaretLeft size={21} weight="bold" />
             </ScreenTopBarIconButton>
           }
@@ -126,7 +128,7 @@ export const EditRecipeRoute = () => {
       stepImagePreviewUrls={recipe.content.steps.map((step) =>
         step.images.map((image) => image.url ?? ""),
       )}
-      onClose={() => void navigate({ to: "/recipes/$recipeId", params: { recipeId } })}
+      onClose={close}
       onSubmit={onSubmit}
     />
   );

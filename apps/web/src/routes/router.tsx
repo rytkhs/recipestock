@@ -12,6 +12,7 @@ import {
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
 import { z } from "zod";
+import { Toaster } from "@/components/ui/sonner";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { Header, MobileAddRecipeFab } from "../components/header";
 import {
@@ -192,9 +193,11 @@ const PublicLayout = () => {
   );
 };
 
+// 保存などの結果は、画面を移ったあとも見えるよう上中央に短く出す。下はスマホの追加ボタンと重なる。
 const RootLayout = () => (
   <div className="min-h-screen bg-background text-foreground">
     <Outlet />
+    <Toaster position="top-center" />
   </div>
 );
 
@@ -465,11 +468,6 @@ const router = createAppRouter();
 declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
-  }
-
-  interface HistoryState {
-    /** 一覧から開いた詳細の履歴に付ける。詳細の戻るで、履歴を戻って一覧の位置に帰すため。 */
-    openedFromRecipeList?: true;
   }
 }
 

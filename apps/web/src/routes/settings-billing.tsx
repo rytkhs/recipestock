@@ -1,8 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import { ConnectionUnavailable } from "../components/connection-unavailable";
 import { SettingsPageSkeleton } from "../components/loading";
 import {
@@ -67,7 +68,16 @@ const ArrivalNotice = ({
 
   if (confirmation === "confirmed") {
     return (
-      <SettingsNotice title="Proになりました" tone="success">
+      <SettingsNotice
+        action={
+          // 決済から戻ると履歴は続かないので、戻るは目次を開く。続けて使う一覧へはここから移る。
+          <Link className={cn(buttonVariants({ size: "sm" }), "no-underline")} to="/recipes">
+            レシピ一覧へ
+          </Link>
+        }
+        title="Proになりました"
+        tone="success"
+      >
         これからはレシピを上限なく保存できます。
       </SettingsNotice>
     );

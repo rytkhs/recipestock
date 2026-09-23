@@ -1,27 +1,22 @@
 import { CaretLeft } from "@phosphor-icons/react";
-import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../../components/screen-top-bar";
+import { useGoBack } from "../../lib/navigation";
 
 // 設定のページはどれもタグの管理と同じ幅にする。広い画面でも1列のまま読む。
 export const settingsPageClass = "mx-auto w-full max-w-3xl px-0 pb-10 sm:px-6 lg:px-10";
 
 export const settingsPageBodyClass = "mt-4 px-4 sm:mt-6 sm:px-0";
 
-// 目次から開くページの上部バー。戻る先は来た経路によらず目次にする。
+// 目次から開くページの上部バー。戻る先がなければ目次を開く。
 export const SettingsSubpageTopBar = ({ title }: { title: string }) => {
-  const navigate = useNavigate();
+  const goBack = useGoBack({ to: "/settings" });
 
   return (
     <ScreenTopBar
       leading={
-        <ScreenTopBarIconButton
-          aria-label="設定へ戻る"
-          onPress={() => {
-            void navigate({ to: "/settings" });
-          }}
-        >
+        <ScreenTopBarIconButton aria-label="戻る" onPress={goBack}>
           <CaretLeft size={21} weight="bold" />
         </ScreenTopBarIconButton>
       }

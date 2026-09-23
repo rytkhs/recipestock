@@ -335,7 +335,7 @@ describe("Settings routes", () => {
     await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
     await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "設定へ戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
     await confirmSignOut();
     await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
     await userEvent.type(screen.getByLabelText("パスワード"), "password123");
@@ -1411,7 +1411,7 @@ describe("Settings routes", () => {
     await expect(
       screen.findByRole("heading", { name: "接続を確認できません" }),
     ).resolves.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "設定へ戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
     expect(appRouter.state.location.pathname).toBe("/settings");
   });
 
@@ -1537,6 +1537,8 @@ describe("Settings routes", () => {
     await vi.waitFor(() => {
       expect(screen.getByText("Proになりました")).toBeInTheDocument();
     });
+    // 決済から戻ると履歴は続かないので、続けて使う一覧への入口を添える。
+    expect(screen.getByRole("link", { name: "レシピ一覧へ" })).toHaveAttribute("href", "/recipes");
     await vi.waitFor(() => {
       expect(screen.getByText("128件（上限なし）")).toBeInTheDocument();
     });
@@ -1865,7 +1867,7 @@ describe("Settings routes", () => {
     ).resolves.toBeInTheDocument();
     expect(appRouter.state.location.pathname).toBe("/settings/share");
 
-    await userEvent.click(screen.getByRole("button", { name: "設定へ戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
     await userEvent.click(await screen.findByRole("link", { name: /メールアドレス/ }));
     await expect(
       screen.findByRole("heading", { name: "メールアドレス" }),

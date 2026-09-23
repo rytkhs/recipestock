@@ -19,8 +19,8 @@ import {
   importJobQueryKeys,
   retryImportTextJob,
 } from "../features/import-jobs";
-import { readRecipeListFilters } from "../features/recipes/list-search";
 import { ApiClientError } from "../lib/api";
+import { useGoBack } from "../lib/navigation";
 import { useViewer } from "../lib/viewer";
 
 export type ImportTextSearch = {
@@ -64,6 +64,7 @@ const ImportTextForm = ({
   retryJobId?: string;
 }) => {
   const navigate = useNavigate();
+  const goBack = useGoBack({ to: "/recipes" });
   const [text, setText] = useState(initialText);
   // 上限のエラーのうち、プランを変えれば直るものにだけプランのページへの入口を添える。
   // プランはviewerを読み終える前に送ることもあるので、描画のときに今のviewerで決める。
@@ -115,7 +116,8 @@ const ImportTextForm = ({
         await createImportTextJob(request.data.text);
       }
 
-      await navigate({ to: "/recipes" });
+      // 取り込み状況は一覧に出す。取り込みの画面は履歴から外し、一覧から戻っても着かないようにする。
+      await navigate({ to: "/recipes", replace: true });
     } catch (submitError) {
       setError({
         message: getCreateImportTextJobErrorMessage(submitError),
@@ -130,12 +132,7 @@ const ImportTextForm = ({
     <section className="mx-auto w-full max-w-3xl px-0 pb-10 sm:px-6 lg:px-10">
       <ScreenTopBar
         leading={
-          <ScreenTopBarIconButton
-            aria-label="レシピ一覧へ戻る"
-            onPress={() => {
-              void navigate({ to: "/recipes", search: readRecipeListFilters() });
-            }}
-          >
+          <ScreenTopBarIconButton aria-label="戻る" onPress={goBack}>
             <CaretLeft size={21} weight="bold" />
           </ScreenTopBarIconButton>
         }
@@ -208,8 +205,10 @@ const ImportTextForm = ({
             {onlyUrl ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] bg-brand-paper-muted p-3">
                 <p className="text-brand-muted text-sm">URLだけのときは、URLから取り込めます。</p>
+                {/* 取り込み方法の切り替えなので、テキストの画面は履歴に残さない。 */}
                 <Link
                   className={cn(buttonVariants({ size: "sm", variant: "outline" }), "no-underline")}
+                  replace
                   search={{ url: onlyUrl }}
                   to="/import/url"
                 >

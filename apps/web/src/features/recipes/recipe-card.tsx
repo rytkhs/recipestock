@@ -154,7 +154,6 @@ export const RecipeCard = ({
           isList ? "flex flex-1 items-center gap-3" : "block",
         )}
         params={{ recipeId: recipe.id }}
-        state={{ openedFromRecipeList: true }}
         to="/recipes/$recipeId"
       >
         {cover}
