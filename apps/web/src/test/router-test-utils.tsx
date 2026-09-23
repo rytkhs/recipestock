@@ -128,9 +128,11 @@ export const renderApp = async (
   // 一覧の並び順と絞り込み条件はモジュールに覚えるので、アプリを開き直した状態に戻す。
   writeRecipeListSort("newest");
   writeRecipeListFilters({});
+  // 送り直す保存も、テストでは待たずに送り直させる。
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
+      mutations: { retryDelay: 0 },
     },
   });
   setupQueryClient?.(queryClient);

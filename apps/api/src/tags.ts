@@ -114,7 +114,8 @@ export const createTagRepository = (db: DbClient): TagRepository => ({
     // 新しく作るタグは語彙の末尾に置く。max(position)も文の開始時点を見るので、同じ要求で作る分はordだけずらす。
     // CTEは文の開始時点のスナップショットを見るので、並びは既存の付与日時と今回の時刻から組み立てる。
     // 別のタブや端末から同じRecipeへ同時に送られると、後から始まった文は先の文が足した付与を見られず外せないことがある。
-    // 画面は同じRecipeの要求を順に送るので、ここでは直列化しない。
+    // 画面は同じRecipeの要求を順に送るが、待ち切れずに打ち切った要求はここで後から確定し得て、そのときは古い組に戻る。
+    // どちらも別の画面との競合か障害のときに限られるので、ここでは直列化も順番の確認もしない。
     const result = await db.execute<{ id: string | null; name: string | null }>(sql`
       with target as (
         select id

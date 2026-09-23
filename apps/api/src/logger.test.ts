@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createConsoleLogSink,
@@ -52,6 +53,24 @@ describe("logger", () => {
         },
       },
     ]);
+  });
+
+  it("失敗したqueryの引数はmessageにもstackにも残さない", () => {
+    const sink = createMemoryLogSink();
+    const logger = createLogger({}, { sink });
+    const error = new DrizzleQueryError(
+      "select id from shortcut_credentials where token_hash = $1",
+      ["token-hash"],
+    );
+
+    logger.error("api_request_failed", { error });
+
+    const logged = sink.entries[0]?.error as { message: string; stack?: string };
+    expect(logged.message).toBe(
+      "Failed query: select id from shortcut_credentials where token_hash = $1",
+    );
+    expect(logged.stack).toContain(logged.message);
+    expect(JSON.stringify(sink.entries)).not.toContain("token-hash");
   });
 
   it("console sinkはlevelごとにconsoleへJSONを出力する", () => {
