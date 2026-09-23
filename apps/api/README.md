@@ -152,6 +152,11 @@ sends the alerts (ADR 0029).
   dead-lettered Import Jobs. 4xx responses and retried queue failures stay in the logs only.
 - The dead letter queue has a consumer that marks the Import Job failed and sends its completion
   notification.
+- When the driver cannot reach Neon, or Neon answers with anything but a 400, the exception goes to one
+  Sentry issue (the `database-unavailable` fingerprint) whichever query failed. SQL errors keep their
+  own issues.
+- Failed-query messages drop their SQL parameters in Workers Logs and Sentry, because the parameters
+  carry user input and token hashes.
 - A cron every 5 minutes reads `IMPORT_QUEUE.metrics()` and checks in to the `import-queue-health`
   Sentry Crons monitor. The queue counts as stalled when its oldest message is older than
   `IMPORT_JOB_TIMEOUT_MS` plus 5 minutes.

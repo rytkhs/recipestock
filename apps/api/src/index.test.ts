@@ -1,4 +1,5 @@
 import { env as workerEnv } from "cloudflare:workers";
+import { isDatabaseUnavailableError } from "@recipestock/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "./billing";
 import { type PushSender } from "./completion-notifications";
@@ -694,6 +695,53 @@ describe("import dead letter queue handler", () => {
     ).rejects.toBe(error);
 
     expect(events).toEqual([]);
+  });
+
+  // 外へ出た例外はWorkers Logsにも残る。default exportを通して、出る時点で引数が消えていることを固定する。
+  it("失敗に確定できなかったqueryの引数を、handlerの外へ投げる例外に残さない", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("fetch failed"));
+    const ack = vi.fn();
+    const batch = {
+      queue: "recipestock-import-jobs-dlq",
+      messages: [
+        {
+          id: "message_123",
+          timestamp: new Date("2026-06-01T00:00:00.000Z"),
+          attempts: 1,
+          body: { jobId: "job_123" },
+          ack,
+          retry: vi.fn(),
+        },
+      ],
+      ackAll: vi.fn(),
+      retryAll: vi.fn(),
+    } as unknown as MessageBatch<{ jobId: string }>;
+    const ctx = {
+      waitUntil: () => undefined,
+      passThroughOnException: () => undefined,
+      props: {},
+    } as unknown as ExecutionContext;
+
+    const error = await Promise.resolve(
+      worker.queue?.(
+        batch,
+        {
+          ...(workerEnv as Bindings),
+          ...requiredStringBindings,
+          DATABASE_URL: "postgresql://user:password@db.example.com/recipestock",
+        },
+        ctx,
+      ),
+    ).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(Error);
+    const { message, stack } = error as Error;
+    expect(message).toMatch(/^Failed query: update "import_jobs"/);
+    expect(`${message}\n${stack}`).not.toMatch(/params:|job_123/);
+    // 書き換えた同じ例外なので、Sentryは元のNeonの失敗をたどって障害としてまとめられる。
+    expect(isDatabaseUnavailableError(error)).toBe(true);
+    expect(ack).not.toHaveBeenCalled();
   });
 });
 

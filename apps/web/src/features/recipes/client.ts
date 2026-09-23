@@ -38,11 +38,14 @@ export const deleteRecipe = async (recipeId: string) => {
   );
 };
 
-export const getRecipe = async (recipeId: string) => {
+export const getRecipe = async (recipeId: string, { signal }: { signal?: AbortSignal } = {}) => {
   const body = await parseApiResponse<GetRecipeResponse>(
-    api.api.recipes[":recipeId"].$get({
-      param: { recipeId },
-    }),
+    api.api.recipes[":recipeId"].$get(
+      {
+        param: { recipeId },
+      },
+      { init: { signal } },
+    ),
   );
   return body.recipe;
 };

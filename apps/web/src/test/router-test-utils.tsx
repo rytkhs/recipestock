@@ -127,9 +127,11 @@ export const renderApp = async (
   resetAuthSessionStore();
   // 一覧の並び順はモジュールに覚えるので、アプリを開き直した状態に戻す。
   writeRecipeListSort("newest");
+  // 送り直す保存も、テストでは待たずに送り直させる。
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
+      mutations: { retryDelay: 0 },
     },
   });
   setupQueryClient?.(queryClient);

@@ -1,3 +1,4 @@
+import { isDatabaseUnavailableError, withoutQueryParams } from "@recipestock/db";
 import * as Sentry from "@sentry/cloudflare";
 
 type ErrorReportContext = {
@@ -80,6 +81,7 @@ const originOf = (value: string) => {
  * 送る内容はログと同じ線に揃える。request bodyはレシピ本文やStripeのpayloadを含み、
  * queryは検索語を含むので送らない。外部へのfetchは取り込み元のURLや署名付きURLを含むため、
  * breadcrumbにはoriginだけを残す（ログの`sourceHost`と同じ扱い）。
+ * 失敗したqueryのメッセージには引数（利用者の入力やtokenのハッシュ）が入るので、例外のメッセージから除く。
  *
  * `dataCollection`を渡すと、書かなかった項目はすべて送る側の既定になる。IPを送らない
  * `userInfo: false`も明示する。request headerは`Authorization`（iOS共有のtoken）を含むので送らない。
@@ -101,9 +103,20 @@ export const createSentryOptions = (): Sentry.CloudflareOptions => ({
   },
   integrations: [Sentry.httpServerIntegration({ maxRequestBodySize: "none" })],
   tracePropagationTargets: [],
-  beforeSend: (event) => {
+  beforeSend: (event, hint) => {
     if (event.request?.url) {
       event.request.url = withoutQuery(event.request.url);
+    }
+
+    for (const exception of event.exception?.values ?? []) {
+      if (exception.value) {
+        exception.value = withoutQueryParams(exception.value);
+      }
+    }
+
+    // Neonに届かない障害はqueryごとに別のissueへ分かれるので、どこで起きても1つにまとめる。
+    if (isDatabaseUnavailableError(hint.originalException)) {
+      event.fingerprint = ["database-unavailable"];
     }
 
     return event;
