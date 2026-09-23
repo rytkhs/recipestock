@@ -324,7 +324,7 @@ describe("Import routes", () => {
     ]);
   });
 
-  it("戻るボタンは一覧の検索語を保ち、取り込みを送信した後の一覧は検索語を外す", async () => {
+  it("戻るボタンは一覧の検索語を保ち、送信した後の一覧は検索語を外して取り込みの画面を履歴に残さない", async () => {
     mockFetch(
       async (input) => {
         const path = getRequestPath(input);
@@ -368,7 +368,7 @@ describe("Import routes", () => {
     await act(async () => {
       await appRouter.navigate({ href: "/import/url" });
     });
-    await userEvent.click(await screen.findByRole("button", { name: "レシピ一覧へ戻る" }));
+    await userEvent.click(await screen.findByRole("button", { name: "戻る" }));
 
     await vi.waitFor(() => {
       expect(appRouter.state.location.pathname).toBe("/recipes");
@@ -385,6 +385,15 @@ describe("Import routes", () => {
       expect(appRouter.state.location.pathname).toBe("/recipes");
     });
     expect(appRouter.state.location.searchStr).toBe("");
+
+    // 取り込みの画面は一覧に置き換わったので、端末の戻るでは開く前の一覧に着く。
+    act(() => {
+      appRouter.history.back();
+    });
+    await vi.waitFor(() => {
+      expect(appRouter.state.location.searchStr).toBe("?q=tomato");
+    });
+    expect(appRouter.state.location.pathname).toBe("/recipes");
   });
 
   it("URL import job作成に失敗したら入力画面にエラーを表示する", async () => {

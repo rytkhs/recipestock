@@ -56,7 +56,8 @@ export const LoginRoute = ({
     try {
       await signInWithEmailPassword(email, password, redirectTo);
       await session.refetch();
-      await navigate({ href: redirectTo });
+      // ログイン画面は履歴に残さない。着いた画面の戻るでログインへ戻らないようにする。
+      await navigate({ href: redirectTo, replace: true });
     } catch {
       setError("メールアドレスまたはパスワードが正しくありません。");
     }
@@ -85,7 +86,7 @@ export const LoginRoute = ({
     try {
       await verifySignUpOtp(email, otp);
       await session.refetch();
-      await navigate({ href: redirectTo });
+      await navigate({ href: redirectTo, replace: true });
     } catch {
       setError("確認コードを検証できませんでした。");
     }

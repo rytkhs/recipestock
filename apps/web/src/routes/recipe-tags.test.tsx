@@ -619,7 +619,7 @@ describe("タグ", () => {
       });
     });
 
-    it("削除したタグは、一覧へ戻るときに引き継ぐ絞り込みからも外す", async () => {
+    it("削除したタグで絞った一覧へ戻ると、一覧がそのタグの絞り込みを外す", async () => {
       let tags: TagFixture[] = [{ id: "tag_1", name: "鶏肉", recipeCount: 2 }];
       mockFetch(
         async (input, init) => {
@@ -658,12 +658,15 @@ describe("タグ", () => {
       await userEvent.click(within(deleteDialog).getByRole("button", { name: "削除" }));
 
       await expect(screen.findByText("タグはまだありません")).resolves.toBeInTheDocument();
-      await userEvent.click(screen.getByRole("button", { name: "レシピ一覧へ戻る" }));
+      await userEvent.click(screen.getByRole("button", { name: "戻る" }));
 
       await waitFor(() => {
         expect(appRouter.state.location.pathname).toBe("/recipes");
       });
-      expect(appRouter.state.location.search).toEqual({});
+      // 履歴を戻るとURLに消えたタグが残るので、一覧がタグ一覧を読み直してから外す。
+      await waitFor(() => {
+        expect(appRouter.state.location.search).toEqual({});
+      });
     });
   });
 });

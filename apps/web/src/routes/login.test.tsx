@@ -109,7 +109,7 @@ describe("LoginRoute", () => {
 
       return new Response(null, { status: 404 });
     });
-    await renderApp(`/login?redirect=${encodeURIComponent(redirect)}`);
+    const { appRouter } = await renderApp(`/login?redirect=${encodeURIComponent(redirect)}`);
 
     await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
     await userEvent.type(screen.getByLabelText("パスワード"), "password123");
@@ -120,6 +120,8 @@ describe("LoginRoute", () => {
       callbackURL: redirect,
     });
     await expect(screen.findByLabelText("URL")).resolves.toHaveValue(sharedUrl);
+    // ログイン画面は履歴に残さないので、着いた画面の戻るでログインへ戻らない。
+    expect(appRouter.history.canGoBack()).toBe(false);
   });
 
   it("ログインルートから新規登録してOTP検証に進む", async () => {

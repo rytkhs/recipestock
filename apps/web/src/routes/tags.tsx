@@ -16,7 +16,6 @@ import {
 } from "@recipestock/schemas";
 import { countTagNameLength, normalizeTagName } from "@recipestock/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import {
   AlertDialog,
@@ -41,7 +40,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import { invalidateRecipeLists, recipesQueryKeys } from "../features/recipes";
-import { readRecipeListFilters, writeRecipeListFilters } from "../features/recipes/list-search";
 import {
   deleteTag,
   listTags,
@@ -52,6 +50,7 @@ import {
   tagsQueryKeys,
 } from "../features/tags";
 import { ApiClientError } from "../lib/api";
+import { useGoBack } from "../lib/navigation";
 
 type MergeRequest = {
   source: TagWithCount;
@@ -60,20 +59,9 @@ type MergeRequest = {
 
 const tagOrderMutationKey = ["tag-order"] as const;
 
-// 消したタグのidを、一覧へ戻るときに引き継ぐ絞り込み条件からも外す。
-const forgetTagInRecipeListFilters = (tagId: string) => {
-  const filters = readRecipeListFilters();
-
-  if (!filters.tags?.includes(tagId)) {
-    return;
-  }
-
-  const tagIds = filters.tags.filter((id) => id !== tagId);
-  writeRecipeListFilters({ ...filters, tags: tagIds.length > 0 ? tagIds : undefined });
-};
-
 export const TagsRoute = () => {
-  const navigate = useNavigate();
+  // 消したタグで絞った一覧へ戻っても、一覧がタグ一覧を読み直してそのidを外す。
+  const goBack = useGoBack({ to: "/settings" });
   const queryClient = useQueryClient();
   const tagsQuery = useQuery({ queryKey: tagsQueryKeys.all(), queryFn: listTags });
   const tags = tagsQuery.data;
@@ -130,10 +118,9 @@ export const TagsRoute = () => {
   });
   const mergeMutation = useMutation({
     mutationFn: ({ source, target }: MergeRequest) => mergeTag(source.id, target.id),
-    onSuccess: async (_tag, { source }) => {
+    onSuccess: async () => {
       setMergeRequest(null);
       setEditingTagId(null);
-      forgetTagInRecipeListFilters(source.id);
       await refreshTagViews();
     },
     onError: () => {
@@ -143,9 +130,8 @@ export const TagsRoute = () => {
   });
   const deleteMutation = useMutation({
     mutationFn: (tag: TagWithCount) => deleteTag(tag.id),
-    onSuccess: async (_response, tag) => {
+    onSuccess: async () => {
       setDeleteTarget(null);
-      forgetTagInRecipeListFilters(tag.id);
       await refreshTagViews();
     },
     onError: () => {
@@ -198,12 +184,7 @@ export const TagsRoute = () => {
     <section className="mx-auto w-full max-w-3xl px-0 pb-10 sm:px-6 lg:px-10">
       <ScreenTopBar
         leading={
-          <ScreenTopBarIconButton
-            aria-label="レシピ一覧へ戻る"
-            onPress={() => {
-              void navigate({ to: "/recipes", search: readRecipeListFilters() });
-            }}
-          >
+          <ScreenTopBarIconButton aria-label="戻る" onPress={goBack}>
             <CaretLeft size={21} weight="bold" />
           </ScreenTopBarIconButton>
         }
