@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "../billing";
+import { createLogger, createMemoryLogSink } from "../logger";
 import { type StripeBillingClient } from "../stripe-billing";
 import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
@@ -324,9 +325,10 @@ describe("Billing routes", () => {
     const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>(async () => {
       throw new Error("Stripe update failed.");
     });
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sink = createMemoryLogSink();
     const testApp = createSilentTestApp({
       auth,
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async (userId) => ({
           userId,
@@ -340,31 +342,30 @@ describe("Billing routes", () => {
       }),
     });
 
-    try {
-      const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
+    const response = await testApp.request("/api/billing/checkout", sameOriginPost, env);
 
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toEqual({
-        url: "https://checkout.stripe.com/session_456",
-      });
-      expect(updateCustomerEmail).toHaveBeenCalledWith({
-        email: "user@example.com",
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      url: "https://checkout.stripe.com/session_456",
+    });
+    expect(updateCustomerEmail).toHaveBeenCalledWith({
+      email: "user@example.com",
+      stripeCustomerId: "cus_existing",
+      userId: "user_123",
+    });
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeCustomerId: "cus_existing",
+      }),
+    );
+    expect(sink.entries).toContainEqual(
+      expect.objectContaining({
+        event: "stripe_customer_email_sync_failed",
+        level: "error",
         stripeCustomerId: "cus_existing",
         userId: "user_123",
-      });
-      expect(createCheckoutSession).toHaveBeenCalledWith(
-        expect.objectContaining({
-          stripeCustomerId: "cus_existing",
-        }),
-      );
-      expect(consoleError).toHaveBeenCalledWith("[billing] Stripe customer email sync failed", {
-        error: expect.any(Error),
-        stripeCustomerId: "cus_existing",
-        userId: "user_123",
-      });
-    } finally {
-      consoleError.mockRestore();
-    }
+      }),
+    );
   });
 
   it("Stripe Customer未作成ユーザーはCustomerを作成してPortal URLを返す", async () => {
@@ -480,9 +481,10 @@ describe("Billing routes", () => {
     const updateCustomerEmail = vi.fn<StripeBillingClient["updateCustomerEmail"]>(async () => {
       throw new Error("Stripe update failed.");
     });
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sink = createMemoryLogSink();
     const testApp = createSilentTestApp({
       auth,
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
       billingRepository: createRepository({
         getOrCreateAppUserBillingState: async (userId) => ({
           userId,
@@ -496,30 +498,29 @@ describe("Billing routes", () => {
       }),
     });
 
-    try {
-      const response = await testApp.request("/api/billing/portal", sameOriginPost, env);
+    const response = await testApp.request("/api/billing/portal", sameOriginPost, env);
 
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toEqual({
-        url: "https://billing.stripe.com/session_456",
-      });
-      expect(updateCustomerEmail).toHaveBeenCalledWith({
-        email: "user@example.com",
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      url: "https://billing.stripe.com/session_456",
+    });
+    expect(updateCustomerEmail).toHaveBeenCalledWith({
+      email: "user@example.com",
+      stripeCustomerId: "cus_existing",
+      userId: "user_123",
+    });
+    expect(createPortalSession).toHaveBeenCalledWith({
+      stripeCustomerId: "cus_existing",
+      returnUrl: "https://app.example.com/settings/billing",
+    });
+    expect(sink.entries).toContainEqual(
+      expect.objectContaining({
+        event: "stripe_customer_email_sync_failed",
+        level: "error",
         stripeCustomerId: "cus_existing",
         userId: "user_123",
-      });
-      expect(createPortalSession).toHaveBeenCalledWith({
-        stripeCustomerId: "cus_existing",
-        returnUrl: "https://app.example.com/settings/billing",
-      });
-      expect(consoleError).toHaveBeenCalledWith("[billing] Stripe customer email sync failed", {
-        error: expect.any(Error),
-        stripeCustomerId: "cus_existing",
-        userId: "user_123",
-      });
-    } finally {
-      consoleError.mockRestore();
-    }
+      }),
+    );
   });
 
   it("Pro相当のsubscriptionがある場合は二重Checkoutを作らない", async () => {

@@ -9,7 +9,22 @@
   "images": { "binding": "IMAGES", "remote": true },
   "upload_source_maps": true,
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    // tracingはbeta中は無料で、この規模では10%に絞ると調べたい遅いリクエストが残らない。
+    // 課金が始まる時点で見直す。
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  },
+  // Import Queueの滞留を見るcron（`src/import-queue-health.ts`）。Sentry Cronsのmonitorは
+  // Workerに届いたcron式で登録するので、ここを変えればmonitorのscheduleも追従する。
+  "triggers": {
+    "crons": ["*/5 * * * *"]
   },
   "assets": {
     "directory": "../web/dist",
@@ -37,6 +52,13 @@
         "max_batch_size": 1,
         "max_retries": 3,
         "dead_letter_queue": "recipestock-import-jobs-dlq"
+      },
+      {
+        // DLQに落ちたJobを失敗に確定させる（`handleDeadLetteredImportJobMessage`）。
+        // ここでも失敗したメッセージは捨て、Jobは期限切れの判定でjob_timeoutになる。
+        "queue": "recipestock-import-jobs-dlq",
+        "max_batch_size": 1,
+        "max_retries": 3
       }
     ]
   },

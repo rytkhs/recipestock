@@ -7,7 +7,7 @@
     "build": "turbo build",
     "db:generate": "pnpm --filter @recipestock/db db:generate",
     "db:migrate": "pnpm --filter @recipestock/db db:migrate",
-    "deploy": "pnpm --filter @recipestock/web build && pnpm --filter @recipestock/api deploy",
+    "deploy": "pnpm --filter @recipestock/api run deploy",
     "dev": "turbo dev",
     "dev:mock": "pnpm --filter @recipestock/web dev:mock",
     "format": "biome format --write .",

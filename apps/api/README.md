@@ -132,4 +132,45 @@ pnpm --filter @recipestock/api exec wrangler secret put OPENROUTER_API_KEY
 pnpm --filter @recipestock/api exec wrangler secret put YOUTUBE_DATA_API_KEY
 ```
 
+Error reporting is not a validated binding, because a missing DSN should not take the API down. Set it
+on every production environment; without it the Worker sends nothing to Sentry. The deploy script stops
+when it is missing:
+
+```bash
+pnpm --filter @recipestock/api exec wrangler secret put SENTRY_DSN
+```
+
+`SENTRY_RELEASE` is not a secret. The deploy script passes it as a `--var` on every deploy.
+
+## Monitoring
+
+Workers Logs and Workers Traces hold the data for investigation. Sentry holds what needs attention and
+sends the alerts (ADR 0029).
+
+- `GET /api/health` is the Sentry Uptime target. It touches no dependency, so it never keeps Neon awake.
+- The API sends 5xx exceptions from `onError`, the exception on an Import Job's last queue delivery, and
+  dead-lettered Import Jobs. 4xx responses and retried queue failures stay in the logs only.
+- The dead letter queue has a consumer that marks the Import Job failed and sends its completion
+  notification.
+- A cron every 5 minutes reads `IMPORT_QUEUE.metrics()` and checks in to the `import-queue-health`
+  Sentry Crons monitor. The queue counts as stalled when its oldest message is older than
+  `IMPORT_JOB_TIMEOUT_MS` plus 5 minutes.
+- Every API response carries `X-Request-ID`, which is the `requestId` field in Workers Logs and the
+  `request_id` tag in Sentry.
+
+## Deploy
+
+```bash
+pnpm run deploy
+```
+
+The deploy script builds the web app, deploys the Worker, and uploads both source maps to Sentry under
+the commit SHA as the release. It reads these values from the repository root `.env` and stops when one
+is missing or when the working tree has uncommitted changes:
+
+- `SENTRY_AUTH_TOKEN`: uploads source maps and creates the release
+- `VITE_SENTRY_DSN`: embedded in the web bundle
+
+It also stops when the Worker has no `SENTRY_DSN` secret.
+
 Do not commit `.dev.vars` or other secret files.

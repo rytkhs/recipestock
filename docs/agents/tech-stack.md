@@ -17,6 +17,8 @@ Browser / PWA
             -> Resend
             -> Stripe
             -> Vercel AI SDK + Workers AI + Cloudflare AI Gateway
+       -> Cloudflare Workers Logs / Traces
+       -> Sentry
 ```
 
 ## Chosen Technologies
@@ -45,6 +47,8 @@ Browser / PWA
 | Billing | Stripe |
 | AI | Vercel AI SDK + workers-ai-provider + Cloudflare Workers AI + Cloudflare AI Gateway |
 | PWA | Web App Manifest + Workbox via `vite-plugin-pwa` `injectManifest` |
+| Logs / traces | Cloudflare Workers Logs + Workers Traces。ログは`apps/api/src/logger.ts`の構造化JSON（ADR 0029） |
+| Error tracking / monitors | Sentry。Workerは`@sentry/cloudflare`、webは`@sentry/react`、source mapは`@sentry/vite-plugin`と`@sentry/cli`。Uptime monitorとCrons monitorもSentryに置く（ADR 0029） |
 | Monorepo | pnpm workspace + Turborepo |
 | Lint / Format | Biome |
 | Unit / Component / Request tests | Vitest + Testing Library |
@@ -83,5 +87,6 @@ Expected sensitive values include:
 - Stripe Price ID
 - AI model names
 - Cloudflare bindings and secrets
+- Sentry DSN and auth token
 
 Store secrets in the platform or local environment configuration, not in source files or documentation.

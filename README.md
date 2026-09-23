@@ -214,7 +214,7 @@ Zod スキーマとの整合を検証するので、API 契約が変わればテ
 | `pnpm test:all` | 通常テストとDatabase統合テストを実行 |
 | `pnpm db:generate` | Drizzle migration を生成 |
 | `pnpm db:migrate` | Drizzle migration を適用 |
-| `pnpm deploy` | Web build 後に Cloudflare Worker へ deploy |
+| `pnpm run deploy` | Web build 後に Cloudflare Worker へ deploy し、source map を Sentry へ上げる（`apps/api/README.md`） |
 
 ### Continuous integration
 
@@ -266,6 +266,8 @@ pnpm --filter @recipestock/api exec wrangler deploy --dry-run
 
 - `DATABASE_URL`
 - `VITE_IOS_SHARE_SHORTCUT_URL`（Web ビルド時に公開される iOS Shortcut URL）
+- `VITE_SENTRY_DSN`（Web ビルド時に埋め込む Sentry DSN）
+- `SENTRY_DSN`（Worker の Sentry DSN）
 - `BETTER_AUTH_SECRET`
 - `RESEND_API_KEY`
 - `STRIPE_SECRET_KEY`

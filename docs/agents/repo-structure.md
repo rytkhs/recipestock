@@ -94,12 +94,13 @@ Put server-side behavior here:
 - Resend integration
 - Better Auth integration
 - binding validation and structured logging
+- error reporting, cron check-ins, and Import Queue health checks for Sentry
 
 Current internal shape:
 
 ```txt
 apps/api/src/
-  index.ts                Hono app composition plus Worker fetch and queue handlers
+  index.ts                Hono app composition plus Worker fetch, queue, and scheduled handlers
   api-error.ts            API error response builders
   context.ts              Hono context types
   env.ts                  Cloudflare binding types and validation
@@ -108,8 +109,10 @@ apps/api/src/
   billing.ts              billing repository and plan synchronization
   images.ts               R2 image service
   import-jobs.ts          Import Job repository and queue processing
+  import-queue-health.ts  Import Queue stall detection for the cron
   import-url.ts           URL import orchestration
   me.ts                   current-user repository and response mapping
+  monitoring.ts           Sentry options, error reporter, and cron check-ins
   push-subscriptions.ts   Push subscription repository
   recipes.ts              recipe repository and response mapping
   shortcut-credentials.ts Shortcut credential repository and service
@@ -208,6 +211,7 @@ The Cloudflare Worker serves the API and static assets from one deployment. `app
 
 ```txt
 Cloudflare Worker
+  ├─ /api/health                  uptime monitoring target (no dependencies)
   ├─ /api/auth/*                  Better Auth
   ├─ /api/images/*                image upload, serving, and thumbnails
   ├─ /api/import/*                Import Job submission and status
@@ -232,6 +236,14 @@ Import Job request
             -> import conversion
             -> Recipe persistence and image finalization
             -> best-effort Push notification
+  -> IMPORT_QUEUE dead letter queue
+       -> Worker queue handler
+            -> mark the Import Job failed and notify
+
+Cron (every 5 minutes)
+  -> Worker scheduled handler
+       -> IMPORT_QUEUE metrics
+       -> Sentry Crons check-in
 ```
 
 ## Placement Rules
