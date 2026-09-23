@@ -1,5 +1,5 @@
 import { env as workerEnv } from "cloudflare:workers";
-import { createDb } from "@recipestock/db";
+import { createDb, withoutQueryParams } from "@recipestock/db";
 import * as Sentry from "@sentry/cloudflare";
 import { Hono } from "hono";
 import { csrf } from "hono/csrf";
@@ -599,6 +599,26 @@ const handleScheduled = (controller: ScheduledController, env: Bindings) =>
 const validateBindings = createBindingValidationGuard();
 
 /**
+ * queueの処理は、最後の配信やDLQでJobを失敗にできなかった例外をhandlerの外へ投げる。
+ * 外へ出た例外のメッセージはWorkers Logsにも残るので、ログやSentryと同じく失敗したqueryの引数を除く。
+ * 作り直すと例外の型とstackが変わってSentryのissueが分かれるので、同じ例外を書き換える。
+ */
+const throwWithoutQueryParams = (error: unknown): never => {
+  if (error instanceof Error) {
+    const message = withoutQueryParams(error.message);
+
+    if (message !== error.message) {
+      if (error.stack) {
+        error.stack = error.stack.replace(error.message, message);
+      }
+      error.message = message;
+    }
+  }
+
+  throw error;
+};
+
+/**
  * Sentryの初期化はfetch・queue・cronを1つにまとめて包む。送るかどうかの判断は
  * `onError`とqueueの処理が`ErrorReporter`で行い、ここからhandlerの外へ漏れた例外は
  * SDKがそのまま拾う。
@@ -610,9 +630,11 @@ export default Sentry.withSentry<Bindings, { jobId: string }>(createSentryOption
   },
   queue: (batch, env) => {
     validateBindings(env);
-    return batch.queue === IMPORT_DEAD_LETTER_QUEUE
-      ? handleImportDeadLetterQueue(batch, env)
-      : handleImportQueue(batch, env);
+    return (
+      batch.queue === IMPORT_DEAD_LETTER_QUEUE
+        ? handleImportDeadLetterQueue(batch, env)
+        : handleImportQueue(batch, env)
+    ).catch(throwWithoutQueryParams);
   },
   scheduled: (controller, env) => {
     validateBindings(env);
