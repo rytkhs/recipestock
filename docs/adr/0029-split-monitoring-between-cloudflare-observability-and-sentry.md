@@ -15,7 +15,7 @@
 
 Stripe webhookの失敗は`onError`の経路で送り、`route` tagで見分けてアラートにする。署名検証の失敗は400を返すだけで送らない。インターネットから届く不正なリクエストは異常ではない。
 
-送る内容はログと同じ線に揃える。request body（レシピ本文、Stripeのpayload）、request header（cookie、iOS共有のtoken）、利用者のIP、URLのqueryは送らない。Workerの外部fetchのbreadcrumbは取り込み元のURLや署名付きURLを含むので、originだけを残す。これはログに`sourceHost`だけを残すのと同じ扱いである。利用者はidだけを載せる。
+送る内容はログと同じ線に揃える。request body（レシピ本文、Stripeのpayload）、Workerが受けたrequestのheader（cookie、iOS共有のtoken）、利用者のIP、URLのqueryは送らない。webのeventにSDKが付けるheaderは`Referer`と`User-Agent`だけで、cookieやtokenは含まれないので残し、`Referer`からqueryだけを落とす。`User-Agent`はbrowserからSentryへの送信そのものにも載るので、eventから消しても隠せない。Workerの外部fetchのbreadcrumbは取り込み元のURLや署名付きURLを含むので、originだけを残す。これはログに`sourceHost`だけを残すのと同じ扱いである。利用者はidだけを載せる。
 
 Sentryのtracingは使わない。WorkerのspanはWorkers Tracesがbindingまで自動で取るので、二つ持つと同じものを二重に計装することになる。SDKはtracingを使わなくても外部へのfetchに`sentry-trace`・`baggage`を付けるので、これも止める。`baggage`にはreleaseやDSNの公開鍵が入り、取り込み元のサイトにまで渡る。
 
