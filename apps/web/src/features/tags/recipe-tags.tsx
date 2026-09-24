@@ -9,9 +9,11 @@ import { tagChipClass } from "./tag-chip";
 // 詳細のタイトルの下に置くタグの行。タグを押すとそのタグで絞った一覧を開く。
 export const RecipeTags = ({
   recipeId,
+  recipeTitle,
   tags: savedTags,
 }: {
   recipeId: string;
+  recipeTitle: string;
   tags: readonly RecipeTag[];
 }) => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -45,6 +47,7 @@ export const RecipeTags = ({
         onOpenChange={setIsSheetOpen}
         open={isSheetOpen}
         recipeId={recipeId}
+        recipeTitle={recipeTitle}
         tags={tags}
       />
     </>

@@ -9,6 +9,7 @@ import { countTagNameLength, normalizeTagName } from "@recipestock/shared";
 import { useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
+import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
@@ -43,6 +44,8 @@ const tagKey = (name: string) => normalizeTagName(name)?.normalizedName ?? "";
 
 const recipeTagsMutationKey = (recipeId: string) => ["recipe-tags", recipeId] as const;
 
+const tagSaveErrorToastId = (recipeId: string) => `recipe-tags-save-error:${recipeId}`;
+
 // 組を丸ごと送るので、送り直しても結果は変わらない。届かなかった要求とサーバー側の失敗だけ送り直す。
 const MAX_TAG_SAVE_RETRIES = 2;
 
@@ -74,17 +77,18 @@ export const RecipeTagSheet = ({
   onOpenChange,
   open,
   recipeId,
+  recipeTitle,
   tags,
 }: {
   onOpenChange: (open: boolean) => void;
   open: boolean;
   recipeId: string;
+  recipeTitle: string;
   tags: readonly RecipeTag[];
 }) => {
   const queryClient = useQueryClient();
   const inputId = useId();
   const [input, setInput] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
   const vocabulary = useQuery({
     queryKey: tagsQueryKeys.all(),
     queryFn: listTags,
@@ -121,9 +125,8 @@ export const RecipeTagSheet = ({
       // 保存の途中で始まった取得は、保存より前の状態を読んでいることがあるので当てさせない。
       await queryClient.cancelQueries({ queryKey: detailQueryKey });
       setDetailTags(savedTags);
-      setSaveError(null);
     },
-    onError: async (_error, attemptedTags) => {
+    onError: async (error, attemptedTags) => {
       if (!isLastTagSave()) {
         return;
       }
@@ -146,7 +149,7 @@ export const RecipeTagSheet = ({
       }
 
       if (!recipe || recipe.locked || !hasSameTags(recipe.tags, attemptedTags)) {
-        setSaveError("タグを保存できませんでした。");
+        showSaveError(attemptedTags, isRetryableTagSaveError(error));
       }
     },
     onSettled: () => {
@@ -160,9 +163,24 @@ export const RecipeTagSheet = ({
     },
   });
 
+  // 新しく押した組のほうが後の意図なので、失敗した組を送り直す知らせは消す。残すと古い組で上書きできてしまう。
   const saveTags = (nextTags: RecipeTag[]) => {
-    setSaveError(null);
+    toast.dismiss(tagSaveErrorToastId(recipeId));
     mutation.mutate(nextTags);
+  };
+
+  // 失敗が分かるのはシートを閉じた後や一覧へ戻った後のこともあるので、画面を移っても残るトーストで知らせる。
+  // 付けたつもりのタグが画面から消えたのを見落とさないよう、閉じるまで出しておく。
+  // 送り直しは画面を離れた後でも押した組をそのまま送る。送り直しても通らない失敗には出さない。
+  const showSaveError = (attemptedTags: RecipeTag[], canRetry: boolean) => {
+    toast.error("タグを保存できませんでした", {
+      id: tagSaveErrorToastId(recipeId),
+      description: recipeTitle,
+      duration: Number.POSITIVE_INFINITY,
+      classNames: { description: "line-clamp-1" },
+      action: canRetry ? { label: "もう一度", onClick: () => saveTags(attemptedTags) } : undefined,
+      cancel: { label: "閉じる", onClick: () => undefined },
+    });
   };
 
   const normalizedInput = normalizeTagName(input);
@@ -356,19 +374,10 @@ export const RecipeTagSheet = ({
             ) : null}
           </div>
 
-          {isLimitReached || saveError ? (
-            <div className="px-4 pb-2">
-              {isLimitReached ? (
-                <p className="text-brand-muted text-xs">
-                  タグは1つのレシピに{MAX_RECIPE_TAGS}個までです。
-                </p>
-              ) : null}
-              {saveError ? (
-                <p className="text-brand-danger text-sm" role="alert">
-                  {saveError}
-                </p>
-              ) : null}
-            </div>
+          {isLimitReached ? (
+            <p className="px-4 pb-2 text-brand-muted text-xs">
+              タグは1つのレシピに{MAX_RECIPE_TAGS}個までです。
+            </p>
           ) : null}
 
           <SheetFooter className="border-brand-line-soft border-t px-4 py-2">

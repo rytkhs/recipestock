@@ -9,6 +9,8 @@ globalThis.ResizeObserver ??= class ResizeObserverStub {
   disconnect() {}
 };
 Element.prototype.scrollIntoView ??= vi.fn();
+// トーストはスワイプで閉じられるよう、押したときにsetPointerCaptureを呼ぶ。
+Element.prototype.setPointerCapture ??= vi.fn();
 // 一覧の次ページ先読みが使う。jsdomには無いので、交差を通知しないstubを置く。
 globalThis.IntersectionObserver ??= class IntersectionObserverStub {
   observe() {}
