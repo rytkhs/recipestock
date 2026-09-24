@@ -43,17 +43,20 @@ export const TagFilterBar = ({
   untagged: boolean;
 }) => {
   const barRef = useRef<HTMLFieldSetElement>(null);
-  const hasTags = tags.length > 0;
+  // 選んでいるidがすべてチップになったら、チップ列が揃ったとみなす。
+  // 詳細で作ったばかりのタグから開くと、古いタグ一覧のキャッシュにそのタグがなく、読み直すまでチップが描かれない。
+  // 「タグなし」だけを選んだ一覧はタグ一覧より先に描かれることがあるので、タグが届くまでは揃っていない。
+  const isChipRowReady =
+    tags.length > 0 && selectedTagIds.every((tagId) => tags.some((tag) => tag.id === tagId));
 
   // 一覧を開き直すとチップ列は先頭に戻り、選んでいるチップが画面の外に隠れて、絞り込み中だと分からなくなる。
   // チップが揃ったときに一度だけ、最初に選んでいるチップを見える位置へ送る。押したチップはもう見えているので、選び直しでは動かさない。
   // ページの縦の位置は戻る操作で復元するので、scrollIntoViewは使わずチップ列の横スクロールだけを動かす。
-  // 「タグなし」だけを選んだ一覧はタグ一覧より先に描かれることがあるので、タグが届いてから送る。
   // チップの幅はWebフォントに差し替わると広がり、見えていたチップが外に押し出されるので、読み込み後にもう一度見る。
   useLayoutEffect(() => {
     const bar = barRef.current;
 
-    if (!hasTags || !bar) {
+    if (!isChipRowReady || !bar) {
       return;
     }
 
@@ -69,7 +72,7 @@ export const TagFilterBar = ({
     return () => {
       isCurrent = false;
     };
-  }, [hasTags]);
+  }, [isChipRowReady]);
 
   return (
     <fieldset
