@@ -29,6 +29,7 @@ const revealFirstSelectedChip = (bar: HTMLElement) => {
 // fieldsetの既定のmarginはpreflightが消す。m-0を足すとcnが-mx-4を落とし、モバイルでチップ列がずれる。
 export const TagFilterBar = ({
   className,
+  isTagsLoaded,
   onToggleTag,
   onToggleUntagged,
   selectedTagIds,
@@ -36,6 +37,8 @@ export const TagFilterBar = ({
   untagged,
 }: {
   className?: string;
+  // この画面を開いてから読んだタグ一覧が届いたか。読み直している間はキャッシュの古い一覧が並ぶ。
+  isTagsLoaded: boolean;
   onToggleTag: (tagId: string) => void;
   onToggleUntagged: () => void;
   selectedTagIds: readonly string[];
@@ -43,20 +46,16 @@ export const TagFilterBar = ({
   untagged: boolean;
 }) => {
   const barRef = useRef<HTMLFieldSetElement>(null);
-  // 選んでいるidがすべてチップになったら、チップ列が揃ったとみなす。
-  // 詳細で作ったばかりのタグから開くと、古いタグ一覧のキャッシュにそのタグがなく、読み直すまでチップが描かれない。
-  // 「タグなし」だけを選んだ一覧はタグ一覧より先に描かれることがあるので、タグが届くまでは揃っていない。
-  const isChipRowReady =
-    tags.length > 0 && selectedTagIds.every((tagId) => tags.some((tag) => tag.id === tagId));
 
   // 一覧を開き直すとチップ列は先頭に戻り、選んでいるチップが画面の外に隠れて、絞り込み中だと分からなくなる。
-  // チップが揃ったときに一度だけ、最初に選んでいるチップを見える位置へ送る。押したチップはもう見えているので、選び直しでは動かさない。
+  // タグ一覧を読み直したときに一度だけ、最初に選んでいるチップを見える位置へ送る。押したチップはもう見えているので、選び直しでは動かさない。
   // ページの縦の位置は戻る操作で復元するので、scrollIntoViewは使わずチップ列の横スクロールだけを動かす。
+  // キャッシュの一覧で送ると、読み直して前に増えたチップ（詳細で付けたばかりのタグなど）に選んでいるチップが押し出される。
   // チップの幅はWebフォントに差し替わると広がり、見えていたチップが外に押し出されるので、読み込み後にもう一度見る。
   useLayoutEffect(() => {
     const bar = barRef.current;
 
-    if (!isChipRowReady || !bar) {
+    if (!isTagsLoaded || !bar) {
       return;
     }
 
@@ -72,7 +71,7 @@ export const TagFilterBar = ({
     return () => {
       isCurrent = false;
     };
-  }, [isChipRowReady]);
+  }, [isTagsLoaded]);
 
   return (
     <fieldset

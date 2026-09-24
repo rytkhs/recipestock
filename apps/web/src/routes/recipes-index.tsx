@@ -675,6 +675,7 @@ export const RecipesIndexRoute = () => {
         {hasTagFilterBar ? (
           <TagFilterBar
             className="mt-2 sm:mt-3"
+            isTagsLoaded={tagsQuery.isFetchedAfterMount}
             onToggleTag={toggleTag}
             onToggleUntagged={toggleUntagged}
             selectedTagIds={tagIds}
