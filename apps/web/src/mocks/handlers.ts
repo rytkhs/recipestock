@@ -34,6 +34,8 @@ import { type MockState } from "./scenarios";
 
 const MOCK_UPLOAD_ORIGIN = "https://mock-r2.invalid";
 const IMPORT_JOB_DURATION_MS = 6000;
+// 画面は失敗したタグの保存を2回まで自動で送り直すので、最初に押した組の保存はこの回数まで届く。
+const FIRST_TAG_SAVE_ATTEMPTS = 3;
 
 const apiError = (status: number, code: ApiErrorCode, message: string, details?: unknown) =>
   HttpResponse.json(
@@ -182,6 +184,7 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
   let billingReads = 0;
   let recipeDetailReads = 0;
   let imageUploadWrites = 0;
+  let recipeTagWrites = 0;
   // Recipeのidごとに、付けたタグのidを付けた順に持つ。
   const recipeTags = new Map(
     Object.entries(state.recipeTags).map(([recipeId, tagIds]) => [recipeId, [...tagIds]]),
@@ -568,10 +571,16 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         return tagsInvalid();
       }
 
-      if (listed.locked) {
+      if (listed.locked || state.failures.replaceRecipeTags === "locked") {
         return apiError(403, "locked_recipe", "Recipe is locked.");
       }
-      if (state.failures.replaceRecipeTags) {
+
+      recipeTagWrites += 1;
+      if (
+        state.failures.replaceRecipeTags === "always" ||
+        (state.failures.replaceRecipeTags === "first-save" &&
+          recipeTagWrites <= FIRST_TAG_SAVE_ATTEMPTS)
+      ) {
         return apiError(500, "unknown", "Failed to save recipe tags.");
       }
 

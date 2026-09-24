@@ -82,7 +82,11 @@ export type MockState = {
     getRecipe?: "once" | "always";
     saveRecipe?: "generic" | "image-finalize";
     deleteRecipe?: boolean;
-    replaceRecipeTags?: boolean;
+    /**
+     * "always" は毎回500にする。"first-save" は最初に押した組の保存を自動の送り直しまで500にし、
+     * その後の保存（「もう一度」を含む）は通す。"locked" はロック中として403を返す。
+     */
+    replaceRecipeTags?: "always" | "first-save" | "locked";
     /** "after-first" は最初の1枚だけ成功させ、同時選択した後続を失敗させる。 */
     uploadImage?: "always" | "after-first";
     getViewer?: boolean;
@@ -556,8 +560,20 @@ export const scenarios: Scenario[] = [
   {
     id: "recipe-tag-save-error",
     group: "recipes",
-    label: "レシピのタグ保存失敗",
-    build: () => ({ ...baseState(), failures: { replaceRecipeTags: true } }),
+    label: "レシピのタグ保存失敗(送り直しても失敗)",
+    build: () => ({ ...baseState(), failures: { replaceRecipeTags: "always" } }),
+  },
+  {
+    id: "recipe-tag-save-first-error",
+    group: "recipes",
+    label: "レシピのタグ保存失敗(もう一度で成功)",
+    build: () => ({ ...baseState(), failures: { replaceRecipeTags: "first-save" } }),
+  },
+  {
+    id: "recipe-tag-save-locked",
+    group: "recipes",
+    label: "レシピのタグ保存失敗(ロック中・送り直せない)",
+    build: () => ({ ...baseState(), failures: { replaceRecipeTags: "locked" } }),
   },
   {
     id: "free-locked",
