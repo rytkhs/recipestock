@@ -675,6 +675,7 @@ export const RecipesIndexRoute = () => {
         {hasTagFilterBar ? (
           <TagFilterBar
             className="mt-2 sm:mt-3"
+            isTagsLoaded={tagsQuery.isFetchedAfterMount}
             onToggleTag={toggleTag}
             onToggleUntagged={toggleUntagged}
             selectedTagIds={tagIds}
@@ -683,6 +684,17 @@ export const RecipesIndexRoute = () => {
           />
         ) : null}
       </div>
+
+      {/* 狭い画面ではツールバーにまとめを出さず、選んだチップも横スクロールで隠れることがあるので、
+          絞り込み中はここに条件と件数を出し、まとめて外せるようにする。0件のときは下の案内が同じ役目を持つ。 */}
+      {hasFilter && recipes.length > 0 ? (
+        <div className="mt-2 flex min-w-0 items-center justify-between gap-3 sm:hidden">
+          <p className="min-w-0 truncate text-brand-muted text-sm">{shelfSummary}</p>
+          <Button className="-mr-2.5 shrink-0" variant="ghost" onClick={clearFilters}>
+            すべて表示
+          </Button>
+        </div>
+      ) : null}
 
       <ImportJobIsland />
 
