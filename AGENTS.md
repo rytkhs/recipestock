@@ -70,6 +70,13 @@ If code, tests, and documentation disagree and the intended behavior cannot be e
 
 ## Verification and Completion
 
+### Test Quality
+
+- Do not write tautological tests that restate the implementation or derive the expected result from the code under test.
+- Do not write change-detector tests that fail on an implementation change without checking a meaningful behavior or contract.
+- Do not add regression tests for bug fixes unless the fix closes a genuine gap in behavior testing.
+- If you happen to encounter existing tests of these kinds during your work, report them.
+
 Use the smallest relevant validation first, then expand according to the affected surface:
 
 ```bash
