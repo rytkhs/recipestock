@@ -536,7 +536,8 @@ describe("タグ", () => {
       await within(sheet).findByRole("button", { name: "作り置き" });
       expect(candidateNames(sheet)).toEqual([...STARTER_TAG_NAMES]);
 
-      await userEvent.click(within(sheet).getByRole("button", { name: "作り置き" }));
+      const starterChip = within(sheet).getByRole("button", { name: "作り置き" });
+      await userEvent.click(starterChip);
       // 保存の後に語彙を読み直して「作り置き」だけになっても、残りの定番候補を消さず、並びも変えない。
       await waitFor(() => {
         expect(tagListFetchCount()).toBe(2);
@@ -548,6 +549,9 @@ describe("タグ", () => {
         );
       });
       expect(candidateNames(sheet)).toEqual([...STARTER_TAG_NAMES]);
+      // 作ったタグのidに変わっても同じチップのまま残し、続けて選べるようフォーカスを外さない。
+      expect(within(sheet).getByRole("button", { name: "作り置き" })).toBe(starterChip);
+      expect(starterChip).toHaveFocus();
 
       await userEvent.click(within(sheet).getByRole("button", { name: "主菜" }));
       await waitFor(() => {

@@ -223,7 +223,8 @@ const RecipeTagSheetBody = ({
               const isSelected = selectedKeys.has(tagKey(candidate.name));
 
               return (
-                <li className="max-w-full" key={candidate.id}>
+                // 定番候補は保存の前後でidが変わるので、名前で見分けて同じチップのまま残す。
+                <li className="max-w-full" key={tagKey(candidate.name)}>
                   <button
                     aria-pressed={isSelected}
                     className={cn(tagChipClass(isSelected), "h-9 max-w-full px-3.5")}
