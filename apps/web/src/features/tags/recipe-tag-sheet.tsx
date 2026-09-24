@@ -102,7 +102,8 @@ const RecipeTagSheetBody = ({
   const inputId = useId();
   const [input, setInput] = useState("");
   const vocabulary = useQuery({ queryKey: tagsQueryKeys.all(), queryFn: listTags });
-  // 語彙もこのRecipeのタグも空で開いた回は、閉じるまで定番候補を並べる。
+  // 開いてから語彙が最初に届いた時点で、語彙もこのRecipeのタグも空なら、閉じるまで定番候補を並べる。
+  // 届く前に自分でタグを作った回は出さない。後から差し込むと、作ったタグの位置がずれる。
   // 語彙が空かどうかをその都度見ると、1つ選んだところで残りが消え、続けて選べない。
   const [showsStarters, setShowsStarters] = useState<boolean | null>(null);
 
