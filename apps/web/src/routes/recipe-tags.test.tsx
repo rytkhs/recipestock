@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { tagsQueryKeys } from "../features/tags";
+import { STARTER_TAG_NAMES, tagsQueryKeys } from "../features/tags";
 import {
   findFetchCall,
   getRequestPath,
@@ -490,6 +490,123 @@ describe("タグ", () => {
         });
       });
       expect(within(sheet).getByLabelText("タグを探す・作る")).toHaveValue("");
+    });
+
+    it("語彙が空で開いた回は、定番候補を選んでも閉じるまで同じ並びで残し、開き直すと語彙から出す", async () => {
+      let vocabulary: TagFixture[] = [];
+      let savedTags: { id: string; name: string }[] = [];
+      const fetchMock = mockFetch(
+        async (input, init) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/recipes/recipe_1/tags" && init?.method === "PUT") {
+            const names = requestedTagNames(init);
+            const createdTags = names
+              .filter((name) => !vocabulary.some((tag) => tag.name === name))
+              .map((name) => ({ id: `tag_${name}`, name, recipeCount: 0 }));
+
+            vocabulary = [...vocabulary, ...createdTags];
+            savedTags = names.map((name) => ({ id: `tag_${name}`, name }));
+            return jsonResponse({ tags: savedTags });
+          }
+
+          if (path === "/api/recipes/recipe_1") {
+            return jsonResponse(detailResponse(savedTags));
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: vocabulary });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+      const tagListFetchCount = () =>
+        fetchMock.mock.calls.filter(([input]) => getRequestPath(input) === "/api/tags").length;
+      const candidateNames = (sheet: HTMLElement) =>
+        within(within(sheet).getByRole("list", { name: "タグの候補" }))
+          .getAllByRole("button")
+          .map((button) => button.textContent);
+
+      await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await within(sheet).findByRole("button", { name: "作り置き" });
+      expect(candidateNames(sheet)).toEqual([...STARTER_TAG_NAMES]);
+
+      await userEvent.click(within(sheet).getByRole("button", { name: "作り置き" }));
+      // 保存の後に語彙を読み直して「作り置き」だけになっても、残りの定番候補を消さず、並びも変えない。
+      await waitFor(() => {
+        expect(tagListFetchCount()).toBe(2);
+      });
+      await waitFor(() => {
+        expect(within(sheet).getByRole("button", { name: "作り置き" })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      });
+      expect(candidateNames(sheet)).toEqual([...STARTER_TAG_NAMES]);
+
+      await userEvent.click(within(sheet).getByRole("button", { name: "主菜" }));
+      await waitFor(() => {
+        expect(savedTagSets(fetchMock)).toEqual([["作り置き"], ["作り置き", "主菜"]]);
+      });
+
+      await userEvent.click(within(sheet).getByRole("button", { name: "完了" }));
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: "タグ" })).not.toBeInTheDocument();
+      });
+      // タグが付いた後は、外すのもここからだと分かるよう「編集」から開く。
+      await userEvent.click(await screen.findByRole("button", { name: "タグを編集" }));
+      const reopened = await screen.findByRole("dialog", { name: "タグ" });
+
+      await waitFor(() => {
+        expect(candidateNames(reopened)).toEqual(["作り置き", "主菜"]);
+      });
+      expect(within(reopened).queryByText("よく使われるタグ")).not.toBeInTheDocument();
+    });
+
+    it("入力に部分一致する既存のタグを作る操作より先に並べ、閉じると入力を消す", async () => {
+      mockFetch(
+        async (input) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/recipes/recipe_1") {
+            return jsonResponse(detailResponse([]));
+          }
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: [{ id: "tag_1", name: "鶏肉", recipeCount: 2 }] });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      await renderApp("/recipes/recipe_1");
+
+      await userEvent.click(await screen.findByRole("button", { name: "タグを付ける" }));
+      const sheet = await screen.findByRole("dialog", { name: "タグ" });
+      await within(sheet).findByRole("button", { name: "鶏肉" });
+      await userEvent.type(within(sheet).getByLabelText("タグを探す・作る"), "鶏");
+
+      const existingTag = within(sheet).getByRole("button", { name: "鶏肉" });
+      const createTag = within(sheet).getByRole("button", { name: "「鶏」を作成" });
+      expect(
+        existingTag.compareDocumentPosition(createTag) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      await userEvent.click(within(sheet).getByRole("button", { name: "完了" }));
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: "タグ" })).not.toBeInTheDocument();
+      });
+      await userEvent.click(screen.getByRole("button", { name: "タグを付ける" }));
+      const reopened = await screen.findByRole("dialog", { name: "タグ" });
+
+      expect(within(reopened).getByLabelText("タグを探す・作る")).toHaveValue("");
     });
 
     it("サーバー側の失敗は送り直し、それでも保存できなければ詳細を取り直してトーストで知らせ、次に押した組を送ると消す", async () => {

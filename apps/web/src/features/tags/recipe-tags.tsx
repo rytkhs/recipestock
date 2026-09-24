@@ -1,4 +1,4 @@
-import { Plus } from "@phosphor-icons/react";
+import { PencilSimple, Plus } from "@phosphor-icons/react";
 import { type RecipeTag } from "@recipestock/schemas";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -33,15 +33,28 @@ export const RecipeTags = ({
             </Link>
           ),
         )}
-        <button
-          aria-label={tags.length > 0 ? "タグを編集" : "タグを付ける"}
-          className={cn(tagChipClass(), "border-dashed text-brand-muted")}
-          type="button"
-          onClick={() => setIsSheetOpen(true)}
-        >
-          <Plus weight="bold" />
-          タグ
-        </button>
+        {/* 付いていないうちは付けるきっかけとして名前を出し、付いた後は外すのもここだと分かる「編集」にする。
+            タグのチップは絞った一覧へのリンクなので、押して外すことはできない。 */}
+        {tags.length > 0 ? (
+          <button
+            aria-label="タグを編集"
+            className={cn(tagChipClass(), "text-brand-muted")}
+            type="button"
+            onClick={() => setIsSheetOpen(true)}
+          >
+            <PencilSimple weight="bold" />
+            編集
+          </button>
+        ) : (
+          <button
+            className={cn(tagChipClass(), "border-dashed text-brand-muted")}
+            type="button"
+            onClick={() => setIsSheetOpen(true)}
+          >
+            <Plus weight="bold" />
+            タグを付ける
+          </button>
+        )}
       </div>
       <RecipeTagSheet
         onOpenChange={setIsSheetOpen}
