@@ -20,6 +20,10 @@ globalThis.IntersectionObserver ??= class IntersectionObserverStub {
     return [];
   }
 } as unknown as typeof IntersectionObserver;
+// 一覧のチップ列が、Webフォントの読み込み後に選んでいるチップの位置を見直す。jsdomにはフォントの読み込みが無い。
+if (!("fonts" in document)) {
+  Object.defineProperty(document, "fonts", { value: { ready: Promise.resolve() } });
+}
 
 URL.createObjectURL = vi.fn(() => "blob:test-preview-url");
 URL.revokeObjectURL = vi.fn();

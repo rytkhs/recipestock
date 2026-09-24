@@ -271,6 +271,8 @@ describe("タグ", () => {
       await expect(
         screen.findByText("すべてのレシピにタグが付いています"),
       ).resolves.toBeInTheDocument();
+      // 0件のときは案内のボタンで外すので、条件と件数の行は出さない。
+      expect(screen.queryByRole("button", { name: "すべて表示" })).not.toBeInTheDocument();
       expect(appRouter.state.location.search).toEqual({ untagged: true });
       expect(within(filterBar).getByRole("button", { name: "鶏肉" })).toHaveAttribute(
         "aria-pressed",
@@ -283,6 +285,48 @@ describe("タグ", () => {
         screen.findByRole("heading", { name: "Tomato pasta" }),
       ).resolves.toBeInTheDocument();
       expect(appRouter.state.location.search).toEqual({});
+    });
+
+    it("絞り込み中は条件と件数を出し、すべて表示で条件を外す", async () => {
+      mockFetch(
+        async (input) => {
+          const path = getRequestPath(input);
+
+          if (path === "/api/tags") {
+            return jsonResponse({ tags: [{ id: "tag_1", name: "鶏肉", recipeCount: 1 }] });
+          }
+
+          if (path === "/api/recipes?limit=20&tagId=tag_1") {
+            return jsonResponse({
+              items: [listItem("recipe_1", "Tomato pasta")],
+              nextCursor: null,
+            });
+          }
+
+          if (path === "/api/recipes?limit=20") {
+            return jsonResponse({
+              items: [listItem("recipe_1", "Tomato pasta"), listItem("recipe_2", "Potato salad")],
+              nextCursor: null,
+            });
+          }
+
+          return new Response(null, { status: 404 });
+        },
+        { authenticated: true },
+      );
+
+      const { appRouter } = await renderApp(recipesPathWithTags(["tag_1"]));
+      const showAll = await screen.findByRole("button", { name: "すべて表示" });
+
+      expect(showAll.parentElement).toHaveTextContent("「鶏肉」 · 1件");
+
+      await userEvent.click(showAll);
+
+      await expect(
+        screen.findByRole("heading", { name: "Potato salad" }),
+      ).resolves.toBeInTheDocument();
+      expect(appRouter.state.location.search).toEqual({});
+      expect(screen.queryByRole("button", { name: "すべて表示" })).not.toBeInTheDocument();
     });
 
     it("URLに残った消えたタグのidは、タグ一覧を読んでから外し、そのidでは一覧を取りに行かない", async () => {
