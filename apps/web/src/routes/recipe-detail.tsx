@@ -480,7 +480,7 @@ const RecipeDetailView = ({
               {createdAtLabel ? <span>{createdAtLabel}に保存</span> : null}
             </p>
           ) : null}
-          <RecipeTags recipeId={recipe.id} tags={recipe.tags} />
+          <RecipeTags recipeId={recipe.id} recipeTitle={recipe.title} tags={recipe.tags} />
         </div>
       </header>
 

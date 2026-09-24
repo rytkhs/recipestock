@@ -205,6 +205,36 @@ describe("mock handlers", () => {
     expect((await getRecipe(handlers, "recipe_001")).tags).toEqual(before);
   });
 
+  it("最初の保存だけ失敗するシナリオでは、自動の送り直しまで失敗させ、その後の保存は通す", async () => {
+    const handlers = setup("recipe-tag-save-first-error");
+    const before = (await getRecipe(handlers, "recipe_001")).tags;
+    const save = () =>
+      send(handlers, "PUT", "/api/recipes/recipe_001/tags", { names: ["新しいタグ"] });
+
+    // 最初に押した組の送信と、画面が自動で送り直す2回。
+    expect((await save()).status).toBe(500);
+    expect((await save()).status).toBe(500);
+    expect((await save()).status).toBe(500);
+    expect((await getRecipe(handlers, "recipe_001")).tags).toEqual(before);
+
+    expect((await save()).status).toBe(200);
+    expect((await getRecipe(handlers, "recipe_001")).tags.map((tag) => tag.name)).toEqual([
+      "新しいタグ",
+    ]);
+  });
+
+  it("ロック中で失敗するシナリオでは403を返し、現在のタグを保つ", async () => {
+    const handlers = setup("recipe-tag-save-locked");
+    const before = (await getRecipe(handlers, "recipe_001")).tags;
+    const response = await send(handlers, "PUT", "/api/recipes/recipe_001/tags", {
+      names: ["新しいタグ"],
+    });
+
+    expect(response.status).toBe(403);
+    expect(await errorCodeOf(response)).toBe("locked_recipe");
+    expect((await getRecipe(handlers, "recipe_001")).tags).toEqual(before);
+  });
+
   it("画像アップロード失敗シナリオでは署名URLへのPUTを失敗させる", async () => {
     const handlers = setup("image-upload-error");
     const upload = (await (
