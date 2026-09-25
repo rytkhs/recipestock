@@ -18,7 +18,7 @@ export const createSilentTestApp = (dependencies: AppDependencies = {}) =>
 export const createTestAuth = (
   user: AuthSession["user"] | null = { id: "user_123", email: "user@example.com" },
 ): AuthService => ({
-  getSession: async () => (user ? { user } : null),
+  getSession: async () => ({ session: user ? { user } : null, setCookies: [] }),
   handleAuthRequest: async () => new Response(null, { status: 404 }),
 });
 

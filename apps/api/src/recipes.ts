@@ -342,8 +342,9 @@ export const createRecipeRepository = (
     };
   },
   async getRecipe(userId, recipeId) {
-    // 行とタグの取得、planの導出は互いに独立なので同じ波で引く。
-    const [rows, plan, attachedTags] = await Promise.all([
+    // 行とタグの取得、planの導出、unlocked判定は互いに独立なので同じ波で引く。
+    // unlocked判定はfreeでしか使わないが、planを待ってから引くと1往復増えるのでplanによらず引く。
+    const [rows, plan, attachedTags, unlockedRecipeIds] = await Promise.all([
       db
         .select()
         .from(recipes)
@@ -351,6 +352,7 @@ export const createRecipeRepository = (
         .limit(1),
       deriveAppUserPlanForDb(db, userId, planSyncOptions),
       listRecipeTags(db, userId, recipeId),
+      getUnlockedRecipeIdSet(db, userId),
     ]);
     const [row] = rows;
 
@@ -358,8 +360,6 @@ export const createRecipeRepository = (
       return null;
     }
 
-    const unlockedRecipeIds =
-      plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
     const recipe = mapRecipeRow(row);
 
     return {
@@ -434,8 +434,9 @@ export const createRecipeRepository = (
       );
     }
 
-    // 一覧本体はplanに依存しないので同じ波で引く。unlocked判定はfreeのときだけ足す。
-    const [plan, rows] = await Promise.all([
+    // 一覧本体とunlocked判定はplanに依存しないので同じ波で引く。
+    // unlocked判定はfreeでしか使わないが、planを待ってから引くと1往復増えるのでplanによらず引く。
+    const [plan, rows, unlockedRecipeIds] = await Promise.all([
       deriveAppUserPlanForDb(db, userId, planSyncOptions),
       db
         .select({
@@ -455,9 +456,8 @@ export const createRecipeRepository = (
         .where(and(...whereConditions))
         .orderBy(order(recipes.createdAt), order(recipes.id))
         .limit(limit + 1),
+      getUnlockedRecipeIdSet(db, userId),
     ]);
-    const unlockedRecipeIds =
-      plan === "free" ? await getUnlockedRecipeIdSet(db, userId) : new Set<string>();
     const pageRows = rows.slice(0, limit);
     const lastRecipe = pageRows.at(-1);
 

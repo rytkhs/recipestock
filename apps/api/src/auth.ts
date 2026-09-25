@@ -22,14 +22,24 @@ export type AuthSession = {
   };
 };
 
+// setCookiesはBetter Authがsessionの照会中に書いたSet-Cookie。DBを引いたときのcookie cacheの
+// 再発行と、失効したsessionのcookie削除がここに載る。
+export type AuthSessionResult = {
+  session: AuthSession | null;
+  setCookies: string[];
+};
+
 export type AuthService = {
-  getSession(request: Request, env: Bindings): Promise<AuthSession | null>;
+  getSession(request: Request, env: Bindings): Promise<AuthSessionResult>;
   handleAuthRequest(request: Request, env: Bindings): Promise<Response>;
 };
 
 type AuthInstance = {
   api: {
-    getSession(input: { headers: Headers }): Promise<AuthSession | null>;
+    getSession(input: {
+      headers: Headers;
+      returnHeaders: true;
+    }): Promise<{ headers: Headers; response: AuthSession | null }>;
   };
   handler(request: Request): Promise<Response>;
 };
@@ -140,7 +150,7 @@ const createAuth = (env: Bindings) => {
       schema,
     }),
     // requireAuthは毎requestでsessionを引き、サムネイル画像1枚ごとにもNeonを往復していた。
-    // get-sessionがDBを引いたときに署名付きcookieを配り、以降のrequestはそれを検証して返す。
+    // sessionをDBから引いたrequestが署名付きcookieを配り、以降のrequestはそれを検証して返す。
     // 引き換えに他端末のsession遮断とuser情報の反映が最大maxAge分遅れる。
     session: {
       cookieCache: { enabled: true, maxAge: 60 },
@@ -217,9 +227,12 @@ export const createAuthService = (authFactory: AuthFactory): AuthService => {
 
   return {
     async getSession(request, env) {
-      return getAuth(env).api.getSession({
+      const { headers, response } = await getAuth(env).api.getSession({
         headers: request.headers,
+        returnHeaders: true,
       });
+
+      return { session: response, setCookies: headers.getSetCookie() };
     },
     async handleAuthRequest(request, env) {
       return getAuth(env).handler(request);
