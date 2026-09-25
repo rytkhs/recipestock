@@ -206,9 +206,12 @@ describe("createAuthService", () => {
         api: {
           async getSession() {
             return {
-              user: {
-                email: `${instanceId}@example.com`,
-                id: instanceId,
+              headers: new Headers(),
+              response: {
+                user: {
+                  email: `${instanceId}@example.com`,
+                  id: instanceId,
+                },
               },
             };
           },
@@ -232,6 +235,9 @@ describe("createAuthService", () => {
     const firstSession = await authService.getSession(request(), env);
     const secondSession = await authService.getSession(request(), env);
 
-    expect([firstSession?.user.id, secondSession?.user.id]).toEqual(["instance-1", "instance-1"]);
+    expect([firstSession.session?.user.id, secondSession.session?.user.id]).toEqual([
+      "instance-1",
+      "instance-1",
+    ]);
   });
 });

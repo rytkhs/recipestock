@@ -223,7 +223,7 @@ describe("API app composition", () => {
       auth: {
         getSession: async () => {
           getSessionCalls += 1;
-          return null;
+          return { session: null, setCookies: [] };
         },
         handleAuthRequest: async () =>
           Response.json(

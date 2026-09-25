@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createRecipeRepository,
   InvalidRecipeListCursorError,
-  isRecipeLockedForPlan,
   type NewRecipeRecord,
   normalizeRecipeSearchTerms,
   normalizeRecipeSource,
@@ -63,28 +62,6 @@ describe("normalizeRecipeSearchTerms", () => {
     const query = Array.from({ length: MAX_RECIPE_SEARCH_TERMS + 5 }, (_, index) => `語${index}`);
 
     expect(normalizeRecipeSearchTerms(query.join(" "))).toHaveLength(MAX_RECIPE_SEARCH_TERMS);
-  });
-});
-
-describe("isRecipeLockedForPlan", () => {
-  it("Freeユーザーは開けておく5件に含まれないRecipeをロックする", () => {
-    expect(
-      isRecipeLockedForPlan({
-        plan: "free",
-        recipeId: "recipe_6",
-        unlockedRecipeIds: new Set(["recipe_1", "recipe_2", "recipe_3", "recipe_4", "recipe_5"]),
-      }),
-    ).toBe(true);
-  });
-
-  it("Proユーザーは保存件数にかかわらずRecipeをロックしない", () => {
-    expect(
-      isRecipeLockedForPlan({
-        plan: "pro",
-        recipeId: "recipe_6",
-        unlockedRecipeIds: new Set(),
-      }),
-    ).toBe(false);
   });
 });
 

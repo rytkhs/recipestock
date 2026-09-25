@@ -2,11 +2,13 @@
 
 ADR 0011は、protected routeの描画をsessionだけに依存させ、viewerと画面本体のqueryを同じ波で発火させた。波が畳まれた結果、起動の所要はその波に並ぶendpointが個別に抱えるNeon往復で決まるようになった。
 
-そこに`requireAuth`が乗っている。`requireAuth`は毎requestでBetter Authの`getSession`を呼び、Neonへ1往復する。Neonは`ap-southeast-1`にあり東京からの1往復は80〜120msかかる。しかもレシピ画像は`/api/images/object/*`として`requireAuth`を通るため、一覧に並ぶサムネイル1枚ごとにsessionの照会が走る。20件の一覧を開けば、認証のためだけに20回Neonを往復することになる。sessionの照会は本来この画面が必要とする情報を何も運んでいない。
+そこに`requireAuth`が乗っている。`requireAuth`は毎requestでBetter Authの`getSession`を呼び、Neonを引く。`findSession`はsessionとuserを順に引くので、往復は2回直列になる。Neonは`ap-southeast-1`にあり東京からの1往復は80〜120msかかる。しかもレシピ画像は`/api/images/object/*`として`requireAuth`を通るため、一覧に並ぶサムネイル1枚ごとにsessionの照会が走る。20件の一覧を開けば、認証のためだけにsessionを20回照会することになる。sessionの照会は本来この画面が必要とする情報を何も運んでいない。
 
 Better Authの`session.cookieCache`を有効にする。`/api/auth/get-session`がDBを引いた応答の最後で、sessionとuserを載せた署名付きcookieが配られる。以降のrequestでは`getSession`がそのcookieをHMAC検証して返し、DBを引かない。起動の並びは、波1の`/api/auth/get-session`がcookieを配り、波2の`/api/me`と`/api/recipes`、波3の画像がそれを読む、という形になる。
 
-`database`を設定している構成では、Better Authはcache hit時のcookie再発行を強制的に無効にする。`requireAuth`はBetter Authが組み立てたResponseを使わず自前のhandlerで応答を返すため、cache hit経路でSet-Cookieが書かれないことはむしろ都合がよい。cookieの更新は、起動時と、focus・online復帰時にclientが投げる`/api/auth/get-session`が担う。この経路だけはBetter Authのhandlerが返したResponseをそのまま返しているため、Set-Cookieが通る。
+`database`を設定している構成では、Better Authはcache hit時のcookie再発行を強制的に無効にする。Set-Cookieが書かれるのは、cacheが切れてsessionをDBから引いたときだけになる。
+
+cookieの更新は、起動時とfocus・online復帰時にclientが投げる`/api/auth/get-session`に加え、`requireAuth`も担う。`requireAuth`はBetter Authが組み立てたResponseを使わず自前のhandlerで応答を返すので、`getSession`が書いたSet-Cookieを受け取り、handlerの応答に付けて返す。これが無いと、画面を開いたまま60秒を過ぎた以降のrequestはcookieを受け取り直す機会がなく、`get-session`が次に呼ばれるまで毎回DBを引く。しかも`findSession`はsessionとuserを順に引くので、認証だけで2往復が直列に乗る。
 
 ## maxAgeは60秒とする
 
