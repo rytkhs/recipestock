@@ -5,6 +5,9 @@
   "compatibility_date": "2026-05-25",
   "compatibility_flags": ["nodejs_compat"],
   "keep_vars": true,
+  // 東京・シンガポール間の通信障害が続く間、Neon の近くで API を実行する。
+  // 復旧後に日本側の配置と再比較し、正式採用するか判断する。
+  "placement": { "region": "aws:ap-southeast-1" },
   "minify": true,
   "images": { "binding": "IMAGES", "remote": true },
   "upload_source_maps": true,
