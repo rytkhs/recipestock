@@ -12,19 +12,14 @@ import {
   recipeContentSchema,
   recipeContentWithUrlsSchema,
 } from "@recipestock/schemas";
-import {
-  buildSearchText,
-  normalizeUrl,
-  PLAN_LIMITS,
-  type Plan,
-  truncateText,
-} from "@recipestock/shared";
+import { buildSearchText, normalizeUrl, PLAN_LIMITS, truncateText } from "@recipestock/shared";
 import {
   and,
   asc,
   desc,
   eq,
   exists,
+  getTableColumns,
   gt,
   ilike,
   inArray,
@@ -189,16 +184,6 @@ export const toLockedRecipeDetail = (recipe: Pick<RecipeRecord, "id">): LockedRe
   locked: true,
 });
 
-export const isRecipeLockedForPlan = ({
-  plan,
-  recipeId,
-  unlockedRecipeIds,
-}: {
-  plan: Plan;
-  recipeId: string;
-  unlockedRecipeIds: ReadonlySet<string>;
-}) => plan === "free" && !unlockedRecipeIds.has(recipeId);
-
 type RecipeListCursor = {
   sort: RecipeListSort;
   createdAt: string;
@@ -342,17 +327,15 @@ export const createRecipeRepository = (
     };
   },
   async getRecipe(userId, recipeId) {
-    // 行とタグの取得、planの導出、unlocked判定は互いに独立なので同じ波で引く。
-    // unlocked判定はfreeでしか使わないが、planを待ってから引くと1往復増えるのでplanによらず引く。
-    const [rows, plan, attachedTags, unlockedRecipeIds] = await Promise.all([
+    // 行とタグの取得、planの導出は互いに独立なので同じ波で引く。
+    const [rows, plan, attachedTags] = await Promise.all([
       db
-        .select()
+        .select({ ...getTableColumns(recipes), unlocked: isUnlockedOnFree(db, userId) })
         .from(recipes)
         .where(and(eq(recipes.userId, userId), eq(recipes.id, recipeId)))
         .limit(1),
       deriveAppUserPlanForDb(db, userId, planSyncOptions),
       listRecipeTags(db, userId, recipeId),
-      getUnlockedRecipeIdSet(db, userId),
     ]);
     const [row] = rows;
 
@@ -365,7 +348,7 @@ export const createRecipeRepository = (
     return {
       ...recipe,
       tags: attachedTags,
-      locked: isRecipeLockedForPlan({ plan, recipeId: recipe.id, unlockedRecipeIds }),
+      locked: plan === "free" && !row.unlocked,
     };
   },
   async listRecipes({ userId, searchTerms, tagIds, untagged, sort, limit, cursor }) {
@@ -434,9 +417,8 @@ export const createRecipeRepository = (
       );
     }
 
-    // 一覧本体とunlocked判定はplanに依存しないので同じ波で引く。
-    // unlocked判定はfreeでしか使わないが、planを待ってから引くと1往復増えるのでplanによらず引く。
-    const [plan, rows, unlockedRecipeIds] = await Promise.all([
+    // 一覧本体はplanに依存しないので同じ波で引く。
+    const [plan, rows] = await Promise.all([
       deriveAppUserPlanForDb(db, userId, planSyncOptions),
       db
         .select({
@@ -451,20 +433,20 @@ export const createRecipeRepository = (
             else null
           end
         `,
+          unlocked: isUnlockedOnFree(db, userId),
         })
         .from(recipes)
         .where(and(...whereConditions))
         .orderBy(order(recipes.createdAt), order(recipes.id))
         .limit(limit + 1),
-      getUnlockedRecipeIdSet(db, userId),
     ]);
     const pageRows = rows.slice(0, limit);
     const lastRecipe = pageRows.at(-1);
 
     return {
-      items: pageRows.map((recipe) => ({
+      items: pageRows.map(({ unlocked, ...recipe }) => ({
         ...recipe,
-        locked: isRecipeLockedForPlan({ plan, recipeId: recipe.id, unlockedRecipeIds }),
+        locked: plan === "free" && !unlocked,
       })),
       nextCursor:
         rows.length > limit && lastRecipe
@@ -515,16 +497,17 @@ export const createRecipeRepository = (
 
 // Freeで開けておくのは新しく保存した5件。一覧と同じ追加日の軸で選ぶので、
 // 並び順や検索によらずロック中のRecipeは一続きになる。
-const getUnlockedRecipeIdSet = async (db: DbClient, userId: string): Promise<Set<string>> => {
-  const rows = await db
-    .select({ id: recipes.id })
-    .from(recipes)
-    .where(eq(recipes.userId, userId))
-    .orderBy(desc(recipes.createdAt), desc(recipes.id))
-    .limit(PLAN_LIMITS.free.savedRecipes);
-
-  return new Set(rows.map((row) => row.id));
-};
+// 行を引くSQLに列として埋め込み、別のクエリを足さずplanと同じ波で判定する。
+const isUnlockedOnFree = (db: DbClient, userId: string) =>
+  sql<boolean>`${inArray(
+    recipes.id,
+    db
+      .select({ id: recipes.id })
+      .from(recipes)
+      .where(eq(recipes.userId, userId))
+      .orderBy(desc(recipes.createdAt), desc(recipes.id))
+      .limit(PLAN_LIMITS.free.savedRecipes),
+  )}`;
 
 const mapRecipeSqlRow = (row: RecipeSqlRow): RecipeRecord => ({
   id: row.id,
