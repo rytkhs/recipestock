@@ -170,12 +170,13 @@ pnpm run deploy
 ```
 
 The deploy script builds the web app, deploys the Worker, and uploads both source maps to Sentry under
-the commit SHA as the release. It reads these values from the repository root `.env` and stops when one
-is missing or when the working tree has uncommitted changes:
+the current commit SHA as the release. It reads these values from the repository root `.env` and stops
+when one is missing:
 
 - `SENTRY_AUTH_TOKEN`: uploads source maps and creates the release
 - `VITE_SENTRY_DSN`: embedded in the web bundle
 
 It also stops when the Worker has no `SENTRY_DSN` secret.
+When deploying uncommitted changes, the release SHA identifies `HEAD`, not the exact deployed source.
 
 Do not commit `.dev.vars` or other secret files.

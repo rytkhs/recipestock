@@ -41,7 +41,7 @@ Neonは何もしない状態が5分続くとcomputeを止める。1分ごとの�
 
 ## releaseとsource map
 
-webとWorkerは1回のdeployで同時に出るので、releaseはgit SHAにして両方で使う。どちらもminifyしているので、source mapが無いとSentryのstack traceは読めない。deployは`apps/api/scripts/deploy.mjs`にまとめ、webのsource mapは`@sentry/vite-plugin`が、Workerのsource mapは`sentry-cli`が上げる。webの`dist`はそのまま公開されるので、上げたsource mapは`dist`から消す。commitしていない変更がある状態と、tokenやDSN（webの`VITE_SENTRY_DSN`とWorkerのsecretの`SENTRY_DSN`）が無い状態ではdeployしない。
+webとWorkerは1回のdeployで同時に出るので、releaseはgit SHAにして両方で使う。どちらもminifyしているので、source mapが無いとSentryのstack traceは読めない。deployは`apps/api/scripts/deploy.mjs`にまとめ、webのsource mapは`@sentry/vite-plugin`が、Workerのsource mapは`sentry-cli`が上げる。webの`dist`はそのまま公開されるので、上げたsource mapは`dist`から消す。tokenやDSN（webの`VITE_SENTRY_DSN`とWorkerのsecretの`SENTRY_DSN`）が無い状態ではdeployしない。未コミットの変更を含めてdeployした場合、releaseのgit SHAは`HEAD`を指し、deployしたsourceそのものを特定しない。
 
 ## 採らなかった案
 
