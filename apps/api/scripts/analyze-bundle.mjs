@@ -40,8 +40,8 @@ const SCENARIOS = [
   ["zod v4 locales (en以外)", /node_modules\/zod\/v4\/locales\/(?!en\.js|index\.js)/],
   ["zod v3互換", /node_modules\/zod\/v3\//],
   [
-    "AI SDK一式 (ai / @ai-sdk / workers-ai-provider / @openrouter)",
-    /node_modules\/(ai|@ai-sdk\/[^/]+|workers-ai-provider|@openrouter\/ai-sdk-provider)\//,
+    "AI SDK一式 (ai / @ai-sdk / workers-ai-provider)",
+    /node_modules\/(ai|@ai-sdk\/[^/]+|workers-ai-provider)\//,
   ],
 ];
 

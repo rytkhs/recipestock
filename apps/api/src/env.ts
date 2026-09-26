@@ -41,15 +41,9 @@ export type Bindings = {
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
   AI_GATEWAY_NAME: string;
-  CF_AIG_TOKEN?: string;
   AI_TEXT_MODEL: string;
   AI_VISION_MODEL: string;
   IMPORT_FETCH_MODE?: string;
-  IMPORT_AI_PROVIDER?: string;
-  GROQ_API_KEY?: string;
-  GROQ_TEXT_MODEL?: string;
-  OPENROUTER_API_KEY?: string;
-  OPENROUTER_TEXT_MODEL?: string;
   YOUTUBE_DATA_API_KEY?: string;
   FREE_AI_MONTHLY_LIMIT?: string;
   PRO_AI_MONTHLY_LIMIT?: string;
@@ -97,9 +91,8 @@ const isWebPushSubject = (value: string) =>
  * runtimeが形式を前提にしているbindingと、欠けていれば機能が成立しないbindingを列挙する。
  *
  * オブジェクトbinding（R2、Queue、AI等）は`wrangler.jsonc`が真実の源であり、欠落は
- * プラットフォーム側の起動失敗になるためここでは扱わない。AI関連の変数も、必要な組が
- * `IMPORT_AI_PROVIDER`で変わり、未設定はimport jobの失敗として扱われる設計なので、
- * ここで必須化してAPI全体の停止に格上げしない。
+ * プラットフォーム側の起動失敗になるためここでは扱わない。AI関連の変数も、未設定は
+ * import jobの失敗として扱われる設計なので、ここで必須化してAPI全体の停止に格上げしない。
  */
 const requiredBindings: readonly RequiredBinding[] = [
   { name: "DATABASE_URL" },

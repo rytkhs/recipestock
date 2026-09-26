@@ -26,10 +26,6 @@ Required local secrets:
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 
-URL import AI provider selection is controlled by `IMPORT_AI_PROVIDER`. Set it to `workers-ai`,
-`openrouter`, or `groq`. OpenRouter requires `OPENROUTER_API_KEY` and `OPENROUTER_TEXT_MODEL`.
-Groq requires `GROQ_API_KEY` and `GROQ_TEXT_MODEL`.
-
 YouTube URL import uses YouTube Data API v3. Set `YOUTUBE_DATA_API_KEY` to enable
 YouTube source extraction.
 
@@ -51,8 +47,8 @@ Validated bindings:
 - `VAPID_SUBJECT` must be a `mailto:` address or an absolute `http(s)` URL, as web-push requires.
 
 Object bindings such as `RECIPE_IMAGES` and `IMPORT_QUEUE` are declared in `wrangler.jsonc` and are
-not revalidated here. AI provider variables are not required at startup either, because the required
-set depends on `IMPORT_AI_PROVIDER` and a missing value fails the import job rather than the API.
+not revalidated here. AI variables are not required at startup either, because a missing value fails
+the import job rather than the API.
 
 ## R2 setup
 
@@ -127,8 +123,6 @@ pnpm --filter @recipestock/api exec wrangler secret put VAPID_SUBJECT
 Optional secrets, required only by the features that read them:
 
 ```bash
-pnpm --filter @recipestock/api exec wrangler secret put GROQ_API_KEY
-pnpm --filter @recipestock/api exec wrangler secret put OPENROUTER_API_KEY
 pnpm --filter @recipestock/api exec wrangler secret put YOUTUBE_DATA_API_KEY
 ```
 
