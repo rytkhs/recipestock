@@ -4,7 +4,9 @@ ADR 0011は、protected routeの描画をsessionだけに依存させ、viewer�
 
 そこに`requireAuth`が乗っている。`requireAuth`は毎requestでBetter Authの`getSession`を呼び、Neonを引く。`findSession`はsessionとuserを順に引くので、往復は2回直列になる。Neonは`ap-southeast-1`にあり東京からの1往復は80〜120msかかる。しかもレシピ画像は`/api/images/object/*`として`requireAuth`を通るため、一覧に並ぶサムネイル1枚ごとにsessionの照会が走る。20件の一覧を開けば、認証のためだけにsessionを20回照会することになる。sessionの照会は本来この画面が必要とする情報を何も運んでいない。
 
-Better Authの`session.cookieCache`を有効にする。`/api/auth/get-session`がDBを引いた応答の最後で、sessionとuserを載せた署名付きcookieが配られる。以降のrequestでは`getSession`がそのcookieをHMAC検証して返し、DBを引かない。起動の並びは、波1の`/api/auth/get-session`がcookieを配り、波2の`/api/me`と`/api/recipes`、波3の画像がそれを読む、という形になる。
+Better Authの`session.cookieCache`を有効にする。`/api/auth/get-session`がDBを引いた応答の最後で、sessionとuserを載せた署名付きcookieが配られる。以降のrequestでは`getSession`がそのcookieをHMAC検証して返し、DBを引かない。
+
+起動の並びは、波1で`/api/auth/get-session`と一覧の最初のページ（`/api/recipes`）が同時に出る。一覧の画面はsessionの確定を待って描画するが（ADR 0011）、一覧の取得はrouteのloaderから始め、sessionの確認を待たない。APIは`requireAuth`で自らsessionを確かめるので、未ログインなら401が返るだけで、画面には出ない。起動時はcacheが切れていることが多く、波1の2本はそれぞれDBでsessionを引き、それぞれがcookieを配る。sessionの照会が1本増える代わりに、ブラウザとWorkerの往復が直列に1回減る。波2の`/api/me`と、一覧の描画後に読む画像は、波1で配られたcookieを読む。URLにタグの指定がある一覧は、消えたタグのidを外してから取りに行くので、先には取らない。
 
 `database`を設定している構成では、Better Authはcache hit時のcookie再発行を強制的に無効にする。Set-Cookieが書かれるのは、cacheが切れてsessionをDBから引いたときだけになる。
 
