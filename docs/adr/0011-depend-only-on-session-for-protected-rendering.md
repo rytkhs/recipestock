@@ -2,11 +2,19 @@
 
 ADR 0007は、protected routeがsessionとviewerを別々のdependencyとして扱い、viewerを信頼できる場合だけprivate navigationと画面本体を表示する設計を採用した。この決定はApp Shellがofflineで起動できるようになった後の「起動はできるがprivate dataは取得できていない」状態を正しく扱うためのものだった。
 
-しかしこの設計は、起動時のnetwork往復を直列化する。PWAの起動では`GET /api/auth/get-session`が完了するまでviewerが発火せず、`GET /api/me`が完了するまで画面本体のqueryが発火しない。Neonは`ap-southeast-1`にあり東京からの1往復は80〜120msかかるため、この直列は体感できる待ち時間になる。
+しかしこの設計は、起動時のnetwork往復を直列化する。PWAの起動では`GET /api/auth/get-session`が完了するまでviewerが発火せず、`GET /api/me`が完了するまで画面本体のqueryが発火しない。ブラウザとWorkerの往復が3回直列に並び、その分だけ画面が遅れる。
 
 viewerを描画のgateに置く根拠も失われている。`useProtectedAccess`が返すviewerのpayloadはどこからも読まれておらず、`/api/me`の実際の消費者は設定画面だけである。viewerはgateではなく、401の検知とsettings用の表示dataとして機能していた。
 
-protected routeの描画dependencyはsessionだけとする。sessionが確定した時点でprivate navigationと画面本体を表示し、viewerの取得はそれと並行させる。これによりviewerと画面本体のqueryが同じ波で発火する。
+protected routeの描画dependencyはsessionだけとする。sessionが確定した時点でprivate navigationと画面本体を表示し、viewerの取得はそれと並行させる。これによりviewerと画面本体のqueryが同時に出る。
+
+## 起動の入口の取得はsessionの確認を待たない
+
+描画はsessionの確定を待つが、取得まで待たせる必要はない。起動の入口（`start_url`の一覧、絞り込みなし）の最初の取得は、routeのloaderからsessionの確認と並べて始める。待たせると、ブラウザとWorkerの往復が直列に1回増える。
+
+APIは自らsessionを確かめるので、未ログインなら401が1回返るだけで、画面には出ない。起動時はcookie cache（ADR 0012）が切れていることが多く、sessionの照会が1本増える。どちらも受け入れる。
+
+先に取るのは起動の入口に限る。アプリを開いた後の遷移では、画面が自分で取りに行くのと同時になり縮まない。通知から開く詳細や共有から開く取り込みの画面も起動の入口になりうるが、今は先に取らない。
 
 ## viewer取得失敗をローカルなdegradeにする
 

@@ -277,7 +277,7 @@ const recipesRoute = createRoute({
     ],
   },
   loaderDeps: ({ search }) => search,
-  // 起動の入口（start_url）の一覧は、画面がsessionの確定を待つ間に取り始める（ADR 0012）。
+  // 起動の入口（start_url）の一覧は、画面がsessionの確定を待つ間に取り始める（ADR 0011）。
   // APIは自分でsessionを確かめるので、未ログインなら401が返るだけで、画面には出ない。
   // 起動時は絞り込みがないので、絞り込んだ一覧は画面に任せる。
   // Promiseは返さない。返すとrouterが取得の完了を待ち、その間skeletonを出し続ける。

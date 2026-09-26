@@ -1,24 +1,14 @@
 # sessionを署名付きcookie cacheから返す
 
-ADR 0011は、protected routeの描画をsessionだけに依存させ、viewerと画面本体のqueryを同じ波で発火させた。波が畳まれた結果、起動の所要はその波に並ぶendpointが個別に抱えるNeon往復で決まるようになった。
-
-そこに`requireAuth`が乗っている。`requireAuth`は毎requestでBetter Authの`getSession`を呼び、Neonを引く。`findSession`はsessionとuserを順に引くので、往復は2回直列になる。Neonは`ap-southeast-1`にあり東京からの1往復は80〜120msかかる。しかもレシピ画像は`/api/images/object/*`として`requireAuth`を通るため、一覧に並ぶサムネイル1枚ごとにsessionの照会が走る。20件の一覧を開けば、認証のためだけにsessionを20回照会することになる。sessionの照会は本来この画面が必要とする情報を何も運んでいない。
+`requireAuth`は毎requestでBetter Authの`getSession`を呼び、DBを引く。`findSession`はsessionとuserを順に引くので、照会は2段になる。しかもレシピ画像は`/api/images/object/*`として`requireAuth`を通るため、一覧に並ぶサムネイル1枚ごとにsessionの照会が走る。20件の一覧を開けば、認証のためだけにsessionを20回照会することになる。sessionの照会は本来この画面が必要とする情報を何も運んでいない。
 
 Better Authの`session.cookieCache`を有効にする。`/api/auth/get-session`がDBを引いた応答の最後で、sessionとuserを載せた署名付きcookieが配られる。以降のrequestでは`getSession`がそのcookieをHMAC検証して返し、DBを引かない。
 
-起動の並びは、波1で`/api/auth/get-session`と、起動の入口（`start_url`の`/recipes`）の最初の取得である一覧の1ページ目（`/api/recipes`）が同時に出る。
-
-起動の入口の最初の取得だけは、routeのloaderから始め、sessionの確認を待たない。画面の描画はsessionの確定を待つ（ADR 0011）が、取得まで待たせると、ブラウザとWorkerの往復が直列に1回増える。APIは`requireAuth`で自らsessionを確かめるので、未ログインなら401が返るだけで、画面には出ない。起動時はcacheが切れていることが多く、波1の2本はそれぞれDBでsessionを引き、それぞれがcookieを配る。sessionの照会が1本増えることは受け入れる。波2の`/api/me`と、一覧の描画後に読む画像は、波1で配られたcookieを読む。
-
-先に取るのは起動の入口の条件（絞り込みなし）だけとする。アプリを開いた後の遷移では、画面が自分で取りに行くのと同時になり、先に取っても縮まない。通知から開く詳細や、共有から開く取り込みの画面も起動の入口になりうるが、今は先に取らない。先に取る画面を増やすときも、起動の入口になることを条件にする。
-
-`database`を設定している構成では、Better Authはcache hit時のcookie再発行を強制的に無効にする。Set-Cookieが書かれるのは、cacheが切れてsessionをDBから引いたときだけになる。
-
-cookieの更新は、起動時とfocus・online復帰時にclientが投げる`/api/auth/get-session`に加え、`requireAuth`も担う。`requireAuth`はBetter Authが組み立てたResponseを使わず自前のhandlerで応答を返すので、`getSession`が書いたSet-Cookieを受け取り、handlerの応答に付けて返す。これが無いと、画面を開いたまま60秒を過ぎた以降のrequestはcookieを受け取り直す機会がなく、`get-session`が次に呼ばれるまで毎回DBを引く。しかも`findSession`はsessionとuserを順に引くので、認証だけで2往復が直列に乗る。
+cookieの更新は、起動時とfocus・online復帰時にclientが投げる`/api/auth/get-session`に加え、`requireAuth`も担う。`getSession`がDBを引いたときに書く再発行のcookieを、`requireAuth`は自前の応答に付けて返す。これが無いと、画面を開いたまま60秒を過ぎた以降のrequestは、`get-session`が次に呼ばれるまで毎回DBを引く。
 
 ## maxAgeは60秒とする
 
-cookieの寿命はsessionが遮断されてからそれが効くまでの遅延に直結する。一方でこの最適化が狙っているのは起動時のバーストであり、波1から画像の読み込みまでは数秒で終わる。60秒あれば起動は丸ごとcacheの内側に収まり、遅延は1分に留まる。長くしても得られるのはスクロールで遅延読み込みされる画像の一部だけで、遮断遅延の増加に見合わない。
+cookieの寿命はsessionが遮断されてからそれが効くまでの遅延に直結する。一方でこの最適化が狙っているのは起動時のバーストであり、起動から画像の読み込みまでは数秒で終わる。60秒あれば起動は丸ごとcacheの内側に収まり、遅延は1分に留まる。長くしても得られるのはスクロールで遅延読み込みされる画像の一部だけで、遮断遅延の増加に見合わない。
 
 ## 401の回復経路だけはcacheを迂回する
 

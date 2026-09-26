@@ -1,6 +1,6 @@
 # 読み取り経路ではplanを書き戻さず導出だけ行う
 
-`/api/me`と`/api/recipes`は、応答を組み立てる前に`syncAppUserPlanForDb`を呼んでいた。この関数は`app_users`行の存在を保証し、保存済みのplanとsubscriptionsを引き、導出結果が保存値と違えば書き戻す。Neonへの往復に直すと、ensureAppUserで1回、planとsubscriptionsを並列で引いて1回、差分があればさらに1回である。ADR 0012がsessionの往復を消したあと、起動の波2に残る所要はほぼこれになる。
+`/api/me`と`/api/recipes`は、応答を組み立てる前に`syncAppUserPlanForDb`を呼んでいた。この関数は`app_users`行の存在を保証し、保存済みのplanとsubscriptionsを引き、導出結果が保存値と違えば書き戻す。Neonへの往復に直すと、ensureAppUserで1回、planとsubscriptionsを並列で引いて1回、差分があればさらに1回である。
 
 しかしこの再導出は、読み取り経路にフレッシュさを足していない。`listSubscriptionPlans`が読むのはローカルの`subscriptions`テーブルであり、Stripeには問い合わせない。そして`subscriptions`を書くのはStripe webhookであり、webhookは同じ処理の中で`app_users.plan`も更新する。つまり読み取り経路が再導出しているのは、webhookがすでに材料と結論の両方を書き終えた同じ行である。
 
