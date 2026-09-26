@@ -22,6 +22,8 @@ viewerのpayloadを実際に必要とする画面だけが、自分の描画をv
 
 user-scoped cacheを消すのはsessionの判定がunauthenticatedに定まった後に限る。判定より前に消すと、enabledなobserverがsessionの確認を待たずに再取得してしまう。
 
+TanStack Queryの既定の再試行は401を対象にしない。401は取り直しても変わらず、sessionの回復はviewerの経路が担う。
+
 ## ADR 0007から引き継ぐこと
 
 ADR 0007のうち、precache対象、navigation fallback、更新とbuild contractに関する決定は有効である。Google Fontsをキャッシュしない決定も有効である。

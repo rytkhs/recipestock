@@ -1,20 +1,23 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { isNotFoundError } from "./lib/api";
+import { isNotFoundError, isUnauthorizedError } from "./lib/api";
 import { initMonitoring } from "./lib/monitoring";
 import { registerAppServiceWorker } from "./pwa/browser";
-import { AppRouter } from "./routes/router";
+import { AppRouter, createAppRouter } from "./routes/router";
 import "./styles.css";
 
 // 見つからないものは読み直しても見つからないので、待たせずに結果を出す。回数はTanStack Queryの既定と同じ。
+// 401も読み直しでは変わらない。sessionの回復はviewerの経路が担う（ADR 0011）。
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: (failureCount, error) => !isNotFoundError(error) && failureCount < 3,
+      retry: (failureCount, error) =>
+        !isNotFoundError(error) && !isUnauthorizedError(error) && failureCount < 3,
     },
   },
 });
+const router = createAppRouter({ queryClient });
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
@@ -28,7 +31,7 @@ const renderApp = () => {
   createRoot(rootElement, rootOptions).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <AppRouter />
+        <AppRouter appRouter={router} />
       </QueryClientProvider>
     </StrictMode>,
   );
