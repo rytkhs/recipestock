@@ -1,6 +1,7 @@
 import { MAX_RECIPE_TAGS, recipeListSortSchema } from "@recipestock/schemas";
+import { type QueryClient } from "@tanstack/react-query";
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   lazyRouteComponent,
@@ -26,7 +27,9 @@ import {
   SettingsSkeleton,
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
+import { recipeListQueryOptions } from "../features/recipes";
 import { readRecipeListSort } from "../features/recipes/list-search";
+import { isUnauthorizedError } from "../lib/api";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { useProtectedAccess } from "../lib/protected-access";
 import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
@@ -201,7 +204,11 @@ const RootLayout = () => (
   </div>
 );
 
-const rootRoute = createRootRoute({
+type AppRouterContext = {
+  queryClient: QueryClient;
+};
+
+const rootRoute = createRootRouteWithContext<AppRouterContext>()({
   component: RootLayout,
 });
 
@@ -269,6 +276,26 @@ const recipesRoute = createRoute({
         return { ...result, sort: result.sort ?? readRecipeListSort() };
       },
     ],
+  },
+  loaderDeps: ({ search }) => search,
+  // 画面はsessionが確定するまで描かないが、一覧の取得はsessionの確認と並べて始める。
+  // APIは自分でsessionを確かめるので、未ログインなら401が返るだけで、画面には出ない。
+  // Promiseは返さない。返すとrouterが取得の完了を待ち、その間skeletonを出し続ける。
+  loader: ({ context, deps }) => {
+    const untagged = deps.untagged === true;
+    // タグの指定があると、画面はタグ一覧を読んで消えたidを外してから取りに行く。ここでは取らない。
+    if (!untagged && deps.tags) return;
+
+    void context.queryClient.prefetchInfiniteQuery({
+      ...recipeListQueryOptions({
+        query: deps.q ?? "",
+        sort: deps.sort ?? "newest",
+        tagIds: [],
+        untagged,
+      }),
+      // 未ログインの401は取り直しても変わらない。
+      retry: (failureCount, error) => !isUnauthorizedError(error) && failureCount < 3,
+    });
   },
   component: RecipesIndexRoute,
   errorComponent: RouteChunkError,
@@ -457,21 +484,22 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
-type AppRouterOptions = Omit<Parameters<typeof createRouter>[0], "routeTree">;
+type AppRouterOptions = Omit<Parameters<typeof createRouter>[0], "routeTree" | "context"> &
+  AppRouterContext;
 
 // 戻る・進むでは、その画面を離れたときのスクロール位置に戻す。
-export const createAppRouter = (options?: AppRouterOptions) =>
-  createRouter({ routeTree, scrollRestoration: true, ...options });
+export const createAppRouter = ({ queryClient, ...options }: AppRouterOptions) =>
+  createRouter({ routeTree, scrollRestoration: true, ...options, context: { queryClient } });
 
-const router = createAppRouter();
+type AppRouterInstance = ReturnType<typeof createAppRouter>;
 
 declare module "@tanstack/react-router" {
   interface Register {
-    router: typeof router;
+    router: AppRouterInstance;
   }
 }
 
-export const AppRouter = ({ appRouter = router }: { appRouter?: typeof router }) => (
+export const AppRouter = ({ appRouter }: { appRouter: AppRouterInstance }) => (
   <AuthStateProvider>
     <RouterProvider router={appRouter} />
   </AuthStateProvider>

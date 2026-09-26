@@ -61,8 +61,7 @@ import {
 import {
   deleteRecipe,
   invalidateRecipeLists,
-  listRecipes,
-  recipesQueryKeys,
+  recipeListQueryOptions,
   syncDeletedRecipeCaches,
 } from "../features/recipes";
 import { writeRecipeListSort } from "../features/recipes/list-search";
@@ -407,11 +406,7 @@ export const RecipesIndexRoute = () => {
     isFetchingNextPage,
     isPending: isListPending,
   } = useInfiniteQuery({
-    queryKey: recipesQueryKeys.list({ query, sort, tagIds, untagged }),
-    staleTime: 5 * 60 * 1000,
-    initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => listRecipes({ query, sort, tagIds, untagged, cursor: pageParam }),
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    ...recipeListQueryOptions({ query, sort, tagIds, untagged }),
     enabled: !isWaitingForTags && !hasUnknownTagIds,
   });
   const deleteMutation = useMutation({

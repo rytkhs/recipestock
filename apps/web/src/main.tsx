@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { isNotFoundError } from "./lib/api";
 import { initMonitoring } from "./lib/monitoring";
 import { registerAppServiceWorker } from "./pwa/browser";
-import { AppRouter } from "./routes/router";
+import { AppRouter, createAppRouter } from "./routes/router";
 import "./styles.css";
 
 // 見つからないものは読み直しても見つからないので、待たせずに結果を出す。回数はTanStack Queryの既定と同じ。
@@ -15,6 +15,7 @@ const queryClient = new QueryClient({
     },
   },
 });
+const router = createAppRouter({ queryClient });
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
@@ -28,7 +29,7 @@ const renderApp = () => {
   createRoot(rootElement, rootOptions).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <AppRouter />
+        <AppRouter appRouter={router} />
       </QueryClientProvider>
     </StrictMode>,
   );
