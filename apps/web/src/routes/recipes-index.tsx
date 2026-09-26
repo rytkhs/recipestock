@@ -408,6 +408,7 @@ export const RecipesIndexRoute = () => {
     isPending: isListPending,
   } = useInfiniteQuery({
     queryKey: recipesQueryKeys.list({ query, sort, tagIds, untagged }),
+    staleTime: 5 * 60 * 1000,
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => listRecipes({ query, sort, tagIds, untagged, cursor: pageParam }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
