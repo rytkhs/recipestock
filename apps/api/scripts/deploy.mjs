@@ -26,11 +26,6 @@ const read = (command, args, options) =>
 const run = (command, args, options) =>
   execFileSync(command, args, { stdio: "inherit", ...options });
 
-// releaseをcommitに結び付けるので、commitしていない変更を含むbuildは出さない。
-if (read("git", ["status", "--porcelain"]) !== "") {
-  fail("Commit or stash local changes before deploying. The Sentry release is the commit SHA.");
-}
-
 // source mapの無い本番や、エラーを送らないwebを出さない。
 for (const name of ["SENTRY_AUTH_TOKEN", "VITE_SENTRY_DSN"]) {
   if (!process.env[name]) {

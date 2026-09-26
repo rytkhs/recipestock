@@ -174,7 +174,7 @@ describe("Recipe thumbnails", () => {
     const response = await fixture.request();
     expect(response.status).toBe(404);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(fixture.bucket.get).not.toHaveBeenCalled();
+    expect(fixture.images.input).not.toHaveBeenCalled();
     expect((await fixture.request(`/api/images/object/${thumbnailKey}`)).status).toBe(403);
   });
 

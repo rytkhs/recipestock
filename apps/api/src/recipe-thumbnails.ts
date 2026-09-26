@@ -67,11 +67,17 @@ export const createRecipeThumbnailResponse = async ({
   if (!prefix) return null;
   const thumbnailKey = `${prefix}${RECIPE_THUMBNAIL_VERSION}.webp`;
   const startedAt = Date.now();
-  // A surviving derivative must not make a deleted source readable again.
-  const sourceMetadata = await bucket.head(objectKey);
-  if (!sourceMetadata) return null;
   const revalidationHeaders = createImageCacheRevalidationHeaders(requestHeaders);
-  const cached = await bucket.get(thumbnailKey, { onlyIf: revalidationHeaders });
+  // Read both at once so the source check does not add an R2 round trip before the derivative.
+  const [sourceMetadata, cached] = await Promise.all([
+    bucket.head(objectKey),
+    bucket.get(thumbnailKey, { onlyIf: revalidationHeaders }),
+  ]);
+  // A surviving derivative must not make a deleted source readable again.
+  if (!sourceMetadata) {
+    if (cached && hasR2ObjectBody(cached)) await cached.body.cancel();
+    return null;
+  }
   if (cached) return conditionalThumbnailResponse(cached);
 
   const source = await bucket.get(objectKey);
