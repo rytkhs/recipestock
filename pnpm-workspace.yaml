@@ -1,8 +1,6 @@
 packages:
   - "apps/*"
   - "packages/*"
-overrides:
-  "@ai-sdk/provider-utils": 4.0.29
 allowBuilds:
   # 本体はplatform別のoptionalDependenciesで入る。postinstallは見つからないときに取りに行く補完なので走らせない。
   "@sentry/cli": false
