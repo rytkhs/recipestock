@@ -29,7 +29,6 @@ import {
 import { RouteChunkError } from "../components/route-chunk-error";
 import { recipeListQueryOptions } from "../features/recipes";
 import { readRecipeListSort } from "../features/recipes/list-search";
-import { isUnauthorizedError } from "../lib/api";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
 import { useProtectedAccess } from "../lib/protected-access";
 import { isProtectedAppPath, resolveAuthRedirect } from "../lib/route-access";
@@ -278,24 +277,21 @@ const recipesRoute = createRoute({
     ],
   },
   loaderDeps: ({ search }) => search,
-  // 画面はsessionが確定するまで描かないが、一覧の取得はsessionの確認と並べて始める。
+  // 起動の入口（start_url）の一覧は、画面がsessionの確定を待つ間に取り始める（ADR 0012）。
   // APIは自分でsessionを確かめるので、未ログインなら401が返るだけで、画面には出ない。
+  // 起動時は絞り込みがないので、絞り込んだ一覧は画面に任せる。
   // Promiseは返さない。返すとrouterが取得の完了を待ち、その間skeletonを出し続ける。
   loader: ({ context, deps }) => {
-    const untagged = deps.untagged === true;
-    // タグの指定があると、画面はタグ一覧を読んで消えたidを外してから取りに行く。ここでは取らない。
-    if (!untagged && deps.tags) return;
+    if (deps.q || deps.tags || deps.untagged) return;
 
-    void context.queryClient.prefetchInfiniteQuery({
-      ...recipeListQueryOptions({
-        query: deps.q ?? "",
+    void context.queryClient.prefetchInfiniteQuery(
+      recipeListQueryOptions({
+        query: "",
         sort: deps.sort ?? "newest",
         tagIds: [],
-        untagged,
+        untagged: false,
       }),
-      // 未ログインの401は取り直しても変わらない。
-      retry: (failureCount, error) => !isUnauthorizedError(error) && failureCount < 3,
-    });
+    );
   },
   component: RecipesIndexRoute,
   errorComponent: RouteChunkError,
