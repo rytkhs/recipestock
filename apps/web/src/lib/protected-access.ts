@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
-import { ApiClientError } from "./api";
+import { isUnauthorizedError } from "./api";
 import { useAuthState } from "./auth-state";
 import { useAvailabilityRecovery } from "./availability-recovery";
 import { clearUserScopedCache } from "./query-cache";
@@ -15,8 +15,6 @@ export type ProtectedAccess =
 // viewerの401は「sessionは通ったのにAPIが認証を拒否した」合図。
 // 回復は1周だけ試し、それでも401ならexhaustedで打ち切ってloopを防ぐ。
 type UnauthorizedRecovery = "idle" | "running" | "exhausted";
-
-const isUnauthorized = (error: unknown) => error instanceof ApiClientError && error.status === 401;
 
 export const useProtectedAccess = (): ProtectedAccess => {
   const auth = useAuthState();
@@ -43,7 +41,7 @@ export const useProtectedAccess = (): ProtectedAccess => {
       await queryClient.fetchQuery({ queryKey: viewerQueryKey, queryFn: fetchViewer });
       setUnauthorizedRecovery("idle");
     } catch (error) {
-      setUnauthorizedRecovery(isUnauthorized(error) ? "exhausted" : "idle");
+      setUnauthorizedRecovery(isUnauthorizedError(error) ? "exhausted" : "idle");
     }
   }, [auth, queryClient]);
 
@@ -51,7 +49,7 @@ export const useProtectedAccess = (): ProtectedAccess => {
     if (
       auth.status !== "authenticated" ||
       unauthorizedRecovery !== "idle" ||
-      !isUnauthorized(viewer.error)
+      !isUnauthorizedError(viewer.error)
     ) {
       return;
     }

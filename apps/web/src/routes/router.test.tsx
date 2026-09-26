@@ -44,6 +44,51 @@ describe("AppRouter", () => {
     expect(screen.getAllByTestId("recipe-card-skeleton")).toHaveLength(8);
   });
 
+  it("認証確認中に一覧の取得を始め、sessionが確定したらその結果を描画する", async () => {
+    let resolveSession = (_response: Response) => {};
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = getRequestPath(input);
+      if (isGetSessionRequest(input)) {
+        return new Promise<Response>((resolve) => {
+          resolveSession = resolve;
+        });
+      }
+      if (path === "/api/me") return jsonResponse(viewerResponse);
+      if (path === "/api/recipes?limit=20") {
+        return jsonResponse({
+          items: [
+            {
+              id: "recipe_123",
+              title: "Tomato pasta",
+              coverImageUrl: null,
+              sourceName: "Example Kitchen",
+              createdAt: new Date().toISOString(),
+              locked: false,
+            },
+          ],
+          nextCursor: null,
+        });
+      }
+      return new Response(null, { status: 404 });
+    });
+    const recipeListRequests = () =>
+      fetchMock.mock.calls.filter(([input]) => getRequestPath(input) === "/api/recipes?limit=20");
+
+    await renderApp("/recipes");
+
+    await vi.waitFor(() => {
+      expect(recipeListRequests()).toHaveLength(1);
+    });
+    expect(screen.queryByRole("link", { name: /Tomato pasta/ })).toBeNull();
+
+    await act(async () => {
+      resolveSession(createSessionResponse(true));
+    });
+
+    await expect(screen.findByRole("link", { name: /Tomato pasta/ })).resolves.toBeInTheDocument();
+    expect(recipeListRequests()).toHaveLength(1);
+  });
+
   it("未ログインで認証必須ルートに入るとログインへ遷移する", async () => {
     mockFetch(async () => new Response(null, { status: 404 }));
     await renderApp("/recipes");

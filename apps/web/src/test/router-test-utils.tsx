@@ -137,6 +137,7 @@ export const renderApp = async (
   setupQueryClient?.(queryClient);
   const appRouter = createAppRouter({
     history: createMemoryHistory({ initialEntries: [initialPath] }),
+    queryClient,
   });
 
   const view = render(
