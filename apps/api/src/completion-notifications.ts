@@ -1,5 +1,4 @@
 import { type ImportCompletionPushPayload } from "@recipestock/shared";
-import * as webPush from "web-push";
 import { buildImportCompletionPushPayload } from "./import-completion-notices";
 import { type ImportJobRepository } from "./import-jobs";
 import { type Logger } from "./logger";
@@ -83,11 +82,18 @@ const getStatusCode = (error: unknown) => {
   return typeof statusCode === "number" ? statusCode : null;
 };
 
+// 送るのはQueueの完了通知だけなので、web-pushは依存（bn.js、asn1.jsなど）ごと、isolateの起動時ではなく
+// 最初の送信のときに評価する。CommonJSでbundle上は元から遅延初期化されるので、ほかのmoduleは巻き込まない（ADR 0015）。
+const sendWebPush: SendWebPush = async (subscription, payload, options) => {
+  const webPush = await import("web-push");
+  return (webPush.sendNotification as SendWebPush)(subscription, payload, options);
+};
+
 export const createPushSender = ({
   repository,
   vapid,
   logger,
-  sendNotification = webPush.sendNotification as SendWebPush,
+  sendNotification = sendWebPush,
 }: {
   repository: PushSubscriptionRepository;
   vapid: WebPushOptions["vapidDetails"];
