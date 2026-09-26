@@ -14,4 +14,6 @@ Resend client は送信失敗を throw する。SDK は失敗を `{ data, error 
 
 kysely、OpenTelemetry、zod の locales は library 側の静的 import と再 export に起因し、build 時の alias stub か pnpm patch でしか外せない。合計 1,058.3 KiB になるが、third-party の内部構造に依存する仕掛けを持ち込まず、upstream の修正と version 更新を待つ。AI SDK 一式は Queue 経路からしか実行されないが、fetch handler と queue handler が同一 script である限り bundle からは外せない。Worker 分割の可否は ADR ではなく Issue #119 の検証で判断する。
 
+bundle に残したまま、`import()` で起動時の評価だけを遅らせる案も測った。esbuild は `import()` の先の module を依存ごと遅延初期化の関数で包み、呼ぶまで top-level を実行しない。AI SDK 一式にこれを使うと、起動時から外れる評価は手元で約 19 ms あった。しかし fetch 側と共有する zod などの ESM module まで包まれ、起動時にはそれらを包んだまま初期化するので、`wrangler check startup` の起動時間は変わらなかった（中央値 87.0 ms と 88.1 ms）。この profile はスクリプトのコンパイルを含まないため、コンパイルは Node の `vm.SourceTextModule` で別に測り、短縮は 2〜3 ms にとどまった。minify 後の bundle は約 20 KiB 増えるので、AI SDK には使わない。web-push は CommonJS で、依存ごと bundle 上で元から包まれているため、`import()` にしても新たに包まれる module は出ない。起動時の実行時間は中央値で約 86 ms から約 80 ms になり（揺れを考えて 2〜6 ms 程度）、bundle は変わらないので、web-push は最初の送信で `import()` する。
+
 bundle の構成は `apps/api/scripts/analyze-bundle.mjs` で再計測できる。`startup_time_ms` は `wrangler versions upload` の出力から取る。同一 code でも 124 ms と 132 ms のばらつきがあるため、単発の値では小さい差を判定しない。
