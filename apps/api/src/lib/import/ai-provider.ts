@@ -1,5 +1,3 @@
-import { createGroq } from "@ai-sdk/groq";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
@@ -60,8 +58,6 @@ const normalizeImportAiDraftContent = (value: unknown): RecipeImportAIDraftConte
   };
 };
 
-type ImportAiProviderKind = "workers-ai" | "openrouter" | "groq";
-
 const IMPORT_AI_MAX_OUTPUT_TOKENS = 8192;
 
 export const createDefaultRecipeImportAIProvider = (
@@ -69,7 +65,6 @@ export const createDefaultRecipeImportAIProvider = (
   { logger = createLogger() }: { logger?: Logger } = {},
 ): RecipeImportAIProvider => ({
   async normalize(request: RecipeImportAINormalizeRequest) {
-    const providerKind = resolveImportAiProvider(env);
     const system = getRecipeImportSystemPrompt(request.promptProfile);
     const timeoutMs = resolveImportAiTimeoutMs(env);
     const controller = new AbortController();
@@ -81,11 +76,10 @@ export const createDefaultRecipeImportAIProvider = (
 
     try {
       const result = await generateObject({
-        model: createImportLanguageModel(env, providerKind, timeoutMs),
+        model: createImportLanguageModel(env, timeoutMs),
         schema: importAiDraftContentSchema,
         system,
         prompt: buildImportUserPrompt(request),
-        providerOptions: createImportProviderOptions(providerKind),
         temperature: 0,
         maxOutputTokens: IMPORT_AI_MAX_OUTPUT_TOKENS,
         maxRetries: 0,
@@ -98,7 +92,6 @@ export const createDefaultRecipeImportAIProvider = (
       logImportAiFailure(error, {
         env,
         logger,
-        providerKind,
         request,
         timeoutMs,
       });
@@ -115,40 +108,7 @@ export const createDefaultRecipeImportAIProvider = (
   },
 });
 
-const createImportLanguageModel = (
-  env: Bindings,
-  providerKind: ImportAiProviderKind,
-  timeoutMs: number,
-) => {
-  if (providerKind === "groq") {
-    const model = resolveGroqTextModel(env);
-    const groq = createGroq({
-      apiKey: resolveGroqApiKey(env),
-      baseURL: resolveGroqGatewayBaseUrl(env),
-      headers: resolveAiGatewayAuthHeaders(env),
-    });
-
-    return groq(model) as never;
-  }
-
-  if (providerKind === "openrouter") {
-    const model = resolveOpenRouterTextModel(env);
-    const openrouter = createOpenRouter({
-      apiKey: resolveOpenRouterApiKey(env),
-      appName: "Recipe Stock",
-      baseURL: resolveOpenRouterGatewayBaseUrl(env),
-      headers: resolveAiGatewayAuthHeaders(env),
-    });
-
-    return openrouter.chat(model, {
-      provider: {
-        allow_fallbacks: false,
-        require_parameters: true,
-      },
-      structuredOutputs: { strict: true },
-    }) as never;
-  }
-
+const createImportLanguageModel = (env: Bindings, timeoutMs: number) => {
   const model = resolveImportAiTextModel(env);
   const workersai = createWorkersAI({
     binding: env.AI,
@@ -158,17 +118,6 @@ const createImportLanguageModel = (
   return workersai(model as never, {
     extraHeaders: { "cf-aig-request-timeout": String(timeoutMs) },
   }) as never;
-};
-
-const createImportProviderOptions = (providerKind: ImportAiProviderKind) => {
-  if (providerKind !== "groq") return undefined;
-
-  return {
-    groq: {
-      structuredOutputs: true,
-      strictJsonSchema: true,
-    },
-  };
 };
 
 const buildImportUserPrompt = (request: RecipeImportAINormalizeRequest) => {
@@ -213,106 +162,23 @@ const resolveImportAiTextModel = (env: Partial<Bindings>) => {
   return model;
 };
 
-const resolveImportAiProvider = (env: Partial<Bindings>): ImportAiProviderKind => {
-  const provider = env.IMPORT_AI_PROVIDER?.trim() || "workers-ai";
-  if (provider === "workers-ai" || provider === "openrouter" || provider === "groq") {
-    return provider;
-  }
-
-  throw new RecipeImportError("unknown", "Import AI provider is not configured.");
-};
-
-const resolveGroqApiKey = (env: Partial<Bindings>) => {
-  const apiKey = env.GROQ_API_KEY?.trim();
-  if (!apiKey) {
-    throw new RecipeImportError("unknown", "Groq API key is not configured.");
-  }
-
-  return apiKey;
-};
-
-const resolveGroqTextModel = (env: Partial<Bindings>) => {
-  const model = env.GROQ_TEXT_MODEL?.trim();
-  if (!model) {
-    throw new RecipeImportError("unknown", "Groq text model is not configured.");
-  }
-
-  return model;
-};
-
-const resolveOpenRouterApiKey = (env: Partial<Bindings>) => {
-  const apiKey = env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) {
-    throw new RecipeImportError("unknown", "OpenRouter API key is not configured.");
-  }
-
-  return apiKey;
-};
-
-const resolveOpenRouterTextModel = (env: Partial<Bindings>) => {
-  const model = env.OPENROUTER_TEXT_MODEL?.trim();
-  if (!model) {
-    throw new RecipeImportError("unknown", "OpenRouter text model is not configured.");
-  }
-
-  return model;
-};
-
-const resolveGroqGatewayBaseUrl = (env: Partial<Bindings>) =>
-  resolveCloudflareAiGatewayProviderBaseUrl(env, "groq");
-
-const resolveOpenRouterGatewayBaseUrl = (env: Partial<Bindings>) => {
-  return resolveCloudflareAiGatewayProviderBaseUrl(env, "openrouter");
-};
-
-const resolveCloudflareAiGatewayProviderBaseUrl = (
-  env: Partial<Bindings>,
-  providerPath: "groq" | "openrouter",
-) => {
-  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
-  const gatewayName = env.AI_GATEWAY_NAME?.trim();
-  if (!accountId || !gatewayName) {
-    throw new RecipeImportError("unknown", "Cloudflare AI Gateway is not configured.");
-  }
-
-  return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(
-    accountId,
-  )}/${encodeURIComponent(gatewayName)}/${providerPath}`;
-};
-
-const resolveAiGatewayAuthHeaders = (env: Partial<Bindings>) => {
-  const token = env.CF_AIG_TOKEN?.trim();
-  if (!token) {
-    throw new RecipeImportError("unknown", "Cloudflare AI Gateway token is not configured.");
-  }
-
-  return {
-    "cf-aig-authorization": `Bearer ${token}`,
-  };
-};
-
 const logImportAiFailure = (
   error: unknown,
   {
     env,
     logger,
-    providerKind,
     request,
     timeoutMs,
   }: {
     env: Partial<Bindings>;
     logger: Logger;
-    providerKind: ImportAiProviderKind;
     request: RecipeImportAINormalizeRequest;
     timeoutMs: number;
   },
 ) => {
-  const model = resolveImportAiTextModelForLog(env, providerKind);
-
   logger.error("recipe_import_ai_normalization_failed", {
-    provider: providerKind,
     promptProfile: request.promptProfile,
-    model: model || undefined,
+    model: env.AI_TEXT_MODEL?.trim() || undefined,
     timeoutMs,
     ...(request.promptProfile === "text"
       ? { textLength: request.input.text.length }
@@ -324,38 +190,9 @@ const logImportAiFailure = (
     ...(request.promptProfile === "generic"
       ? { structuredEvidenceCount: request.input.recipeStructuredEvidence.length }
       : {}),
-    gatewayBaseUrl:
-      providerKind === "workers-ai"
-        ? undefined
-        : resolveCloudflareAiGatewayProviderBaseUrlForLog(env, providerKind),
     gatewayName: env.AI_GATEWAY_NAME?.trim() || undefined,
-    gatewayAuthConfigured:
-      providerKind === "workers-ai" ? undefined : Boolean(env.CF_AIG_TOKEN?.trim()),
     error: sanitizeErrorDetails(error),
   });
-};
-
-const resolveImportAiTextModelForLog = (
-  env: Partial<Bindings>,
-  providerKind: ImportAiProviderKind,
-) => {
-  if (providerKind === "groq") return env.GROQ_TEXT_MODEL?.trim();
-  if (providerKind === "openrouter") return env.OPENROUTER_TEXT_MODEL?.trim();
-
-  return env.AI_TEXT_MODEL?.trim();
-};
-
-const resolveCloudflareAiGatewayProviderBaseUrlForLog = (
-  env: Partial<Bindings>,
-  providerKind: Exclude<ImportAiProviderKind, "workers-ai">,
-) => {
-  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
-  const gatewayName = env.AI_GATEWAY_NAME?.trim();
-  if (!accountId || !gatewayName) return undefined;
-
-  return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(
-    accountId,
-  )}/${encodeURIComponent(gatewayName)}/${providerKind}`;
 };
 
 const sanitizeErrorDetails = (error: unknown, depth = 0): unknown => {
