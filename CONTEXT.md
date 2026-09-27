@@ -41,6 +41,10 @@ _Avoid_: Raw text, original text, text draft
 A user's request that an active **Import Job** must not produce a **Recipe**. Cancellation does not imply that already-started external processing stops immediately.
 _Avoid_: Dismiss, close, force stop
 
+**AI Import Limit**:
+The monthly cap on **Import Jobs** read with AI; imports read without AI do not count, but once the cap is reached no **Import Job** is accepted until the month resets. Users see it as the limit on 「AI取り込み」 (the Free cap as a number, the Pro cap only as generous) and never see how many they have used, because uncounted imports would make that number disagree with what they imported.
+_Avoid_: Import count, remaining imports, 取り込み回数, AI利用回数
+
 ## Example Dialogue
 
 Developer: "Should `sourceName` be part of `RecipeContent`?"
