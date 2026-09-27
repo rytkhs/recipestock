@@ -2897,6 +2897,85 @@ describe("RecipesRoute", () => {
     );
   });
 
+  it("編集画面で表紙の写真を外すとプレビューが消え、表紙なしで更新する", async () => {
+    const recipe = {
+      id: "recipe_123",
+      title: "Tomato pasta",
+      content: {
+        title: "Tomato pasta",
+        coverImage: savedImage(
+          "recipes/user_123/recipe_123/cover.webp",
+          "https://images.example/cover.webp",
+        ),
+        ingredientGroups: [],
+        steps: [],
+      },
+      source: {
+        sourceUrl: null,
+        normalizedSourceUrl: null,
+        sourceName: null,
+      },
+      createdAt: "2026-05-26T00:00:00.000Z",
+      updatedAt: "2026-05-26T00:00:00.000Z",
+      tags: [],
+      locked: false,
+    };
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        if (getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT") {
+          return jsonResponse({
+            recipe: {
+              ...recipe,
+              content: { ...recipe.content, coverImage: undefined },
+              updatedAt: "2026-05-27T00:00:00.000Z",
+            },
+          });
+        }
+
+        if (getRequestPath(input) === "/api/recipes/recipe_123") {
+          return jsonResponse({ recipe });
+        }
+
+        if (getRequestPath(input) === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/recipes/recipe_123/edit");
+
+    await expect(screen.findByAltText("表紙の写真プレビュー")).resolves.toHaveAttribute(
+      "src",
+      "https://images.example/cover.webp",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "表紙の写真を外す" }));
+
+    expect(screen.queryByAltText("表紙の写真プレビュー")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "表紙の写真を追加" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT",
+        ),
+      ).toBe(true);
+    });
+    const updateRecipeCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        getRequestPath(input) === "/api/recipes/recipe_123" && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(updateRecipeCall?.[1]?.body)).content).not.toHaveProperty(
+      "coverImage",
+    );
+  });
+
   it("編集画面で手順画像を削除しても残った画像のプレビューURLを保つ", async () => {
     mockFetch(
       async (input) => {
