@@ -103,7 +103,7 @@ describe("取り込みのアイランド", () => {
     expect(within(panel).getByText("取り込み待ち")).toBeInTheDocument();
   });
 
-  it("保存できたjobはレシピ名を出し、そのレシピを開ける", async () => {
+  it("保存できたjobはレシピ名を出し、アイランドからそのレシピを開ける", async () => {
     mockRecentJobs(() => [
       recentJob({
         status: "succeeded",
@@ -118,7 +118,7 @@ describe("取り込みのアイランド", () => {
     const island = await findIsland();
     expect(island).toHaveTextContent("保存しました");
     expect(island).toHaveTextContent("トマトパスタ");
-    expect(within(island).getByRole("link", { name: "開く" })).toHaveAttribute(
+    expect(within(island).getByRole("link", { name: /トマトパスタ/ })).toHaveAttribute(
       "href",
       "/recipes/recipe_123",
     );
@@ -186,6 +186,12 @@ describe("取り込みのアイランド", () => {
         status: "succeeded",
         recipeId: "recipe_done",
         recipe: { title: "トマトパスタ", coverImageUrl: null },
+      }),
+      recentJob({
+        id: "job_done_2",
+        status: "succeeded",
+        recipeId: "recipe_done_2",
+        recipe: { title: "かぼちゃの煮物", coverImageUrl: null },
       }),
     ]);
 

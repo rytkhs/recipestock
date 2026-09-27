@@ -167,9 +167,7 @@ const ProtectedLayout = () => {
           <ConnectionUnavailable isRetrying={access.isRetrying} onRetry={access.retry} />
         ) : null}
       </main>
-      {isReady && isHome ? (
-        <MobileAddRecipeFab isHidden={importIsland.view.mode === "saved"} />
-      ) : null}
+      {isReady && isHome ? <MobileAddRecipeFab /> : null}
       <ImportIsland island={importIsland} placement={isHome ? "beside-fab" : "center"} />
     </>
   );

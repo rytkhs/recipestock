@@ -1,5 +1,6 @@
 import {
   Article,
+  CaretRight,
   CaretUp,
   Check,
   CookingPot,
@@ -13,7 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { type RecentImportJob } from "@recipestock/schemas";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -27,8 +28,8 @@ import { type ImportIsland as ImportIslandState } from "./use-import-island";
 import { isActiveImportJob } from "./workflow";
 
 /**
- * - `beside-fab`: スマホの一覧では追加ボタンの左に並べ、保存できたときだけ横いっぱいに広げる
- * - `center`: ほかの画面とデスクトップでは下の中央に置く
+ * - `beside-fab`: スマホの一覧では追加ボタンの左に並べる。連続して取り込めるよう、保存できたときも大きさを変えない
+ * - `center`: ほかの画面では下の中央に置き、保存できたときはレシピ名が読めるよう広げる
  */
 export type ImportIslandPlacement = "beside-fab" | "center";
 
@@ -43,27 +44,6 @@ const sourceIcons: Record<ImportSourceKind, Icon> = {
 
 const activeStatusLabel = (job: RecentImportJob) =>
   job.status === "queued" ? "取り込み待ち" : "取り込み中";
-
-const formatElapsed = (elapsedMs: number) => {
-  const seconds = Math.max(0, Math.floor(elapsedMs / 1000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-};
-
-// 読み上げると毎秒割り込むので、見た目だけに出す。
-const ElapsedTime = ({ since }: { since: string }) => {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return (
-    <span aria-hidden="true" className="shrink-0 text-brand-muted text-xs tabular-nums">
-      {formatElapsed(now - Date.parse(since))}
-    </span>
-  );
-};
 
 const jobIconToneClass = (job: RecentImportJob) => {
   if (job.status === "failed") return "bg-brand-danger/10 text-brand-danger";
@@ -145,10 +125,13 @@ const StackedJobIcons = ({ jobs }: { jobs: readonly RecentImportJob[] }) => (
   </span>
 );
 
-const SavedRecipeThumb = ({ job }: { job: RecentImportJob }) => (
+const SavedRecipeThumb = ({ job, isCompact }: { job: RecentImportJob; isCompact: boolean }) => (
   <span
     aria-hidden="true"
-    className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[12px] border-2 border-brand-sage-dark bg-brand-paper-muted text-brand-wheat"
+    className={cn(
+      "flex shrink-0 items-center justify-center overflow-hidden border-2 border-brand-sage-dark bg-brand-paper-muted text-brand-wheat",
+      isCompact ? "size-10 rounded-[10px]" : "size-12 rounded-[12px]",
+    )}
   >
     {job.recipeId && job.recipe ? (
       <span className="@container size-full">
@@ -167,15 +150,21 @@ const SavedRecipeThumb = ({ job }: { job: RecentImportJob }) => (
   </span>
 );
 
-const SavedSummary = ({ jobs }: { jobs: readonly RecentImportJob[] }) => {
+const SavedSummary = ({
+  jobs,
+  isCompact,
+}: {
+  jobs: readonly RecentImportJob[];
+  isCompact: boolean;
+}) => {
   const [firstJob] = jobs;
 
   return (
     <>
       <span className="relative flex shrink-0 items-center">
         {jobs.slice(0, 3).map((job, index) => (
-          <span className={cn(index > 0 && "-ml-6")} key={job.id}>
-            <SavedRecipeThumb job={job} />
+          <span className={cn(index > 0 && (isCompact ? "-ml-5" : "-ml-6"))} key={job.id}>
+            <SavedRecipeThumb isCompact={isCompact} job={job} />
           </span>
         ))}
         <span
@@ -187,7 +176,12 @@ const SavedSummary = ({ jobs }: { jobs: readonly RecentImportJob[] }) => {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-brand-sage-soft text-xs">保存しました</span>
-        <span className="mt-0.5 block truncate font-semibold text-[15px] text-white">
+        <span
+          className={cn(
+            "mt-0.5 block truncate font-semibold text-white",
+            isCompact ? "text-sm" : "text-[15px]",
+          )}
+        >
           {jobs.length === 1 ? (firstJob?.recipe?.title ?? "レシピ") : `${jobs.length}件のレシピ`}
         </span>
       </span>
@@ -202,7 +196,6 @@ const SingleSummary = ({
   job: RecentImportJob;
   isHighlighted: boolean;
 }) => {
-  const isActive = isActiveImportJob(job);
   const isFailed = job.status === "failed";
   const title = isFailed
     ? "取り込めませんでした"
@@ -226,7 +219,6 @@ const SingleSummary = ({
           {isFailed ? getImportJobFailureMessage(job) : describeImportSource(job).label}
         </span>
       </span>
-      {isActive ? <ElapsedTime since={job.createdAt} /> : null}
     </>
   );
 };
@@ -345,18 +337,15 @@ const ImportJobRow = ({ island, job }: { island: ImportIslandState; job: RecentI
           </p>
         </div>
         {isActive ? (
-          <>
-            <ElapsedTime since={job.createdAt} />
-            <Button
-              aria-label={`${source.label}の取り込みを取り消す`}
-              className="shrink-0 text-brand-muted"
-              size="sm"
-              variant="ghost"
-              onClick={() => island.cancelJob(job.id)}
-            >
-              取り消す
-            </Button>
-          </>
+          <Button
+            aria-label={`${source.label}の取り込みを取り消す`}
+            className="shrink-0 text-brand-muted"
+            size="sm"
+            variant="ghost"
+            onClick={() => island.cancelJob(job.id)}
+          >
+            取り消す
+          </Button>
         ) : null}
         {job.status === "succeeded" && job.recipeId ? (
           <Link
@@ -387,11 +376,11 @@ const ImportJobRow = ({ island, job }: { island: ImportIslandState; job: RecentI
 
 const islandPositionClass = (placement: ImportIslandPlacement, isSaved: boolean) =>
   placement === "beside-fab"
-    ? cn(
-        "left-4 origin-right sm:right-4 sm:mx-auto sm:origin-bottom",
-        isSaved ? "right-4 sm:max-w-[440px]" : "right-[5.25rem] sm:max-w-[360px]",
-      )
-    : cn("inset-x-4 mx-auto origin-bottom", isSaved ? "max-w-[440px]" : "max-w-[360px]");
+    ? "left-4 right-[5.25rem] h-14 origin-right rounded-[28px] sm:right-4 sm:mx-auto sm:max-w-[360px] sm:origin-bottom"
+    : cn(
+        "inset-x-4 mx-auto origin-bottom",
+        isSaved ? "h-[72px] max-w-[440px] rounded-[24px]" : "h-14 max-w-[360px] rounded-[28px]",
+      );
 
 const islandToneClass = (view: ImportIslandView, isHighlighted: boolean) => {
   if (view.mode === "saved") return "border-brand-sage-dark bg-brand-sage-dark";
@@ -407,8 +396,12 @@ const islandToneClass = (view: ImportIslandView, isHighlighted: boolean) => {
     : "border-brand-line-soft bg-brand-paper/95";
 };
 
+const islandActionClass =
+  "flex h-full min-w-0 flex-1 items-center gap-3 rounded-[inherit] text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-inset";
+
 /**
  * 取り込み状況のアイランド。タップすると上に一覧を開く。
+ * 保存できたのが1件なら、狭い横幅でもレシピ名を読めるよう、アイランド全体でそのレシピを開く。
  */
 export const ImportIsland = ({
   island,
@@ -428,6 +421,20 @@ export const ImportIsland = ({
       : undefined;
   const savedJobToOpen =
     view.mode === "saved" && view.jobs.length === 1 && view.jobs[0]?.recipeId ? view.jobs[0] : null;
+  const summary = (
+    <span
+      className="flex min-w-0 flex-1 items-center gap-3 fade-in-0 slide-in-from-bottom-1 animate-in duration-300 motion-reduce:animate-none"
+      key={view.mode === "single" ? `single-${view.job.id}-${view.job.status}` : view.mode}
+    >
+      {view.mode === "saved" ? (
+        <SavedSummary isCompact={placement === "beside-fab"} jobs={view.jobs} />
+      ) : null}
+      {view.mode === "single" ? (
+        <SingleSummary isHighlighted={Boolean(highlightedJob)} job={view.job} />
+      ) : null}
+      {view.mode === "multiple" ? <MultipleSummary view={view} /> : null}
+    </span>
+  );
   // 触れている間は、保存できたことの表示を閉じずに待つ。
   const holdHandlers = {
     onBlur: () => island.setIsHeld(false),
@@ -446,35 +453,36 @@ export const ImportIsland = ({
           <div
             className={cn(
               "fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 flex items-center overflow-hidden border shadow-pantry-lg backdrop-blur-xl sm:bottom-6",
-              "transition-[right,max-width,height,border-radius,background-color,border-color] duration-500 ease-[cubic-bezier(0.2,0.9,0.25,1.12)] motion-reduce:transition-none",
+              "transition-[max-width,height,border-radius,background-color,border-color] duration-500 ease-[cubic-bezier(0.2,0.9,0.25,1.12)] motion-reduce:transition-none",
               "fade-in-0 zoom-in-50 animate-in motion-reduce:animate-none",
-              isSaved ? "h-[72px] rounded-[24px]" : "h-14 rounded-[28px]",
               islandPositionClass(placement, isSaved),
               islandToneClass(view, Boolean(highlightedJob)),
             )}
             data-testid="import-island"
             ref={anchorRef}
           >
-            <PopoverTrigger
-              {...holdHandlers}
-              className={cn(
-                "flex h-full min-w-0 flex-1 items-center gap-3 rounded-[inherit] text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-inset",
-                isSaved ? "px-3" : "pr-4 pl-2",
-              )}
-            >
-              <span
-                className="flex min-w-0 flex-1 items-center gap-3 fade-in-0 slide-in-from-bottom-1 animate-in duration-300 motion-reduce:animate-none"
-                key={
-                  view.mode === "single" ? `single-${view.job.id}-${view.job.status}` : view.mode
-                }
+            {savedJobToOpen?.recipeId ? (
+              <Link
+                {...holdHandlers}
+                className={cn(islandActionClass, "px-3 no-underline")}
+                params={{ recipeId: savedJobToOpen.recipeId }}
+                to="/recipes/$recipeId"
+                onClick={() => island.dismissJob(savedJobToOpen.id)}
               >
-                {view.mode === "saved" ? <SavedSummary jobs={view.jobs} /> : null}
-                {view.mode === "single" ? (
-                  <SingleSummary isHighlighted={Boolean(highlightedJob)} job={view.job} />
-                ) : null}
-                {view.mode === "multiple" ? <MultipleSummary view={view} /> : null}
-              </span>
-              {savedJobToOpen ? null : (
+                {summary}
+                <CaretRight
+                  aria-hidden="true"
+                  className="shrink-0 text-brand-sage-soft"
+                  size={16}
+                  weight="bold"
+                />
+              </Link>
+            ) : (
+              <PopoverTrigger
+                {...holdHandlers}
+                className={cn(islandActionClass, isSaved ? "px-3" : "pr-4 pl-2")}
+              >
+                {summary}
                 <CaretUp
                   aria-hidden="true"
                   className={cn(
@@ -485,22 +493,8 @@ export const ImportIsland = ({
                   size={16}
                   weight="bold"
                 />
-              )}
-            </PopoverTrigger>
-            {savedJobToOpen?.recipeId ? (
-              <Link
-                className={cn(
-                  buttonVariants({ size: "sm" }),
-                  "mr-3 shrink-0 rounded-full bg-brand-paper px-4 text-brand-sage-dark no-underline hover:bg-brand-paper-muted",
-                )}
-                params={{ recipeId: savedJobToOpen.recipeId }}
-                to="/recipes/$recipeId"
-                {...holdHandlers}
-                onClick={() => island.dismissJob(savedJobToOpen.id)}
-              >
-                開く
-              </Link>
-            ) : null}
+              </PopoverTrigger>
+            )}
           </div>
           <PopoverContent
             anchor={anchorRef}

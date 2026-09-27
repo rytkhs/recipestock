@@ -109,20 +109,13 @@ const AppNav = () => (
 
 // モバイルでは親指の届く下からシートで出し、追加の方法を全幅の行で選ばせる。
 // 行を選ぶと一覧から離れ、FABごとシートが外れる。
-// 取り込みの保存を知らせている間は、横に広がるアイランドに場所を譲る。
-export const MobileAddRecipeFab = ({ isHidden = false }: { isHidden?: boolean }) => (
+export const MobileAddRecipeFab = () => (
   <Sheet>
     <SheetTrigger
       aria-label="レシピ追加"
       data-testid="add-recipe-fab"
-      inert={isHidden}
       render={
-        <Button
-          className={cn(
-            "fixed right-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 size-14 rounded-full shadow-lg transition-[opacity,scale] duration-300 motion-reduce:transition-none sm:hidden",
-            isHidden && "pointer-events-none scale-75 opacity-0",
-          )}
-        />
+        <Button className="fixed right-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 size-14 rounded-full shadow-lg sm:hidden" />
       }
     >
       <Plus weight="bold" />
