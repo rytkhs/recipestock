@@ -96,7 +96,7 @@ pnpm --filter @recipestock/api exec wrangler r2 bucket cors set recipestock-imag
 pnpm --filter @recipestock/api exec wrangler r2 bucket lifecycle add recipestock-images-dev expire-tmp-uploads tmp/ --expire-days 1
 ```
 
-ライフサイクルルールは、保存されないまま残る一時アップロード(`tmp/`)を消します(ADR 0024)。
+ライフサイクルルールは、保存されないまま残る一時アップロード(`tmp/`)を消します。
 本番など別の bucket を作るときも同じ設定を適用してください。
 
 API 固有のセットアップ詳細は `apps/api/README.md` を参照してください。
@@ -248,6 +248,8 @@ cp .env.example .env.test.local
 # .env.test.localへテスト専用projectの値を設定
 pnpm test:db
 ```
+
+Serviceやrouteのテストのin-memory adapterは、Database adapterの代わりの検証には使わない。SQL、制約、日時比較、同時実行などPostgreSQL固有の保証は、Database統合テストで確かめる。
 
 日常の高速テストには`pnpm test`を使用し、Databaseまたはrepositoryを変更した場合は、CIに加えて必要に応じてローカルでも`pnpm test:all`を実行する。
 

@@ -60,7 +60,7 @@ pnpm --filter @recipestock/api exec wrangler r2 bucket cors set recipestock-imag
 pnpm --filter @recipestock/api exec wrangler r2 bucket lifecycle add recipestock-images-dev expire-tmp-uploads tmp/ --expire-days 1
 ```
 
-The lifecycle rule expires temporary uploads under `tmp/` that were never saved to a recipe (ADR 0024). Apply the same rule to every bucket the API writes to.
+The lifecycle rule expires temporary uploads under `tmp/` that were never saved to a recipe. Apply the same rule to every bucket the API writes to.
 
 The Worker binding name is `RECIPE_IMAGES`. Direct browser uploads also require R2 S3 API credentials in `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 
@@ -139,7 +139,7 @@ pnpm --filter @recipestock/api exec wrangler secret put SENTRY_DSN
 ## Monitoring
 
 Workers Logs and Workers Traces hold the data for investigation. Sentry holds what needs attention and
-sends the alerts (ADR 0029).
+sends the alerts (ADR 0010).
 
 - `GET /api/health` is the Sentry Uptime target. It touches no dependency, so it never keeps Neon awake.
 - The API sends 5xx exceptions from `onError`, the exception on an Import Job's last queue delivery, and

@@ -9,7 +9,7 @@ import { issueShortcutCredential, shortcutCredentialsQueryKey } from "./api";
 
 /**
  * 連携キーを発行して、ショートカットの追加へ進む。
- * 取り込みはサーバーだけで完結するので、ホーム画面に追加していなくても発行できる（ADR 0025）。
+ * 取り込みはサーバーだけで完結するので、ホーム画面に追加していなくても発行できる。
  */
 export const LinkThisDevice = () => {
   const iosShareShortcutUrl = import.meta.env.VITE_IOS_SHARE_SHORTCUT_URL;

@@ -2,7 +2,7 @@
 
 `VITE_IOS_SHARE_SHORTCUT_URL`から配布するShortcutの定義と、対応するAPI契約の記録。iCloudリンクの実体はレビューもdiffも取れないため、API契約を変更するときは必ずこの文書と突き合わせる。
 
-配布後のShortcutは更新できない。判断ロジックはサーバーに置き、Shortcutは受け取った文字列を表示するだけにする（ADR 0008）。
+配布後のShortcutは更新できない。判断ロジックはサーバーに置き、Shortcutは受け取った文字列を表示するだけにする（ADR 0004）。
 
 ## 現行バージョン
 
@@ -81,13 +81,13 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
 
 AI月次上限はプランでreasonを分ける。保存上限がfreeの投稿を先に止めAIを消費させないため、freeが`ai_usage_limit_exceeded`に達するのは例外的であり、実際に到達するのは主にProである。すでに払っているProへ「Proにすると」と案内しても意味がないので、`ai_usage_quota_exhausted`はopenUrlを持たせずリセット時期だけを伝える。リセットはJST月初固定なので「毎月1日」は常に真であり、日付を補間する必要はない。
 
-上限値は運用中にenvで変えられるため、`body`に具体的な回数を書かず、文言の一覧を固定のまま保つ。Freeの回数は、遷移先のプランのページが今の値から出す（ADR 0026）。利用者向けの文言では「AI取り込み」の上限と呼ぶ。
+上限値は運用中にenvで変えられるため、`body`に具体的な回数を書かず、文言の一覧を固定のまま保つ。Freeの回数は、遷移先のプランのページが今の値から出す。利用者向けの文言では「AI取り込み」の上限と呼ぶ。
 
 表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`、`ai_usage_quota_exhausted`はwarn、それ以外はinfo。freeのAI上限到達はコンバージョン機会であり通常の利用結果だが、proの枠切れは容量または濫用の兆候であるため別のlevelで扱う。
 
 `malformed_request`はrequest bodyが契約に合わない場合、`no_url_in_input`は`input`にURLが含まれない場合であり、両者を混ぜない。前者はクライアントの契約違反、後者はユーザーの通常の操作結果である。
 
-`rate_limit_exceeded`は2つの安全弁から返る。`credentialId`単位の毎分10回（ADR 0006）と、認証へ到達する前にclient IP単位で引く毎分60回である。後者は、無効なtokenを送り続けるrequestがtoken hash照合のDBアクセスを無制限に起こすのを防ぐ。keyは`cf-connecting-ip`とし、Cloudflareの背後では常に付与されるため、欠落するlocal devやtestでは共通のkeyで数える。IPは監視ログへ残さない。responseはどちらの安全弁でも同じ`reason`と同じnoticeであり、切り分けはログの`rateLimitScope`（`client`または`credential`）で行う。
+`rate_limit_exceeded`は2つの安全弁から返る。`credentialId`単位の毎分10回と、認証へ到達する前にclient IP単位で引く毎分60回である。後者は、無効なtokenを送り続けるrequestがtoken hash照合のDBアクセスを無制限に起こすのを防ぐ。keyは`cf-connecting-ip`とし、Cloudflareの背後では常に付与されるため、欠落するlocal devやtestでは共通のkeyで数える。IPは監視ログへ残さない。responseはどちらの安全弁でも同じ`reason`と同じnoticeであり、切り分けはログの`rateLimitScope`（`client`または`credential`）で行う。
 
 ## 共有入力の実機確認
 

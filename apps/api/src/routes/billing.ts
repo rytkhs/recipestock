@@ -33,7 +33,7 @@ type BillingRouteDependencies = {
 const buildUrl = (origin: string, path: string) => new URL(path, origin).toString();
 
 // 画面は「月額 ¥◯（税込）」と出す。それに合わないPriceを設定したまま別の値段を見せないよう、
-// 円・1か月ごとの定期払い以外は設定の誤りとして止める（ADR 0027）。
+// 円・1か月ごとの定期払い以外は設定の誤りとして止める。
 const toProPrice = (price: StripePriceState): GetProPriceResponse => {
   if (
     price.currency !== "jpy" ||

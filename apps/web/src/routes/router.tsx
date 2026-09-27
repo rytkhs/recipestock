@@ -268,7 +268,7 @@ const recipesRoute = createRoute({
     middlewares: [
       stripSearchParams({ sort: "newest" }),
       // 並び順を指定せずに一覧へ移るときは、一覧で最後に使った並び順を引き継ぐ。
-      // 絞り込み条件はここでは埋めず、戻る操作だけがsearchで渡す（ADR 0021）。
+      // 絞り込み条件はここでは埋めず、戻る操作だけがsearchで渡す。
       // stripSearchParamsより内側に置き、指定された新しい順が消される前に判定する。
       ({ search, next }) => {
         const result = next(search);
@@ -277,7 +277,7 @@ const recipesRoute = createRoute({
     ],
   },
   loaderDeps: ({ search }) => search,
-  // 起動の入口（start_url）の一覧は、画面がsessionの確定を待つ間に取り始める（ADR 0011）。
+  // 起動の入口（start_url）の一覧は、画面がsessionの確定を待つ間に取り始める。
   // APIは自分でsessionを確かめるので、未ログインなら401が返るだけで、画面には出ない。
   // 起動時は絞り込みがないので、絞り込んだ一覧は画面に任せる。
   // Promiseは返さない。返すとrouterが取得の完了を待ち、その間skeletonを出し続ける。

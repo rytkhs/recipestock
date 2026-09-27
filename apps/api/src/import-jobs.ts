@@ -252,7 +252,7 @@ type NewImportJobInput =
 
 /**
  * 投稿時の判定をURLとテキストで共有する。active Jobの再利用、保存上限、AI上限の順に単一SQLで
- * 判定し(ADR 0001、ADR 0010)、入力の種類で変わるのは同じImport Jobとみなす列だけである。
+ * 判定し(ADR 0001、ADR 0002)、入力の種類で変わるのは同じImport Jobとみなす列だけである。
  */
 const createImportJobWithSubmissionLimits = async (
   db: DbClient,

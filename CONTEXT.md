@@ -25,6 +25,10 @@ _Avoid_: Origin, reference, citation
 A user-owned label attached to **Recipes** to narrow the recipe list. Tags form the user's vocabulary: a **Tag** exists independently of any **Recipe** and is renamed, merged, or deleted as a whole. The vocabulary is kept in an order the user decides; it does not change with how many **Recipes** carry a **Tag**. A **Tag** is not part of **RecipeContent** or **Source**.
 _Avoid_: Category, Folder, Label
 
+**Locked Recipe**:
+A **Recipe** whose content a Free user cannot read or edit because they hold more **Recipes** than the Free plan allows, which happens only after returning from Pro. The newest saved **Recipes** up to the Free limit stay open and the rest are locked. A **Locked Recipe** is not deleted, lock state is not stored, and editing a **Recipe** does not change which **Recipes** are locked.
+_Avoid_: Hidden recipe, disabled recipe
+
 **Import Job**:
 A user-requested attempt to create one **Recipe** from an external source, such as a URL or pasted text. An **Import Job** may finish successfully, fail, or be canceled before producing a **Recipe**.
 _Avoid_: Import task, background import

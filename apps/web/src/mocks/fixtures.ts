@@ -427,7 +427,7 @@ export const recipeDetailFixture = (
 export type RecipeContentOverride = Partial<RecipeDetail["content"]>;
 
 /**
- * SNSの画像だけの投稿から取り込んだ本文(ADR 0017)。表紙とレシピ画像だけを持つ。
+ * SNSの画像だけの投稿から取り込んだ本文。表紙とレシピ画像だけを持つ。
  * 取り込みと同じく、表紙は投稿の1枚目で、レシピ画像にも1枚目から投稿の順に入る。
  */
 export const imageOnlyRecipeContentFixture = (

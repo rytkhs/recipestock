@@ -55,7 +55,7 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
    * Proへ「Proにすると」と案内しても意味がないため、プランでreasonを分ける。
    *
    * 上限値は運用中にenvで変えられるため、このカタログには回数を書かず静的に保つ。
-   * Freeの回数は、遷移先のプランのページが今の値から出す（ADR 0026）。
+   * Freeの回数は、遷移先のプランのページが今の値から出す。
    * 利用者には「AI取り込み」の上限として見せる。
    */
   ai_usage_limit_exceeded: {
