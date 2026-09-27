@@ -29,7 +29,7 @@ export const formValuesToRecipeDraftContent = (
   return recipeDraftContentSchema.parse({
     title: values.title.trim(),
     yieldText: compactText(values.yieldText),
-    coverImage: values.coverImage,
+    coverImage: values.coverImage ?? undefined,
     referenceImages: values.referenceImages,
     ingredientGroups: values.ingredientGroups
       .map((group) => ({
@@ -54,7 +54,7 @@ export const recipeDetailToFormValues = (recipe: RecipeDetail): RecipeDraftFormV
   yieldText: recipe.content.yieldText ?? "",
   coverImage: recipe.content.coverImage
     ? { type: "existingObjectKey", key: recipe.content.coverImage.objectKey }
-    : undefined,
+    : null,
   referenceImages: (recipe.content.referenceImages ?? []).map((image) => ({
     type: "existingObjectKey",
     key: image.objectKey,
