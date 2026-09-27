@@ -82,7 +82,6 @@ Put server-side behavior here:
 - recipe CRUD route handlers
 - URL and text Import Job submission and lifecycle
 - Cloudflare Queue consumption and Import Job processing
-- image import route handlers
 - AI usage-limit checks
 - Free / Pro save limits
 - recipe lock computation

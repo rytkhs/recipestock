@@ -1,6 +1,6 @@
 # Recipe Stock
 
-Recipe Stock は、レシピサイト、YouTube、SNS投稿、書籍、画像、スクリーンショットなどからレシピを取り込み、統一された形式で保存・検索・閲覧するための PWA です。
+Recipe Stock は、レシピサイト、YouTube、SNS投稿、などからレシピを取り込み、統一された形式で保存・検索・閲覧するための PWA です。
 
 ## Architecture
 
@@ -278,7 +278,6 @@ pnpm --filter @recipestock/api exec wrangler deploy --dry-run
 - `CLOUDFLARE_ACCOUNT_ID`
 - `AI_GATEWAY_NAME`
 - `AI_TEXT_MODEL`
-- `AI_VISION_MODEL`
 - `IMPORT_TIMEOUT_MS`
 - `IMPORT_JOB_TIMEOUT_MS`
 
