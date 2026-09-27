@@ -129,7 +129,7 @@ describe("YouTube source extraction adapter", () => {
     });
   });
 
-  it("YouTube Data API client未設定はextraction_failedにする", async () => {
+  it("YouTube Data API client未設定はunknownにする", async () => {
     const fetchHtml = createFetchHtml();
     await expect(
       youtubeSourceExtractionAdapter.extract({
@@ -139,13 +139,13 @@ describe("YouTube source extraction adapter", () => {
         fetchHtml,
       }),
     ).rejects.toMatchObject({
-      code: "extraction_failed",
+      code: "unknown",
     } satisfies Partial<RecipeImportError>);
 
     expect(fetchHtml).not.toHaveBeenCalled();
   });
 
-  it("動画metadataが見つからない場合はextraction_failedにする", async () => {
+  it("動画metadataが見つからない場合はprivate_or_login_requiredにする", async () => {
     await expect(
       youtubeSourceExtractionAdapter.extract({
         normalizedUrl: CANONICAL_URL,
@@ -157,11 +157,16 @@ describe("YouTube source extraction adapter", () => {
         },
       }),
     ).rejects.toMatchObject({
-      code: "extraction_failed",
+      code: "private_or_login_required",
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("YouTube Data API errorはRecipeImportErrorへ変換する", async () => {
+  it.each([
+    ["request_failed", "fetch_failed"],
+    ["quota_exceeded", "fetch_failed"],
+    ["timeout", "fetch_failed"],
+    ["invalid_response", "unknown"],
+  ] as const)("YouTube Data APIの%sを%sにする", async (dataErrorCode, importErrorCode) => {
     await expect(
       youtubeSourceExtractionAdapter.extract({
         normalizedUrl: CANONICAL_URL,
@@ -170,13 +175,13 @@ describe("YouTube source extraction adapter", () => {
         fetchHtml: createFetchHtml(),
         youtubeDataClient: {
           getVideo: vi.fn(async () => {
-            throw new YouTubeDataError("quota_exceeded", "quota exceeded");
+            throw new YouTubeDataError(dataErrorCode, "YouTube Data API failed");
           }),
         },
       }),
     ).rejects.toMatchObject({
       name: "RecipeImportError",
-      code: "extraction_failed",
+      code: importErrorCode,
     } satisfies Partial<RecipeImportError>);
   });
 
