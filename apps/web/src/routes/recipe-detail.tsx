@@ -52,6 +52,7 @@ import {
   screenTopBarTitleClass,
 } from "../components/screen-top-bar";
 import { SectionHeader } from "../components/section-header";
+import { clearRecipeArrival } from "../features/import-jobs";
 import {
   deleteRecipe,
   getRecipe,
@@ -211,6 +212,11 @@ const RecipeDetailNotice = ({
 export const RecipeDetailRoute = () => {
   const { recipeId } = useParams({ from: "/_protected/recipes/$recipeId" });
   const returnToRecipeList = useGoBack({ to: "/recipes" });
+
+  // 取り込みから届いたRecipeは、開いたら「新着」でなくなる。
+  useEffect(() => {
+    clearRecipeArrival(recipeId);
+  }, [recipeId]);
   const {
     data: recipe,
     error,

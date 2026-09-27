@@ -1,5 +1,6 @@
 import { CaretLeft, ClipboardText, X } from "@phosphor-icons/react";
 import { extractFirstUrl } from "@recipestock/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,11 @@ import { Input } from "@/components/ui/input";
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import { PlanLink } from "../features/billing/plan-link";
 import { isResolvedByUpgrade } from "../features/billing/plan-state";
-import { createImportUrlJob, getCreateImportUrlJobErrorMessage } from "../features/import-jobs";
+import {
+  createImportUrlJob,
+  getCreateImportUrlJobErrorMessage,
+  showSubmittedImportJob,
+} from "../features/import-jobs";
 import { ApiClientError } from "../lib/api";
 import { useGoBack } from "../lib/navigation";
 import { useViewer } from "../lib/viewer";
@@ -31,6 +36,7 @@ export const getInitialImportUrl = ({ text, url }: ImportUrlSearch) => {
 
 export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const goBack = useGoBack({ to: "/recipes" });
   const [url, setUrl] = useState(() => getInitialImportUrl(search));
   // 上限のエラーのうち、プランを変えれば直るものにだけプランのページへの入口を添える。
@@ -64,7 +70,7 @@ export const ImportUrlRoute = ({ search = {} }: { search?: ImportUrlSearch }) =>
     setIsSubmitting(true);
 
     try {
-      await createImportUrlJob(url);
+      showSubmittedImportJob(queryClient, await createImportUrlJob(url));
 
       // 取り込み状況は一覧に出す。取り込みの画面は履歴から外し、一覧から戻っても着かないようにする。
       await navigate({ to: "/recipes", replace: true });

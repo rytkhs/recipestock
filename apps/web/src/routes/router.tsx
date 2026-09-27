@@ -27,6 +27,7 @@ import {
   SettingsSkeleton,
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
+import { ImportIsland, useImportIsland } from "../features/import-jobs";
 import { recipeListQueryOptions } from "../features/recipes";
 import { readRecipeListSort } from "../features/recipes/list-search";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
@@ -121,6 +122,10 @@ const ProtectedRouteSkeleton = () => {
   return <RecipeListSkeleton />;
 };
 
+// 入力の画面では、送信や下の保存バーと重なるのでアイランドを出さない。
+const isFormPath = (pathname: string) =>
+  pathname.startsWith("/import/") || pathname === "/recipes/new" || pathname.endsWith("/edit");
+
 const ProtectedLayout = () => {
   const access = useProtectedAccess();
   const navigate = useNavigate();
@@ -139,22 +144,33 @@ const ProtectedLayout = () => {
 
   const isReady = access.status === "ready";
   const isHome = currentPathname === "/recipes";
+  const importIsland = useImportIsland({
+    enabled: isReady,
+    isShown: isReady && !isFormPath(currentPathname),
+    pathname: currentPathname,
+  });
+  // アイランドが出ている間は、最後の行が隠れないよう下を空ける。
+  const hasImportIsland = importIsland.isShown && importIsland.view.mode !== "hidden";
+  const mainPaddingClass = hasImportIsland
+    ? "pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-28"
+    : isReady && isHome
+      ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8"
+      : "pb-8";
 
   return (
     <>
       <Header isMobileVisible={false} variant={isReady ? "private" : "brand"} />
-      <main
-        className={
-          isReady && isHome ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"
-        }
-      >
+      <main className={mainPaddingClass}>
         {access.status === "pending" ? <ProtectedRouteSkeleton /> : null}
         {access.status === "ready" ? <Outlet /> : null}
         {access.status === "unavailable" ? (
           <ConnectionUnavailable isRetrying={access.isRetrying} onRetry={access.retry} />
         ) : null}
       </main>
-      {isReady && isHome ? <MobileAddRecipeFab /> : null}
+      {isReady && isHome ? (
+        <MobileAddRecipeFab isHidden={importIsland.view.mode === "saved"} />
+      ) : null}
+      <ImportIsland island={importIsland} placement={isHome ? "beside-fab" : "center"} />
     </>
   );
 };

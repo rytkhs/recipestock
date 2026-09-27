@@ -1,4 +1,5 @@
 import {
+  type CancelImportJobResponse,
   type CreateImportJobResponse,
   type DismissImportJobResponse,
   type GetImportJobResponse,
@@ -16,13 +17,16 @@ export const createImportUrlJob = (url: string): Promise<CreateImportJobResponse
     }),
   );
 
-export const createImportTextJob = (text: string): Promise<CreateImportJobResponse> =>
+export const createImportTextJob = (
+  text: string,
+  sourceUrl?: string,
+): Promise<CreateImportJobResponse> =>
   parseApiResponse<CreateImportJobResponse>(
     fetch("/api/import/text/jobs", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, sourceUrl }),
     }),
   );
 
@@ -45,6 +49,14 @@ export const fetchImportJob = (jobId: string): Promise<GetImportJobResponse> =>
 export const dismissFinishedImportJob = (jobId: string): Promise<DismissImportJobResponse> =>
   parseApiResponse<DismissImportJobResponse>(
     fetch(`/api/import/jobs/${encodeURIComponent(jobId)}/dismiss`, {
+      method: "PATCH",
+      credentials: "include",
+    }),
+  );
+
+export const cancelImportJob = (jobId: string): Promise<CancelImportJobResponse> =>
+  parseApiResponse<CancelImportJobResponse>(
+    fetch(`/api/import/jobs/${encodeURIComponent(jobId)}/cancel`, {
       method: "PATCH",
       credentials: "include",
     }),

@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { finishRecipeArrival, useRecipeArrival } from "../import-jobs";
 import { RecipeCover } from "./recipe-cover";
 import { formatRecipeCreatedAt } from "./recipe-shelf";
 import { type RecipeViewMode } from "./view-mode";
@@ -75,6 +76,12 @@ const LockedBadge = () => (
   </span>
 );
 
+const NewArrivalBadge = () => (
+  <span className="absolute top-1.5 left-1.5 rounded-full bg-brand-orange-dark px-2 py-0.5 font-semibold text-[10px] text-white leading-4">
+    新着
+  </span>
+);
+
 export const LockedShelfNotice = () => (
   <div className="col-span-full flex flex-col items-start gap-3 rounded-[14px] border border-brand-line border-dashed bg-brand-paper-muted/60 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
     <div className="min-w-0 flex-1">
@@ -104,18 +111,26 @@ export const RecipeCard = ({
   viewMode: RecipeViewMode;
 }) => {
   const isList = viewMode === "list";
+  // 取り込みから届いたRecipeは、一覧に入るときに一度だけ目立たせ、開くまで「新着」を付ける。
+  const arrival = useRecipeArrival(recipe.id);
+  const isEntering = arrival === "entering" && !recipe.locked;
   const createdAtLabel = formatRecipeCreatedAt(recipe.createdAt);
   const meta = isList
     ? [recipe.sourceName, createdAtLabel].filter(Boolean).join(" · ")
     : recipe.sourceName;
   const cover = (
     <div
-      className={cn(coverClass, isList ? "w-20 shrink-0 rounded-[10px] sm:w-24" : "rounded-[14px]")}
+      className={cn(
+        coverClass,
+        isList ? "w-20 shrink-0 rounded-[10px] sm:w-24" : "rounded-[14px]",
+        isEntering && "motion-safe:animate-recipe-arrive-glow",
+      )}
     >
       <div className={cn("size-full", recipe.locked && "opacity-60 grayscale-[0.45]")}>
         <RecipeCover index={index} recipe={recipe} />
       </div>
       {recipe.locked ? <LockedBadge /> : null}
+      {arrival && !recipe.locked ? <NewArrivalBadge /> : null}
     </div>
   );
   const body = (
@@ -146,7 +161,16 @@ export const RecipeCard = ({
 
   return (
     <article
-      className={cn("group relative flex min-w-0", isList ? "items-center gap-3 py-3" : "flex-col")}
+      className={cn(
+        "group relative flex min-w-0",
+        isList ? "items-center gap-3 py-3" : "flex-col",
+        isEntering && "motion-safe:animate-recipe-arrive",
+      )}
+      onAnimationEnd={(event) => {
+        if (event.animationName === "recipe-arrive-glow") {
+          finishRecipeArrival(recipe.id);
+        }
+      }}
     >
       <Link
         className={cn(

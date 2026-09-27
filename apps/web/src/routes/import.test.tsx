@@ -313,7 +313,9 @@ describe("Import routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("1件を取り込み中");
+    const island = screen.getByTestId("import-island");
+    expect(island).toHaveTextContent("取り込み待ち");
+    expect(island).toHaveTextContent("example.com");
     expect(findFetchCall(fetchMock, "/api/import/url/jobs")).toEqual([
       "/api/import/url/jobs",
       expect.objectContaining({
@@ -533,7 +535,7 @@ describe("Import routes", () => {
     );
   });
 
-  it("同じURLのactive jobがある場合もレシピ一覧へ遷移する", async () => {
+  it("同じURLのactive jobがある場合もレシピ一覧へ遷移し、そのjobを目立たせる", async () => {
     mockFetch(
       async (input) => {
         if (getRequestPath(input) === "/api/import/url/jobs") {
@@ -589,6 +591,6 @@ describe("Import routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("1件を取り込み中");
+    expect(screen.getByTestId("import-island")).toHaveTextContent("もう取り込んでいます");
   });
 });

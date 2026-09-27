@@ -3,7 +3,7 @@ import {
   type GetMeResponse,
   type GetProPriceResponse,
   type GetPushSubscriptionsResponse,
-  type ImportJobSummary,
+  type ImportErrorCode,
   type ListShortcutCredentialsResponse,
   MAX_INGREDIENT_AMOUNT_LENGTH,
   MAX_INGREDIENT_GROUP_LABEL_LENGTH,
@@ -16,6 +16,7 @@ import {
   MAX_RECIPE_TAGS,
   MAX_RECIPE_TITLE_LENGTH,
   MAX_RECIPE_TOTAL_IMAGES,
+  type RecentImportJob,
   type RecipeListItem,
 } from "@recipestock/schemas";
 import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
@@ -67,7 +68,7 @@ export type MockState = {
   recipeTags: Record<string, string[]>;
   /** Recipeのidごとに、詳細の本文をfixtureから差し替える部分。 */
   recipeContents: Record<string, RecipeContentOverride>;
-  importJobs: ImportJobSummary[];
+  importJobs: RecentImportJob[];
   /** テキスト取り込みのjobが保持し、本人向けの詳細APIから返す原文。 */
   importJobSourceTexts: Record<string, string>;
   pushSubscriptions: GetPushSubscriptionsResponse;
@@ -103,6 +104,8 @@ export type MockState = {
     listShortcutCredentials?: boolean;
     issueShortcutCredential?: boolean;
     revokeShortcutCredential?: boolean;
+    /** 指定すると、このあと送るURLの取り込みをこのエラーで失敗させる。 */
+    importJob?: ImportErrorCode;
   };
 };
 
@@ -738,6 +741,81 @@ export const scenarios: Scenario[] = [
       ...baseState(),
       importJobs: [importJobFixture({ status: "running" })],
     }),
+  },
+  {
+    id: "import-saved",
+    group: "import",
+    label: "取り込んで保存した直後",
+    build: () => {
+      const state = baseState();
+      const [recipe] = state.recipes;
+
+      return {
+        ...state,
+        importJobs: recipe
+          ? [
+              importJobFixture({
+                id: "job_saved",
+                status: "succeeded",
+                url: "https://www.youtube.com/watch?v=mock",
+                recipeId: recipe.id,
+                finishedAt: new Date().toISOString(),
+                recipe: { title: recipe.title, coverImageUrl: recipe.coverImageUrl },
+              }),
+            ]
+          : [],
+      };
+    },
+  },
+  {
+    id: "importing-multiple",
+    group: "import",
+    label: "複数を取り込み中（失敗を含む）",
+    build: () => ({
+      ...baseState(),
+      importJobs: [
+        importJobFixture({
+          id: "job_running",
+          url: "https://www.youtube.com/watch?v=mock",
+        }),
+        importJobFixture({
+          id: "job_queued",
+          status: "queued",
+          url: "https://www.tiktok.com/@mock/video/1",
+          startedAt: null,
+        }),
+        importJobFixture({
+          id: "job_private",
+          status: "failed",
+          url: "https://www.instagram.com/p/mock/",
+          errorCode: "private_or_login_required",
+          finishedAt: new Date(Date.now() - 10_000).toISOString(),
+        }),
+      ],
+    }),
+  },
+  {
+    id: "import-private-post",
+    group: "import",
+    label: "非公開の投稿で取り込み失敗",
+    build: () => ({
+      ...baseState(),
+      importJobs: [
+        importJobFixture({
+          id: "job_private",
+          status: "failed",
+          url: "https://www.instagram.com/p/mock/",
+          errorCode: "private_or_login_required",
+          finishedAt: new Date(Date.now() - 10_000).toISOString(),
+        }),
+      ],
+    }),
+  },
+  {
+    id: "import-will-fail",
+    group: "import",
+    label: "これから送るURLが取り込めない",
+    build: () => ({ ...baseState(), failures: { importJob: "private_or_login_required" } }),
   },
   {
     id: "import-failed",
