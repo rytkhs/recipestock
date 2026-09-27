@@ -30,7 +30,11 @@ export const importJobs = pgTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     kind: text("kind", { enum: ["url", "text"] }).notNull(),
-    status: text("status", { enum: ["queued", "running", "succeeded", "failed"] }).notNull(),
+    status: text("status", {
+      enum: ["queued", "running", "succeeded", "failed", "canceled"],
+    }).notNull(),
+    // URLのJobでは取り込むURL、テキストのJobでは出典として残すURL。
+    // テキストのJobは`normalized_url`を持たないので、URLのJobの重複判定には入らない。
     url: text("url"),
     normalizedUrl: text("normalized_url"),
     sourceText: text("source_text"),

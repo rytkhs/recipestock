@@ -83,6 +83,7 @@ const createImportJobRepository = (
   },
   markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
+  cancelJob: async () => null,
   ...overrides,
 });
 
@@ -456,6 +457,35 @@ describe("processImportJob", () => {
       normalizedSourceUrl: null,
       sourceName: null,
     });
+  });
+
+  it.each([
+    ["対応しているプラットフォームのURL", "https://www.instagram.com/p/DYsxvKyAZMg/", "Instagram"],
+    ["ほかのサイトのURL", "https://www.example.com/recipes/1", "example.com"],
+  ])("出典URLを持つテキストjobは、%sを出典として保存する", async (_label, sourceUrl, sourceName) => {
+    const recipes: Parameters<ImportJobRepository["completeJobWithRecipe"]>[0]["recipe"][] = [];
+
+    await processImportJob({
+      jobId: "job_123",
+      env,
+      importJobRepository: createImportJobRepository([], {
+        claimQueuedJob: async () => createTextJob({ url: sourceUrl }),
+        completeJobWithRecipe: async ({ recipe }) => {
+          recipes.push(recipe);
+          return { status: "succeeded" };
+        },
+      }),
+      recipeRepository: createRecipeRepository(),
+      usageRepository: createUsageRepository(),
+      aiProvider,
+      fetcher: async () => {
+        throw new Error("should not fetch");
+      },
+      createRecipeId: () => "recipe_123",
+      getCurrentDate: () => new Date("2026-06-01T00:00:00.000Z"),
+    });
+
+    expect(recipes[0]).toMatchObject({ originType: "text", sourceUrl, sourceName });
   });
 
   it("テキストからレシピを読み取れなければRecipeを作らずextraction_failedにする", async () => {

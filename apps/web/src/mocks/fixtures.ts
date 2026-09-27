@@ -3,8 +3,8 @@ import {
   type GetMeResponse,
   type GetProPriceResponse,
   type GetPushSubscriptionsResponse,
-  type ImportJobSummary,
   type ListShortcutCredentialsResponse,
+  type RecentImportJob,
   type RecipeDetail,
   type RecipeListItem,
   type ShortcutCredential,
@@ -455,7 +455,7 @@ export const brokenImageRecipeContentFixture = (recipeId: string): RecipeContent
   ),
 });
 
-export const importJobFixture = (overrides: Partial<ImportJobSummary> = {}): ImportJobSummary => {
+export const importJobFixture = (overrides: Partial<RecentImportJob> = {}): RecentImportJob => {
   const now = new Date();
 
   return {
@@ -469,6 +469,7 @@ export const importJobFixture = (overrides: Partial<ImportJobSummary> = {}): Imp
     createdAt: new Date(now.getTime() - 20_000).toISOString(),
     startedAt: new Date(now.getTime() - 15_000).toISOString(),
     finishedAt: null,
+    recipe: null,
     ...overrides,
   };
 };

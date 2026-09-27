@@ -66,6 +66,7 @@ type TikTokProjection = {
 
 export const tiktokSourceExtractionAdapter: SourceExtractionAdapter = {
   id: "tiktok",
+  sourceName: TIKTOK_SOURCE_NAME,
 
   match(input: SourceExtractionMatchInput) {
     return getTikTokUrlTarget(input.normalizedUrl) !== null;

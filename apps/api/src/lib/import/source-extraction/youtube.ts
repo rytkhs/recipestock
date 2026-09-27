@@ -10,9 +10,11 @@ const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"
 const YOUTUBE_SHORT_HOSTS = new Set(["youtu.be", "www.youtu.be"]);
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const YOUTUBE_PAGE_ID = "youtube_thumbnail";
+const YOUTUBE_SOURCE_NAME = "YouTube";
 
 export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
   id: "youtube",
+  sourceName: YOUTUBE_SOURCE_NAME,
 
   match(input: SourceExtractionMatchInput) {
     return getYouTubeVideoId(input.normalizedUrl) !== null;
@@ -93,7 +95,7 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
         : {}),
       source: {
         sourceUrl: canonicalUrl,
-        sourceName: "YouTube",
+        sourceName: YOUTUBE_SOURCE_NAME,
       },
       warnings: [],
     };

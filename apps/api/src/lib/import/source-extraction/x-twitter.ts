@@ -62,6 +62,7 @@ type XTwitterCanonicalSource =
 
 export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
   id: "x-twitter",
+  sourceName: X_SOURCE_NAME,
 
   match(input: SourceExtractionMatchInput) {
     return getXTwitterSource(input.normalizedUrl) !== null;

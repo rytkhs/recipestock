@@ -50,6 +50,7 @@ const createImportJobRepository = (
   markJobFailed: async () => undefined,
   markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
+  cancelJob: async () => null,
   ...overrides,
 });
 
