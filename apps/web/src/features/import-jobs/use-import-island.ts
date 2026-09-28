@@ -71,7 +71,8 @@ export const useImportIsland = ({
     setIsHeld(false);
   }
 
-  const [announcement, setAnnouncement] = useState("");
+  // 同じ文でも、知らせるたびに読み上げの要素を差し替えて、続けて起きたことも読み上げさせる。
+  const [announcement, setAnnouncement] = useState<{ id: number; message: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const observedStatusesRef = useRef(new Map<string, ImportJobStatus>());
 
@@ -157,7 +158,7 @@ export const useImportIsland = ({
     const message = describeChanges(saved, failedCount);
 
     if (message) {
-      setAnnouncement(message);
+      setAnnouncement((current) => ({ id: (current?.id ?? 0) + 1, message }));
     }
   }, [jobs, queryClient]);
 

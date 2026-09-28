@@ -507,7 +507,9 @@ export const ImportIsland = ({
   return (
     <>
       <p aria-live="polite" className="sr-only">
-        {island.announcement}
+        {island.announcement ? (
+          <span key={island.announcement.id}>{island.announcement.message}</span>
+        ) : null}
       </p>
       {island.isVisible ? (
         <Popover modal open={island.isPanelOpen} onOpenChange={island.setPanelOpen}>
