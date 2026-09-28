@@ -11,6 +11,8 @@ export type SubmitUrlImportJobInput = {
   userId: string;
   url: unknown;
   notifyOnCompletion: boolean;
+  // ショートカットから送られたときの連携キー。アプリから送ったときはnull。
+  shortcutCredentialId: string | null;
 };
 
 export type SubmitUrlImportJobResult = SubmitImportJobResult | { status: "invalidUrl" };
@@ -52,6 +54,7 @@ export const createUrlImportJobSubmission = (
           url: request.data.url,
           normalizedUrl,
           completionNotificationRequested: input.notifyOnCompletion,
+          shortcutCredentialId: input.shortcutCredentialId,
           aiUsage,
           now,
         }),

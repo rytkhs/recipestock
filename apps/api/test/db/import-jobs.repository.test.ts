@@ -31,6 +31,8 @@ describe("Import Job repository with Neon Postgres", () => {
 
   const aiUsage = { month: "2026-07", freeLimit: 10, proLimit: 300 };
 
+  const shortcutCredentialId = "dbtest_shortcut_credential";
+
   const createShortcutJob = (params: {
     id: string;
     userId: string;
@@ -43,9 +45,20 @@ describe("Import Job repository with Neon Postgres", () => {
       url: params.normalizedUrl ?? "https://example.com/recipe",
       normalizedUrl: params.normalizedUrl ?? "https://example.com/recipe",
       completionNotificationRequested: true,
+      shortcutCredentialId,
       aiUsage: params.aiUsage ?? aiUsage,
       now,
     });
+
+  it("ショートカットから作ったJobに、作ったときの連携キーを残す", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_shortcut_origin_user_${runId}`;
+
+    await createShortcutJob({ id: `dbtest_shortcut_origin_job_${runId}`, userId });
+
+    const [stored] = await db.select().from(importJobs).where(eq(importJobs.userId, userId));
+    expect(stored?.shortcutCredentialId).toBe(shortcutCredentialId);
+  });
 
   it("同一URLの同時送信は一つのactive Jobへ収束する", async () => {
     const runId = crypto.randomUUID();
@@ -81,6 +94,7 @@ describe("Import Job repository with Neon Postgres", () => {
       url: normalizedUrl,
       normalizedUrl,
       completionNotificationRequested: false,
+      shortcutCredentialId: null,
       aiUsage,
       now,
     });
@@ -99,6 +113,9 @@ describe("Import Job repository with Neon Postgres", () => {
         completionNotificationRequested: true,
       },
     });
+    // 経路は作った側のものなので、合流したショートカットの連携キーで書き換えない。
+    const [stored] = await db.select().from(importJobs).where(eq(importJobs.userId, userId));
+    expect(stored?.shortcutCredentialId).toBeNull();
   });
 
   it("Recipe上限時はImport Jobを残さない", async () => {
@@ -353,6 +370,7 @@ describe("Import Job repository with Neon Postgres", () => {
       url: sourceUrl,
       normalizedUrl: sourceUrl,
       completionNotificationRequested: false,
+      shortcutCredentialId: null,
       aiUsage,
       now,
     });

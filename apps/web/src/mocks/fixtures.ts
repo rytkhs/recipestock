@@ -496,6 +496,8 @@ export const shortcutCredentialFixture = (
   name: "iPhone",
   tokenSuffix: "0001",
   createdAt: "2026-06-01T00:00:00.000Z",
+  firstUsedAt: "2026-06-01T00:05:00.000Z",
+  lastUsedAt: "2026-06-20T09:00:00.000Z",
   ...overrides,
 });
 
@@ -508,6 +510,8 @@ export const linkedShortcutCredentialsFixture = (): ListShortcutCredentialsRespo
       name: "iPad",
       tokenSuffix: "0002",
       createdAt: "2025-12-20T00:00:00.000Z",
+      firstUsedAt: "2025-12-20T00:03:00.000Z",
+      lastUsedAt: "2026-05-02T12:00:00.000Z",
     }),
   ],
 });

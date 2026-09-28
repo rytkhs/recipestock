@@ -841,6 +841,8 @@ describe("Settings routes", () => {
                 name: "iPhone",
                 tokenSuffix: "aaaa",
                 createdAt: "2026-07-11T00:00:00.000Z",
+                firstUsedAt: null,
+                lastUsedAt: null,
               },
               token: `rssc_${"a".repeat(25)}`,
             },
@@ -1675,12 +1677,17 @@ describe("Settings routes", () => {
     expect(screen.queryByText(/共有したレシピ|手続き/)).not.toBeInTheDocument();
   });
 
-  const linkedCredential = (id: string, name: string) => ({
-    id,
-    name,
-    tokenSuffix: id.slice(-4),
-    createdAt: new Date().toISOString(),
-  });
+  const linkedCredential = (id: string, name: string) => {
+    const linkedAt = new Date().toISOString();
+    return {
+      id,
+      name,
+      tokenSuffix: id.slice(-4),
+      createdAt: linkedAt,
+      firstUsedAt: linkedAt,
+      lastUsedAt: linkedAt,
+    };
+  };
 
   const mockSettingsFetch = ({
     billing = null,

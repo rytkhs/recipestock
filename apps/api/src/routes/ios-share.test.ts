@@ -61,7 +61,9 @@ const createShortcutCredentialsFake = (): ShortcutCredentials => ({
   list: async () => [],
   revoke: async () => true,
   authenticate: async ({ token }) =>
-    token.startsWith("rssc_") ? { credentialId: "credential_1", userId: "user_1" } : null,
+    token.startsWith("rssc_")
+      ? { status: "active", credentialId: "credential_1", userId: "user_1" }
+      : { status: "unknown" },
 });
 
 const shortcutHeaders = {
@@ -126,6 +128,7 @@ describe("iOS Share routes", () => {
       url: "https://example.com/recipe",
       normalizedUrl: "https://example.com/recipe",
       completionNotificationRequested: true,
+      shortcutCredentialId: "credential_1",
       // 上限のenvが未設定のときはプラン定数へフォールバックする。
       aiUsage: { month: "2026-07", freeLimit: 10, proLimit: 300 },
       now: new Date("2026-07-11T00:00:00.000Z"),
@@ -223,7 +226,7 @@ describe("iOS Share routes", () => {
       await expect(response.json()).resolves.toMatchObject({
         outcome: "rejected",
         reason: "malformed_request",
-        notice: { openUrl: "https://app.example.com/settings/share" },
+        notice: { openUrl: "https://app.example.com/settings/share?reason=malformed_request" },
       });
     }
     expect(createUrlJob).not.toHaveBeenCalled();
@@ -328,41 +331,66 @@ describe("iOS Share routes", () => {
     expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401]);
   });
 
-  it("Bearerがない、無効、revoke済みの場合は再連携を促すnoticeを返す", async () => {
-    const revokedService = createShortcutCredentialsFake();
-    revokedService.authenticate = async () => null;
-    const app = createShortcutTestApp({ auth, shortcutCredentials: revokedService });
+  it("認証できないrequestは再連携を促すnoticeを返し、詰まった理由を分けて記録する", async () => {
+    const entries: LogEntry[] = [];
+    const sink = { write: (entry: LogEntry) => entries.push(entry) };
+    const revokedToken = `rssc_${"r".repeat(25)}`;
+    const credentials = createShortcutCredentialsFake();
+    credentials.authenticate = async ({ token }) =>
+      token === revokedToken
+        ? { status: "revoked", credentialId: "credential_old", userId: "user_1" }
+        : { status: "unknown" };
+    const app = createShortcutTestApp({
+      auth,
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
+      shortcutCredentials: credentials,
+    });
+    const requestWithAuthorization = (authorization?: string) => ({
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorization === undefined ? {} : { authorization }),
+      },
+      body: JSON.stringify({ input: "https://example.com/recipe" }),
+    });
 
-    const responses = await Promise.all([
-      app.request(
-        "/api/shortcut/import-jobs",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ input: "https://example.com/recipe" }),
-        },
-        env,
-      ),
-      app.request(
-        "/api/shortcut/import-jobs",
-        {
-          method: "POST",
-          headers: { ...shortcutHeaders, authorization: "Bearer invalid" },
-          body: JSON.stringify({ input: "https://example.com/recipe" }),
-        },
-        env,
-      ),
-      app.request("/api/shortcut/import-jobs", shareRequest(), env),
-    ]);
+    const responses = [];
+    for (const authorization of [
+      undefined,
+      // キーを貼らずに追加すると、Bearerの後ろが空になる。
+      "Bearer ",
+      "Bearer https://example.com/recipe",
+      `Bearer rssc_${"u".repeat(25)}`,
+      `Bearer ${revokedToken}`,
+    ]) {
+      responses.push(
+        await app.request(
+          "/api/shortcut/import-jobs",
+          requestWithAuthorization(authorization),
+          env,
+        ),
+      );
+    }
 
-    expect(responses.map((response) => response.status)).toEqual([200, 200, 200]);
     for (const response of responses) {
+      expect(response.status).toBe(200);
       await expect(response.json()).resolves.toMatchObject({
         outcome: "rejected",
         reason: "unauthorized",
-        notice: { openUrl: "https://app.example.com/settings/share" },
+        notice: { openUrl: "https://app.example.com/settings/share?reason=unauthorized" },
       });
     }
+    expect(
+      entries
+        .filter((entry) => entry.event === "ios_share_shortcut_import_submitted")
+        .map(({ authFailure, credentialId, userId }) => ({ authFailure, credentialId, userId })),
+    ).toEqual([
+      { authFailure: "missing_token", credentialId: undefined, userId: undefined },
+      { authFailure: "missing_token", credentialId: undefined, userId: undefined },
+      { authFailure: "malformed_token", credentialId: undefined, userId: undefined },
+      { authFailure: "unknown_token", credentialId: undefined, userId: undefined },
+      { authFailure: "revoked_token", credentialId: "credential_old", userId: "user_1" },
+    ]);
   });
 
   it("active Jobを再利用すると通知要求だけを有効にしQueueへ追加しない", async () => {
@@ -550,7 +578,7 @@ describe("iOS Share routes", () => {
    * 1requestごとにhash照合のDBアクセスを起こすため、認証前にも上限を置く。
    */
   it("認証に失敗するrequestを認証へ到達する前にrate limitする", async () => {
-    const authenticate = vi.fn(async () => null);
+    const authenticate = vi.fn(async () => ({ status: "unknown" as const }));
     const clientRateLimiter = createRateLimiter(false);
     const app = createShortcutTestApp({
       auth,

@@ -98,6 +98,7 @@ describe("Import job routes", () => {
       url: "https://example.com:443/recipe?utm_source=x#step",
       normalizedUrl: "https://example.com/recipe",
       completionNotificationRequested: false,
+      shortcutCredentialId: null,
       aiUsage: { month: "2026-06", freeLimit: 10, proLimit: 300 },
       now: new Date("2026-06-01T00:00:00.000Z"),
     });

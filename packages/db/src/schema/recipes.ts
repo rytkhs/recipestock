@@ -49,6 +49,9 @@ export const importJobs = pgTable(
     completionNotificationSentAt: timestamp("completion_notification_sent_at", {
       withTimezone: true,
     }),
+    // ショートカットから作ったJobだけが持つ、作ったときの連携キー。取り込みの経路を数えるためだけに使う。
+    // 同じURLのactive Jobへ合流したときは、作った側の値を書き換えない。
+    shortcutCredentialId: text("shortcut_credential_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),

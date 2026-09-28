@@ -29,12 +29,15 @@ const createRepository = () => {
       record.revokedAt = now;
       return true;
     },
-    async authenticate({ tokenHash }) {
-      const record = records.find(
-        (candidate) => candidate.tokenHash === tokenHash && !candidate.revokedAt,
-      );
-      if (!record) return null;
-      return { credentialId: record.id, userId: record.userId };
+    async authenticate({ tokenHash, now }) {
+      const record = records.find((candidate) => candidate.tokenHash === tokenHash);
+      if (!record) return { status: "unknown" };
+      if (record.revokedAt) {
+        return { status: "revoked", credentialId: record.id, userId: record.userId };
+      }
+      record.firstUsedAt ??= now;
+      record.lastUsedAt = now;
+      return { status: "active", credentialId: record.id, userId: record.userId };
     },
   };
   return { records, repository };
@@ -64,6 +67,8 @@ describe("Shortcut credentials Module", () => {
         name: "iPhone",
         tokenSuffix: "aaaa",
         createdAt: issuedAt.toISOString(),
+        firstUsedAt: null,
+        lastUsedAt: null,
       },
       token: `rssc_${"a".repeat(25)}`,
     });
@@ -71,7 +76,7 @@ describe("Shortcut credentials Module", () => {
     expect(state.records[0]?.tokenSuffix).toBe("aaaa");
   });
 
-  it("認証成功時にcredentialId/userIdを返す", async () => {
+  it("認証を通したキーは、使った時刻を一覧に出す", async () => {
     const state = createRepository();
     let currentDate = issuedAt;
     const token = `rssc_${"b".repeat(25)}`;
@@ -85,9 +90,16 @@ describe("Shortcut credentials Module", () => {
 
     currentDate = usedAt;
     await expect(credentials.authenticate({ token })).resolves.toEqual({
+      status: "active",
       credentialId: "credential_1",
       userId: "user_1",
     });
+    await expect(credentials.list("user_1")).resolves.toEqual([
+      expect.objectContaining({
+        firstUsedAt: usedAt.toISOString(),
+        lastUsedAt: usedAt.toISOString(),
+      }),
+    ]);
   });
 
   it("一覧はactive credentialだけを返し、revoke後のtokenを拒否する", async () => {
@@ -108,6 +120,10 @@ describe("Shortcut credentials Module", () => {
       credentials.revoke({ credentialId: "credential_1", userId: "user_1" }),
     ).resolves.toBe(true);
     await expect(credentials.list("user_1")).resolves.toEqual([]);
-    await expect(credentials.authenticate({ token })).resolves.toBeNull();
+    await expect(credentials.authenticate({ token })).resolves.toEqual({
+      status: "revoked",
+      credentialId: "credential_1",
+      userId: "user_1",
+    });
   });
 });
