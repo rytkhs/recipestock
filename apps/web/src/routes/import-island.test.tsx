@@ -548,6 +548,40 @@ describe("取り込みのアイランド", () => {
     });
   });
 
+  it("最後の1件を取り消せなかったら、一覧を開いたまま知らせ、開き直したときには残さない", async () => {
+    mockRecentJobs(() => [recentJob()], {
+      handler: (input, init) =>
+        getRequestPath(input) === "/api/import/jobs/job_123/cancel" && init?.method === "PATCH"
+          ? jsonResponse(
+              { error: { code: "unknown", message: "Failed to cancel import job." } },
+              { status: 500 },
+            )
+          : undefined,
+    });
+
+    await renderApp("/recipes");
+
+    const panel = await openPanel();
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "example.comの取り込みを取り消す" }),
+    );
+
+    await expect(within(panel).findByRole("alert")).resolves.toHaveTextContent(
+      "取り消せませんでした。",
+    );
+    expect(
+      within(panel).getByRole("button", { name: "example.comの取り込みを取り消す" }),
+    ).toBeEnabled();
+
+    await userEvent.click(within(panel).getByRole("button", { name: "取り込みの一覧を閉じる" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    const reopenedPanel = await openPanel();
+    expect(within(reopenedPanel).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("入力の画面では出さず、ほかの画面では出す", async () => {
     mockRecentJobs(() => [recentJob()], {
       handler: (input) =>

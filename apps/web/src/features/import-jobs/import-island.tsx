@@ -395,6 +395,7 @@ const ImportJobRow = ({ island, job }: { island: ImportIslandState; job: RecentI
           <Button
             aria-label={`${source.label}の取り込みを取り消す`}
             className="shrink-0 text-brand-muted"
+            disabled={island.cancelingJobId === job.id}
             size="sm"
             variant="ghost"
             onClick={() => island.cancelJob(job.id)}

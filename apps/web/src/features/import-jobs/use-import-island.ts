@@ -57,7 +57,7 @@ export const useImportIsland = ({
   const view = useMemo(() => deriveImportIslandView(jobs), [jobs]);
   const isVisible = isShown && hasImportIslandContent(view);
   const highlightedJobId = useHighlightedImportJobId();
-  const [isPanelOpen, setPanelOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isHeld, setIsHeld] = useState(false);
   const shownPathname = isVisible ? pathname : null;
   const [lastShownPathname, setLastShownPathname] = useState(shownPathname);
@@ -67,13 +67,22 @@ export const useImportIsland = ({
   // アイランドから開いてアイランドが消えたときは、pointerleaveもblurも届かないので、ここで解く。
   if (lastShownPathname !== shownPathname) {
     setLastShownPathname(shownPathname);
-    setPanelOpen(false);
+    setIsPanelOpen(false);
     setIsHeld(false);
   }
 
   const [announcement, setAnnouncement] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const observedStatusesRef = useRef(new Map<string, ImportJobStatus>());
+
+  // 操作できなかったことは、その操作をした一覧の中でだけ知らせる。開き直したときに前の失敗を残さない。
+  const setPanelOpen = useCallback((open: boolean) => {
+    if (open) {
+      setActionError(null);
+    }
+
+    setIsPanelOpen(open);
+  }, []);
 
   // 読み直しの途中で消したjobが戻ってこないよう、進行中の取得を止めてから外す。
   const hideJob = useCallback(
@@ -93,22 +102,19 @@ export const useImportIsland = ({
     onMutate: hideJob,
     onSettled: refreshJobs,
   });
-  const { mutate: cancelJob } = useMutation({
+  // 取り消せたと分かってから外す。先に外すと、最後の1件ではアイランドごと一覧が閉じ、取り消せなかったことを知らせられない。
+  const cancelMutation = useMutation({
     mutationFn: cancelImportJob,
-    onMutate: async (jobId) => {
-      setActionError(null);
-      await hideJob(jobId);
-    },
+    onMutate: () => setActionError(null),
     // 取り消す前に終わっていたら、その結果を出し直す。
-    onSuccess: async ({ job }) => {
-      if (job.status !== "canceled") {
+    onSuccess: async ({ job }, jobId) => {
+      if (job.status === "canceled") {
+        await hideJob(jobId);
+      } else {
         await refreshJobs();
       }
     },
-    onError: async () => {
-      setActionError("取り消せませんでした。");
-      await refreshJobs();
-    },
+    onError: () => setActionError("取り消せませんでした。"),
   });
   const retryMutation = useMutation({
     mutationFn: retryImportUrlJob,
@@ -183,7 +189,8 @@ export const useImportIsland = ({
     announcement,
     actionError,
     dismissJob,
-    cancelJob,
+    cancelJob: cancelMutation.mutate,
+    cancelingJobId: cancelMutation.isPending ? cancelMutation.variables : undefined,
     retryUrlJob: retryMutation.mutate,
     isRetrying: retryMutation.isPending,
   };
