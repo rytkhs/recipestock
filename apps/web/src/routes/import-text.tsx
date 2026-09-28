@@ -1,7 +1,7 @@
 import { CaretLeft, ClipboardText, X } from "@phosphor-icons/react";
 import { IMPORT_TEXT_MAX_LENGTH, importTextRequestSchema } from "@recipestock/schemas";
 import { extractFirstUrl } from "@recipestock/shared";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -14,10 +14,12 @@ import { PlanLink } from "../features/billing/plan-link";
 import { isResolvedByUpgrade } from "../features/billing/plan-state";
 import {
   createImportTextJob,
+  describeImportSource,
   fetchImportJob,
   getCreateImportTextJobErrorMessage,
   importJobQueryKeys,
   retryImportTextJob,
+  showSubmittedImportJob,
 } from "../features/import-jobs";
 import { ApiClientError } from "../lib/api";
 import { useGoBack } from "../lib/navigation";
@@ -43,13 +45,17 @@ export const ImportTextRoute = ({ search = {} }: { search?: ImportTextSearch }) 
     return <ImportTextSkeleton />;
   }
 
+  const job = retryJob.data?.job;
   const initialText = retryJob.data?.sourceText ?? "";
 
+  // URLから読めなかったjobからは、ページの本文を貼って取り込み直す。元のURLは出典として残す。
   return (
     <ImportTextForm
       initialText={initialText}
-      isSourceTextUnavailable={Boolean(retryJobId) && initialText === ""}
+      isSourceTextUnavailable={Boolean(retryJobId) && job?.kind !== "url" && initialText === ""}
       retryJobId={retryJobId}
+      sourceUrl={job?.url ?? undefined}
+      unreadableSourceLabel={job?.kind === "url" ? describeImportSource(job).label : undefined}
     />
   );
 };
@@ -58,12 +64,17 @@ const ImportTextForm = ({
   initialText,
   isSourceTextUnavailable,
   retryJobId,
+  sourceUrl,
+  unreadableSourceLabel,
 }: {
   initialText: string;
   isSourceTextUnavailable: boolean;
   retryJobId?: string;
+  sourceUrl?: string;
+  unreadableSourceLabel?: string;
 }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const goBack = useGoBack({ to: "/recipes" });
   const [text, setText] = useState(initialText);
   // 上限のエラーのうち、プランを変えれば直るものにだけプランのページへの入口を添える。
@@ -110,11 +121,12 @@ const ImportTextForm = ({
     setIsSubmitting(true);
 
     try {
-      if (retryJobId) {
-        await retryImportTextJob({ jobId: retryJobId, text: request.data.text });
-      } else {
-        await createImportTextJob(request.data.text);
-      }
+      showSubmittedImportJob(
+        queryClient,
+        retryJobId
+          ? await retryImportTextJob({ jobId: retryJobId, text: request.data.text, sourceUrl })
+          : await createImportTextJob(request.data.text),
+      );
 
       // 取り込み状況は一覧に出す。取り込みの画面は履歴から外し、一覧から戻っても着かないようにする。
       await navigate({ to: "/recipes", replace: true });
@@ -146,6 +158,21 @@ const ImportTextForm = ({
         {isSourceTextUnavailable ? (
           <p className="mt-2 text-brand-muted text-sm">
             元のテキストを読み込めませんでした。もう一度貼り付けてください。
+          </p>
+        ) : null}
+        {unreadableSourceLabel ? (
+          <div className="mt-3 rounded-[14px] border border-brand-line-soft bg-brand-paper-muted p-3">
+            <p className="font-semibold text-brand-ink text-sm">
+              {`${unreadableSourceLabel}の内容を読み取れませんでした`}
+            </p>
+            <p className="mt-1 text-brand-muted text-sm">
+              投稿の説明文やページの本文をコピーして貼り付けると、そこから取り込めます。
+            </p>
+          </div>
+        ) : null}
+        {sourceUrl ? (
+          <p className="mt-2 text-brand-muted text-xs">
+            {`出典：${describeImportSource({ kind: "url", url: sourceUrl, textPreview: null }).label}`}
           </p>
         ) : null}
         <div className="mt-4 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">

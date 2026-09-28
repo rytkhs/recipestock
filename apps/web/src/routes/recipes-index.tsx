@@ -1,6 +1,4 @@
 import {
-  CaretRight,
-  CheckCircle,
   CookingPot,
   GearSix,
   List,
@@ -10,11 +8,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import {
-  MAX_RECIPE_TAGS,
-  type RecentImportJobsResponse,
-  type RecipeListSort,
-} from "@recipestock/schemas";
+import { MAX_RECIPE_TAGS, type RecipeListSort } from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -48,22 +42,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { RecipeCardSkeleton } from "../components/loading";
-import { PlanLink } from "../features/billing/plan-link";
-import { derivePlanState, isStillResolvedByUpgrade } from "../features/billing/plan-state";
-import {
-  dismissFinishedImportJob,
-  fetchRecentImportJobs,
-  getImportJobFailureMessage,
-  hasActiveImportJob,
-  importJobQueryKeys,
-  retryImportUrlJob,
-} from "../features/import-jobs";
-import {
-  deleteRecipe,
-  invalidateRecipeLists,
-  recipeListQueryOptions,
-  syncDeletedRecipeCaches,
-} from "../features/recipes";
+import { deleteRecipe, recipeListQueryOptions, syncDeletedRecipeCaches } from "../features/recipes";
 import { writeRecipeListSort } from "../features/recipes/list-search";
 import { LockedShelfNotice, RecipeCard } from "../features/recipes/recipe-card";
 import { groupRecipesByPeriod, recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
@@ -74,12 +53,10 @@ import {
 } from "../features/recipes/view-mode";
 import { listTags, tagsQueryKeys } from "../features/tags";
 import { TagFilterBar } from "../features/tags/tag-filter-bar";
-import { useViewer } from "../lib/viewer";
 
 // routeには遅延読み込みのcomponentをそのまま渡し、routerに画面のコードを先読みさせる。
 // そのため並び順はpropsではなく、ここでrouteから読む。
 const recipesRouteApi = getRouteApi("/_protected/recipes");
-const importJobSuccessDismissDelayMs = 4000;
 const nextPageRootMargin = "480px 0px";
 const gridRecipeSkeletonKeys = [
   "grid-recipe-skeleton-1",
@@ -98,216 +75,6 @@ const listRecipeSkeletonKeys = [
   "list-recipe-skeleton-4",
   "list-recipe-skeleton-5",
 ];
-
-const ImportJobIsland = () => {
-  const queryClient = useQueryClient();
-  const viewer = useViewer({ enabled: true });
-  const planState = viewer.data ? derivePlanState(viewer.data) : undefined;
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
-  const observedSuccessIdsRef = useRef(new Set<string>());
-  const successTimersRef = useRef(new Map<string, number>());
-  const { data } = useQuery({
-    queryKey: importJobQueryKeys.recent(),
-    queryFn: fetchRecentImportJobs,
-    refetchInterval: (query) => (hasActiveImportJob(query.state.data?.jobs ?? []) ? 2500 : false),
-  });
-  const dismissMutation = useMutation({
-    mutationFn: dismissFinishedImportJob,
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
-    },
-  });
-  const retryMutation = useMutation({
-    mutationFn: retryImportUrlJob,
-    onSuccess: async () => {
-      setRetryError(null);
-      await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
-    },
-    onError: () => {
-      setRetryError("再試行を開始できませんでした。");
-    },
-  });
-  const jobs = data?.jobs ?? [];
-
-  const dismissImportJob = useCallback(
-    (jobId: string) => {
-      const timer = successTimersRef.current.get(jobId);
-      if (timer) {
-        window.clearTimeout(timer);
-        successTimersRef.current.delete(jobId);
-      }
-      queryClient.setQueryData<RecentImportJobsResponse>(importJobQueryKeys.recent(), (current) =>
-        current
-          ? {
-              ...current,
-              jobs: current.jobs.filter((job) => job.id !== jobId),
-            }
-          : current,
-      );
-      dismissMutation.mutate(jobId);
-    },
-    [dismissMutation, queryClient],
-  );
-
-  useEffect(() => {
-    return () => {
-      for (const timer of successTimersRef.current.values()) {
-        window.clearTimeout(timer);
-      }
-      successTimersRef.current.clear();
-    };
-  }, []);
-
-  useEffect(() => {
-    for (const job of jobs) {
-      if (job.status !== "succeeded" || observedSuccessIdsRef.current.has(job.id)) {
-        continue;
-      }
-
-      observedSuccessIdsRef.current.add(job.id);
-      void invalidateRecipeLists(queryClient);
-      const timer = window.setTimeout(() => {
-        successTimersRef.current.delete(job.id);
-        dismissImportJob(job.id);
-      }, importJobSuccessDismissDelayMs);
-      successTimersRef.current.set(job.id, timer);
-    }
-  }, [dismissImportJob, jobs, queryClient]);
-
-  if (jobs.length === 0) {
-    return null;
-  }
-
-  const activeJobs = jobs.filter((job) => job.status === "queued" || job.status === "running");
-  const failedJobs = jobs.filter((job) => job.status === "failed");
-  const succeededJobs = jobs.filter((job) => job.status === "succeeded");
-  const summary = [
-    activeJobs.length > 0 ? `${activeJobs.length}件を取り込み中` : null,
-    failedJobs.length > 0 ? `${failedJobs.length}件取り込めませんでした` : null,
-    succeededJobs.length > 0 ? `${succeededJobs.length}件保存しました` : null,
-  ]
-    .filter(Boolean)
-    .join("・");
-  const hasFailure = failedJobs.length > 0;
-  const hasActive = activeJobs.length > 0;
-
-  return (
-    <div
-      className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 mx-auto max-w-[520px] rounded-[20px] border border-brand-line-soft bg-brand-paper/95 text-sm shadow-pantry backdrop-blur-xl sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-[76px] sm:w-[min(520px,calc(100vw-2rem))] sm:-translate-x-1/2"
-      role={hasFailure ? "alert" : "status"}
-    >
-      <button
-        aria-expanded={isExpanded}
-        className="flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left"
-        type="button"
-        onClick={() => setIsExpanded((current) => !current)}
-      >
-        <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-            hasFailure
-              ? "bg-brand-danger/10 text-brand-danger"
-              : hasActive
-                ? "bg-brand-orange-soft/60 text-brand-orange"
-                : "bg-brand-sage-soft text-brand-sage-dark"
-          }`}
-        >
-          {hasActive && !hasFailure ? <Spinner aria-hidden="true" role="presentation" /> : null}
-          {!hasActive && !hasFailure ? <CheckCircle size={19} weight="fill" /> : null}
-          {hasFailure ? <WarningCircle size={19} weight="fill" /> : null}
-        </div>
-
-        <p className="min-w-0 flex-1 truncate font-semibold text-brand-ink text-sm">{summary}</p>
-        <CaretRight
-          className={`shrink-0 text-brand-muted transition-transform ${isExpanded ? "rotate-90" : ""}`}
-          size={17}
-          weight="bold"
-        />
-      </button>
-
-      {isExpanded ? (
-        <div className="max-h-[min(55vh,420px)] overflow-y-auto border-brand-line-soft border-t px-3 py-2">
-          {jobs.map((job) => {
-            const isActive = job.status === "queued" || job.status === "running";
-            const isFailed = job.status === "failed";
-            const isSucceeded = job.status === "succeeded";
-            const status =
-              job.status === "queued"
-                ? "取り込み待ち"
-                : job.status === "running"
-                  ? "取り込み中"
-                  : isFailed
-                    ? "取り込めませんでした"
-                    : "保存しました";
-            const label = job.kind === "text" ? (job.textPreview ?? "貼り付けたテキスト") : job.url;
-            // 上限で止まったものは、今も上限にいれば再試行しても同じ理由で止まる。直せる先へ案内する。
-            const needsPlanChange = isFailed && isStillResolvedByUpgrade(job.errorCode, planState);
-
-            return (
-              <div
-                className="flex min-w-0 items-center gap-3 rounded-[14px] px-2 py-2"
-                key={job.id}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-brand-ink text-xs">{status}</p>
-                  <p className="mt-0.5 truncate text-brand-muted text-xs">
-                    {isFailed ? getImportJobFailureMessage(job) : label}
-                  </p>
-                </div>
-                {isSucceeded && job.recipeId ? (
-                  <Link
-                    className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
-                    params={{ recipeId: job.recipeId }}
-                    to="/recipes/$recipeId"
-                    onClick={() => dismissImportJob(job.id)}
-                  >
-                    開く
-                  </Link>
-                ) : null}
-                {needsPlanChange ? <PlanLink variant="default" /> : null}
-                {isFailed && !needsPlanChange && job.kind === "text" ? (
-                  <Link
-                    className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
-                    search={{ fromJob: job.id }}
-                    to="/import/text"
-                  >
-                    再試行
-                  </Link>
-                ) : null}
-                {isFailed && !needsPlanChange && job.kind === "url" ? (
-                  <Button
-                    className="shrink-0"
-                    disabled={!job.url || retryMutation.isPending}
-                    size="sm"
-                    onClick={() => retryMutation.mutate(job)}
-                  >
-                    再試行
-                  </Button>
-                ) : null}
-                {!isActive ? (
-                  <Button
-                    aria-label={`${label ?? status}を閉じる`}
-                    className="shrink-0"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => dismissImportJob(job.id)}
-                  >
-                    <X weight="bold" />
-                  </Button>
-                ) : null}
-              </div>
-            );
-          })}
-          {retryError ? (
-            <p className="px-2 pb-1 text-brand-danger text-xs" role="alert">
-              {retryError}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-};
 
 // URLにタグの指定がないときに使う。描画のたびに新しい配列にすると、条件が変わったと見なされる。
 const noTagIds: string[] = [];
@@ -691,8 +458,6 @@ export const RecipesIndexRoute = () => {
           </Button>
         </div>
       ) : null}
-
-      <ImportJobIsland />
 
       {error ? (
         <div className="mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-4">
