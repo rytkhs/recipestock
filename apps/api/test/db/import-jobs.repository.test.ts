@@ -1,5 +1,5 @@
 import { neonConfig } from "@neondatabase/serverless";
-import { aiUsageMonthly, appUsers, createDb, importJobs } from "@recipestock/db";
+import { aiUsageMonthly, appUsers, createDb, importJobs, recipes } from "@recipestock/db";
 import { PLAN_LIMITS } from "@recipestock/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -202,12 +202,18 @@ describe("Import Job repository with Neon Postgres", () => {
 
   const sourceText = "鶏むね肉のレモン煮\n鶏むね肉 300g";
 
-  const createTextJob = (params: { id: string; userId: string; sourceTextDigest?: string }) =>
+  const createTextJob = (params: {
+    id: string;
+    userId: string;
+    sourceTextDigest?: string;
+    sourceUrl?: string;
+  }) =>
     repository.createTextJob({
       id: params.id,
       userId: params.userId,
       sourceText,
       sourceTextDigest: params.sourceTextDigest ?? "digest_lemon_chicken",
+      sourceUrl: params.sourceUrl ?? null,
       aiUsage,
       now,
     });
@@ -329,5 +335,157 @@ describe("Import Job repository with Neon Postgres", () => {
       dismissedAt: now,
       sourceText,
     });
+  });
+
+  it("出典URLを持つテキストJobは、同じURLのURL取り込みを止めない", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_text_source_user_${runId}`;
+    const sourceUrl = "https://www.instagram.com/p/dbtest/";
+
+    const textJob = await createTextJob({
+      id: `dbtest_text_source_job_${runId}`,
+      userId,
+      sourceUrl,
+    });
+    const urlJob = await repository.createUrlJob({
+      id: `dbtest_text_source_url_job_${runId}`,
+      userId,
+      url: sourceUrl,
+      normalizedUrl: sourceUrl,
+      completionNotificationRequested: false,
+      aiUsage,
+      now,
+    });
+
+    expect(textJob).toMatchObject({
+      status: "created",
+      job: { url: sourceUrl, normalizedUrl: null },
+    });
+    expect(urlJob.status).toBe("created");
+  });
+
+  it("取り消したJobはRecipeを作らず、最近のJobにも出ず、同じURLをすぐ送り直せる", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_cancel_user_${runId}`;
+    const jobId = `dbtest_cancel_job_${runId}`;
+    const recipeId = `dbtest_cancel_recipe_${runId}`;
+    const expiresBefore = new Date(now.getTime() - 60_000);
+    const completingRepository = createImportJobRepository(db, { proPriceId: "price_dbtest" });
+
+    await createShortcutJob({ id: jobId, userId });
+    await repository.claimQueuedJob({ jobId, recipeId, expiresBefore, now });
+
+    await expect(repository.cancelJob({ userId, jobId, now })).resolves.toMatchObject({
+      status: "canceled",
+      finishedAt: now,
+      dismissedAt: now,
+    });
+    await expect(
+      completingRepository.completeJobWithRecipe({
+        jobId,
+        expiresBefore,
+        now,
+        recipe: {
+          id: recipeId,
+          userId,
+          title: "鶏むね肉のレモン煮",
+          content: {
+            title: "鶏むね肉のレモン煮",
+            referenceImages: [],
+            ingredientGroups: [],
+            steps: [],
+          },
+          originType: "url",
+          sourceUrl: "https://example.com/recipe",
+          normalizedSourceUrl: "https://example.com/recipe",
+          sourceName: "Example",
+          searchText: "鶏むね肉のレモン煮",
+          createdAt: now,
+          updatedAt: now,
+        },
+      }),
+    ).resolves.toEqual({ status: "inactive" });
+
+    await expect(db.select().from(recipes).where(eq(recipes.userId, userId))).resolves.toEqual([]);
+    await expect(repository.listRecentJobs(userId)).resolves.toEqual([]);
+    await expect(
+      createShortcutJob({ id: `dbtest_cancel_resubmit_job_${runId}`, userId }),
+    ).resolves.toMatchObject({ status: "created" });
+  });
+
+  it("終わっていたJobは取り消しても変えずに返す", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_cancel_finished_user_${runId}`;
+    const jobId = `dbtest_cancel_finished_job_${runId}`;
+
+    await createShortcutJob({ id: jobId, userId });
+    await repository.markJobFailed({
+      jobId,
+      errorCode: "fetch_failed",
+      errorMessage: "Fetch failed.",
+      now,
+    });
+
+    await expect(repository.cancelJob({ userId, jobId, now })).resolves.toMatchObject({
+      status: "failed",
+      errorCode: "fetch_failed",
+      dismissedAt: null,
+    });
+    await expect(
+      repository.cancelJob({ userId: `dbtest_cancel_other_user_${runId}`, jobId, now }),
+    ).resolves.toBeNull();
+  });
+
+  it("成功したJobには作ったRecipeの題名を添え、表紙はロックされない新しい範囲のRecipeにだけ添える", async () => {
+    const runId = crypto.randomUUID();
+    const userId = `dbtest_recent_recipe_user_${runId}`;
+    const coverImage = { objectKey: `recipes/${userId}/cover.jpg`, width: 1200, height: 800 };
+    const insertRecipe = (id: string, createdAt: Date) =>
+      db.insert(recipes).values({
+        id,
+        userId,
+        title: id,
+        content: { title: id, coverImage, referenceImages: [], ingredientGroups: [], steps: [] },
+        searchText: id,
+        createdAt,
+        updatedAt: createdAt,
+      });
+    const succeedJob = async (jobId: string, recipeId: string) => {
+      await createTextJob({ id: jobId, userId, sourceTextDigest: jobId });
+      await repository.claimQueuedJob({
+        jobId,
+        recipeId,
+        expiresBefore: new Date(now.getTime() - 60_000),
+        now,
+      });
+      await repository.markJobSucceeded({ jobId, recipeId, now });
+    };
+    const oldRecipeId = `dbtest_recent_old_recipe_${runId}`;
+    const newRecipeId = `dbtest_recent_new_recipe_${runId}`;
+
+    await insertRecipe(oldRecipeId, new Date(now.getTime() - 60 * 60_000));
+    for (let index = 0; index < PLAN_LIMITS.free.savedRecipes - 1; index += 1) {
+      await insertRecipe(`dbtest_recent_newer_recipe_${index}_${runId}`, now);
+    }
+    await insertRecipe(newRecipeId, new Date(now.getTime() + 60_000));
+    await succeedJob(`dbtest_recent_old_job_${runId}`, oldRecipeId);
+    await succeedJob(`dbtest_recent_new_job_${runId}`, newRecipeId);
+    await createTextJob({
+      id: `dbtest_recent_running_job_${runId}`,
+      userId,
+      sourceTextDigest: `running_${runId}`,
+    });
+
+    const jobs = await repository.listRecentJobs(userId);
+
+    expect(jobs.find((job) => job.recipeId === newRecipeId)?.recipe).toEqual({
+      title: newRecipeId,
+      coverImageObjectKey: coverImage.objectKey,
+    });
+    expect(jobs.find((job) => job.recipeId === oldRecipeId)?.recipe).toEqual({
+      title: oldRecipeId,
+      coverImageObjectKey: null,
+    });
+    expect(jobs.find((job) => job.status === "queued")?.recipe).toBeNull();
   });
 });

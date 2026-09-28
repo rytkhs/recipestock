@@ -1,9 +1,10 @@
-import { type DbClient, importJobs } from "@recipestock/db";
+import { type DbClient, importJobs, recipes } from "@recipestock/db";
 import {
   type ImportErrorCode,
   type ImportJobKind,
   type ImportJobStatus,
   type ImportJobSummary,
+  type RecentImportJob,
 } from "@recipestock/schemas";
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
@@ -26,12 +27,15 @@ import {
   finalizeRecipeDraftImages,
   RecipeImageFinalizeError,
 } from "./recipe-images";
+import { createRecipeThumbnailUrl } from "./recipe-thumbnails";
 import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
+  isUnlockedOnFree,
   type NewRecipeRecord,
   normalizeRecipeSource,
   type RecipeRepository,
+  recipeCoverImageObjectKey,
 } from "./recipes";
 import { type AiUsageConsumptionRepository } from "./usage";
 
@@ -53,6 +57,19 @@ export type ImportJobRecord = {
   startedAt: Date | null;
   finishedAt: Date | null;
   updatedAt: Date;
+};
+
+/**
+ * 成功したJobが作ったRecipeのうち、取り込み状況に添えて見せる部分。
+ * `coverImageObjectKey`はロックされうるRecipeではnullにしてある。
+ */
+export type ImportedRecipePreviewRecord = {
+  title: string;
+  coverImageObjectKey: string | null;
+};
+
+export type RecentImportJobRecord = ImportJobRecord & {
+  recipe: ImportedRecipePreviewRecord | null;
 };
 
 export type CreateImportJobResult =
@@ -104,10 +121,11 @@ export type ImportJobRepository = {
     userId: string;
     sourceText: string;
     sourceTextDigest: string;
+    sourceUrl: string | null;
     aiUsage: ImportJobAiUsageLimits;
     now: Date;
   }): Promise<CreateImportJobResult>;
-  listRecentJobs(userId: string): Promise<ImportJobRecord[]>;
+  listRecentJobs(userId: string): Promise<RecentImportJobRecord[]>;
   getJob(userId: string, jobId: string): Promise<ImportJobRecord | null>;
   getJobById(jobId: string): Promise<ImportJobRecord | null>;
   expireActiveJobsForUser(params: {
@@ -137,6 +155,10 @@ export type ImportJobRepository = {
   }): Promise<void>;
   markCompletionNotificationSent(params: { jobId: string; now: Date }): Promise<boolean>;
   dismissJob(params: { userId: string; jobId: string; now: Date }): Promise<ImportJobRecord | null>;
+  /**
+   * activeなJobを取り消して閉じる。終わっていたJobは変えずにそのまま返す。
+   */
+  cancelJob(params: { userId: string; jobId: string; now: Date }): Promise<ImportJobRecord | null>;
 };
 
 type ImportJobSqlRow = {
@@ -203,6 +225,18 @@ export const toImportJobSummary = (job: ImportJobRecord): ImportJobSummary => ({
   finishedAt: job.finishedAt?.toISOString() ?? null,
 });
 
+export const toRecentImportJob = (job: RecentImportJobRecord): RecentImportJob => ({
+  ...toImportJobSummary(job),
+  recipe: job.recipe
+    ? {
+        title: job.recipe.title,
+        coverImageUrl: job.recipe.coverImageObjectKey
+          ? createRecipeThumbnailUrl({ objectKey: job.recipe.coverImageObjectKey })
+          : null,
+      }
+    : null,
+});
+
 const mapImportJobRow = (row: typeof importJobs.$inferSelect): ImportJobRecord => ({
   id: row.id,
   userId: row.userId,
@@ -248,7 +282,7 @@ const mapImportJobSqlRow = (row: ImportJobSqlRow): ImportJobRecord => ({
 
 type NewImportJobInput =
   | { kind: "url"; url: string; normalizedUrl: string }
-  | { kind: "text"; sourceText: string; sourceTextDigest: string };
+  | { kind: "text"; sourceText: string; sourceTextDigest: string; sourceUrl: string | null };
 
 /**
  * 投稿時の判定をURLとテキストで共有する。active Jobの再利用、保存上限、AI上限の順に単一SQLで
@@ -281,7 +315,7 @@ const createImportJobWithSubmissionLimits = async (
   }
 
   const nowIso = now.toISOString();
-  const url = input.kind === "url" ? input.url : null;
+  const url = input.kind === "url" ? input.url : input.sourceUrl;
   const normalizedUrl = input.kind === "url" ? input.normalizedUrl : null;
   const sourceText = input.kind === "text" ? input.sourceText : null;
   const sourceTextDigest = input.kind === "text" ? input.sourceTextDigest : null;
@@ -566,6 +600,16 @@ const createImportJobWithSubmissionLimits = async (
   throw new Error("Could not resolve concurrent import job submission.");
 };
 
+const getUserImportJob = async (db: DbClient, userId: string, jobId: string) => {
+  const [row] = await db
+    .select()
+    .from(importJobs)
+    .where(and(eq(importJobs.userId, userId), eq(importJobs.id, jobId)))
+    .limit(1);
+
+  return row ? mapImportJobRow(row) : null;
+};
+
 export const createImportJobRepository = (
   db: DbClient,
   planSyncOptions?: AppUserPlanSyncOptions,
@@ -588,11 +632,11 @@ export const createImportJobRepository = (
       now,
     });
   },
-  async createTextJob({ id, userId, sourceText, sourceTextDigest, aiUsage, now }) {
+  async createTextJob({ id, userId, sourceText, sourceTextDigest, sourceUrl, aiUsage, now }) {
     return createImportJobWithSubmissionLimits(db, planSyncOptions, {
       id,
       userId,
-      input: { kind: "text", sourceText, sourceTextDigest },
+      input: { kind: "text", sourceText, sourceTextDigest, sourceUrl },
       completionNotificationRequested: false,
       aiUsage,
       now,
@@ -600,8 +644,22 @@ export const createImportJobRepository = (
   },
   async listRecentJobs(userId) {
     const rows = await db
-      .select()
+      .select({
+        job: importJobs,
+        recipeTitle: recipes.title,
+        coverImageObjectKey: recipeCoverImageObjectKey,
+        // planを引かずに済むよう、どのplanでもロックされない新しい範囲のRecipeにだけ表紙を添える。
+        coverUnlocked: isUnlockedOnFree(db, userId),
+      })
       .from(importJobs)
+      .leftJoin(
+        recipes,
+        and(
+          eq(importJobs.status, "succeeded"),
+          eq(recipes.userId, importJobs.userId),
+          eq(recipes.id, importJobs.recipeId),
+        ),
+      )
       .where(
         and(
           eq(importJobs.userId, userId),
@@ -620,16 +678,19 @@ export const createImportJobRepository = (
         desc(importJobs.id),
       );
 
-    return rows.map(mapImportJobRow);
+    return rows.map(({ job, recipeTitle, coverImageObjectKey, coverUnlocked }) => ({
+      ...mapImportJobRow(job),
+      recipe:
+        recipeTitle === null
+          ? null
+          : {
+              title: recipeTitle,
+              coverImageObjectKey: coverUnlocked ? coverImageObjectKey : null,
+            },
+    }));
   },
   async getJob(userId, jobId) {
-    const [row] = await db
-      .select()
-      .from(importJobs)
-      .where(and(eq(importJobs.userId, userId), eq(importJobs.id, jobId)))
-      .limit(1);
-
-    return row ? mapImportJobRow(row) : null;
+    return getUserImportJob(db, userId, jobId);
   },
   async getJobById(jobId) {
     const [row] = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).limit(1);
@@ -884,6 +945,32 @@ export const createImportJobRepository = (
 
     return row ? mapImportJobRow(row) : null;
   },
+  async cancelJob({ userId, jobId, now }) {
+    // 取り消したJobは、どの完了処理もactiveを条件にしているのでRecipeを作らない。
+    // 始まっていた外部の処理は止まらず、使ったAI利用回数も戻さない。
+    const [canceled] = await db
+      .update(importJobs)
+      .set({
+        status: "canceled",
+        finishedAt: now,
+        dismissedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(importJobs.userId, userId),
+          eq(importJobs.id, jobId),
+          inArray(importJobs.status, activeStatuses),
+        ),
+      )
+      .returning();
+
+    if (canceled) {
+      return mapImportJobRow(canceled);
+    }
+
+    return getUserImportJob(db, userId, jobId);
+  },
 });
 
 export type ProcessImportJobDependencies = {
@@ -1008,6 +1095,7 @@ export const processImportJob = async ({
           })
         : await importRecipeFromText({
             sourceText: input.sourceText,
+            sourceUrl: input.sourceUrl,
             userId: job.userId,
             env,
             usageRepository,
@@ -1143,7 +1231,7 @@ const resolveImportJobInput = (job: ImportJobRecord) => {
   }
 
   if (job.kind === "text" && job.sourceText) {
-    return { kind: "text" as const, sourceText: job.sourceText };
+    return { kind: "text" as const, sourceText: job.sourceText, sourceUrl: job.url };
   }
 
   return null;

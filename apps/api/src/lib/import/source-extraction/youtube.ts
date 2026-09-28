@@ -10,9 +10,11 @@ const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"
 const YOUTUBE_SHORT_HOSTS = new Set(["youtu.be", "www.youtu.be"]);
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const YOUTUBE_PAGE_ID = "youtube_thumbnail";
+const YOUTUBE_SOURCE_NAME = "YouTube";
 
 export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
   id: "youtube",
+  sourceName: YOUTUBE_SOURCE_NAME,
 
   match(input: SourceExtractionMatchInput) {
     return getYouTubeVideoId(input.normalizedUrl) !== null;
@@ -26,17 +28,15 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
 
     const canonicalUrl = createYouTubeCanonicalUrl(videoId);
     if (!context.youtubeDataClient) {
-      throw new RecipeImportError(
-        "extraction_failed",
-        "YouTube Data API client is not configured.",
-      );
+      throw new RecipeImportError("unknown", "YouTube Data API client is not configured.");
     }
 
+    // YouTube Data APIは、非公開の動画と削除された動画を返さない。
     const video = await getYouTubeVideoMetadata(context, videoId);
     if (!video) {
       throw new RecipeImportError(
-        "extraction_failed",
-        "YouTube video details could not be extracted.",
+        "private_or_login_required",
+        "YouTube video is private or unavailable.",
       );
     }
 
@@ -93,7 +93,7 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
         : {}),
       source: {
         sourceUrl: canonicalUrl,
-        sourceName: "YouTube",
+        sourceName: YOUTUBE_SOURCE_NAME,
       },
       warnings: [],
     };
@@ -145,14 +145,25 @@ const getYouTubeVideoMetadata = async (context: SourceExtractionContext, videoId
     });
   } catch (error) {
     if (error instanceof YouTubeDataError) {
-      throw new RecipeImportError(
-        "extraction_failed",
-        "YouTube video details could not be extracted.",
-      );
+      throw toYouTubeDataImportError(error);
     }
 
     throw error;
   }
+};
+
+/**
+ * 通信の失敗と割り当ての超過は、時間を置いて同じURLで試し直せば読める。
+ * 応答を読めないのはこちらの不具合なので、利用者に直し方を示さない。
+ */
+const toYouTubeDataImportError = (error: YouTubeDataError) => {
+  const message = `YouTube Data API failed: ${error.code}.`;
+
+  if (error.code === "invalid_response") {
+    return new RecipeImportError("unknown", message);
+  }
+
+  return new RecipeImportError("fetch_failed", message);
 };
 
 const selectBestYouTubeThumbnail = (value: YouTubeThumbnail[]): YouTubeThumbnail | undefined =>

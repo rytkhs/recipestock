@@ -129,6 +129,7 @@ const createAdapter = (
   overrides: Partial<SourceExtractionAdapter> = {},
 ): SourceExtractionAdapter => ({
   id: "example",
+  sourceName: "Example",
   match: () => true,
   async extract() {
     return createResult();

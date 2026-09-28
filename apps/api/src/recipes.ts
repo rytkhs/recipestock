@@ -426,13 +426,7 @@ export const createRecipeRepository = (
           title: recipes.title,
           sourceName: recipes.sourceName,
           createdAt: recipes.createdAt,
-          coverImageObjectKey: sql<string | null>`
-          case
-            when jsonb_typeof(${recipes.content}->'coverImage'->'objectKey') = 'string'
-              then ${recipes.content}->'coverImage'->>'objectKey'
-            else null
-          end
-        `,
+          coverImageObjectKey: recipeCoverImageObjectKey,
           unlocked: isUnlockedOnFree(db, userId),
         })
         .from(recipes)
@@ -495,10 +489,19 @@ export const createRecipeRepository = (
   },
 });
 
+// 表紙のサムネイルを作る元画像のkey。表紙がなければnullになる。
+export const recipeCoverImageObjectKey = sql<string | null>`
+  case
+    when jsonb_typeof(${recipes.content}->'coverImage'->'objectKey') = 'string'
+      then ${recipes.content}->'coverImage'->>'objectKey'
+    else null
+  end
+`;
+
 // Freeで開けておくのは新しく保存した5件。一覧と同じ追加日の軸で選ぶので、
 // 並び順や検索によらずロック中のRecipeは一続きになる。
 // 行を引くSQLに列として埋め込み、別のクエリを足さずplanと同じ波で判定する。
-const isUnlockedOnFree = (db: DbClient, userId: string) =>
+export const isUnlockedOnFree = (db: DbClient, userId: string) =>
   sql<boolean>`${inArray(
     recipes.id,
     db

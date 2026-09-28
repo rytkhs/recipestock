@@ -1,4 +1,5 @@
-import { type RecipeDraftContent } from "@recipestock/schemas";
+import { type RecipeDraftContent, type RecipeSourceDraft } from "@recipestock/schemas";
+import { normalizeUrl } from "@recipestock/shared";
 import { z } from "zod";
 import { type Bindings } from "../../env";
 import { createLogger, type Logger } from "../../logger";
@@ -6,6 +7,7 @@ import { type AiUsageConsumptionRepository } from "../../usage";
 import { normalizeRecipeWithAi } from "./ai-normalization";
 import { assertImportJobDeadline } from "./deadline";
 import { trimRecipeDraftContent } from "./draft-limits";
+import { resolveSourceNameForUrl } from "./source-extraction";
 import {
   type RecipeImportAIDraftContent,
   type RecipeImportAIProvider,
@@ -17,9 +19,11 @@ const TITLE_FALLBACK_MAX_LENGTH = 80;
 
 /**
  * 貼り付けられた原文からRecipeを作る。URL取り込みと違い取得や抽出の段階はなく、原文をそのままAIへ渡す。
+ * `sourceUrl`があれば、URLから取り込んだときと同じ出典名を添えて出典にする。
  */
 export const importRecipeFromText = async ({
   sourceText,
+  sourceUrl = null,
   userId,
   env,
   usageRepository,
@@ -30,6 +34,7 @@ export const importRecipeFromText = async ({
   logger = createLogger(),
 }: {
   sourceText: string;
+  sourceUrl?: string | null;
   userId: string;
   env: Partial<Bindings>;
   usageRepository: AiUsageConsumptionRepository;
@@ -66,10 +71,15 @@ export const importRecipeFromText = async ({
 
   return {
     recipeDraftContent,
-    source: { sourceUrl: null, sourceName: null },
+    source: toTextRecipeSource(sourceUrl),
     warnings: [],
   };
 };
+
+const toTextRecipeSource = (sourceUrl: string | null): RecipeSourceDraft =>
+  sourceUrl
+    ? { sourceUrl, sourceName: resolveSourceNameForUrl(normalizeUrl(sourceUrl)) }
+    : { sourceUrl: null, sourceName: null };
 
 /**
  * テキストには画像がないので、AIが画像URLを返しても採用しない。Recipeにはタイトルが必須であり、

@@ -46,6 +46,7 @@ const createRepository = (overrides: Partial<ImportJobRepository> = {}): ImportJ
   markJobFailed: async () => undefined,
   markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
+  cancelJob: async () => null,
   ...overrides,
 });
 
@@ -327,13 +328,23 @@ describe("Import job routes", () => {
       importJobRepository: createRepository({
         expireActiveJobsForUser,
         listRecentJobs: async () => [
-          createJob({ id: "job_running", status: "running" }),
-          createJob({
-            id: "job_done",
-            status: "succeeded",
-            recipeId: "recipe_123",
-            finishedAt: new Date("2026-06-01T00:01:00.000Z"),
-          }),
+          { ...createJob({ id: "job_running", status: "running" }), recipe: null },
+          {
+            ...createJob({
+              id: "job_done",
+              status: "succeeded",
+              recipeId: "recipe_123",
+              finishedAt: new Date("2026-06-01T00:01:00.000Z"),
+            }),
+            recipe: {
+              title: "トマトパスタ",
+              coverImageObjectKey: "recipes/user_123/recipe_123/cover.jpg",
+            },
+          },
+          {
+            ...createJob({ id: "job_plain", status: "succeeded", recipeId: "recipe_456" }),
+            recipe: { title: "ほうれん草の胡麻和え", coverImageObjectKey: null },
+          },
         ],
       }),
       getCurrentDate: () => new Date("2026-06-01T00:10:00.000Z"),
@@ -344,8 +355,20 @@ describe("Import job routes", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       jobs: [
-        { id: "job_running", status: "running", recipeId: null },
-        { id: "job_done", status: "succeeded", recipeId: "recipe_123" },
+        { id: "job_running", status: "running", recipeId: null, recipe: null },
+        {
+          id: "job_done",
+          status: "succeeded",
+          recipeId: "recipe_123",
+          recipe: {
+            title: "トマトパスタ",
+            coverImageUrl: "/api/images/thumbnail/v1/recipes/user_123/recipe_123/cover.jpg",
+          },
+        },
+        {
+          id: "job_plain",
+          recipe: { title: "ほうれん草の胡麻和え", coverImageUrl: null },
+        },
       ],
     });
     expect(expireActiveJobsForUser).toHaveBeenCalledWith({
@@ -381,5 +404,70 @@ describe("Import job routes", () => {
         errorCode: "fetch_failed",
       },
     });
+  });
+
+  it("jobを取り消す", async () => {
+    const cancelJob = vi.fn<ImportJobRepository["cancelJob"]>(async () =>
+      createJob({
+        status: "canceled",
+        finishedAt: new Date("2026-06-01T00:02:00.000Z"),
+        dismissedAt: new Date("2026-06-01T00:02:00.000Z"),
+      }),
+    );
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({ cancelJob }),
+      getCurrentDate: () => new Date("2026-06-01T00:02:00.000Z"),
+    });
+
+    const response = await testApp.request("/api/import/jobs/job_123/cancel", {
+      method: "PATCH",
+      headers: sameOriginHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      job: { id: "job_123", status: "canceled", finishedAt: "2026-06-01T00:02:00.000Z" },
+    });
+    expect(cancelJob).toHaveBeenCalledWith({
+      userId: "user_123",
+      jobId: "job_123",
+      now: new Date("2026-06-01T00:02:00.000Z"),
+    });
+  });
+
+  it("取り消す前に終わっていたjobは、終わった状態のまま返す", async () => {
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({
+        cancelJob: async () =>
+          createJob({ status: "succeeded", recipeId: "recipe_123", finishedAt: new Date() }),
+      }),
+    });
+
+    const response = await testApp.request("/api/import/jobs/job_123/cancel", {
+      method: "PATCH",
+      headers: sameOriginHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      job: { status: "succeeded", recipeId: "recipe_123" },
+    });
+  });
+
+  it("見つからないjobの取り消しはnot_foundを返す", async () => {
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({ cancelJob: async () => null }),
+    });
+
+    const response = await testApp.request("/api/import/jobs/job_missing/cancel", {
+      method: "PATCH",
+      headers: sameOriginHeaders,
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "not_found" } });
   });
 });

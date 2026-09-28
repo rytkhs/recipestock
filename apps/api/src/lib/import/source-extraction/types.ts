@@ -32,6 +32,8 @@ export type SourceExtractionResult = {
 
 export type SourceExtractionAdapter = {
   id: string;
+  /** 取り込んだRecipeの出典名。 */
+  sourceName: string;
   match(input: SourceExtractionMatchInput): boolean;
   extract(context: SourceExtractionContext): Promise<SourceExtractionResult>;
 };

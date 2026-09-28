@@ -9,6 +9,7 @@ import {
 export type SubmitTextImportJobInput = {
   userId: string;
   text: unknown;
+  sourceUrl: unknown;
 };
 
 export type SubmitTextImportJobResult =
@@ -25,7 +26,10 @@ export const createTextImportJobSubmission = (
   dependencies: ImportJobSubmissionDependencies,
 ): TextImportJobSubmission => ({
   async submit(input) {
-    const request = importTextRequestSchema.safeParse({ text: input.text });
+    const request = importTextRequestSchema.safeParse({
+      text: input.text,
+      sourceUrl: input.sourceUrl,
+    });
 
     if (!request.success) {
       return { status: "invalidText", issues: request.error.flatten() };
@@ -42,6 +46,7 @@ export const createTextImportJobSubmission = (
           userId: input.userId,
           sourceText,
           sourceTextDigest,
+          sourceUrl: request.data.sourceUrl ?? null,
           aiUsage,
           now,
         }),
