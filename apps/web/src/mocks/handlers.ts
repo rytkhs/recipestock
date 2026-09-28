@@ -218,6 +218,12 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
   const recipeLimitExceeded = () =>
     apiError(403, "recipe_limit_exceeded", "Recipe limit exceeded.");
 
+  // APIと同じく、今月のAI取り込みを使い切っていると取り込みを始めない。
+  const isAiUsageLimitReached = () => viewer.aiUsage.used >= viewer.aiUsage.limit;
+
+  const aiUsageLimitExceeded = () =>
+    apiError(429, "ai_usage_limit_exceeded", "AI usage limit exceeded.");
+
   const configuredRecipeSaveFailure = () => {
     if (state.failures.saveRecipe === "generic") {
       return apiError(500, "unknown", "Failed to save recipe.");
@@ -827,6 +833,10 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         return recipeLimitExceeded();
       }
 
+      if (isAiUsageLimitReached()) {
+        return aiUsageLimitExceeded();
+      }
+
       const job: RecentImportJob = {
         id: `job_mock_${nextId++}`,
         kind: "url",
@@ -868,6 +878,10 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
 
       if (isRecipeLimitReached()) {
         return recipeLimitExceeded();
+      }
+
+      if (isAiUsageLimitReached()) {
+        return aiUsageLimitExceeded();
       }
 
       const job: RecentImportJob = {
@@ -924,6 +938,9 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
     http.patch("/api/import/jobs/:jobId/cancel", ({ params }) => {
       const unauthorized = requireSession();
       if (unauthorized) return unauthorized;
+      if (state.failures.cancelImportJob) {
+        return apiError(500, "unknown", "Failed to cancel import job.");
+      }
 
       advanceJobs();
 

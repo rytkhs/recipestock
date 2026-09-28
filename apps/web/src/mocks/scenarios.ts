@@ -106,6 +106,7 @@ export type MockState = {
     revokeShortcutCredential?: boolean;
     /** 指定すると、このあと送るURLの取り込みをこのエラーで失敗させる。 */
     importJob?: ImportErrorCode;
+    cancelImportJob?: boolean;
   };
 };
 
@@ -161,6 +162,14 @@ const freeState = (recipeCount: number): MockState => {
     recipeTags: recipeTagsFixture({ count: recipeCount }),
   };
 };
+
+const withAiUsageLimitReached = (state: MockState): MockState => ({
+  ...state,
+  viewer: {
+    ...state.viewer,
+    aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
+  },
+});
 
 // 一覧のサムネイルと、開いた詳細の画像がどちらも読み込めないRecipe。
 const brokenImageRecipeIndexes = [1, 4, 7];
@@ -594,33 +603,13 @@ export const scenarios: Scenario[] = [
     id: "import-limit",
     group: "plan",
     label: "Free(今月のAI取り込みが上限)",
-    build: () => {
-      const state = freeState(2);
-
-      return {
-        ...state,
-        viewer: {
-          ...state.viewer,
-          aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
-        },
-      };
-    },
+    build: () => withAiUsageLimitReached(freeState(2)),
   },
   {
     id: "pro-import-limit",
     group: "plan",
     label: "Pro(今月のAI取り込みが上限)",
-    build: () => {
-      const state = baseState();
-
-      return {
-        ...state,
-        viewer: {
-          ...state.viewer,
-          aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
-        },
-      };
-    },
+    build: () => withAiUsageLimitReached(baseState()),
   },
   {
     id: "checkout-pending",
@@ -743,6 +732,16 @@ export const scenarios: Scenario[] = [
     }),
   },
   {
+    id: "import-queued",
+    group: "import",
+    label: "取り込み待ち（取り消しに失敗）",
+    build: () => ({
+      ...baseState(),
+      importJobs: [importJobFixture({ status: "queued", startedAt: null })],
+      failures: { cancelImportJob: true },
+    }),
+  },
+  {
     id: "import-saved",
     group: "import",
     label: "取り込んで保存した直後",
@@ -764,6 +763,34 @@ export const scenarios: Scenario[] = [
               }),
             ]
           : [],
+      };
+    },
+  },
+  {
+    id: "import-saved-multiple",
+    group: "import",
+    label: "取り込んで複数保存した直後（1件は削除済み）",
+    build: () => {
+      const state = baseState();
+      const savedJob = (id: string, url: string, recipe?: RecipeListItem) =>
+        importJobFixture({
+          id,
+          status: "succeeded",
+          url,
+          recipeId: recipe?.id ?? "recipe_deleted",
+          finishedAt: new Date().toISOString(),
+          recipe: recipe ? { title: recipe.title, coverImageUrl: recipe.coverImageUrl } : null,
+        });
+      const [first, second] = state.recipes;
+
+      return {
+        ...state,
+        importJobs: [
+          savedJob("job_saved_1", "https://www.youtube.com/watch?v=mock", first),
+          savedJob("job_saved_2", "https://example.com/recipes/mock", second),
+          // 保存したあと、ほかの端末で消したRecipe。
+          savedJob("job_saved_deleted", "https://www.tiktok.com/@mock/video/1"),
+        ],
       };
     },
   },
@@ -893,6 +920,56 @@ export const scenarios: Scenario[] = [
         job_text_failed: "今日の夕飯\n鶏むね肉を焼いただけ。おいしかった。",
       },
     }),
+  },
+  {
+    id: "import-recoveries",
+    group: "import",
+    label: "取り込めなかったときの直し方（Free・AI上限）",
+    build: () => {
+      const failedJob = (overrides: Partial<RecentImportJob>) =>
+        importJobFixture({
+          status: "failed",
+          finishedAt: new Date(Date.now() - 10_000).toISOString(),
+          ...overrides,
+        });
+
+      // AI取り込みを使い切っているので、再試行とテキストでの取り込み直しも上限で断られる。
+      return {
+        ...withAiUsageLimitReached(freeState(2)),
+        importJobs: [
+          failedJob({
+            id: "job_ai_limit",
+            url: "https://www.youtube.com/watch?v=mock",
+            errorCode: "ai_usage_limit_exceeded",
+          }),
+          failedJob({
+            id: "job_fetch_failed",
+            url: "https://example.com/recipes/mock",
+            errorCode: "fetch_failed",
+          }),
+          failedJob({
+            id: "job_extraction_failed",
+            url: "https://www.tiktok.com/@mock/video/1",
+            errorCode: "extraction_failed",
+          }),
+          failedJob({
+            id: "job_text_failed",
+            kind: "text",
+            url: null,
+            textPreview: "今日の夕飯",
+            errorCode: "extraction_failed",
+          }),
+          failedJob({
+            id: "job_invalid_url",
+            url: "https://x.com/mock",
+            errorCode: "invalid_url",
+          }),
+        ],
+        importJobSourceTexts: {
+          job_text_failed: "今日の夕飯\n鶏むね肉を焼いただけ。おいしかった。",
+        },
+      };
+    },
   },
   {
     id: "google-login",

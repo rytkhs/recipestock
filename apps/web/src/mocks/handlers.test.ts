@@ -284,6 +284,34 @@ describe("mock handlers", () => {
     expect(await errorCodeOf(imported)).toBe("recipe_limit_exceeded");
   });
 
+  it("今月のAI取り込みを使い切っているとURLとテキストの取り込みはai_usage_limit_exceededになる", async () => {
+    const handlers = setup("import-limit");
+
+    const url = await send(handlers, "POST", "/api/import/url/jobs", {
+      url: "https://example.com/recipe",
+    });
+    expect(url.status).toBe(429);
+    expect(await errorCodeOf(url)).toBe("ai_usage_limit_exceeded");
+
+    const text = await send(handlers, "POST", "/api/import/text/jobs", {
+      text: "鶏むね肉のレモン煮",
+    });
+    expect(text.status).toBe(429);
+    expect(await errorCodeOf(text)).toBe("ai_usage_limit_exceeded");
+  });
+
+  it("取り消し失敗シナリオではjobを取り込み待ちのまま残す", async () => {
+    const handlers = setup("import-queued");
+
+    const response = await send(handlers, "PATCH", "/api/import/jobs/job_001/cancel");
+    expect(response.status).toBe(500);
+
+    const job = getImportJobResponseSchema.parse(
+      await (await send(handlers, "GET", "/api/import/jobs/job_001")).json(),
+    ).job;
+    expect(job.status).toBe("queued");
+  });
+
   it("取り込めないURLはinvalid_urlになる", async () => {
     const handlers = setup();
 
