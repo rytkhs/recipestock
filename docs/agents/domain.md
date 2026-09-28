@@ -8,10 +8,8 @@ This is a single-context repo for the Recipe Stock.
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, if present.
-- **`docs/adr/`**, if present. Read ADRs that touch the area you're about to work in.
-
-If `CONTEXT.md` or `docs/adr/` don't exist, proceed silently. Don't flag their absence or suggest creating them upfront. The producer skill (`/grill-with-docs`) creates them lazily when terms or decisions actually get resolved.
+- **`CONTEXT.md`** at the repo root.
+- **`docs/adr/`**. Read ADRs that touch the area you're about to work in.
 
 ## Expected structure
 

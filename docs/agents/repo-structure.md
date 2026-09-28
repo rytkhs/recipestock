@@ -106,17 +106,26 @@ apps/api/src/
   logger.ts               structured logging
   auth.ts                 Better Auth setup and auth service
   billing.ts              billing repository and plan synchronization
+  completion-notifications.ts Import Job completion Push delivery
+  image-dimensions.ts     image dimension detection from uploaded bytes
   images.ts               R2 image service
+  import-completion-notices.ts Import Job completion Push payloads
   import-jobs.ts          Import Job repository and queue processing
+  import-page-evidence.ts recipe evidence extraction from fetched pages
   import-queue-health.ts  Import Queue stall detection for the cron
   import-url.ts           URL import orchestration
+  ios-share-notices.ts    iOS Shortcut import result copy and destinations
   me.ts                   current-user repository and response mapping
   monitoring.ts           Sentry options, error reporter, and cron check-ins
   push-subscriptions.ts   Push subscription repository
+  recipe-image-keys.ts    R2 recipe image and thumbnail key parsing
+  recipe-images.ts        draft image finalization into R2
+  recipe-thumbnails.ts    thumbnail URLs and Cloudflare Images responses
   recipes.ts              recipe repository and response mapping
   shortcut-credentials.ts Shortcut credential repository and service
   stripe-billing.ts       Stripe client
   tags.ts                 tag repository and normalization
+  url-safety.ts           outbound fetch URL and hostname checks
   usage.ts                AI usage repository and limits
   routes/
     auth.ts
