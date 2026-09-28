@@ -41,7 +41,8 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     outcome: "rejected",
     title: "共有できませんでした",
     body: "ショートカットを追加し直してください。",
-    path: "/settings/share",
+    // 開いた画面が、なぜ来たのかを先に伝えてから入れ直しの手順を出せるよう、理由を添える。
+    path: "/settings/share?reason=malformed_request",
   },
   recipe_limit_exceeded: {
     outcome: "rejected",
@@ -86,7 +87,7 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     outcome: "rejected",
     title: "連携が無効になっています",
     body: "もう一度連携してください。",
-    path: "/settings/share",
+    path: "/settings/share?reason=unauthorized",
   },
 };
 

@@ -17,6 +17,8 @@ describe("Shortcut credential schemas", () => {
           name: "iPhone",
           tokenSuffix: "abcdef",
           createdAt: "2026-07-11T00:00:00.000Z",
+          firstUsedAt: null,
+          lastUsedAt: null,
         },
         token: `rssc_${"a".repeat(25)}`,
       }).success,

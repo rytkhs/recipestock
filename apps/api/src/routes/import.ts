@@ -66,6 +66,7 @@ export const createImportRoutes = ({
         userId,
         url,
         notifyOnCompletion: false,
+        shortcutCredentialId: null,
       });
 
       if (result.status === "invalidUrl") {

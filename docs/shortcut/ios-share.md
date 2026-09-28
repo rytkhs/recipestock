@@ -67,15 +67,17 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
 | `existing_active_job` | `accepted` | 空文字 | なし |
 | `no_url_in_input` | `rejected` | 空文字 | なし |
 | `invalid_url` | `rejected` | あり | なし |
-| `malformed_request` | `rejected` | あり | `/settings/share` |
+| `malformed_request` | `rejected` | あり | `/settings/share?reason=malformed_request` |
 | `recipe_limit_exceeded` | `rejected` | あり | `/settings/billing?upsell=recipe_limit&from=shortcut` |
 | `ai_usage_limit_exceeded` | `rejected` | あり | `/settings/billing?upsell=ai_usage_limit&from=shortcut` |
 | `ai_usage_quota_exhausted` | `rejected` | あり | なし |
 | `rate_limit_exceeded` | `rejected` | 空文字 | なし |
 | `temporarily_unavailable` | `rejected` | あり | なし |
-| `unauthorized` | `rejected` | あり | `/settings/share` |
+| `unauthorized` | `rejected` | あり | `/settings/share?reason=unauthorized` |
 
 `openUrl`のキーは常に存在し、遷移先がないreasonでは`null`になる。`body`と違い空文字は返さない。
+
+`/settings/share`へ送るreasonには`reason`を添え、開いた画面が、なぜ来たのかを伝えてから入れ直しの手順を出せるようにする。
 
 バナーは一瞥されるだけの表示であり、`body`は次に取るべき行動があるreasonにだけ置く。`title`の言い換えにしかならない2行目は持たせない。
 
@@ -88,6 +90,47 @@ AI月次上限はプランでreasonを分ける。保存上限がfreeの投稿�
 `malformed_request`はrequest bodyが契約に合わない場合、`no_url_in_input`は`input`にURLが含まれない場合であり、両者を混ぜない。前者はクライアントの契約違反、後者はユーザーの通常の操作結果である。
 
 `rate_limit_exceeded`は2つの安全弁から返る。`credentialId`単位の毎分10回と、認証へ到達する前にclient IP単位で引く毎分60回である。後者は、無効なtokenを送り続けるrequestがtoken hash照合のDBアクセスを無制限に起こすのを防ぐ。keyは`cf-connecting-ip`とし、Cloudflareの背後では常に付与されるため、欠落するlocal devやtestでは共通のkeyで数える。IPは監視ログへ残さない。responseはどちらの安全弁でも同じ`reason`と同じnoticeであり、切り分けはログの`rateLimitScope`（`client`または`credential`）で行う。
+
+`unauthorized`もresponseは1つだが、ログの`authFailure`で連携の設定のどこで詰まったかを分ける。
+
+| `authFailure` | 条件 | 主な原因 |
+| --- | --- | --- |
+| `missing_token` | Bearerがない、または空 | インポート質問でキーを貼らずに追加した |
+| `malformed_token` | 照合できず、今の連携キーの形でもない | 別のものを貼った（コピーに失敗した、途中で別のものをコピーした） |
+| `unknown_token` | 今の形だが照合できない | 別の環境で発行したキー、手で打ち間違えたキー |
+| `revoked_token` | 解除済みのキー | 解除した端末のショートカットを使い続けている。`credentialId`と`userId`を添える |
+
+形の判定はログを分けるためだけに使い、認証はhash照合だけで行う。
+
+## 連携キーの利用の記録
+
+認証を通したrequestは、同じSQLで連携キーの`first_used_at`と`last_used_at`を記録する。取り込みを受け付けたかどうかは問わない。`no_url_in_input`や上限で止まったrequestでも、キーの貼り付けと接続の許可は済んでいるので、連携の設定は済んだとみなす。`first_used_at`は上書きしない。解除済みのキーは記録しない。
+
+設定画面は`firstUsedAt`が入ったことで連携の完了を知り、`lastUsedAt`で端末ごとの最後に使った日を出す。
+
+ショートカットから作ったImport Jobは、作ったときの連携キーを`import_jobs.shortcut_credential_id`に残す。同じURLのactive Jobへ合流したときは、作った側の値を書き換えない。アプリから作ったJobはnullである。
+
+## 計測
+
+設定の流れと共有からの利用は、上の列とログから、見たいときにSQLで数える。定期実行の監視は置かない（ADR 0010）。連携キーは発行し直すと同じ人に複数できるので、設定の完了は人単位で数える。
+
+```sql
+-- 人ごとの、設定を始めた日時・初めて使えた日時・使われていないキーの数
+select user_id,
+       min(created_at)    as started_at,
+       min(first_used_at) as first_used_at,
+       count(*) filter (where first_used_at is null and revoked_at is null) as unused_keys
+from shortcut_credentials
+group by user_id;
+
+-- 共有から取り込んで保存できた人
+select count(distinct user_id)
+from import_jobs
+where shortcut_credential_id is not null
+  and status = 'succeeded';
+```
+
+発行してから使われるまでの間で、リクエストが届く失敗（キーを貼っていない、別のものを貼った）は`authFailure`で数えられる。ショートカットを追加していない、接続の確認で「許可しない」を選んだ、はリクエストが届かないので観測できず、使われていないキーとしてだけ現れる。
 
 ## 共有入力の実機確認
 

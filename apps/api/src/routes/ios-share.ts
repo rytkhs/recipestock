@@ -2,6 +2,7 @@ import {
   type IosShareShortcutImportReason,
   iosShareShortcutImportRequestSchema,
   iosShareShortcutImportResponseSchema,
+  shortcutCredentialTokenSchema,
 } from "@recipestock/schemas";
 import { extractFirstUrl } from "@recipestock/shared";
 import { type Context, Hono } from "hono";
@@ -17,7 +18,14 @@ type IosShareRouteDependencies = {
   shortcutRateLimiterFor: (env: ApiEnv["Bindings"]) => RateLimit;
 };
 
+/**
+ * `unauthorized`の内訳。キーを貼らずに追加した、別のものを貼った、解除したキーを使い続けている、を
+ * 見分け、連携の設定のどこで詰まっているかを数える。
+ */
+type ShortcutAuthFailure = "missing_token" | "malformed_token" | "unknown_token" | "revoked_token";
+
 type ShortcutImportLogFields = {
+  authFailure?: ShortcutAuthFailure;
   credentialId?: string;
   rateLimitScope?: "client" | "credential";
   sourceHost?: string;
@@ -111,12 +119,24 @@ export const createIosShareRoutes = ({
 
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
-      return respondWithNotice(c, "unauthorized");
+      return respondWithNotice(c, "unauthorized", { authFailure: "missing_token" });
     }
 
     const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
-    if (!identity) {
-      return respondWithNotice(c, "unauthorized");
+    if (identity.status === "revoked") {
+      return respondWithNotice(c, "unauthorized", {
+        authFailure: "revoked_token",
+        credentialId: identity.credentialId,
+        userId: identity.userId,
+      });
+    }
+    if (identity.status === "unknown") {
+      // 形はログを分けるためだけに見る。認証はhash照合だけで行い、形の違う旧形式のキーも通す。
+      return respondWithNotice(c, "unauthorized", {
+        authFailure: shortcutCredentialTokenSchema.safeParse(token).success
+          ? "unknown_token"
+          : "malformed_token",
+      });
     }
 
     const logFields: ShortcutImportLogFields = {
@@ -149,6 +169,7 @@ export const createIosShareRoutes = ({
       userId: identity.userId,
       url,
       notifyOnCompletion: true,
+      shortcutCredentialId: identity.credentialId,
     });
     const submissionLogFields = { ...logFields, sourceHost: sourceHostOf(url) };
 

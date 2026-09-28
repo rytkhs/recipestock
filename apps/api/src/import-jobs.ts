@@ -113,6 +113,7 @@ export type ImportJobRepository = {
     url: string;
     normalizedUrl: string;
     completionNotificationRequested: boolean;
+    shortcutCredentialId: string | null;
     aiUsage: ImportJobAiUsageLimits;
     now: Date;
   }): Promise<CreateImportJobResult>;
@@ -296,6 +297,7 @@ const createImportJobWithSubmissionLimits = async (
     userId,
     input,
     completionNotificationRequested,
+    shortcutCredentialId,
     aiUsage,
     now,
   }: {
@@ -303,6 +305,7 @@ const createImportJobWithSubmissionLimits = async (
     userId: string;
     input: NewImportJobInput;
     completionNotificationRequested: boolean;
+    shortcutCredentialId: string | null;
     aiUsage: ImportJobAiUsageLimits;
     now: Date;
   },
@@ -411,6 +414,7 @@ const createImportJobWithSubmissionLimits = async (
           source_text,
           source_text_digest,
           completion_notification_requested,
+          shortcut_credential_id,
           created_at,
           updated_at
         )
@@ -424,6 +428,7 @@ const createImportJobWithSubmissionLimits = async (
           ${sourceText},
           ${sourceTextDigest},
           ${completionNotificationRequested},
+          ${shortcutCredentialId},
           ${nowIso}::timestamptz,
           ${nowIso}::timestamptz
         from submission_limits
@@ -620,6 +625,7 @@ export const createImportJobRepository = (
     url,
     normalizedUrl,
     completionNotificationRequested,
+    shortcutCredentialId,
     aiUsage,
     now,
   }) {
@@ -628,16 +634,19 @@ export const createImportJobRepository = (
       userId,
       input: { kind: "url", url, normalizedUrl },
       completionNotificationRequested,
+      shortcutCredentialId,
       aiUsage,
       now,
     });
   },
+  // テキストはアプリの画面からしか送れないので、連携キーを持たない。
   async createTextJob({ id, userId, sourceText, sourceTextDigest, sourceUrl, aiUsage, now }) {
     return createImportJobWithSubmissionLimits(db, planSyncOptions, {
       id,
       userId,
       input: { kind: "text", sourceText, sourceTextDigest, sourceUrl },
       completionNotificationRequested: false,
+      shortcutCredentialId: null,
       aiUsage,
       now,
     });

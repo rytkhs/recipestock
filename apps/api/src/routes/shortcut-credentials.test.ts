@@ -19,6 +19,8 @@ const createCredentials = (): ShortcutCredentials => ({
       name,
       tokenSuffix: "aaaa",
       createdAt: "2026-07-11T00:00:00.000Z",
+      firstUsedAt: null,
+      lastUsedAt: null,
     },
     token: `rssc_${"a".repeat(25)}`,
   }),
@@ -28,10 +30,12 @@ const createCredentials = (): ShortcutCredentials => ({
       name: "iPhone",
       tokenSuffix: "aaaa",
       createdAt: "2026-07-11T00:00:00.000Z",
+      firstUsedAt: "2026-07-11T00:05:00.000Z",
+      lastUsedAt: "2026-07-12T08:00:00.000Z",
     },
   ],
   revoke: async () => true,
-  authenticate: async () => null,
+  authenticate: async () => ({ status: "unknown" }),
 });
 
 describe("Shortcut credential routes", () => {
@@ -57,13 +61,20 @@ describe("Shortcut credential routes", () => {
     expect(issue).toHaveBeenCalledWith({ userId: "user_1", name: "iPhone" });
   });
 
-  it("active credentialを一覧する", async () => {
+  it("active credentialを、使った時刻とともに一覧する", async () => {
     const app = createSilentTestApp({ auth, shortcutCredentials: createCredentials() });
     const response = await app.request("/api/shortcut-credentials", {}, env);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      credentials: [{ id: "credential_1", name: "iPhone" }],
+      credentials: [
+        {
+          id: "credential_1",
+          name: "iPhone",
+          firstUsedAt: "2026-07-11T00:05:00.000Z",
+          lastUsedAt: "2026-07-12T08:00:00.000Z",
+        },
+      ],
     });
   });
 
