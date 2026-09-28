@@ -150,8 +150,7 @@ const ProtectedLayout = () => {
     pathname: currentPathname,
   });
   // アイランドが出ている間は、最後の行が隠れないよう下を空ける。
-  const hasImportIsland = importIsland.isShown && importIsland.view.mode !== "hidden";
-  const mainPaddingClass = hasImportIsland
+  const mainPaddingClass = importIsland.isVisible
     ? "pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-28"
     : isReady && isHome
       ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8"

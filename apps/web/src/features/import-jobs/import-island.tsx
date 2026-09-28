@@ -14,13 +14,13 @@ import {
 } from "@phosphor-icons/react";
 import { type RecentImportJob } from "@recipestock/schemas";
 import { Link } from "@tanstack/react-router";
-import { useRef } from "react";
+import { type FocusEvent, useRef } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { PlanLink } from "../billing/plan-link";
 import { RecipeCover } from "../recipes/recipe-cover";
-import { type ImportIslandView } from "./island-state";
+import { type ImportIslandStatus } from "./island-state";
 import { getImportJobFailureMessage } from "./messages";
 import { getImportJobRecovery } from "./recovery";
 import { describeImportSource, type ImportSourceKind } from "./source";
@@ -29,7 +29,7 @@ import { isActiveImportJob } from "./workflow";
 
 /**
  * - `beside-fab`: スマホの一覧では追加ボタンの左に並べる。連続して取り込めるよう、保存できたときも大きさを変えない
- * - `center`: ほかの画面では下の中央に置き、保存できたときはレシピ名が読めるよう広げる
+ * - `center`: ほかの画面では下の中央に置き、保存だけを知らせるときはレシピ名が読めるよう広げる
  */
 export type ImportIslandPlacement = "beside-fab" | "center";
 
@@ -189,23 +189,102 @@ const SavedSummary = ({
   );
 };
 
-const SingleSummary = ({
-  job,
+const statusTitle = (status: ImportIslandStatus) => {
+  if (status.mode === "single") {
+    return status.job.status === "failed" ? "取り込めませんでした" : activeStatusLabel(status.job);
+  }
+
+  return status.activeCount > 0
+    ? `${status.activeCount}件を取り込み中`
+    : `${status.failedCount}件取り込めませんでした`;
+};
+
+const statusDetail = (status: ImportIslandStatus) => {
+  if (status.mode === "single") {
+    return status.job.status === "failed"
+      ? getImportJobFailureMessage(status.job)
+      : describeImportSource(status.job).label;
+  }
+
+  return status.activeCount > 0 && status.failedCount > 0
+    ? `${status.failedCount}件は取り込めず`
+    : status.jobs.map((job) => describeImportSource(job).label).join("・");
+};
+
+const statusNoteClass =
+  "mt-0.5 text-xs fade-in-0 animate-in duration-300 motion-reduce:animate-none";
+
+/**
+ * 状況の2行目。送り直したことと保存できたことは、しばらくふだんの詳細に代えて出す。
+ * 送り直したことは今の操作への答えなので、保存より先に出す。
+ * 狭い横幅ではレシピ名の側が切れるよう、「保存しました」を先に置く。
+ */
+const StatusNote = ({
+  status,
   isHighlighted,
+  saved,
 }: {
-  job: RecentImportJob;
+  status: ImportIslandStatus;
   isHighlighted: boolean;
+  saved: readonly RecentImportJob[];
 }) => {
-  const isFailed = job.status === "failed";
-  const title = isFailed
-    ? "取り込めませんでした"
-    : isHighlighted
-      ? "もう取り込んでいます"
-      : activeStatusLabel(job);
+  const [firstSaved] = saved;
+
+  if (isHighlighted) {
+    return (
+      <span
+        className={cn(statusNoteClass, "block truncate font-medium text-brand-orange-dark")}
+        key="highlighted"
+      >
+        もう取り込んでいます
+      </span>
+    );
+  }
+
+  if (firstSaved) {
+    return (
+      <span
+        className={cn(
+          statusNoteClass,
+          "flex min-w-0 items-center gap-1 font-medium text-brand-sage-dark",
+        )}
+        key="saved"
+      >
+        <Check aria-hidden="true" className="shrink-0" size={12} weight="bold" />
+        <span className="truncate">
+          {saved.length === 1
+            ? `保存しました「${firstSaved.recipe?.title ?? "レシピ"}」`
+            : `${saved.length}件を保存しました`}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn(statusNoteClass, "block truncate text-brand-muted")} key="detail">
+      {statusDetail(status)}
+    </span>
+  );
+};
+
+const StatusSummary = ({
+  status,
+  isHighlighted,
+  saved,
+}: {
+  status: ImportIslandStatus;
+  isHighlighted: boolean;
+  saved: readonly RecentImportJob[];
+}) => {
+  const isFailed = status.mode === "single" && status.job.status === "failed";
 
   return (
     <>
-      <ImportJobIcon job={job} />
+      {status.mode === "single" ? (
+        <ImportJobIcon job={status.job} />
+      ) : (
+        <StackedJobIcons jobs={status.jobs} />
+      )}
       <span className="min-w-0 flex-1">
         <span
           className={cn(
@@ -213,33 +292,9 @@ const SingleSummary = ({
             isFailed ? "text-brand-danger" : "text-brand-ink",
           )}
         >
-          {title}
+          {statusTitle(status)}
         </span>
-        <span className="mt-0.5 block truncate text-brand-muted text-xs">
-          {isFailed ? getImportJobFailureMessage(job) : describeImportSource(job).label}
-        </span>
-      </span>
-    </>
-  );
-};
-
-const MultipleSummary = ({ view }: { view: Extract<ImportIslandView, { mode: "multiple" }> }) => {
-  const { activeCount, failedCount, jobs } = view;
-
-  return (
-    <>
-      <StackedJobIcons jobs={jobs} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-semibold text-brand-ink text-sm">
-          {activeCount > 0
-            ? `${activeCount}件を取り込み中`
-            : `${failedCount}件取り込めませんでした`}
-        </span>
-        <span className="mt-0.5 block truncate text-brand-muted text-xs">
-          {activeCount > 0 && failedCount > 0
-            ? `${failedCount}件は取り込めず`
-            : jobs.map((job) => describeImportSource(job).label).join("・")}
-        </span>
+        <StatusNote isHighlighted={isHighlighted} saved={saved} status={status} />
       </span>
     </>
   );
@@ -374,22 +429,20 @@ const ImportJobRow = ({ island, job }: { island: ImportIslandState; job: RecentI
   );
 };
 
-const islandPositionClass = (placement: ImportIslandPlacement, isSaved: boolean) =>
+const islandPositionClass = (placement: ImportIslandPlacement, isSavedOnly: boolean) =>
   placement === "beside-fab"
     ? "left-4 right-[5.25rem] h-14 origin-right rounded-[28px] sm:right-4 sm:mx-auto sm:max-w-[360px] sm:origin-bottom"
     : cn(
         "inset-x-4 mx-auto origin-bottom",
-        isSaved ? "h-[72px] max-w-[440px] rounded-[24px]" : "h-14 max-w-[360px] rounded-[28px]",
+        isSavedOnly ? "h-[72px] max-w-[440px] rounded-[24px]" : "h-14 max-w-[360px] rounded-[28px]",
       );
 
-const islandToneClass = (view: ImportIslandView, isHighlighted: boolean) => {
-  if (view.mode === "saved") return "border-brand-sage-dark bg-brand-sage-dark";
+const islandToneClass = (status: ImportIslandStatus | null, isHighlighted: boolean) => {
+  if (!status) return "border-brand-sage-dark bg-brand-sage-dark";
   if (isHighlighted) return "border-brand-orange bg-brand-paper/95 ring-4 ring-brand-orange/25";
 
   const hasFailure =
-    view.mode === "single"
-      ? view.job.status === "failed"
-      : view.mode === "multiple" && view.failedCount > 0;
+    status.mode === "single" ? status.job.status === "failed" : status.failedCount > 0;
 
   return hasFailure
     ? "border-brand-danger/40 bg-brand-paper/95"
@@ -401,7 +454,7 @@ const islandActionClass =
 
 /**
  * 取り込み状況のアイランド。タップすると上に一覧を開く。
- * 保存できたのが1件なら、狭い横幅でもレシピ名を読めるよう、アイランド全体でそのレシピを開く。
+ * 保存だけを知らせていてそれが1件なら、狭い横幅でもレシピ名を読めるよう、アイランド全体でそのレシピを開く。
  */
 export const ImportIsland = ({
   island,
@@ -411,34 +464,41 @@ export const ImportIsland = ({
   placement: ImportIslandPlacement;
 }) => {
   const anchorRef = useRef<HTMLDivElement | null>(null);
-  const { view } = island;
-  const isSaved = view.mode === "saved";
-  const highlightedJob =
-    view.mode === "single" || view.mode === "multiple"
-      ? (view.mode === "single" ? [view.job] : view.jobs).find(
-          (job) => isActiveImportJob(job) && job.id === island.highlightedJobId,
-        )
-      : undefined;
+  const { status, saved } = island.view;
+  const isSavedOnly = status === null;
+  const highlightedJob = status
+    ? (status.mode === "single" ? [status.job] : status.jobs).find(
+        (job) => isActiveImportJob(job) && job.id === island.highlightedJobId,
+      )
+    : undefined;
+  const [onlySaved] = saved;
   const savedJobToOpen =
-    view.mode === "saved" && view.jobs.length === 1 && view.jobs[0]?.recipeId ? view.jobs[0] : null;
+    isSavedOnly && saved.length === 1 && onlySaved?.recipeId ? onlySaved : null;
   const summary = (
     <span
       className="flex min-w-0 flex-1 items-center gap-3 fade-in-0 slide-in-from-bottom-1 animate-in duration-300 motion-reduce:animate-none"
-      key={view.mode === "single" ? `single-${view.job.id}-${view.job.status}` : view.mode}
+      key={
+        status?.mode === "single"
+          ? `single-${status.job.id}-${status.job.status}`
+          : (status?.mode ?? "saved")
+      }
     >
-      {view.mode === "saved" ? (
-        <SavedSummary isCompact={placement === "beside-fab"} jobs={view.jobs} />
-      ) : null}
-      {view.mode === "single" ? (
-        <SingleSummary isHighlighted={Boolean(highlightedJob)} job={view.job} />
-      ) : null}
-      {view.mode === "multiple" ? <MultipleSummary view={view} /> : null}
+      {status ? (
+        <StatusSummary isHighlighted={Boolean(highlightedJob)} saved={saved} status={status} />
+      ) : (
+        <SavedSummary isCompact={placement === "beside-fab"} jobs={saved} />
+      )}
     </span>
   );
   // 触れている間は、保存できたことの表示を閉じずに待つ。
+  // フォーカスで止めるのはキーボードで来たときだけにする。一覧を閉じてフォーカスが戻っただけでは止めない。
   const holdHandlers = {
     onBlur: () => island.setIsHeld(false),
-    onFocus: () => island.setIsHeld(true),
+    onFocus: (event: FocusEvent<HTMLElement>) => {
+      if (event.currentTarget.matches(":focus-visible")) {
+        island.setIsHeld(true);
+      }
+    },
     onPointerEnter: () => island.setIsHeld(true),
     onPointerLeave: () => island.setIsHeld(false),
   };
@@ -448,15 +508,15 @@ export const ImportIsland = ({
       <p aria-live="polite" className="sr-only">
         {island.announcement}
       </p>
-      {island.isShown && view.mode !== "hidden" ? (
+      {island.isVisible ? (
         <Popover modal open={island.isPanelOpen} onOpenChange={island.setPanelOpen}>
           <div
             className={cn(
               "fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 flex items-center overflow-hidden border shadow-pantry-lg backdrop-blur-xl sm:bottom-6",
               "transition-[max-width,height,border-radius,background-color,border-color] duration-500 ease-[cubic-bezier(0.2,0.9,0.25,1.12)] motion-reduce:transition-none",
               "fade-in-0 zoom-in-50 animate-in motion-reduce:animate-none",
-              islandPositionClass(placement, isSaved),
-              islandToneClass(view, Boolean(highlightedJob)),
+              islandPositionClass(placement, isSavedOnly),
+              islandToneClass(status, Boolean(highlightedJob)),
             )}
             data-testid="import-island"
             ref={anchorRef}
@@ -480,14 +540,14 @@ export const ImportIsland = ({
             ) : (
               <PopoverTrigger
                 {...holdHandlers}
-                className={cn(islandActionClass, isSaved ? "px-3" : "pr-4 pl-2")}
+                className={cn(islandActionClass, isSavedOnly ? "px-3" : "pr-4 pl-2")}
               >
                 {summary}
                 <CaretUp
                   aria-hidden="true"
                   className={cn(
                     "shrink-0 transition-transform",
-                    isSaved ? "text-brand-sage-soft" : "text-brand-muted",
+                    isSavedOnly ? "text-brand-sage-soft" : "text-brand-muted",
                     island.isPanelOpen && "rotate-180",
                   )}
                   size={16}

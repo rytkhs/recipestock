@@ -1,29 +1,32 @@
 import { type RecentImportJob } from "@recipestock/schemas";
 import { isActiveImportJob } from "./workflow";
 
-export type ImportIslandView =
-  | { mode: "hidden" }
-  | { mode: "saved"; jobs: RecentImportJob[] }
+/**
+ * 終わるまで出し続ける取り込みの状況。取り込み中と取り込めなかったjobから作る。
+ */
+export type ImportIslandStatus =
   | { mode: "single"; job: RecentImportJob }
   | { mode: "multiple"; jobs: RecentImportJob[]; activeCount: number; failedCount: number };
 
 /**
- * アイランドに出すものを決める。保存できたものは見逃さないよう、取り込み中や失敗より先に出す。
- * 保存できたjobは見せたあとで閉じるので、残っているのはまだ見せていないものである。
+ * アイランドに出すもの。
+ * - `status`: 取り込み中と取り込めなかったもの。終わるまで出し続け、アイランドの主にする
+ * - `saved`: 保存できたもの。一度知らせれば済むので、`status`があれば押しのけずに添える
+ *
+ * 保存できたjobは見せたあとで閉じるので、`saved`に残っているのはまだ見せていないものである。
  */
-export const deriveImportIslandView = (jobs: readonly RecentImportJob[]): ImportIslandView => {
-  const saved = jobs.filter((job) => job.status === "succeeded");
+export type ImportIslandView = {
+  status: ImportIslandStatus | null;
+  saved: RecentImportJob[];
+};
 
-  if (saved.length > 0) {
-    return { mode: "saved", jobs: saved };
-  }
-
+const deriveImportIslandStatus = (jobs: readonly RecentImportJob[]): ImportIslandStatus | null => {
   const active = jobs.filter(isActiveImportJob);
   const failed = jobs.filter((job) => job.status === "failed");
   const [onlyJob, ...otherJobs] = [...active, ...failed];
 
   if (!onlyJob) {
-    return { mode: "hidden" };
+    return null;
   }
 
   if (otherJobs.length === 0) {
@@ -37,3 +40,11 @@ export const deriveImportIslandView = (jobs: readonly RecentImportJob[]): Import
     failedCount: failed.length,
   };
 };
+
+export const deriveImportIslandView = (jobs: readonly RecentImportJob[]): ImportIslandView => ({
+  status: deriveImportIslandStatus(jobs),
+  saved: jobs.filter((job) => job.status === "succeeded"),
+});
+
+export const hasImportIslandContent = ({ status, saved }: ImportIslandView): boolean =>
+  status !== null || saved.length > 0;

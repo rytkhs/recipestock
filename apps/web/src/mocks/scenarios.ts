@@ -768,6 +768,43 @@ export const scenarios: Scenario[] = [
     },
   },
   {
+    id: "import-saved-while-importing",
+    group: "import",
+    label: "複数を取り込む途中で1件保存した直後",
+    build: () => {
+      const state = baseState();
+      const [recipe] = state.recipes;
+
+      return {
+        ...state,
+        importJobs: [
+          importJobFixture({
+            id: "job_running",
+            url: "https://www.youtube.com/watch?v=mock",
+          }),
+          importJobFixture({
+            id: "job_queued",
+            status: "queued",
+            url: "https://www.tiktok.com/@mock/video/1",
+            startedAt: null,
+          }),
+          ...(recipe
+            ? [
+                importJobFixture({
+                  id: "job_saved",
+                  status: "succeeded",
+                  url: "https://example.com/recipes/mock",
+                  recipeId: recipe.id,
+                  finishedAt: new Date().toISOString(),
+                  recipe: { title: recipe.title, coverImageUrl: recipe.coverImageUrl },
+                }),
+              ]
+            : []),
+        ],
+      };
+    },
+  },
+  {
     id: "importing-multiple",
     group: "import",
     label: "複数を取り込み中（失敗を含む）",

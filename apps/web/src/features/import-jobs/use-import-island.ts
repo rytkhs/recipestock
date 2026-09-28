@@ -12,7 +12,7 @@ import { cancelImportJob, dismissFinishedImportJob, fetchRecentImportJobs } from
 import { markRecipeArrived } from "./arrivals";
 import { removeRecentImportJob, showSubmittedImportJob } from "./cache";
 import { useHighlightedImportJobId } from "./highlight";
-import { deriveImportIslandView } from "./island-state";
+import { deriveImportIslandView, hasImportIslandContent } from "./island-state";
 import { importJobQueryKeys } from "./query-keys";
 import { hasActiveImportJob, retryImportUrlJob } from "./workflow";
 
@@ -55,11 +55,22 @@ export const useImportIsland = ({
   });
   const jobs = data?.jobs ?? noJobs;
   const view = useMemo(() => deriveImportIslandView(jobs), [jobs]);
+  const isVisible = isShown && hasImportIslandContent(view);
   const highlightedJobId = useHighlightedImportJobId();
-  // 一覧を開いた画面。画面を移ったら閉じたものとし、開いたレシピの上に重ねたままにしない。
-  const [panelPathname, setPanelPathname] = useState<string | null>(null);
-  const isPanelOpen = panelPathname === pathname && view.mode !== "hidden";
+  const [isPanelOpen, setPanelOpen] = useState(false);
   const [isHeld, setIsHeld] = useState(false);
+  const shownPathname = isVisible ? pathname : null;
+  const [lastShownPathname, setLastShownPathname] = useState(shownPathname);
+
+  // 一覧を開いたことと触れていることは、アイランドがその画面に出ている間だけのものにする。
+  // 画面を移るかアイランドが消えたら忘れ、開いたレシピの上に一覧を重ねたり、戻ったときに開き直したりしない。
+  // アイランドから開いてアイランドが消えたときは、pointerleaveもblurも届かないので、ここで解く。
+  if (lastShownPathname !== shownPathname) {
+    setLastShownPathname(shownPathname);
+    setPanelOpen(false);
+    setIsHeld(false);
+  }
+
   const [announcement, setAnnouncement] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const observedStatusesRef = useRef(new Map<string, ImportJobStatus>());
@@ -144,7 +155,7 @@ export const useImportIsland = ({
     }
   }, [jobs, queryClient]);
 
-  const savedJobIds = view.mode === "saved" ? view.jobs.map((job) => job.id).join(" ") : "";
+  const savedJobIds = view.saved.map((job) => job.id).join(" ");
 
   useEffect(() => {
     if (!savedJobIds || !isShown || isPanelOpen || isHeld) {
@@ -160,17 +171,12 @@ export const useImportIsland = ({
     return () => window.clearTimeout(timer);
   }, [dismissJob, isHeld, isPanelOpen, isShown, savedJobIds]);
 
-  const setPanelOpen = useCallback(
-    (open: boolean) => setPanelPathname(open ? pathname : null),
-    [pathname],
-  );
-
   return {
     view,
     jobs,
     planState,
     highlightedJobId,
-    isShown,
+    isVisible,
     isPanelOpen,
     setPanelOpen,
     setIsHeld,
