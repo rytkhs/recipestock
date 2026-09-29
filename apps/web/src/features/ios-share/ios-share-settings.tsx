@@ -15,24 +15,66 @@ import {
 import { ShortcutSetupComplete } from "./setup-complete";
 import { ShareFlow } from "./share-flow";
 import { ShortcutKeys } from "./shortcut-keys";
-import { ShortcutSetup, type ShortcutSetupVariant } from "./shortcut-setup";
+import { ShortcutSetup } from "./shortcut-setup";
 import { ShortcutSyncNote } from "./shortcut-sync-note";
 import { ShortcutTroubleshooting } from "./troubleshooting";
 import { useShortcutSetup } from "./use-shortcut-setup";
 
+// 共有はアプリの外で起きるので、数秒で気づければよい。
+const sharePollIntervalMs = 3000;
+
 const usedCredentialIds = (credentials: readonly ShortcutCredential[]): ReadonlySet<string> =>
   new Set(credentials.filter(isShortcutCredentialUsed).map(({ id }) => id));
 
-/** 1回分の設定。始めるたびに`id`を変え、手順の状態と完了の基準を作り直す。 */
+/**
+ * 1回分の設定。始めるたびに`id`を変え、手順の状態と完了の基準を作り直す。
+ * 値は始まり方で決まる（docs/shortcut/ios-share.mdの表1）。
+ */
 type SetupSession = {
   id: number;
-  variant: ShortcutSetupVariant;
+  /** 初回の案内を出すか。 */
+  showsIntro: boolean;
   relinkReason?: ShortcutRelinkReason;
-  /** 開いたときや、未連携になったときに始まった設定。発行したまま使われていないキーがあれば、その続きから出す。 */
+  /** この端末にショートカットがもうありうるか。ありうるなら、②で置き換えるよう添える。 */
+  mayHaveShortcut: boolean;
+  /** 発行したまま使われていないキーがあれば、その続きから出すか。 */
   resumesUnusedKey: boolean;
 };
 
-const firstSetupSession: SetupSession = { id: 0, variant: "first", resumesUnusedKey: true };
+// 前にキーをすべて解除した人にはショートカットが残っているが、見分けられないのでiOSの確認に任せる。
+const openedUnlinkedSession: SetupSession = {
+  id: 0,
+  showsIntro: true,
+  mayHaveShortcut: false,
+  resumesUnusedKey: true,
+};
+
+// 連携の管理を出している間に、最後の使ったキーが解除された。解除したキーのショートカットが残っている。
+const becameUnlinkedSession: SetupSession = { ...openedUnlinkedSession, mayHaveShortcut: true };
+
+const relinkSession = (relinkReason: ShortcutRelinkReason): SetupSession => ({
+  id: 0,
+  showsIntro: false,
+  relinkReason,
+  mayHaveShortcut: true,
+  resumesUnusedKey: false,
+});
+
+// 連携の管理から、この端末で追加するか、最初からやり直す。iCloudで同期されて、もう入っていることがある。
+const addHereSession: SetupSession = {
+  id: 0,
+  showsIntro: false,
+  mayHaveShortcut: true,
+  resumesUnusedKey: false,
+};
+
+// やり直しを案内するのは、ショートカットを追加したあとのつまずきだけ。導入と理由は元の設定のまま出す。
+const restartSession = (current: SetupSession): SetupSession => ({
+  ...current,
+  id: current.id + 1,
+  mayHaveShortcut: true,
+  resumesUnusedKey: false,
+});
 
 /**
  * 設定を始めた時点の連携キーの一覧から、完了の基準と、続きから出すキーを決める。どちらもこの設定の間は変えないので、
@@ -51,15 +93,32 @@ const ShortcutSetupSession = ({
   onRestart: () => void;
   session: SetupSession;
 }) => {
-  const setup = useShortcutSetup({ deviceName });
-  const [atStart] = useState(() => ({
-    // これ以外のキーが使われたら、どのキーでも連携できたとみなす。発行し直す前のキーや、
-    // Safariで発行したキーで共有しても、ここで待っている人に完了を見せられる。
-    usedIds: usedCredentialIds(credentials),
-    resumableCredential: session.resumesUnusedKey
+  const [atStart] = useState(() => {
+    const resumableCredential = session.resumesUnusedKey
       ? (credentials.find((credential) => !isShortcutCredentialUsed(credential)) ?? null)
-      : null,
-  }));
+      : null;
+
+    return {
+      // これ以外のキーが使われたら、どのキーでも連携できたとみなす。発行し直す前のキーや、
+      // Safariで発行したキーで共有しても、ここで待っている人に完了を見せられる。
+      usedIds: usedCredentialIds(credentials),
+      resumableCredential,
+      // 続きのキーがあれば、それを貼って追加し終えていることがある。
+      mayHaveShortcut: session.mayHaveShortcut || resumableCredential !== null,
+    };
+  });
+  const setup = useShortcutSetup({
+    deviceName,
+    resumableCredential: atStart.resumableCredential,
+  });
+  // 一覧は親が読んでいる。ここでは、共有を待っている間の読み直しだけを足す。iPadのSplit ViewやStage Managerでは、
+  // この画面が見えたまま共有するので、アプリへ戻ったときの読み直しが起きない。
+  useQuery({
+    queryKey: shortcutCredentialsQueryKey,
+    queryFn: listShortcutCredentials,
+    refetchOnMount: false,
+    refetchInterval: setup.isWaitingForShare ? sharePollIntervalMs : false,
+  });
   const hasNewlyUsedKey = credentials.some(
     (credential) => isShortcutCredentialUsed(credential) && !atStart.usedIds.has(credential.id),
   );
@@ -71,10 +130,11 @@ const ShortcutSetupSession = ({
   return (
     <ShortcutSetup
       deviceName={deviceName}
+      mayHaveShortcut={atStart.mayHaveShortcut}
       relinkReason={session.relinkReason}
       resumableCredential={atStart.resumableCredential}
       setup={setup}
-      variant={session.variant}
+      showsIntro={session.showsIntro}
       onCancel={onCancel}
       onRestart={onRestart}
     />
@@ -97,30 +157,19 @@ const IosShareSettingsContent = ({
   const isLinked = isShortcutLinked(credentials);
   const [session, setSession] = useState<SetupSession | null>(() => {
     if (initialRelinkReason) {
-      return {
-        id: 0,
-        variant: "relink",
-        relinkReason: initialRelinkReason,
-        resumesUnusedKey: false,
-      };
+      return relinkSession(initialRelinkReason);
     }
-    return isLinked ? null : firstSetupSession;
+    return isLinked ? null : openedUnlinkedSession;
   });
 
   // 未連携なら、いつも設定の途中にいる。連携の管理で最後の連携キーを解除したときも、ここから設定を始める。
   if (session === null && !isLinked) {
-    setSession(firstSetupSession);
+    setSession(becameUnlinkedSession);
     return null;
   }
 
-  // 設定の途中なら同じ始め方で、連携の管理からならこの端末で追加する設定として、最初から始める。
   const startSetupHere = () => {
-    setSession((current) => ({
-      id: (current?.id ?? 0) + 1,
-      variant: current?.variant ?? "another",
-      relinkReason: current?.relinkReason,
-      resumesUnusedKey: false,
-    }));
+    setSession(addHereSession);
   };
 
   if (session) {
@@ -131,7 +180,7 @@ const IosShareSettingsContent = ({
         key={session.id}
         session={session}
         onCancel={isLinked ? () => setSession(null) : undefined}
-        onRestart={startSetupHere}
+        onRestart={() => setSession((current) => current && restartSession(current))}
       />
     );
   }
@@ -157,7 +206,7 @@ const IosShareSettingsContent = ({
 
 /**
  * iPhoneとiPadの「共有から取り込む」。まだ連携していないか、連携し直しに来たか、この端末で追加するときは
- * 設定の手順を、それ以外は連携の管理を出す。共有が届いたかどうかは、アプリへ戻ったときの一覧の読み直しで知る。
+ * 設定の手順を、それ以外は連携の管理を出す。共有が届いたかどうかは、アプリへ戻ったときと、共有を待っている間の一覧の読み直しで知る。
  */
 export const IosShareSettings = ({
   deviceName,

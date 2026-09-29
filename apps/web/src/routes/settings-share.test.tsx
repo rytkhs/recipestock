@@ -31,6 +31,7 @@ const usedCredential = (credential: ShortcutCredential) => {
 // iPadのSafariは既定でMacと同じUser-Agentを名乗る。
 const iPadDesktopUserAgent =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+const replaceShortcutGuide = /同じ名前のショートカットがあると聞かれたら、置き換えてください。/;
 
 class ClipboardItemStub {
   constructor(readonly data: Record<string, Promise<Blob>>) {}
@@ -168,6 +169,7 @@ describe("共有から取り込む", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+    vi.useRealTimers();
     focusManager.setFocused(undefined);
   });
 
@@ -246,6 +248,25 @@ describe("共有から取り込む", () => {
     );
     expect(screen.getByRole("button", { name: "キーを発行し直す" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "キーをコピー" })).not.toBeInTheDocument();
+  });
+
+  it("共有を待っている間は、画面が見えたままでも、共有が届いたら連携できたことを伝える", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    installDevice();
+    const shortcut = mockShortcutFetch({ credentials: [issuedCredential] });
+
+    await renderApp("/settings/share");
+    await screen.findByText("共有を待っています");
+
+    // iPadのSplit Viewでは、隣のアプリから共有してもこの画面は隠れず、アプリへ戻ったことにならない。
+    shortcut.setCredentials([usedCredential(issuedCredential)]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    await expect(
+      screen.findByRole("heading", { name: "連携できました" }),
+    ).resolves.toBeInTheDocument();
   });
 
   it("共有が届いたら連携できたことを伝え、次に開いたときは連携の管理を出す", async () => {
@@ -342,6 +363,23 @@ describe("共有から取り込む", () => {
     expect(device.copied).toEqual([]);
   });
 
+  it("初めての設定では置き換えを案内せず、やり直したら、もう追加したショートカットを置き換えるよう伝える", async () => {
+    installDevice();
+    mockShortcutFetch();
+
+    await renderApp("/settings/share");
+    await userEvent.click(await screen.findByRole("button", { name: "キーをコピー" }));
+    await screen.findByRole("heading", { name: /キーをコピーしました/ });
+    expect(screen.queryByText(replaceShortcutGuide)).not.toBeInTheDocument();
+
+    const forgotKey = screen.getByText("キーを貼り忘れた・違うものを貼った").closest("details");
+    if (!forgotKey) throw new Error("troubleshooting item not found");
+    await userEvent.click(within(forgotKey).getByRole("button", { name: "最初からやり直す" }));
+
+    expect(screen.getByRole("button", { name: "キーをコピー" })).toBeInTheDocument();
+    expect(screen.getByText(replaceShortcutGuide)).toBeInTheDocument();
+  });
+
   it("連携し直しに来たら、使ったことのあるキーがあっても理由と入れ直す手順を出し、新しいキーに共有が届いたら連携できたことを伝える", async () => {
     installDevice();
     const linkedCredential = shortcutCredentialFixture();
@@ -377,7 +415,9 @@ describe("共有から取り込む", () => {
     await userEvent.click(await screen.findByRole("button", { name: "末尾 0001 のキーを解除" }));
     await userEvent.click(await screen.findByRole("button", { name: "解除" }));
 
-    await userEvent.click(await screen.findByRole("button", { name: "キーをコピー" }));
+    // 解除したキーのショートカットが残っているので、追加するときに聞かれたら置き換えてもらう。
+    await expect(screen.findByText(replaceShortcutGuide)).resolves.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "キーをコピー" }));
     await screen.findByRole("heading", { name: /キーをコピーしました/ });
     shortcut.setCredentials([usedCredential(issuedCredential)]);
     await returnToApp();

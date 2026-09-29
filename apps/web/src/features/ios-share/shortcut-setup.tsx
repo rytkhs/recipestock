@@ -19,12 +19,6 @@ import { guideTextClass, ShareIntro } from "./share-guide";
 import { ShortcutTroubleshooting } from "./troubleshooting";
 import { type ShortcutSetupState } from "./use-shortcut-setup";
 
-/**
- * どこから設定を始めたか。`first`はまだ連携していない人、`another`は連携済みの人がこの端末で追加するとき、
- * `relink`はショートカットから連携し直しへ送られてきたとき。
- */
-export type ShortcutSetupVariant = "first" | "another" | "relink";
-
 type StepStatus = "todo" | "active" | "done";
 
 const stepNumberClass: Record<StepStatus, string> = {
@@ -94,15 +88,13 @@ const relinkNotice = (reason: ShortcutRelinkReason, deviceName: IosDeviceName) =
     },
   })[reason];
 
-const shortcutStepText: Record<ShortcutSetupVariant, string> = {
-  first:
-    "ショートカットAppが開きます。キーを聞かれたら貼り付けて、「ショートカットを追加」を押してください。",
-  // 同期ですでに入っていることがある。同じ名前のショートカットを2つにしない。
-  another:
-    "ショートカットAppに「Recipe Stock」があれば、削除してから追加してください。キーを聞かれたら貼り付けます。",
-  relink:
-    "ショートカットAppで古い「Recipe Stock」を削除してから、追加し直してください。キーを聞かれたら貼り付けます。",
-};
+const shortcutStepText =
+  "ショートカットAppが開きます。キーを聞かれたら貼り付けて、「ショートカットを追加」を押してください。";
+// 開き直したときは、もう追加したかどうか分からない。③で待ちながら、まだなら追加できるようにしておく。
+const resumedShortcutStepText =
+  "まだ追加していなければ、ショートカットAppで追加してください。キーを聞かれたら貼り付けます。";
+// 同じ名前のショートカットがあると、iOSは置き換えるか追加するかを聞く。追加すると、古いキーのものと2つ並ぶ。
+const replaceShortcutText = "同じ名前のショートカットがあると聞かれたら、置き換えてください。";
 
 const KeyStep = ({
   resumableCredential,
@@ -200,17 +192,18 @@ const KeyStep = ({
 };
 
 const ShortcutStep = ({
-  resumableCredential,
+  isRelink,
+  mayHaveShortcut,
   setup,
-  variant,
 }: {
-  resumableCredential: ShortcutCredential | null;
+  isRelink: boolean;
+  mayHaveShortcut: boolean;
   setup: ShortcutSetupState;
-  variant: ShortcutSetupVariant;
 }) => {
   const shortcutUrl = import.meta.env.VITE_IOS_SHARE_SHORTCUT_URL;
-  const title = variant === "relink" ? "ショートカットを入れ直す" : "ショートカットを追加";
+  const title = isRelink ? "ショートカットを入れ直す" : "ショートカットを追加";
 
+  // 開いたあとに、キーを貼らずに追加したときの案内は出さない。つまずいた人には「うまくいかないとき」がある。
   if (setup.hasOpenedShortcut) {
     return (
       <SetupStep
@@ -227,12 +220,7 @@ const ShortcutStep = ({
             もう一度開く
           </a>
         }
-      >
-        <p className={guideTextClass}>
-          キーを貼らずに追加してしまったら、ショートカットAppで「Recipe
-          Stock」を削除して、もう一度開いてください。
-        </p>
-      </SetupStep>
+      />
     );
   }
 
@@ -243,21 +231,16 @@ const ShortcutStep = ({
     </>
   );
   const isIssued = setup.key.status === "issued";
-  // 開き直したときは、もう追加したかどうか分からない。③で待ちながら、まだなら追加できるようにしておく。
-  const isResumed = setup.key.status === "none" && resumableCredential !== null;
-  // 続きから発行し直した人は、キーを貼らずに追加し終えていることがある。同じ名前のショートカットを2つにしない。
-  const stepText = isResumed
-    ? "まだ追加していなければ、ショートカットAppで追加してください。キーを聞かれたら貼り付けます。"
-    : resumableCredential
-      ? shortcutStepText.another
-      : shortcutStepText[variant];
 
   return (
     <SetupStep number={2} status={isIssued ? "active" : "todo"} title={title}>
-      <p className={guideTextClass}>{stepText}</p>
+      <p className={guideTextClass}>
+        {setup.isResumed ? resumedShortcutStepText : shortcutStepText}
+        {mayHaveShortcut ? replaceShortcutText : null}
+      </p>
       <ShortcutQuestionIllustration />
       {/* キーを持たずに追加すると、貼るものがない。キーを発行してコピーを終えるまでは押せなくしておく。 */}
-      {isIssued || isResumed ? (
+      {isIssued || setup.isResumed ? (
         <a
           className={cn(
             buttonVariants({ variant: isIssued ? "default" : "secondary" }),
@@ -283,28 +266,29 @@ const ShortcutStep = ({
 /**
  * 連携の設定を、アプリの外で起きることまで含めて順に見せる。ショートカットAppで追加したあと、
  * ここへ戻らずにSafariやInstagramへ行く人がいるので、③の中身は②を押す前から見せておく。
+ * 何を出すかは、始まり方で決まった値（表1）と手順の段階（表2）だけから決める（docs/shortcut/ios-share.md）。
  */
 export const ShortcutSetup = ({
   deviceName,
+  mayHaveShortcut,
   onCancel,
   onRestart,
   relinkReason,
   resumableCredential,
   setup,
-  variant,
+  showsIntro,
 }: {
   deviceName: IosDeviceName;
+  mayHaveShortcut: boolean;
   onCancel?: () => void;
   onRestart: () => void;
   relinkReason?: ShortcutRelinkReason;
   resumableCredential: ShortcutCredential | null;
   setup: ShortcutSetupState;
-  variant: ShortcutSetupVariant;
+  showsIntro: boolean;
 }) => {
   const headingId = useId();
   const notice = relinkReason ? relinkNotice(relinkReason, deviceName) : null;
-  const isWaitingForShare =
-    setup.hasOpenedShortcut || (setup.key.status === "none" && resumableCredential !== null);
 
   return (
     <div className="grid gap-10">
@@ -326,7 +310,7 @@ export const ShortcutSetup = ({
       ) : null}
 
       {/* 連携するまで残す。発行した直後に上が消えると、押したところへ次のボタンが来てしまう。 */}
-      {variant === "first" ? (
+      {showsIntro ? (
         <ShareIntro>
           <p className="text-brand-walnut text-sm leading-6">
             InstagramやYouTube、Safariで見つけたレシピを、アプリを開かずにRecipe
@@ -340,14 +324,18 @@ export const ShortcutSetup = ({
         <SectionHeader id={headingId} title={`この${deviceName}で設定する`} />
         <ol className="mt-4">
           <KeyStep resumableCredential={resumableCredential} setup={setup} />
-          <ShortcutStep resumableCredential={resumableCredential} setup={setup} variant={variant} />
+          <ShortcutStep
+            isRelink={relinkReason !== undefined}
+            mayHaveShortcut={mayHaveShortcut}
+            setup={setup}
+          />
           <SetupStep
             isLast
             number={3}
-            status={isWaitingForShare ? "active" : "todo"}
+            status={setup.isWaitingForShare ? "active" : "todo"}
             title="試しに共有する"
           >
-            {isWaitingForShare ? (
+            {setup.isWaitingForShare ? (
               <div
                 className="flex items-center gap-3.5 rounded-[16px] border border-brand-orange-soft bg-brand-orange-soft/25 px-4 py-3.5"
                 role="status"

@@ -25,10 +25,16 @@ export type ShortcutKeyPhase =
     };
 
 /**
- * 1回の設定で進めている手順。設定を始めるたびに作り直すので、やり直しで消すものはない。
- * どこまで進んだかは端末に覚えない。開き直したときの続きは、連携キーの一覧から決める。
+ * 1回の設定で進めている手順（docs/shortcut/ios-share.mdの表2）。設定を始めるたびに作り直すので、やり直しで消すものはない。
+ * どこまで進んだかは端末に覚えない。開き直したときの続きは、始めたときの連携キーの一覧から親が決めて渡す。
  */
-export const useShortcutSetup = ({ deviceName }: { deviceName: IosDeviceName }) => {
+export const useShortcutSetup = ({
+  deviceName,
+  resumableCredential,
+}: {
+  deviceName: IosDeviceName;
+  resumableCredential: ShortcutCredential | null;
+}) => {
   const queryClient = useQueryClient();
   const [key, setKey] = useState<ShortcutKeyPhase>({ status: "none", hasIssueError: false });
   const [hasOpenedShortcut, setHasOpenedShortcut] = useState(false);
@@ -67,9 +73,14 @@ export const useShortcutSetup = ({ deviceName }: { deviceName: IosDeviceName }) 
     setHasOpenedShortcut(true);
   };
 
+  // 続きのキーがあり、この画面ではまだ発行していない。もう追加したかどうかは分からない。
+  const isResumed = key.status === "none" && resumableCredential !== null;
+
   return {
     key,
     hasOpenedShortcut,
+    isResumed,
+    isWaitingForShare: hasOpenedShortcut || isResumed,
     issueAndCopyKey,
     copyKeyAgain,
     markShortcutOpened,
