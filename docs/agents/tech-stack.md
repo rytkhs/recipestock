@@ -69,6 +69,7 @@ Browser / PWA
 - Use Biome for repository-wide formatting and baseline linting.
 - Use Vitest for unit tests, component tests, and request-level API tests.
 - Use MSW to inspect state-dependent screens during development. Declare the server state as a scenario in `apps/web/src/mocks/scenarios.ts` instead of hand-crafting data through the real API. Keep fixtures typed with `@recipestock/schemas` so `pnpm typecheck` and `src/mocks/scenarios.test.ts` catch contract drift. Do not enable MSW outside `--mode mock`.
+- Use the UI gallery (`apps/web/src/gallery/`, `/gallery.html` on the dev server) to compare every pattern of a screen side by side. Pass state directly to the real components instead of copying their markup, so `pnpm typecheck` catches prop changes. Keep it out of the production build: Vite builds only `index.html`.
 - Use Testing Library with Vitest for React component behavior tests.
 - Do not set up E2E testing in the initial project setup. Add Playwright later only when end-to-end coverage becomes necessary.
 - Add ESLint only if a concrete rule need appears that Biome does not cover, such as advanced React Hooks or type-aware linting.
