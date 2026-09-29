@@ -28,6 +28,7 @@ import {
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
 import { ImportIsland, useImportIsland } from "../features/import-jobs";
+import { shortcutRelinkReasonSchema } from "../features/ios-share/api";
 import { recipeListQueryOptions } from "../features/recipes";
 import { readRecipeListSort } from "../features/recipes/list-search";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
@@ -431,9 +432,15 @@ const settingsBillingRoute = createRoute({
   pendingMs: 0,
 });
 
+// ショートカットが連携し直しへ送るときの理由。ページは一度だけ読んでURLから消す。読めない値は理由なしとして扱う。
+const settingsShareSearchSchema = z.object({
+  reason: shortcutRelinkReasonSchema.optional().catch(undefined),
+});
+
 const settingsShareRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings/share",
+  validateSearch: settingsShareSearchSchema,
   component: SettingsShareRoute,
   errorComponent: RouteChunkError,
   pendingComponent: SettingsPageSkeleton,

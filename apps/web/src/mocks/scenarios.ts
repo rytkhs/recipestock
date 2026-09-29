@@ -43,6 +43,7 @@ import {
   recipeTagsFixture,
   type SessionFixture,
   sessionFixture,
+  shortcutCredentialFixture,
   shortcutCredentialsFixture,
   tagsFixture,
   viewerFixture,
@@ -76,6 +77,11 @@ export type MockState = {
   proPrice: GetProPriceResponse;
   /** 指定すると、課金の状態をこの回数より多く読んだところでProに変わる(決済から戻った直後の再現)。 */
   upgradeAfterBillingReads?: number;
+  /**
+   * 指定すると、発行した連携キーをこのミリ秒が過ぎてから読み直したとき、使われたことにする
+   * (ショートカットから最初の共有が届いたときの再現)。
+   */
+  shortcutFirstUseAfterMs?: number;
   failures: {
     /** "always" は全ページ、"after-first-page" は2ページ目以降を500にする。 */
     listRecipes?: "always" | "after-first-page";
@@ -674,12 +680,57 @@ export const scenarios: Scenario[] = [
     build: () => ({ ...baseState(), failures: { createBillingPortal: true } }),
   },
   {
-    id: "linked-devices",
+    id: "shortcut-linked-keys",
     group: "settings",
-    label: "共有を2台と連携中",
+    label: "共有を連携済み(使ったキー2本)",
     build: () => ({
       ...baseState(),
       shortcutCredentials: linkedShortcutCredentialsFixture(),
+    }),
+  },
+  {
+    // 端末の判定はブラウザのUser-Agentで行う。iPhoneの画面は開発者ツールで端末を切り替えて見る。
+    id: "shortcut-first-share",
+    group: "settings",
+    label: "共有を連携する(発行の10秒後に最初の共有が届く)",
+    build: () => ({ ...baseState(), shortcutFirstUseAfterMs: 10_000 }),
+  },
+  {
+    // ショートカットAppへ移っている間にアプリが閉じられ、開き直したとき。
+    id: "shortcut-setup-resumed",
+    group: "settings",
+    label: "共有の設定の途中(発行したキーにまだ共有が届いていない)",
+    build: () => ({
+      ...baseState(),
+      shortcutCredentials: shortcutCredentialsFixture({
+        credentials: [
+          shortcutCredentialFixture({
+            createdAt: new Date().toISOString(),
+            firstUsedAt: null,
+            lastUsedAt: null,
+          }),
+        ],
+      }),
+    }),
+  },
+  {
+    id: "shortcut-linked-and-unused-keys",
+    group: "settings",
+    label: "共有を連携済み・使われていないキーあり",
+    build: () => ({
+      ...baseState(),
+      shortcutCredentials: shortcutCredentialsFixture({
+        credentials: [
+          shortcutCredentialFixture({ lastUsedAt: new Date().toISOString() }),
+          shortcutCredentialFixture({
+            id: "credential_0002",
+            name: "iPad",
+            tokenSuffix: "0002",
+            firstUsedAt: null,
+            lastUsedAt: null,
+          }),
+        ],
+      }),
     }),
   },
   {
@@ -697,7 +748,7 @@ export const scenarios: Scenario[] = [
   {
     id: "shortcut-credentials-error",
     group: "settings",
-    label: "連携端末の取得失敗",
+    label: "連携キーの取得失敗",
     build: () => ({ ...baseState(), failures: { listShortcutCredentials: true } }),
   },
   {
@@ -715,7 +766,7 @@ export const scenarios: Scenario[] = [
   {
     id: "shortcut-revoke-error",
     group: "settings",
-    label: "端末の連携解除失敗",
+    label: "連携キーの解除失敗",
     build: () => ({
       ...baseState(),
       shortcutCredentials: linkedShortcutCredentialsFixture(),

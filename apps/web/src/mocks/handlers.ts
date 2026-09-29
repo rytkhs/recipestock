@@ -1021,6 +1021,18 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
         return apiError(503, "temporarily_unavailable", "Failed to list shortcut credentials.");
       }
 
+      const firstUseAfterMs = state.shortcutFirstUseAfterMs;
+      if (firstUseAfterMs !== undefined) {
+        const now = Date.now();
+        const usedAt = new Date(now).toISOString();
+        credentials = credentials.map((credential) =>
+          credential.firstUsedAt === null &&
+          Date.parse(credential.createdAt) + firstUseAfterMs <= now
+            ? { ...credential, firstUsedAt: usedAt, lastUsedAt: usedAt }
+            : credential,
+        );
+      }
+
       return HttpResponse.json({ credentials });
     }),
     http.post("/api/shortcut-credentials", async ({ request }) => {

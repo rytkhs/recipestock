@@ -1,21 +1,31 @@
+import { type ShortcutCredential } from "@recipestock/schemas";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { billingRedirect } from "../features/billing/api";
 import { viewerQueryKey } from "../lib/viewer";
-import { googleLoginAccountsFixture, loginAccountFixture } from "../mocks/fixtures";
+import {
+  googleLoginAccountsFixture,
+  loginAccountFixture,
+  shortcutCredentialFixture,
+} from "../mocks/fixtures";
 import {
   billingStatusResponse,
   createSessionResponse,
   findFetchCall,
   getRequestPath,
+  iPhoneUserAgent,
   isGetSessionRequest,
   jsonResponse,
   loginAccountsResponse,
   mockFetch,
   renderApp,
+  stubUserAgent,
   viewerResponse,
 } from "../test/router-test-utils";
+
+// 取り込み完了の通知は、共有から取り込めるiPhoneの「共有から取り込む」に出る。
+const linkedIphoneCredentials = [shortcutCredentialFixture()];
 
 describe("Settings routes", () => {
   afterEach(() => {
@@ -68,6 +78,7 @@ describe("Settings routes", () => {
     vi.stubGlobal("PushManager", class PushManager {});
     vi.stubGlobal("navigator", {
       ...navigator,
+      userAgent: iPhoneUserAgent,
       serviceWorker: {
         getRegistration,
         ready,
@@ -131,7 +142,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -170,7 +181,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -212,7 +223,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -231,7 +242,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -280,6 +291,7 @@ describe("Settings routes", () => {
     vi.stubGlobal("PushManager", class PushManager {});
     vi.stubGlobal("navigator", {
       ...navigator,
+      userAgent: iPhoneUserAgent,
       serviceWorker: {
         getRegistration: vi.fn(async () => registration as unknown as ServiceWorkerRegistration),
         ready: Promise.resolve(registration),
@@ -305,6 +317,9 @@ describe("Settings routes", () => {
       }
       if (path === "/api/recipes?limit=20") {
         return jsonResponse({ items: [], nextCursor: null });
+      }
+      if (path === "/api/shortcut-credentials" && authenticated) {
+        return jsonResponse({ credentials: linkedIphoneCredentials });
       }
       if (path === "/api/push-subscriptions" && init?.method === "GET") {
         return jsonResponse({
@@ -356,7 +371,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -366,7 +381,9 @@ describe("Settings routes", () => {
       screen.findByText("通知が拒否されています。端末の設定から許可してください。"),
     ).resolves.toBeInTheDocument();
     expect(browser.subscribe).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "連携キーを発行" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "このiPhoneでショートカットを追加する" }),
+    ).toBeInTheDocument();
   });
 
   it("通知権限dialogを閉じた場合は拒否扱いにせず再試行できる", async () => {
@@ -378,7 +395,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -407,7 +424,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -422,7 +439,11 @@ describe("Settings routes", () => {
   it("ホーム画面から開いていない未対応環境には、追加すれば通知を使えることを伝える", async () => {
     vi.stubGlobal("Notification", undefined);
     vi.stubGlobal("PushManager", undefined);
-    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+    stubUserAgent(iPhoneUserAgent);
+    mockFetch(async () => new Response(null, { status: 404 }), {
+      authenticated: true,
+      shortcutCredentials: linkedIphoneCredentials,
+    });
 
     await renderApp("/settings/share");
 
@@ -432,7 +453,9 @@ describe("Settings routes", () => {
       ),
     ).resolves.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "通知を有効にする" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "連携キーを発行" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "このiPhoneでショートカットを追加する" }),
+    ).toBeInTheDocument();
   });
 
   it("ホーム画面から開いていても未対応なら、通知権限を要求せず未対応と伝える", async () => {
@@ -442,7 +465,11 @@ describe("Settings routes", () => {
       "matchMedia",
       vi.fn(() => ({ matches: true })),
     );
-    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
+    stubUserAgent(iPhoneUserAgent);
+    mockFetch(async () => new Response(null, { status: 404 }), {
+      authenticated: true,
+      shortcutCredentials: linkedIphoneCredentials,
+    });
 
     await renderApp("/settings/share");
 
@@ -464,7 +491,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -489,7 +516,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -542,7 +569,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -572,7 +599,7 @@ describe("Settings routes", () => {
         }
         return new Response(null, { status: 404 });
       },
-      { authenticated: true },
+      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
     );
 
     await renderApp("/settings/share");
@@ -823,51 +850,6 @@ describe("Settings routes", () => {
       ),
     ).resolves.toBeInTheDocument();
     expect(appRouter.state.location.pathname).toBe("/settings");
-  });
-
-  it("ホーム画面に追加していなくても連携キーを発行してショートカットの追加へ進める", async () => {
-    vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", "https://www.icloud.com/shortcuts/recipe-stock-test");
-    const fetchMock = mockFetch(
-      async (input, init) => {
-        const path = getRequestPath(input);
-        if (path === "/api/shortcut-credentials" && init?.method === "GET") {
-          return jsonResponse({ credentials: [] });
-        }
-        if (path === "/api/shortcut-credentials" && init?.method === "POST") {
-          return jsonResponse(
-            {
-              credential: {
-                id: "credential_1",
-                name: "iPhone",
-                tokenSuffix: "aaaa",
-                createdAt: "2026-07-11T00:00:00.000Z",
-                firstUsedAt: null,
-                lastUsedAt: null,
-              },
-              token: `rssc_${"a".repeat(25)}`,
-            },
-            { status: 201 },
-          );
-        }
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "連携キーを発行" }));
-
-    await expect(screen.findByLabelText("連携キー")).resolves.toHaveValue(`rssc_${"a".repeat(25)}`);
-    expect(screen.getByRole("link", { name: "ショートカットを追加" })).toHaveAttribute(
-      "href",
-      "https://www.icloud.com/shortcuts/recipe-stock-test",
-    );
-    expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          getRequestPath(input) === "/api/shortcut-credentials" && init?.method === "POST",
-      ),
-    ).toBe(true);
   });
 
   it("メールアドレスのページから変更確認メールを送信できる", async () => {
@@ -1697,7 +1679,7 @@ describe("Settings routes", () => {
     viewer = viewerResponse,
   }: {
     billing?: object | null;
-    credentials?: ReturnType<typeof linkedCredential>[];
+    credentials?: ShortcutCredential[];
     loginAccounts?: typeof loginAccountsResponse;
     tags?: { id: string; name: string; recipeCount: number }[];
     viewer?: typeof viewerResponse | null;
@@ -1753,7 +1735,7 @@ describe("Settings routes", () => {
     ).resolves.toHaveAttribute("href", "/settings/billing");
     expect(screen.getByText("Free · 5/5件")).toHaveClass("text-brand-orange-dark");
     await expect(
-      screen.findByRole("link", { name: /共有から取り込む.*2台と連携中/ }),
+      screen.findByRole("link", { name: /共有から取り込む.*連携済み/ }),
     ).resolves.toHaveAttribute("href", "/settings/share");
     await expect(screen.findByRole("link", { name: /タグ.*3個/ })).resolves.toHaveAttribute(
       "href",
@@ -1818,6 +1800,20 @@ describe("Settings routes", () => {
       screen.findByRole("link", { name: /共有から取り込む.*未設定/ }),
     ).resolves.toBeInTheDocument();
     await expect(screen.findByRole("link", { name: /タグ.*なし/ })).resolves.toBeInTheDocument();
+  });
+
+  it("共有が届いていないキーしかなければ、共有から取り込むは未設定と出す", async () => {
+    mockSettingsFetch({
+      credentials: [
+        { ...linkedCredential("credential_0001", "iPhone"), firstUsedAt: null, lastUsedAt: null },
+      ],
+    });
+
+    await renderApp("/settings");
+
+    await expect(
+      screen.findByRole("link", { name: /共有から取り込む.*未設定/ }),
+    ).resolves.toBeInTheDocument();
   });
 
   it("ProからFreeに戻ってロックがあれば、目次のプランの行にロック中の件数を出す", async () => {
@@ -1896,7 +1892,7 @@ describe("Settings routes", () => {
     expect(findFetchCall(fetchMock, "/api/auth/sign-out")).toBeUndefined();
   });
 
-  const mockLinkedDevicesFetch = ({ revokeSucceeds = true }: { revokeSucceeds?: boolean } = {}) => {
+  const mockLinkedKeysFetch = ({ revokeSucceeds = true }: { revokeSucceeds?: boolean } = {}) => {
     let credentials = [
       linkedCredential("credential_0001", "iPhone"),
       linkedCredential("credential_0002", "iPad"),
@@ -1927,25 +1923,25 @@ describe("Settings routes", () => {
     );
   };
 
-  it("ホーム画面から開いていなくても、連携している端末を確認して解除できる", async () => {
-    const fetchMock = mockLinkedDevicesFetch();
+  it("ホーム画面から開いていなくても、連携キーを確認して解除できる", async () => {
+    const fetchMock = mockLinkedKeysFetch();
 
     await renderApp("/settings/share");
 
-    const list = await screen.findByRole("list", { name: "連携している端末" });
-    expect(within(list).getByText("iPhone")).toBeInTheDocument();
+    const list = await screen.findByRole("list", { name: "連携キー" });
+    expect(within(list).getByText("iPhoneで設定")).toBeInTheDocument();
     expect(within(list).getByText(/末尾 0001/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "「iPhone」の連携を解除" }));
+    await userEvent.click(screen.getByRole("button", { name: "末尾 0001 のキーを解除" }));
     const dialog = await screen.findByRole("alertdialog", {
-      name: "「iPhone」の連携を解除しますか？",
+      name: "末尾 0001 のキーを解除しますか？",
     });
     await userEvent.click(within(dialog).getByRole("button", { name: "解除" }));
 
     await waitFor(() => {
-      expect(within(list).queryByText("iPhone")).not.toBeInTheDocument();
+      expect(within(list).queryByText("iPhoneで設定")).not.toBeInTheDocument();
     });
-    expect(within(list).getByText("iPad")).toBeInTheDocument();
+    expect(within(list).getByText("iPadで設定")).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
@@ -1955,36 +1951,36 @@ describe("Settings routes", () => {
     ).toBe(true);
   });
 
-  it("連携の解除をキャンセルすると解除しない", async () => {
-    const fetchMock = mockLinkedDevicesFetch();
+  it("キーの解除をキャンセルすると解除しない", async () => {
+    const fetchMock = mockLinkedKeysFetch();
 
     await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "「iPhone」の連携を解除" }));
+    await userEvent.click(await screen.findByRole("button", { name: "末尾 0001 のキーを解除" }));
     const dialog = await screen.findByRole("alertdialog", {
-      name: "「iPhone」の連携を解除しますか？",
+      name: "末尾 0001 のキーを解除しますか？",
     });
     await userEvent.click(within(dialog).getByRole("button", { name: "キャンセル" }));
 
     await waitFor(() => {
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     });
-    expect(screen.getByText("iPhone")).toBeInTheDocument();
+    expect(screen.getByText("iPhoneで設定")).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
   });
 
-  it("連携を解除できなかったら知らせ、端末を一覧に残す", async () => {
-    mockLinkedDevicesFetch({ revokeSucceeds: false });
+  it("キーを解除できなかったら知らせ、一覧に残す", async () => {
+    mockLinkedKeysFetch({ revokeSucceeds: false });
 
     await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "「iPhone」の連携を解除" }));
+    await userEvent.click(await screen.findByRole("button", { name: "末尾 0001 のキーを解除" }));
     const dialog = await screen.findByRole("alertdialog", {
-      name: "「iPhone」の連携を解除しますか？",
+      name: "末尾 0001 のキーを解除しますか？",
     });
     await userEvent.click(within(dialog).getByRole("button", { name: "解除" }));
 
     await expect(
-      screen.findByText("連携を解除できませんでした。時間をおいて再度お試しください。"),
+      screen.findByText("キーを解除できませんでした。時間をおいて再度お試しください。"),
     ).resolves.toBeInTheDocument();
-    expect(screen.getByText("iPhone")).toBeInTheDocument();
+    expect(screen.getByText("iPhoneで設定")).toBeInTheDocument();
   });
 });
