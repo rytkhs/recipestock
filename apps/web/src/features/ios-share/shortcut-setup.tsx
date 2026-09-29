@@ -156,16 +156,17 @@ const KeyStep = ({
     );
   }
 
-  // 発行したあと、この画面を開き直した。平文はもう無いので、貼る前に閉じたときは発行し直してもらう。
-  // 何日も前のキーなら、日付で気づいてやり直せる。
+  // 発行したあと、この画面を開き直した。平文はもう無いので、貼っていなければ発行し直してもらう。
+  // ほかの端末で発行したキーや何日も前のキーでも、発行した場所と日で気づいてやり直せる。
   if (resumableCredential) {
     const issuedDay = formatCredentialDay(resumableCredential.createdAt);
 
     return (
       <SetupStep number={1} status="done" title="キーを発行しました">
         <p className={guideTextClass}>
-          {issuedDay ? `${issuedDay}に発行した、` : ""}末尾 {resumableCredential.tokenSuffix}
-          のキーです。ショートカットに貼る前にこの画面を閉じてしまったときは、発行し直してください。
+          {resumableCredential.name}で{issuedDay ? `${issuedDay}に` : ""}発行した、末尾{" "}
+          {resumableCredential.tokenSuffix}
+          のキーです。このキーをショートカットに貼っていなければ、発行し直してください。
         </p>
         <Button
           className="justify-self-start"
@@ -244,14 +245,16 @@ const ShortcutStep = ({
   const isIssued = setup.key.status === "issued";
   // 開き直したときは、もう追加したかどうか分からない。③で待ちながら、まだなら追加できるようにしておく。
   const isResumed = setup.key.status === "none" && resumableCredential !== null;
+  // 続きから発行し直した人は、キーを貼らずに追加し終えていることがある。同じ名前のショートカットを2つにしない。
+  const stepText = isResumed
+    ? "まだ追加していなければ、ショートカットAppで追加してください。キーを聞かれたら貼り付けます。"
+    : resumableCredential
+      ? shortcutStepText.another
+      : shortcutStepText[variant];
 
   return (
     <SetupStep number={2} status={isIssued ? "active" : "todo"} title={title}>
-      <p className={guideTextClass}>
-        {isResumed
-          ? "まだ追加していなければ、ショートカットAppで追加してください。キーを聞かれたら貼り付けます。"
-          : shortcutStepText[variant]}
-      </p>
+      <p className={guideTextClass}>{stepText}</p>
       <ShortcutQuestionIllustration />
       {/* キーを持たずに追加すると、貼るものがない。キーを発行してコピーを終えるまでは押せなくしておく。 */}
       {isIssued || isResumed ? (
