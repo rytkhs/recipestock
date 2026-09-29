@@ -1,6 +1,8 @@
 import {
   Article,
+  CaretRight,
   CookingPot,
+  Export,
   GearSix,
   Link as LinkIcon,
   List as ListIcon,
@@ -14,6 +16,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -25,6 +28,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { DeviceBadge } from "../features/ios-share/device-badge";
+import { useShortcutSetupOffer } from "../features/ios-share/use-shortcut-setup-offer";
 
 const PublicNav = () => (
   <nav aria-label="Main navigation" className="flex items-center gap-2">
@@ -47,6 +52,75 @@ const addRecipeOptions = [
   },
   { to: "/recipes/new", icon: PencilSimple, label: "手入力", description: "レシピを自分で入力" },
 ] as const;
+
+// 追加の方法ではなく、共有から送れるようにする設定への入口。まだ連携していないiPhoneとiPadにだけ、
+// 区切って最後に置く。メニューを開いたときに連携の状態を読む。
+const shortcutSetupOption = {
+  label: "共有から取り込む",
+  description: "アプリを開かずに送れるよう設定する",
+} as const;
+
+const ShortcutSetupMenuItem = () => {
+  const navigate = useNavigate();
+  const offer = useShortcutSetupOffer();
+
+  if (offer.status !== "offer") {
+    return null;
+  }
+
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        onClick={() => {
+          void navigate({ to: "/settings/share" });
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <Export weight="bold" />
+          <div className="flex flex-col">
+            <span>{shortcutSetupOption.label}</span>
+            <span className="text-xs text-muted-foreground">{shortcutSetupOption.description}</span>
+          </div>
+        </div>
+      </DropdownMenuItem>
+    </>
+  );
+};
+
+const ShortcutSetupSheetRow = () => {
+  const offer = useShortcutSetupOffer();
+
+  if (offer.status !== "offer") {
+    return null;
+  }
+
+  return (
+    <li className="mt-2 border-brand-line-soft border-t px-0 pt-2">
+      <Link
+        className="flex min-h-14 items-center gap-3 rounded-[12px] border border-brand-sage-soft bg-brand-sage-soft/30 px-2 py-2 text-brand-ink no-underline outline-none transition-colors hover:bg-brand-sage-soft/50 focus-visible:bg-brand-sage-soft/50"
+        to="/settings/share"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-sage-soft text-brand-sage-dark [&_svg]:size-5">
+          <Export weight="bold" />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex items-center gap-2 font-medium text-sm">
+            {shortcutSetupOption.label}
+            <DeviceBadge className="bg-brand-paper" deviceName={offer.deviceName} />
+          </span>
+          <span className="text-brand-muted text-xs">{shortcutSetupOption.description}</span>
+        </span>
+        <CaretRight
+          aria-hidden="true"
+          className="shrink-0 text-brand-muted"
+          size={16}
+          weight="bold"
+        />
+      </Link>
+    </li>
+  );
+};
 
 const AddRecipeMenu = () => {
   const navigate = useNavigate();
@@ -76,6 +150,7 @@ const AddRecipeMenu = () => {
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>
+        <ShortcutSetupMenuItem />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -147,6 +222,7 @@ export const MobileAddRecipeFab = () => (
               </Link>
             </li>
           ))}
+          <ShortcutSetupSheetRow />
         </ul>
       </div>
     </SheetContent>

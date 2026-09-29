@@ -1,6 +1,9 @@
 import {
+  CaretRight,
   CookingPot,
+  Export,
   GearSix,
+  Link as LinkIcon,
   List,
   MagnifyingGlass,
   SlidersHorizontal,
@@ -11,7 +14,16 @@ import {
 import { MAX_RECIPE_TAGS, type RecipeListSort } from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +54,9 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { RecipeCardSkeleton } from "../components/loading";
+import { DeviceBadge } from "../features/ios-share/device-badge";
+import { ShortcutSetupNudge } from "../features/ios-share/setup-nudge";
+import { useShortcutSetupOffer } from "../features/ios-share/use-shortcut-setup-offer";
 import { deleteRecipe, recipeListQueryOptions, syncDeletedRecipeCaches } from "../features/recipes";
 import { writeRecipeListSort } from "../features/recipes/list-search";
 import { LockedShelfNotice, RecipeCard } from "../features/recipes/recipe-card";
@@ -53,6 +68,7 @@ import {
 } from "../features/recipes/view-mode";
 import { listTags, tagsQueryKeys } from "../features/tags";
 import { TagFilterBar } from "../features/tags/tag-filter-bar";
+import { type IosDeviceName } from "../pwa/platform";
 
 // routeには遅延読み込みのcomponentをそのまま渡し、routerに画面のコードを先読みさせる。
 // そのため並び順はpropsではなく、ここでrouteから読む。
@@ -106,8 +122,51 @@ const describeFilterMiss = ({
   return query ? `「${query}」に一致するレシピはありません` : "条件に合うレシピはありません";
 };
 
+// 空の一覧から始め方を選ぶ行。どちらも同じ重さで並べる。
+const ShelfStartOption = ({
+  deviceName,
+  description,
+  icon,
+  iconClassName,
+  title,
+  to,
+}: {
+  /** この端末での設定だと分かるよう、名前に添える。 */
+  deviceName?: IosDeviceName;
+  description: string;
+  icon: ReactNode;
+  iconClassName: string;
+  title: string;
+  to: "/import/url" | "/settings/share";
+}) => (
+  <li>
+    <Link
+      className="grid grid-cols-[2.75rem_minmax(0,1fr)_1rem] items-center gap-x-3.5 rounded-[16px] border border-brand-line-soft bg-brand-paper p-4 text-left text-brand-ink no-underline shadow-pantry-sm transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-brand-orange focus-visible:outline-offset-2"
+      to={to}
+    >
+      <span
+        aria-hidden="true"
+        className={cn("grid size-11 place-items-center rounded-full", iconClassName)}
+      >
+        {icon}
+      </span>
+      <span className="grid gap-0.5">
+        <span className="flex items-center gap-2 font-bold text-base">
+          {title}
+          {deviceName ? (
+            <DeviceBadge className="bg-brand-paper-muted" deviceName={deviceName} />
+          ) : null}
+        </span>
+        <span className="text-brand-muted text-[13px] leading-[21px]">{description}</span>
+      </span>
+      <CaretRight aria-hidden="true" className="text-brand-muted" size={16} weight="bold" />
+    </Link>
+  </li>
+);
+
 export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
+  const shortcutSetupOffer = useShortcutSetupOffer();
   const {
     sort = "newest",
     q: query = "",
@@ -485,12 +544,42 @@ export const RecipesIndexRoute = () => {
             <CookingPot size={28} className="text-brand-sage-dark" weight="bold" />
           </div>
           <p className="mt-5 font-semibold text-brand-walnut text-lg">レシピはまだありません</p>
-          <p className="mt-2 max-w-xs text-brand-muted text-sm leading-relaxed">
-            サイトや動画のURLを貼ると、材料と手順に整えて保存します。
-          </p>
-          <Link className={cn(buttonVariants(), "mt-6 no-underline")} to="/import/url">
-            URLから取り込む
-          </Link>
+          {/* iPhoneとiPadでは、見つけたその場で送れる共有を、URLを貼るのと並べて最初から見せる。
+              連携の状態を読めるまではどちらも出さず、URLだけの始め方から2択へ差し替わらないようにする。 */}
+          {shortcutSetupOffer.status === "offer" ? (
+            <>
+              <p className="mt-2 max-w-xs text-brand-muted text-sm leading-relaxed">
+                どちらからでも始められます。
+              </p>
+              <ul className="mt-7 grid w-full max-w-md gap-3">
+                <ShelfStartOption
+                  description="サイトや動画のURLから、材料と手順に整えて保存します。"
+                  icon={<LinkIcon size={20} weight="bold" />}
+                  iconClassName="bg-brand-sage-soft text-brand-sage-dark"
+                  title="URLを貼って取り込む"
+                  to="/import/url"
+                />
+                <ShelfStartOption
+                  deviceName={shortcutSetupOffer.deviceName}
+                  description="InstagramやYouTubeを見ながら、アプリを開かずに保存できます。設定は1分ほどです。"
+                  icon={<Export size={20} weight="bold" />}
+                  iconClassName="bg-brand-orange-soft text-brand-orange-dark"
+                  title="共有ボタンから送る"
+                  to="/settings/share"
+                />
+              </ul>
+            </>
+          ) : null}
+          {shortcutSetupOffer.status === "none" ? (
+            <>
+              <p className="mt-2 max-w-xs text-brand-muted text-sm leading-relaxed">
+                サイトや動画のURLを貼ると、材料と手順に整えて保存します。
+              </p>
+              <Link className={cn(buttonVariants(), "mt-6 no-underline")} to="/import/url">
+                URLから取り込む
+              </Link>
+            </>
+          ) : null}
         </div>
       ) : null}
       {isFilterMiss ? (
@@ -518,6 +607,9 @@ export const RecipesIndexRoute = () => {
           ))}
         </div>
       ) : null}
+
+      {/* 絞り込み中は探している最中なので、誘いで一覧を押し下げない。 */}
+      {recipes.length > 0 && !hasFilter ? <ShortcutSetupNudge /> : null}
 
       {shelf.sections.map((section, sectionIndex) => {
         const headingId = `${shelfId}-${section.key}`;
