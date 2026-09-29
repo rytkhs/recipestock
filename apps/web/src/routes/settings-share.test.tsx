@@ -44,19 +44,27 @@ const readBlobText = (blob: Blob) =>
     reader.readAsText(blob);
   });
 
-/** 端末とクリップボードを差し替える。書けたものは`copied`に残る。 */
+/**
+ * 端末とクリップボードを差し替える。書き込みを頼まれた文字列は`requested`に、書けたものは`copied`に残る。
+ * `holdWrite`を渡すと、それが解決するまで書き込みを終えない。
+ */
 const installDevice = ({
   canWriteClipboard = true,
+  holdWrite,
   maxTouchPoints = 5,
   userAgent = iPhoneUserAgent,
 }: {
   canWriteClipboard?: boolean;
+  holdWrite?: Promise<void>;
   maxTouchPoints?: number;
   userAgent?: string;
 } = {}) => {
+  const requested: string[] = [];
   const copied: string[] = [];
   const write = vi.fn(async (items: ClipboardItemStub[]) => {
     const text = await readBlobText(await items[0].data["text/plain"]);
+    requested.push(text);
+    await holdWrite;
     if (!canWriteClipboard) {
       throw new DOMException("Write permission denied.", "NotAllowedError");
     }
@@ -66,11 +74,11 @@ const installDevice = ({
   vi.stubGlobal("ClipboardItem", ClipboardItemStub);
   vi.stubGlobal("navigator", { ...navigator, userAgent, maxTouchPoints, clipboard: { write } });
 
-  return { copied, write };
+  return { copied, requested, write };
 };
 
 /**
- * 連携キーの一覧と発行を受け持つ。`setCredentials`で、ショートカットから共有が届いたことにできる。
+ * 連携キーの一覧と発行、解除を受け持つ。`setCredentials`で、ショートカットから共有が届いたことにできる。
  * 発行は`issued`を順に返す。`holdIssue`を渡すと、それが解決するまで発行の応答を返さない。
  */
 const mockShortcutFetch = ({
@@ -98,6 +106,11 @@ const mockShortcutFetch = ({
               { error: { code: "unknown", message: "Unexpected error occurred." } },
               { status: 500 },
             );
+      }
+      if (path.startsWith("/api/shortcut-credentials/") && init?.method === "DELETE") {
+        const credentialId = path.slice("/api/shortcut-credentials/".length);
+        credentials = credentials.filter(({ id }) => id !== credentialId);
+        return jsonResponse({ revoked: true });
       }
       if (path === "/api/shortcut-credentials" && init?.method === "POST") {
         await holdIssue;
@@ -160,7 +173,12 @@ describe("共有から取り込む", () => {
 
   it("まだ連携していないiPhoneでは、発行を待たずにコピーを始め、コピーしてからショートカットの追加へ進める", async () => {
     vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", shortcutUrl);
-    const device = installDevice();
+    let releaseWrite = () => {};
+    const device = installDevice({
+      holdWrite: new Promise<void>((resolve) => {
+        releaseWrite = resolve;
+      }),
+    });
     let releaseIssue = () => {};
     const { fetchMock } = mockShortcutFetch({
       holdIssue: new Promise<void>((resolve) => {
@@ -184,6 +202,17 @@ describe("共有から取り込む", () => {
     expect(device.copied).toEqual([]);
 
     releaseIssue();
+    await vi.waitFor(() => {
+      expect(device.requested).toEqual([issuedToken]);
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    // 発行できても、コピーを終えるまでは次へ進めず、共有も待たない。
+    expect(screen.getByRole("button", { name: "ショートカットを追加" })).toBeDisabled();
+    expect(screen.queryByText("共有を待っています")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /キーを発行しました/ })).not.toBeInTheDocument();
+
+    releaseWrite();
 
     await expect(
       screen.findByRole("heading", { name: /キーをコピーしました/ }),
@@ -332,6 +361,25 @@ describe("共有から取り込む", () => {
     await userEvent.click(screen.getByRole("button", { name: "キーをコピー" }));
     await screen.findByRole("heading", { name: /キーをコピーしました/ });
     shortcut.setCredentials([usedCredential(issuedCredential), linkedCredential]);
+    await returnToApp();
+
+    await expect(
+      screen.findByRole("heading", { name: "連携できました" }),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("最後の連携キーを解除して未連携になったら設定を始め、新しいキーに共有が届いたら連携できたことを伝える", async () => {
+    installDevice();
+    const linkedCredential = usedCredential(shortcutCredentialFixture());
+    const shortcut = mockShortcutFetch({ credentials: [linkedCredential] });
+
+    await renderApp("/settings/share");
+    await userEvent.click(await screen.findByRole("button", { name: "末尾 0001 のキーを解除" }));
+    await userEvent.click(await screen.findByRole("button", { name: "解除" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "キーをコピー" }));
+    await screen.findByRole("heading", { name: /キーをコピーしました/ });
+    shortcut.setCredentials([usedCredential(issuedCredential)]);
     await returnToApp();
 
     await expect(

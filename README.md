@@ -156,13 +156,16 @@ pnpm dev:mock
 | プラン・上限 | `pro-price-error` | Pro価格の取得失敗 |
 | プラン・上限 | `checkout-error` | Checkoutの開始失敗 |
 | プラン・上限 | `billing-portal-error` | 契約管理画面の開始失敗 |
-| 設定・連携 | `linked-devices` | iPhoneとiPadの2台と共有を連携中 |
+| 設定・連携 | `shortcut-linked-keys` | 共有を連携済み(使ったキー2本) |
+| 設定・連携 | `shortcut-first-share` | 共有を連携する(発行の10秒後に最初の共有が届く) |
+| 設定・連携 | `shortcut-setup-resumed` | 共有の設定の途中(発行したキーにまだ共有が届いていない) |
+| 設定・連携 | `shortcut-linked-and-unused-keys` | 共有を連携済み・使われていないキーあり |
 | 設定・連携 | `viewer-error` | プラン・利用状況の取得失敗 |
 | 設定・連携 | `tags-error` | タグの取得失敗 |
-| 設定・連携 | `shortcut-credentials-error` | 連携端末の取得失敗 |
+| 設定・連携 | `shortcut-credentials-error` | 連携キーの取得失敗 |
 | 設定・連携 | `push-subscriptions-error` | 通知状態の取得失敗(Push対応ブラウザ向け) |
 | 設定・連携 | `shortcut-issue-error` | 連携キーの発行失敗 |
-| 設定・連携 | `shortcut-revoke-error` | 連携端末の解除失敗 |
+| 設定・連携 | `shortcut-revoke-error` | 連携キーの解除失敗 |
 | 取り込み | `importing` | 取り込み中 |
 | 取り込み | `import-failed` | 取り込み失敗 |
 | 取り込み | `text-import-failed` | テキストの取り込み失敗(原文を直して再試行) |
@@ -181,6 +184,7 @@ pnpm dev:mock
 Freeで保存上限に達しているシナリオ(`limit-reached` / `free-locked`)では、作成と URL・テキストの取り込みが本番と同じく `recipe_limit_exceeded` で失敗します。
 Freeのシナリオでプランのページから「Proにする」を押すと、決済から戻った画面になりますが、Proには変わらず待ちきれなかったときの表示になります。
 `checkout-error`、`billing-portal-error`、`shortcut-issue-error`、`shortcut-revoke-error`、アカウントの更新失敗は、対象の設定ページでボタンを押すとエラー表示を確認できます。
+共有から取り込む設定(`/settings/share`)は端末で出す画面が変わります。iPhoneやiPadの画面は、開発者ツールで端末を切り替えて見ます。
 `signed-out` でメールアドレスによるログインや新規登録(OTP 検証)をすると、そのままログイン状態になります。
 Google ログインはリロードを伴うので、戻り先で `default` シナリオに切り替わります。
 

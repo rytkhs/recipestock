@@ -8,29 +8,33 @@ import { type IosDeviceName } from "../../pwa/platform";
 import { issueShortcutCredential, shortcutCredentialsQueryKey } from "./api";
 import { copyTextToClipboard } from "./clipboard";
 
-/** この画面で発行したキー。平文はこのときにしか受け取れないので、開いている間だけ持つ。 */
-export type IssuedShortcutKey = {
-  credential: ShortcutCredential;
-  token: string;
-  isCopied: boolean;
-  /** 「もう一度コピー」を押して書けたとき。押しても見た目が変わらないので、書けたことを伝える。 */
-  isCopiedAgain: boolean;
-};
+/**
+ * この画面で発行したキーの段階。平文は発行したときにしか受け取れないので、開いている間だけ持つ。
+ * 発行とコピーの両方が済むまでは`issuing`のままにする。済むまでは、②へ進めない。
+ */
+export type ShortcutKeyPhase =
+  | { status: "none"; hasIssueError: boolean }
+  | { status: "issuing" }
+  | {
+      status: "issued";
+      credential: ShortcutCredential;
+      token: string;
+      isCopied: boolean;
+      /** 「もう一度コピー」を押して書けたとき。押しても見た目が変わらないので、書けたことを伝える。 */
+      isCopiedAgain: boolean;
+    };
 
 /**
- * この画面で進めている手順。どこまで進んだかは端末に覚えない。開き直したときの続きは、
- * どの入れ物（ホーム画面のアプリ、Safari）で開いても同じになるよう、連携キーの一覧から決める。
+ * 1回の設定で進めている手順。設定を始めるたびに作り直すので、やり直しで消すものはない。
+ * どこまで進んだかは端末に覚えない。開き直したときの続きは、連携キーの一覧から決める。
  */
 export const useShortcutSetup = ({ deviceName }: { deviceName: IosDeviceName }) => {
   const queryClient = useQueryClient();
-  const [issuedKey, setIssuedKey] = useState<IssuedShortcutKey | null>(null);
+  const [key, setKey] = useState<ShortcutKeyPhase>({ status: "none", hasIssueError: false });
   const [hasOpenedShortcut, setHasOpenedShortcut] = useState(false);
-  const [isIssuing, setIsIssuing] = useState(false);
-  const [hasIssueError, setHasIssueError] = useState(false);
 
   const issueAndCopyKey = async () => {
-    setHasIssueError(false);
-    setIsIssuing(true);
+    setKey({ status: "issuing" });
 
     // 発行を待たずに、タップの処理の中でコピーを始める。
     const issuing = issueShortcutCredential(deviceName);
@@ -38,47 +42,37 @@ export const useShortcutSetup = ({ deviceName }: { deviceName: IosDeviceName }) 
 
     try {
       const { credential, token } = await issuing;
+      const isCopied = await copying;
 
+      setKey({ status: "issued", credential, token, isCopied, isCopiedAgain: false });
+      // 新しいキーは、ショートカットを追加し直して貼るまで使われない。
+      setHasOpenedShortcut(false);
       queryClient.setQueryData<ListShortcutCredentialsResponse>(
         shortcutCredentialsQueryKey,
         (current) => current && { credentials: [credential, ...current.credentials] },
       );
-      setIssuedKey({ credential, token, isCopied: await copying, isCopiedAgain: false });
-      // 新しいキーは、ショートカットを追加し直して貼るまで使われない。
-      setHasOpenedShortcut(false);
     } catch {
-      setHasIssueError(true);
-    } finally {
-      setIsIssuing(false);
+      setKey({ status: "none", hasIssueError: true });
     }
   };
 
   const copyKeyAgain = async () => {
-    if (!issuedKey) return;
+    if (key.status !== "issued") return;
 
-    const isCopied = await copyTextToClipboard(issuedKey.token);
-    setIssuedKey({ ...issuedKey, isCopied, isCopiedAgain: isCopied });
+    const isCopied = await copyTextToClipboard(key.token);
+    setKey({ ...key, isCopied, isCopiedAgain: isCopied });
   };
 
   const markShortcutOpened = () => {
     setHasOpenedShortcut(true);
   };
 
-  const startOver = () => {
-    setIssuedKey(null);
-    setHasOpenedShortcut(false);
-    setHasIssueError(false);
-  };
-
   return {
-    issuedKey,
+    key,
     hasOpenedShortcut,
-    isIssuing,
-    hasIssueError,
     issueAndCopyKey,
     copyKeyAgain,
     markShortcutOpened,
-    startOver,
   };
 };
 

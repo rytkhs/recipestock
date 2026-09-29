@@ -112,14 +112,16 @@ const KeyStep = ({
   setup: ShortcutSetupState;
 }) => {
   const keyInputId = useId();
-  const { issuedKey } = setup;
-  const issueError = setup.hasIssueError ? (
-    <p className="text-brand-danger text-sm" role="alert">
-      連携キーを発行できませんでした。時間をおいて再度お試しください。
-    </p>
-  ) : null;
+  const { key } = setup;
+  const isIssuing = key.status === "issuing";
+  const issueError =
+    key.status === "none" && key.hasIssueError ? (
+      <p className="text-brand-danger text-sm" role="alert">
+        連携キーを発行できませんでした。時間をおいて再度お試しください。
+      </p>
+    ) : null;
 
-  if (issuedKey && !issuedKey.isCopied) {
+  if (key.status === "issued" && !key.isCopied) {
     return (
       <SetupStep number={1} status="done" title="キーを発行しました">
         <p className="text-brand-danger text-sm" role="alert">
@@ -128,12 +130,12 @@ const KeyStep = ({
         <label className="sr-only" htmlFor={keyInputId}>
           連携キー
         </label>
-        <Input className="w-full min-w-0" id={keyInputId} readOnly value={issuedKey.token} />
+        <Input className="w-full min-w-0" id={keyInputId} readOnly value={key.token} />
       </SetupStep>
     );
   }
 
-  if (issuedKey) {
+  if (key.status === "issued") {
     return (
       <SetupStep
         number={1}
@@ -145,7 +147,7 @@ const KeyStep = ({
           </Button>
         }
       >
-        {issuedKey.isCopiedAgain ? (
+        {key.isCopiedAgain ? (
           <p className="text-brand-sage-dark text-sm" role="status">
             もう一度コピーしました。
           </p>
@@ -167,7 +169,7 @@ const KeyStep = ({
         </p>
         <Button
           className="justify-self-start"
-          disabled={setup.isIssuing}
+          disabled={isIssuing}
           variant="secondary"
           onClick={() => void setup.issueAndCopyKey()}
         >
@@ -185,7 +187,7 @@ const KeyStep = ({
       </p>
       <Button
         className={primaryActionClass}
-        disabled={setup.isIssuing}
+        disabled={isIssuing}
         onClick={() => void setup.issueAndCopyKey()}
       >
         <Copy data-icon="inline-start" weight="bold" />
@@ -239,22 +241,23 @@ const ShortcutStep = ({
       ショートカットを追加
     </>
   );
+  const isIssued = setup.key.status === "issued";
   // 開き直したときは、もう追加したかどうか分からない。③で待ちながら、まだなら追加できるようにしておく。
-  const isResumed = !setup.issuedKey && resumableCredential !== null;
+  const isResumed = setup.key.status === "none" && resumableCredential !== null;
 
   return (
-    <SetupStep number={2} status={setup.issuedKey ? "active" : "todo"} title={title}>
+    <SetupStep number={2} status={isIssued ? "active" : "todo"} title={title}>
       <p className={guideTextClass}>
         {isResumed
           ? "まだ追加していなければ、ショートカットAppで追加してください。キーを聞かれたら貼り付けます。"
           : shortcutStepText[variant]}
       </p>
       <ShortcutQuestionIllustration />
-      {/* キーを持たずに追加すると、貼るものがない。キーをコピーするまでは押せなくしておく。 */}
-      {setup.issuedKey || isResumed ? (
+      {/* キーを持たずに追加すると、貼るものがない。キーを発行してコピーを終えるまでは押せなくしておく。 */}
+      {isIssued || isResumed ? (
         <a
           className={cn(
-            buttonVariants({ variant: setup.issuedKey ? "default" : "secondary" }),
+            buttonVariants({ variant: isIssued ? "default" : "secondary" }),
             primaryActionClass,
             "no-underline",
           )}
@@ -298,7 +301,7 @@ export const ShortcutSetup = ({
   const headingId = useId();
   const notice = relinkReason ? relinkNotice(relinkReason, deviceName) : null;
   const isWaitingForShare =
-    setup.hasOpenedShortcut || (!setup.issuedKey && resumableCredential !== null);
+    setup.hasOpenedShortcut || (setup.key.status === "none" && resumableCredential !== null);
 
   return (
     <div className="grid gap-10">
