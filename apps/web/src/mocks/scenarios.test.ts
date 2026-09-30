@@ -44,8 +44,8 @@ describe("設定シナリオ", () => {
     ).toEqual(["credential", "google"]);
   });
 
-  it("共有に連携している2台を持つ", () => {
-    const { credentials } = findScenario("linked-devices").build().shortcutCredentials;
+  it("共有に使ったキーを2本持つ", () => {
+    const { credentials } = findScenario("shortcut-linked-keys").build().shortcutCredentials;
 
     expect(credentials).toHaveLength(2);
     expect(credentials.map(({ name }) => name)).toEqual(["iPhone", "iPad"]);

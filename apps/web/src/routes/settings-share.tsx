@@ -1,24 +1,43 @@
-import { LinkThisDevice } from "../features/ios-share/link-this-device";
-import { LinkedDevices } from "../features/ios-share/linked-devices";
-import { PushNotificationSettings } from "../features/push-notifications/settings-section";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { AndroidShareGuide } from "../features/ios-share/android-share-guide";
+import { DesktopShareGuide } from "../features/ios-share/desktop-share-guide";
+import { IosShareSettings } from "../features/ios-share/ios-share-settings";
 import {
   SettingsSubpageTopBar,
   settingsPageBodyClass,
   settingsPageClass,
 } from "../features/settings/settings-page";
+import { detectSharePlatform } from "../pwa/platform";
 
-// 完了通知はショートカットから始めた取り込みにしか届かないので、共有の連携と同じページに置く。
-export const SettingsShareRoute = () => (
-  <section className={settingsPageClass}>
-    <SettingsSubpageTopBar title="共有から取り込む" />
+const shareRouteApi = getRouteApi("/_protected/settings/share");
 
-    <div className={`${settingsPageBodyClass} grid gap-10`}>
-      <p className="text-brand-muted text-sm leading-6">
-        iPhoneやiPadの共有メニューから、レシピのページをRecipe Stockへ直接取り込めます。
-      </p>
-      <LinkedDevices />
-      <LinkThisDevice />
-      <PushNotificationSettings />
-    </div>
-  </section>
-);
+// 共有から取り込む方法は端末ごとに違うので、開いた端末のやり方だけを出す。
+// 完了通知はショートカットから始めた取り込みにしか届かないので、iPhoneとiPadの画面にだけ置く。
+export const SettingsShareRoute = () => {
+  const navigate = useNavigate();
+  const search = shareRouteApi.useSearch();
+  // 理由は開いたときに一度だけ読んで持ち、URLからは消す。再読み込みで古いお知らせを出さない。
+  const [relinkReason] = useState(search.reason);
+  const [platform] = useState(detectSharePlatform);
+
+  useEffect(() => {
+    if (search.reason) {
+      void navigate({ to: "/settings/share", search: {}, replace: true });
+    }
+  }, [navigate, search.reason]);
+
+  return (
+    <section className={settingsPageClass}>
+      <SettingsSubpageTopBar title="共有から取り込む" />
+
+      <div className={settingsPageBodyClass}>
+        {platform.kind === "ios" ? (
+          <IosShareSettings deviceName={platform.deviceName} relinkReason={relinkReason} />
+        ) : null}
+        {platform.kind === "android" ? <AndroidShareGuide /> : null}
+        {platform.kind === "other" ? <DesktopShareGuide /> : null}
+      </div>
+    </section>
+  );
+};

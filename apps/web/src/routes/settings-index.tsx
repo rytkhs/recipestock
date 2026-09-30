@@ -23,7 +23,11 @@ import {
 import { ScreenTopBar, ScreenTopBarIconButton } from "../components/screen-top-bar";
 import { billingStatusQueryKey, fetchBillingStatus } from "../features/billing/api";
 import { derivePlanState, planRowValue } from "../features/billing/plan-state";
-import { listShortcutCredentials, shortcutCredentialsQueryKey } from "../features/ios-share/api";
+import {
+  isShortcutLinked,
+  listShortcutCredentials,
+  shortcutCredentialsQueryKey,
+} from "../features/ios-share/api";
 import { useLoginMethods } from "../features/settings/login-methods";
 import {
   SettingsActionRow,
@@ -159,8 +163,9 @@ export const SettingsIndexRoute = () => {
             icon={<ShareNetwork size={rowIconSize} weight="bold" />}
             label="共有から取り込む"
             to="/settings/share"
+            // キーは端末を表さないので数えない。発行しただけで共有が届いていなければ、まだ連携できていない。
             value={rowValue(shortcutCredentials, ({ credentials }) =>
-              credentials.length > 0 ? `${credentials.length}台と連携中` : "未設定",
+              isShortcutLinked(credentials) ? "連携済み" : "未設定",
             )}
           />
           <SettingsLinkRow

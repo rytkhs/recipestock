@@ -501,7 +501,7 @@ export const shortcutCredentialFixture = (
   ...overrides,
 });
 
-/** 設定の台数表示と、連携済み端末の一覧を確認する2台。 */
+/** 連携済みの表示と、使ったキーの一覧を確認する2本。 */
 export const linkedShortcutCredentialsFixture = (): ListShortcutCredentialsResponse => ({
   credentials: [
     shortcutCredentialFixture(),
