@@ -11,6 +11,8 @@ const shortcutSetupOfferQueryOptions = queryOptions({
   queryKey: shortcutCredentialsQueryKey,
   queryFn: listShortcutCredentials,
   staleTime: offerStaleTimeMs,
+  // 読めなければ誘わないだけなので、読み直しを重ねて空の一覧の始め方を待たせない。次にアプリへ戻るか画面を開くと読み直す。
+  retry: false,
 });
 
 /**
