@@ -18,16 +18,17 @@ const formatDate = (date: Date, now: Date) => {
 };
 
 /** 連携キーを発行した日。読めない値はnull。 */
-export const formatCredentialDay = (value: string, now = new Date()) => {
+export const formatCredentialDay = (value: string) => {
   const date = parseDate(value);
-  return date ? formatDate(date, now) : null;
+  return date ? formatDate(date, new Date()) : null;
 };
 
 /** どのキーをもう使っていないかを見分けられるよう、近い日は言葉にする。読めない値はnull。 */
-export const formatCredentialUsedDay = (value: string, now = new Date()) => {
+export const formatCredentialUsedDay = (value: string) => {
   const date = parseDate(value);
   if (!date) return null;
 
+  const now = new Date();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
 

@@ -151,6 +151,12 @@ const issueRequests = (fetchMock: ReturnType<typeof mockShortcutFetch>["fetchMoc
     )
     .map(([, init]) => JSON.parse(String(init?.body)) as { name: string });
 
+const listRequestCount = (fetchMock: ReturnType<typeof mockShortcutFetch>["fetchMock"]) =>
+  fetchMock.mock.calls.filter(
+    ([input, init]) =>
+      getRequestPath(input) === "/api/shortcut-credentials" && init?.method === "GET",
+  ).length;
+
 // iOSはショートカットAppへ移っている間にアプリを閉じることがある。開き直したときと同じに描き直す。
 const reopenApp = async (path = "/settings/share") => {
   cleanup();
@@ -250,7 +256,7 @@ describe("共有から取り込む", () => {
     expect(screen.queryByRole("button", { name: "キーをコピー" })).not.toBeInTheDocument();
   });
 
-  it("共有を待っている間は、画面が見えたままでも、共有が届いたら連携できたことを伝える", async () => {
+  it("共有を待っている間は、画面が見えたままでも、共有が届いたら連携できたことを伝え、そのあとは読み直さない", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     installDevice();
     const shortcut = mockShortcutFetch({ credentials: [issuedCredential] });
@@ -267,6 +273,12 @@ describe("共有から取り込む", () => {
     await expect(
       screen.findByRole("heading", { name: "連携できました" }),
     ).resolves.toBeInTheDocument();
+
+    const listCountAtComplete = listRequestCount(shortcut.fetchMock);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(listRequestCount(shortcut.fetchMock)).toBe(listCountAtComplete);
   });
 
   it("共有が届いたら連携できたことを伝え、次に開いたときは連携の管理を出す", async () => {

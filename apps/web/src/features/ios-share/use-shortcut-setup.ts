@@ -41,6 +41,8 @@ export const useShortcutSetup = ({
 
   const issueAndCopyKey = async () => {
     setKey({ status: "issuing" });
+    // 新しいキーは、ショートカットを追加し直して貼るまで使われない。発行している間も②を押せないようにする。
+    setHasOpenedShortcut(false);
 
     // 発行を待たずに、タップの処理の中でコピーを始める。
     const issuing = issueShortcutCredential(deviceName);
@@ -51,8 +53,6 @@ export const useShortcutSetup = ({
       const isCopied = await copying;
 
       setKey({ status: "issued", credential, token, isCopied, isCopiedAgain: false });
-      // 新しいキーは、ショートカットを追加し直して貼るまで使われない。
-      setHasOpenedShortcut(false);
       queryClient.setQueryData<ListShortcutCredentialsResponse>(
         shortcutCredentialsQueryKey,
         (current) => current && { credentials: [credential, ...current.credentials] },

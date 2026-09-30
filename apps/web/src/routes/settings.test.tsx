@@ -1923,7 +1923,7 @@ describe("Settings routes", () => {
     );
   };
 
-  it("ホーム画面から開いていなくても、連携キーを確認して解除できる", async () => {
+  it("連携キーを確認して解除できる", async () => {
     const fetchMock = mockLinkedKeysFetch();
 
     await renderApp("/settings/share");

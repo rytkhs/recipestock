@@ -111,17 +111,17 @@ const ShortcutSetupSession = ({
     deviceName,
     resumableCredential: atStart.resumableCredential,
   });
+  const hasNewlyUsedKey = credentials.some(
+    (credential) => isShortcutCredentialUsed(credential) && !atStart.usedIds.has(credential.id),
+  );
   // 一覧は親が読んでいる。ここでは、共有を待っている間の読み直しだけを足す。iPadのSplit ViewやStage Managerでは、
   // この画面が見えたまま共有するので、アプリへ戻ったときの読み直しが起きない。
   useQuery({
     queryKey: shortcutCredentialsQueryKey,
     queryFn: listShortcutCredentials,
     refetchOnMount: false,
-    refetchInterval: setup.isWaitingForShare ? sharePollIntervalMs : false,
+    refetchInterval: setup.isWaitingForShare && !hasNewlyUsedKey ? sharePollIntervalMs : false,
   });
-  const hasNewlyUsedKey = credentials.some(
-    (credential) => isShortcutCredentialUsed(credential) && !atStart.usedIds.has(credential.id),
-  );
 
   if (hasNewlyUsedKey) {
     return <ShortcutSetupComplete />;
