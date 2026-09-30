@@ -99,7 +99,7 @@ const ShortcutSetupSheetRow = () => {
   }
 
   return (
-    <li className="mt-2 border-brand-line-soft border-t px-0 pt-2">
+    <li className="mt-2 border-brand-line-soft border-t pt-2">
       <Link
         className="flex min-h-14 items-center gap-3 rounded-[12px] border border-brand-sage-soft bg-brand-sage-soft/30 px-2 py-2 text-brand-ink no-underline outline-none transition-colors hover:bg-brand-sage-soft/50 focus-visible:bg-brand-sage-soft/50"
         to="/settings/share"
@@ -134,7 +134,8 @@ const AddRecipeMenu = () => {
         <CookingPot data-icon="inline-start" weight="bold" />
         レシピ追加
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="min-w-56">
+      {/* 共有の設定の説明は他より長い。幅をボタンに合わせず、折り返さずに収まる幅まで広げる。 */}
+      <DropdownMenuContent className="w-auto min-w-56">
         <DropdownMenuGroup>
           {addRecipeOptions.map(({ description, icon: Icon, label, to }) => (
             <DropdownMenuItem

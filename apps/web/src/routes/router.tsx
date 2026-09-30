@@ -29,6 +29,7 @@ import {
 import { RouteChunkError } from "../components/route-chunk-error";
 import { ImportIsland, useImportIsland } from "../features/import-jobs";
 import { shortcutRelinkReasonSchema } from "../features/ios-share/api";
+import { prefetchShortcutSetupOffer } from "../features/ios-share/use-shortcut-setup-offer";
 import { recipeListQueryOptions } from "../features/recipes";
 import { readRecipeListSort } from "../features/recipes/list-search";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
@@ -306,6 +307,8 @@ const recipesRoute = createRoute({
         untagged: false,
       }),
     );
+    // 一覧に出す共有の設定への誘いは、連携の状態を読めるまで出せない。一覧と並べて取り始める。
+    prefetchShortcutSetupOffer(context.queryClient);
   },
   component: RecipesIndexRoute,
   errorComponent: RouteChunkError,

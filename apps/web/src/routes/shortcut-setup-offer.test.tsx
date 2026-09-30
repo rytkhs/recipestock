@@ -66,6 +66,8 @@ const openAddRecipeMenu = async () => {
 
 describe("共有の設定への入口", () => {
   afterEach(() => {
+    // 画面を先に外す。出したままfetchを戻してfocusを知らせると、読み直しが本物のfetchへ飛ぶ。
+    cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     focusManager.setFocused(undefined);
@@ -196,6 +198,50 @@ describe("共有の設定への入口", () => {
 
     expect(screen.getByRole("link", { name: /共有ボタンから送る/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "URLから取り込む" })).not.toBeInTheDocument();
+  });
+
+  it("連携の状態を読めなかったら空の一覧はURLから取り込むだけを出し、読み直している間も消さない", async () => {
+    stubUserAgent(iPhoneUserAgent);
+    mockFetch(
+      (input) =>
+        getRequestPath(input) === "/api/shortcut-credentials"
+          ? new Response(null, { status: 500 })
+          : respondWithRecipes(0)(input),
+      { authenticated: true },
+    );
+
+    const { queryClient } = await renderApp("/recipes");
+    await screen.findByRole("link", { name: "URLから取り込む" });
+    expect(screen.queryByRole("link", { name: /共有ボタンから送る/ })).not.toBeInTheDocument();
+
+    // アプリへ戻ると読み直す。結果が出るまで、出した始め方を消さない。
+    let releaseCredentials = () => {};
+    const heldCredentials = new Promise<void>((resolve) => {
+      releaseCredentials = resolve;
+    });
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/shortcut-credentials") {
+          await heldCredentials;
+          return jsonResponse({ credentials: [] });
+        }
+        return respondWithRecipes(0)(input);
+      },
+      { authenticated: true },
+    );
+    returnToApp();
+    await vi.waitFor(() => {
+      expect(queryClient.getQueryState(shortcutCredentialsQueryKey)?.fetchStatus).toBe("fetching");
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(screen.getByRole("link", { name: "URLから取り込む" })).toBeInTheDocument();
+
+    releaseCredentials();
+
+    await expect(
+      screen.findByRole("link", { name: /共有ボタンから送る/ }),
+    ).resolves.toBeInTheDocument();
   });
 
   it("レシピ追加のシートには、まだ連携していないiPhoneにだけ共有の設定を出す", async () => {

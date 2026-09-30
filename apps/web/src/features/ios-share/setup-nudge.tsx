@@ -19,7 +19,7 @@ const writeNudgeDismissed = () => {
   try {
     localStorage.setItem(shortcutNudgeDismissedStorageKey, "true");
   } catch {
-    // 覚えておけなくても、開いている間は閉じたままにできる。
+    // 覚えておけなくても、誘いを出している間は閉じたままにできる。絞り込みや画面の移動で出し直すと、また出る。
   }
 };
 
