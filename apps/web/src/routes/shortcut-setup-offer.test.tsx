@@ -1,12 +1,14 @@
 import { type ShortcutCredential } from "@recipestock/schemas";
-import { type QueryClient } from "@tanstack/react-query";
+import { focusManager, type QueryClient } from "@tanstack/react-query";
 import { act, cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { shortcutCredentialsQueryKey } from "../features/ios-share/api";
 import { recipeListFixture, shortcutCredentialFixture } from "../mocks/fixtures";
 import {
+  androidUserAgent,
   getRequestPath,
+  iPadUserAgent,
   iPhoneUserAgent,
   jsonResponse,
   mockFetch,
@@ -15,43 +17,41 @@ import {
 } from "../test/router-test-utils";
 
 const unusedCredential = shortcutCredentialFixture({ firstUsedAt: null, lastUsedAt: null });
-const iPadUserAgent =
-  "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 
-/** `holdCredentials`を渡すと、それが解決するまで連携キーの一覧を返さない。 */
+const respondWithRecipes = (recipeCount: number) => (input: RequestInfo | URL) =>
+  getRequestPath(input) === "/api/recipes?limit=20"
+    ? jsonResponse({ items: recipeListFixture({ count: recipeCount }), nextCursor: null })
+    : new Response(null, { status: 404 });
+
 const mockRecipesFetch = ({
   credentials = [],
-  holdCredentials,
   recipeCount = 0,
 }: {
   credentials?: ShortcutCredential[];
-  holdCredentials?: Promise<void>;
   recipeCount?: number;
 } = {}) =>
-  mockFetch(
-    async (input) => {
-      const path = getRequestPath(input);
+  mockFetch(respondWithRecipes(recipeCount), {
+    authenticated: true,
+    shortcutCredentials: credentials,
+  });
 
-      if (path === "/api/recipes?limit=20") {
-        return jsonResponse({ items: recipeListFixture({ count: recipeCount }), nextCursor: null });
-      }
-      if (path === "/api/shortcut-credentials") {
-        await holdCredentials;
-        return jsonResponse({ credentials });
-      }
-
-      return new Response(null, { status: 404 });
-    },
-    { authenticated: true },
-  );
-
-// 誘いを出さないことは、連携の状態を読み、読んだ結果を画面へ届けてから確かめる。
-// 読んだ結果はsetTimeout(0)でまとめて画面へ届く。
-const waitForCredentialsRead = async (queryClient: QueryClient) => {
+// 連携の状態を読み、読んだ結果を画面へ届けてから確かめる。読んだ結果はsetTimeout(0)でまとめて画面へ届く。
+const waitForCredentialsRead = async (
+  queryClient: QueryClient,
+  status: "success" | "error" = "success",
+) => {
   await vi.waitFor(() => {
-    expect(queryClient.getQueryState(shortcutCredentialsQueryKey)?.status).toBe("success");
+    expect(queryClient.getQueryState(shortcutCredentialsQueryKey)?.status).toBe(status);
   });
   await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+};
+
+// ほかのアプリから戻ってきたことにする。
+const returnToApp = () => {
+  act(() => {
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+  });
 };
 
 const [firstRecipe] = recipeListFixture({ count: 1 });
@@ -68,19 +68,27 @@ describe("共有の設定への入口", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    focusManager.setFocused(undefined);
     localStorage.clear();
   });
 
   it("まだ連携していないiPhoneでは、連携の状態を読めてから、空の一覧にURLを貼るのと並べて共有から送る始め方を出す", async () => {
     stubUserAgent(iPhoneUserAgent);
     let releaseCredentials = () => {};
-    // 発行しただけで共有が届いていないキーは、連携したことにしない。
-    mockRecipesFetch({
-      credentials: [unusedCredential],
-      holdCredentials: new Promise<void>((resolve) => {
-        releaseCredentials = resolve;
-      }),
+    const heldCredentials = new Promise<void>((resolve) => {
+      releaseCredentials = resolve;
     });
+    mockFetch(
+      async (input) => {
+        if (getRequestPath(input) === "/api/shortcut-credentials") {
+          await heldCredentials;
+          // 発行しただけで共有が届いていないキーは、連携したことにしない。
+          return jsonResponse({ credentials: [unusedCredential] });
+        }
+        return respondWithRecipes(0)(input);
+      },
+      { authenticated: true },
+    );
 
     await renderApp("/recipes");
 
@@ -100,7 +108,7 @@ describe("共有の設定への入口", () => {
     );
   });
 
-  it("連携済みのiPhoneとiPhone以外では、空の一覧はURLから取り込むだけを出す", async () => {
+  it("連携済みのiPhoneと、iPhone・iPad以外では、空の一覧はURLから取り込むだけを出す", async () => {
     stubUserAgent(iPhoneUserAgent);
     mockRecipesFetch({ credentials: [shortcutCredentialFixture()] });
 
@@ -113,6 +121,7 @@ describe("共有の設定への入口", () => {
 
     cleanup();
     vi.restoreAllMocks();
+    stubUserAgent(androidUserAgent);
     mockRecipesFetch();
 
     await renderApp("/recipes");
@@ -123,7 +132,7 @@ describe("共有の設定への入口", () => {
     expect(screen.queryByRole("link", { name: /共有ボタンから送る/ })).not.toBeInTheDocument();
   });
 
-  it("レシピがある一覧で共有の設定を勧め、今はしないを選んだらこの端末では出さない", async () => {
+  it("レシピがある一覧で共有の設定を勧め、今はしないを選んだら開き直しても出さない", async () => {
     stubUserAgent(iPhoneUserAgent);
     mockRecipesFetch({ recipeCount: 1 });
 
@@ -148,6 +157,45 @@ describe("共有の設定への入口", () => {
     expect(
       screen.queryByRole("region", { name: "共有ボタンからの取り込み" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("誘っている間はアプリへ戻るたびに連携の状態を読み直し、連携できたら誘いを消す", async () => {
+    stubUserAgent(iPhoneUserAgent);
+    mockRecipesFetch({ recipeCount: 1 });
+
+    await renderApp("/recipes");
+    await screen.findByRole("region", { name: "共有ボタンからの取り込み" });
+
+    // 一覧を開いたまま、ほかのアプリから共有して連携できた。
+    mockRecipesFetch({ credentials: [shortcutCredentialFixture()], recipeCount: 1 });
+    returnToApp();
+
+    await vi.waitFor(() => {
+      expect(
+        screen.queryByRole("region", { name: "共有ボタンからの取り込み" }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("連携の状態を一度読めたら、読み直しに失敗しても空の一覧の2択を変えない", async () => {
+    stubUserAgent(iPhoneUserAgent);
+    mockRecipesFetch();
+
+    const { queryClient } = await renderApp("/recipes");
+    await screen.findByRole("link", { name: /共有ボタンから送る/ });
+
+    mockFetch(
+      (input) =>
+        getRequestPath(input) === "/api/shortcut-credentials"
+          ? new Response(null, { status: 500 })
+          : respondWithRecipes(0)(input),
+      { authenticated: true },
+    );
+    await act(() => queryClient.refetchQueries({ queryKey: shortcutCredentialsQueryKey }));
+    await waitForCredentialsRead(queryClient, "error");
+
+    expect(screen.getByRole("link", { name: /共有ボタンから送る/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "URLから取り込む" })).not.toBeInTheDocument();
   });
 
   it("レシピ追加のシートには、まだ連携していないiPhoneにだけ共有の設定を出す", async () => {

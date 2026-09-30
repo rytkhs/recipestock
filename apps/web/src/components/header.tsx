@@ -79,7 +79,10 @@ const ShortcutSetupMenuItem = () => {
         <div className="flex items-center gap-3">
           <Export weight="bold" />
           <div className="flex flex-col">
-            <span>{shortcutSetupOption.label}</span>
+            <span className="flex items-center gap-2">
+              {shortcutSetupOption.label}
+              <DeviceBadge className="bg-brand-paper-muted" deviceName={offer.deviceName} />
+            </span>
             <span className="text-xs text-muted-foreground">{shortcutSetupOption.description}</span>
           </div>
         </div>

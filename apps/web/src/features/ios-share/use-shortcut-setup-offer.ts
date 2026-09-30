@@ -28,17 +28,21 @@ export const useShortcutSetupOffer = (): ShortcutSetupOffer => {
     queryFn: listShortcutCredentials,
     enabled: isIos,
     staleTime: offerStaleTimeMs,
+    // 共有はアプリの外で起きる。連携できたらすぐ誘いを消せるよう、連携するまではアプリへ戻るたびに読み直す。
+    refetchOnWindowFocus: ({ state }) =>
+      state.data && isShortcutLinked(state.data.credentials) ? true : "always",
   });
 
-  if (platform.kind !== "ios" || credentials.isError) {
+  if (platform.kind !== "ios") {
     return { status: "none" };
   }
 
-  if (!credentials.data) {
-    return { status: "pending" };
+  // 一度読めたあとは、読み直しに失敗しても読めた一覧で決める。出していた誘いや始め方を入れ替えない。
+  if (credentials.data) {
+    return isShortcutLinked(credentials.data.credentials)
+      ? { status: "none" }
+      : { status: "offer", deviceName: platform.deviceName };
   }
 
-  return isShortcutLinked(credentials.data.credentials)
-    ? { status: "none" }
-    : { status: "offer", deviceName: platform.deviceName };
+  return credentials.isError ? { status: "none" } : { status: "pending" };
 };
