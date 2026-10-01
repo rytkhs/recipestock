@@ -17,7 +17,7 @@ const controlClass = "flex items-center gap-2 text-brand-muted text-sm";
  */
 export const Gallery = () => {
   const [deviceName, setDeviceName] = useState<IosDeviceName>("iPhone");
-  const [relinkReason, setRelinkReason] = useState<ShortcutRelinkReason>("unauthorized");
+  const [relinkReason, setRelinkReason] = useState<ShortcutRelinkReason>("missing_credential");
   const [opensDetails, setOpensDetails] = useState(false);
   const [zoom, setZoom] = useState(0.75);
   const contentRef = useRef<HTMLDivElement>(null);

@@ -11,7 +11,8 @@ export const shortcutCredentialsQueryKey = ["shortcut-credentials"] as const;
 
 /** ショートカットが連携し直しの画面へ送るときに添える理由（apps/api/src/ios-share-notices.ts）。 */
 export const shortcutRelinkReasonSchema = iosShareShortcutImportReasonSchema.extract([
-  "unauthorized",
+  "missing_credential",
+  "unusable_credential",
   "malformed_request",
 ]);
 

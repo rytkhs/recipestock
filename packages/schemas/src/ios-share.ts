@@ -19,7 +19,8 @@ export const iosShareShortcutImportReasonSchema = z.enum([
   "ai_usage_quota_exhausted",
   "rate_limit_exceeded",
   "temporarily_unavailable",
-  "unauthorized",
+  "missing_credential",
+  "unusable_credential",
 ]);
 
 export const iosShareNoticeSchema = z.object({

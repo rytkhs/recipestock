@@ -22,7 +22,8 @@ const titleOnlyReasons: IosShareShortcutImportReason[] = [
 
 const openUrlByReason: Partial<Record<IosShareShortcutImportReason, string>> = {
   malformed_request: `${APP_ORIGIN}/settings/share?reason=malformed_request`,
-  unauthorized: `${APP_ORIGIN}/settings/share?reason=unauthorized`,
+  missing_credential: `${APP_ORIGIN}/settings/share?reason=missing_credential`,
+  unusable_credential: `${APP_ORIGIN}/settings/share?reason=unusable_credential`,
   recipe_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=recipe_limit&from=shortcut`,
   ai_usage_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=ai_usage_limit&from=shortcut`,
 };
@@ -59,7 +60,8 @@ describe("iOS Shortcut noticeのカタログ", () => {
       "ai_usage_limit_exceeded",
       "ai_usage_quota_exhausted",
       "temporarily_unavailable",
-      "unauthorized",
+      "missing_credential",
+      "unusable_credential",
     ]);
     for (const reason of actionableReasons) {
       expect(buildResult(reason).notice.body).not.toBe("");

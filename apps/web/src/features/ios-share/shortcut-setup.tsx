@@ -75,12 +75,16 @@ const SetupStep = ({
 
 const primaryActionClass = "h-11 w-full text-base";
 
-// `unauthorized`の原因（キーを貼っていない、使えなくなった）はショートカットの画面からは分からないので、どちらにも合う言い方にする。
+// `unusable_credential`には、解除したキーのほか、どのアカウントのものでもないキーも入る。解除したとは言い切らない。
 const relinkNotice = (reason: ShortcutRelinkReason, deviceName: IosDeviceName) =>
   ({
-    unauthorized: {
+    missing_credential: {
+      title: "ショートカットにキーが入っていません",
+      body: `この${deviceName}のショートカットに、連携キーが入っていないか、別のものが入っています。キーをコピーし直して、ショートカットを入れ直してください。`,
+    },
+    unusable_credential: {
       title: "ショートカットのキーが使えません",
-      body: `この${deviceName}のショートカットに、キーが入っていないか、使えなくなったキーが入っています。キーをコピーし直して、ショートカットを入れ直してください。`,
+      body: `この${deviceName}のショートカットに入っているキーは、解除されたなどで使えなくなっています。キーをコピーし直して、ショートカットを入れ直してください。`,
     },
     malformed_request: {
       title: "ショートカットを入れ直してください",

@@ -83,11 +83,22 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     title: "いま取り込めませんでした",
     body: "時間をおいて共有し直してください。",
   },
-  unauthorized: {
+  /**
+   * 認証の失敗は、キーの形をしたものが届いたかで分ける。届いていなければ貼り忘れか別のものを貼った、
+   * 届いていれば解除されたなどで使えなくなったキーである。どちらも入れ直すしかないが、起きたことを
+   * そのまま伝えるため、文言と連携し直しの画面へ添える理由を分ける。
+   */
+  missing_credential: {
+    outcome: "rejected",
+    title: "連携キーが入っていません",
+    body: "キーを貼って、ショートカットを入れ直してください。",
+    path: "/settings/share?reason=missing_credential",
+  },
+  unusable_credential: {
     outcome: "rejected",
     title: "連携が無効になっています",
     body: "もう一度連携してください。",
-    path: "/settings/share?reason=unauthorized",
+    path: "/settings/share?reason=unusable_credential",
   },
 };
 
