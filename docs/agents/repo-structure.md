@@ -52,6 +52,7 @@ Put browser-facing UI and client behavior here:
 - PWA manifest and service worker
 - URL share-target handling
 - development-only MSW handlers, fixtures, and scenarios
+- development-only UI gallery that lays out screen patterns side by side
 
 Do not put server-only secrets, database access, Stripe server calls, R2 signing, or AI provider calls in `apps/web`.
 
@@ -62,6 +63,7 @@ apps/web/src/
   components/
     ui/                  vendored shadcn/ui components
   features/              feature-specific UI and client logic
+  gallery/               development-only UI gallery, opened at /gallery.html
   lib/                   app-wide browser utilities and API clients
   mocks/                 MSW handlers, fixtures, and scenarios
   pwa/                   service worker and PWA browser behavior

@@ -184,7 +184,7 @@ pnpm dev:mock
 Freeで保存上限に達しているシナリオ(`limit-reached` / `free-locked`)では、作成と URL・テキストの取り込みが本番と同じく `recipe_limit_exceeded` で失敗します。
 Freeのシナリオでプランのページから「Proにする」を押すと、決済から戻った画面になりますが、Proには変わらず待ちきれなかったときの表示になります。
 `checkout-error`、`billing-portal-error`、`shortcut-issue-error`、`shortcut-revoke-error`、アカウントの更新失敗は、対象の設定ページでボタンを押すとエラー表示を確認できます。
-共有から取り込む設定(`/settings/share`)は端末で出す画面が変わります。iPhoneやiPadの画面は、開発者ツールで端末を切り替えて見ます。
+共有から取り込む設定(`/settings/share`)は端末で出す画面が変わります。iPhoneやiPadの画面は、開発者ツールで端末を切り替えて見ます。パターンを並べて見るときは、下のUIギャラリーを使います。
 `signed-out` でメールアドレスによるログインや新規登録(OTP 検証)をすると、そのままログイン状態になります。
 Google ログインはリロードを伴うので、戻り先で `default` シナリオに切り替わります。
 
@@ -202,6 +202,13 @@ Zod スキーマとの整合を検証するので、API 契約が変わればテ
 この場合 MSW はページ内の `fetch` だけを差し替えるフォールバックで動くので、API のモックは効きますが、
 `<img>` で読む画像は差し替わらず、すべて読み込み失敗の表示になります。
 スマートフォンで画像まで確認するときは、trycloudflare などの HTTPS トンネル越しに開いてください。
+
+### UIギャラリー
+
+画面のパターンを1ページに並べて見比べるときは、開発サーバー(`pnpm dev` か `pnpm dev:mock`)で `/gallery.html` を開きます。
+本物の部品に状態を直接渡して描くので、端末の判定や API を通らず、PC でも iPhone・iPad の画面を見られます。押して進む挙動は再現しません。
+今は共有から取り込む画面だけで、設定の手順は `docs/shortcut/ios-share.md` の表1(始まり方)を行に、表2(段階)を列に並べています。
+ページは `apps/web/src/gallery/` にあります。build の入口は `index.html` だけなので、本番には入りません。
 
 ## Commands
 
