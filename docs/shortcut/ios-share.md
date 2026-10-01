@@ -73,7 +73,8 @@ routeが把握している結果はすべて`200`で返す。非2xxはrouteが�
 | `ai_usage_quota_exhausted` | `rejected` | あり | なし |
 | `rate_limit_exceeded` | `rejected` | 空文字 | なし |
 | `temporarily_unavailable` | `rejected` | あり | なし |
-| `unauthorized` | `rejected` | あり | `/settings/share?reason=unauthorized` |
+| `missing_credential` | `rejected` | あり | `/settings/share?reason=missing_credential` |
+| `unusable_credential` | `rejected` | あり | `/settings/share?reason=unusable_credential` |
 
 `openUrl`のキーは常に存在し、遷移先がないreasonでは`null`になる。`body`と違い空文字は返さない。
 
@@ -85,22 +86,24 @@ AI月次上限はプランでreasonを分ける。保存上限がfreeの投稿�
 
 上限値は運用中にenvで変えられるため、`body`に具体的な回数を書かず、文言の一覧を固定のまま保つ。Freeの回数は、遷移先のプランのページが今の値から出す。利用者向けの文言では「AI取り込み」の上限と呼ぶ。
 
-表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。`malformed_request`、`unauthorized`、`rate_limit_exceeded`、`temporarily_unavailable`、`ai_usage_quota_exhausted`はwarn、それ以外はinfo。freeのAI上限到達はコンバージョン機会であり通常の利用結果だが、proの枠切れは容量または濫用の兆候であるため別のlevelで扱う。
+表示文言は`apps/api/src/ios-share-notices.ts`が唯一の出所であり、Shortcutは文言を組み立てない。`reason`はHTTPステータスに代わる監視の軸で、routeは結果ごとに`ios_share_shortcut_import_submitted`を出力する。`malformed_request`、`missing_credential`、`unusable_credential`、`rate_limit_exceeded`、`temporarily_unavailable`、`ai_usage_quota_exhausted`はwarn、それ以外はinfo。freeのAI上限到達はコンバージョン機会であり通常の利用結果だが、proの枠切れは容量または濫用の兆候であるため別のlevelで扱う。
 
 `malformed_request`はrequest bodyが契約に合わない場合、`no_url_in_input`は`input`にURLが含まれない場合であり、両者を混ぜない。前者はクライアントの契約違反、後者はユーザーの通常の操作結果である。
 
 `rate_limit_exceeded`は2つの安全弁から返る。`credentialId`単位の毎分10回と、認証へ到達する前にclient IP単位で引く毎分60回である。後者は、無効なtokenを送り続けるrequestがtoken hash照合のDBアクセスを無制限に起こすのを防ぐ。keyは`cf-connecting-ip`とし、Cloudflareの背後では常に付与されるため、欠落するlocal devやtestでは共通のkeyで数える。IPは監視ログへ残さない。responseはどちらの安全弁でも同じ`reason`と同じnoticeであり、切り分けはログの`rateLimitScope`（`client`または`credential`）で行う。
 
-`unauthorized`もresponseは1つだが、ログの`authFailure`で連携の設定のどこで詰まったかを分ける。
+認証の失敗は、連携キーの形をしたものが届いたかで2つの`reason`に分ける。届いていなければ`missing_credential`（キーが入っていない）、届いていれば`unusable_credential`（使えなくなった）である。どちらも利用者がすることは入れ直しで変わらないが、通知と連携し直しの画面で起きたことをそのまま伝えるために分ける。さらに細かい内訳は、ログの`authFailure`で連携の設定のどこで詰まったかを分ける。
 
-| `authFailure` | 条件 | 主な原因 |
-| --- | --- | --- |
-| `missing_token` | Bearerがない、または空 | インポート質問でキーを貼らずに追加した |
-| `malformed_token` | 照合できず、今の連携キーの形でもない | 別のものを貼った（コピーに失敗した、途中で別のものをコピーした） |
-| `unknown_token` | 今の形だが照合できない | 別の環境で発行したキー、手で打ち間違えたキー |
-| `revoked_token` | 解除済みのキー | 解除したキーのショートカットを使い続けている。`credentialId`と`userId`を添える |
+| `reason` | `authFailure` | 条件 | 主な原因 |
+| --- | --- | --- | --- |
+| `missing_credential` | `missing_token` | Bearerがない、または空 | インポート質問でキーを貼らずに追加した |
+| `missing_credential` | `malformed_token` | 照合できず、今の連携キーの形でもない | 別のものを貼った（コピーに失敗した、途中で別のものをコピーした） |
+| `unusable_credential` | `unknown_token` | 今の形だが照合できない | 別の環境で発行したキー、手で打ち間違えたキー |
+| `unusable_credential` | `revoked_token` | 解除済みのキー | 解除したキーのショートカットを使い続けている。`credentialId`と`userId`を添える |
 
-形の判定はログを分けるためだけに使い、認証はhash照合だけで行う。
+`unknown_token`は、一度も有効でなかったキーなので「使えなくなった」とは厳密には言えない。それでも`revoked_token`と分けない。利用者のもとで起きることはまれで、responseで分けると、その形のキーがかつて存在したかを教えることになる。画面の文言は「解除されたなどで」とし、解除したと言い切らない。
+
+形の判定は伝え分けとログのためだけに使い、認証はhash照合だけで行う。
 
 ## 連携キーの利用の記録
 
@@ -174,8 +177,8 @@ AI月次上限はプランでreasonを分ける。保存上限がfreeの投稿�
 | 端末側の状態 | 起きること | 扱う場所 |
 | --- | --- | --- |
 | ショートカットを追加していない | 共有メニューに出ない | ②、③ |
-| キーを貼らずに、または別のものを貼って追加した | 共有すると`unauthorized` | 連携し直し、うまくいかないとき |
-| 解除したキーが入っている | 共有すると`unauthorized` | 連携し直し |
+| キーを貼らずに、または別のものを貼って追加した | 共有すると`missing_credential` | 連携し直し、うまくいかないとき |
+| 解除したキーが入っている | 共有すると`unusable_credential` | 連携し直し |
 | キーを貼ったが、まだ共有していない | 使われていないキーとして残る | 未連携で開いたときの続き |
 | 接続の確認で「許可しない」を選んだ | 共有してもrequestが届かず、待ち続ける | うまくいかないとき |
 | ショートカットの通知を切っている | 「取り込みを開始しました」が出ない | うまくいかないとき |
@@ -230,7 +233,7 @@ where shortcut_credential_id is not null
   and status = 'succeeded';
 ```
 
-発行してから使われるまでの間で、リクエストが届く失敗（キーを貼っていない、別のものを貼った）は`authFailure`で数えられる。ショートカットを追加していない、接続の確認で「許可しない」を選んだ、はリクエストが届かないので観測できず、使われていないキーとしてだけ現れる。
+発行してから使われるまでの間で、リクエストが届く失敗（キーを貼っていない、別のものを貼った）は`missing_credential`として数えられ、内訳は`authFailure`で分かる。ショートカットを追加していない、接続の確認で「許可しない」を選んだ、はリクエストが届かないので観測できず、使われていないキーとしてだけ現れる。
 
 ## 共有入力の実機確認
 
@@ -242,7 +245,7 @@ where shortcut_credential_id is not null
 
 ## 分岐の実機確認
 
-配布前に、`openUrl`が`null`のreason（`created`）と`openUrl`を持つreason（`unauthorized`）の両方を実機で通し、前者で遷移も失敗も起きないこと、後者で遷移することを確認する。手順5はShortcut唯一の分岐であり、配布後は修正できない。
+配布前に、`openUrl`が`null`のreason（`created`）と`openUrl`を持つreason（キーを貼らずに追加して`missing_credential`）の両方を実機で通し、前者で遷移も失敗も起きないこと、後者で遷移することを確認する。手順5はShortcut唯一の分岐であり、配布後は修正できない。
 
 ## 設定の手順の実機確認
 

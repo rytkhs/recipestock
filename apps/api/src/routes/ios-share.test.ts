@@ -1,3 +1,4 @@
+import { type IosShareShortcutImportResponse } from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
 import { type AppDependencies } from "../index";
@@ -257,7 +258,7 @@ describe("iOS Share routes", () => {
     );
 
     expect(submitted.map((entry) => [entry.reason, entry.level])).toEqual([
-      ["unauthorized", "warn"],
+      ["missing_credential", "warn"],
       ["no_url_in_input", "info"],
       ["created", "info"],
     ]);
@@ -311,7 +312,7 @@ describe("iOS Share routes", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ reason: "unauthorized" });
+    await expect(response.json()).resolves.toMatchObject({ reason: "missing_credential" });
     expect(rateLimiter.limit).not.toHaveBeenCalled();
   });
 
@@ -331,7 +332,7 @@ describe("iOS Share routes", () => {
     expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401]);
   });
 
-  it("認証できないrequestは再連携を促すnoticeを返し、詰まった理由を分けて記録する", async () => {
+  it("認証できないrequestは、キーが届いたかで分けて再連携を促し、詰まった理由を記録する", async () => {
     const entries: LogEntry[] = [];
     const sink = { write: (entry: LogEntry) => entries.push(entry) };
     const revokedToken = `rssc_${"r".repeat(25)}`;
@@ -372,14 +373,30 @@ describe("iOS Share routes", () => {
       );
     }
 
-    for (const response of responses) {
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toMatchObject({
-        outcome: "rejected",
-        reason: "unauthorized",
-        notice: { openUrl: "https://app.example.com/settings/share?reason=unauthorized" },
-      });
-    }
+    const results = await Promise.all(
+      responses.map(async (response) => {
+        expect(response.status).toBe(200);
+        const { outcome, reason, notice } = await response.json<IosShareShortcutImportResponse>();
+        return { outcome, reason, openUrl: notice.openUrl };
+      }),
+    );
+    const missingCredential = {
+      outcome: "rejected",
+      reason: "missing_credential",
+      openUrl: "https://app.example.com/settings/share?reason=missing_credential",
+    };
+    const unusableCredential = {
+      outcome: "rejected",
+      reason: "unusable_credential",
+      openUrl: "https://app.example.com/settings/share?reason=unusable_credential",
+    };
+    expect(results).toEqual([
+      missingCredential,
+      missingCredential,
+      missingCredential,
+      unusableCredential,
+      unusableCredential,
+    ]);
     expect(
       entries
         .filter((entry) => entry.event === "ios_share_shortcut_import_submitted")

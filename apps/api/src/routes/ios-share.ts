@@ -19,8 +19,8 @@ type IosShareRouteDependencies = {
 };
 
 /**
- * `unauthorized`の内訳。キーを貼らずに追加した、別のものを貼った、解除したキーを使い続けている、を
- * 見分け、連携の設定のどこで詰まっているかを数える。
+ * `missing_credential`と`unusable_credential`の内訳。キーを貼らずに追加した、別のものを貼った、
+ * 解除したキーを使い続けている、を見分け、連携の設定のどこで詰まっているかを数える。
  */
 type ShortcutAuthFailure = "missing_token" | "malformed_token" | "unknown_token" | "revoked_token";
 
@@ -58,7 +58,8 @@ const sourceHostOf = (url: string) => {
  */
 const warnedReasons = new Set<IosShareShortcutImportReason>([
   "malformed_request",
-  "unauthorized",
+  "missing_credential",
+  "unusable_credential",
   "rate_limit_exceeded",
   "temporarily_unavailable",
   /**
@@ -119,24 +120,22 @@ export const createIosShareRoutes = ({
 
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
-      return respondWithNotice(c, "unauthorized", { authFailure: "missing_token" });
+      return respondWithNotice(c, "missing_credential", { authFailure: "missing_token" });
     }
 
     const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
     if (identity.status === "revoked") {
-      return respondWithNotice(c, "unauthorized", {
+      return respondWithNotice(c, "unusable_credential", {
         authFailure: "revoked_token",
         credentialId: identity.credentialId,
         userId: identity.userId,
       });
     }
     if (identity.status === "unknown") {
-      // 形はログを分けるためだけに見る。認証はhash照合だけで行い、形の違う旧形式のキーも通す。
-      return respondWithNotice(c, "unauthorized", {
-        authFailure: shortcutCredentialTokenSchema.safeParse(token).success
-          ? "unknown_token"
-          : "malformed_token",
-      });
+      // 形は、届いたものがキーかどうかを伝え分けるためだけに見る。認証はhash照合だけで行い、形の違う旧形式のキーも通す。
+      return shortcutCredentialTokenSchema.safeParse(token).success
+        ? respondWithNotice(c, "unusable_credential", { authFailure: "unknown_token" })
+        : respondWithNotice(c, "missing_credential", { authFailure: "malformed_token" });
     }
 
     const logFields: ShortcutImportLogFields = {

@@ -397,7 +397,7 @@ describe("共有から取り込む", () => {
     const linkedCredential = shortcutCredentialFixture();
     const shortcut = mockShortcutFetch({ credentials: [linkedCredential] });
 
-    const { appRouter } = await renderApp("/settings/share?reason=unauthorized");
+    const { appRouter } = await renderApp("/settings/share?reason=unusable_credential");
 
     await expect(
       screen.findByText("ショートカットのキーが使えません"),
@@ -416,6 +416,19 @@ describe("共有から取り込む", () => {
     await expect(
       screen.findByRole("heading", { name: "連携できました" }),
     ).resolves.toBeInTheDocument();
+  });
+
+  it("キーが届かずに連携し直しに来たら、使えなくなったキーとは分けて、キーが入っていないことを伝える", async () => {
+    installDevice();
+    mockShortcutFetch();
+
+    await renderApp("/settings/share?reason=missing_credential");
+
+    await expect(
+      screen.findByText("ショートカットにキーが入っていません"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByText("ショートカットのキーが使えません")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /ショートカットを入れ直す/ })).toBeInTheDocument();
   });
 
   it("最後の連携キーを解除して未連携になったら設定を始め、新しいキーに共有が届いたら連携できたことを伝える", async () => {
