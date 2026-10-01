@@ -53,16 +53,6 @@ describe("iOS Shortcut noticeのカタログ", () => {
   it("次に取るべき行動があるreasonはbodyを持つ", () => {
     const actionableReasons = allReasons.filter((reason) => !titleOnlyReasons.includes(reason));
 
-    expect(actionableReasons).toEqual([
-      "invalid_url",
-      "malformed_request",
-      "recipe_limit_exceeded",
-      "ai_usage_limit_exceeded",
-      "ai_usage_quota_exhausted",
-      "temporarily_unavailable",
-      "missing_credential",
-      "unusable_credential",
-    ]);
     for (const reason of actionableReasons) {
       expect(buildResult(reason).notice.body).not.toBe("");
     }

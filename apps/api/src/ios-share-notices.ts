@@ -91,7 +91,7 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
   missing_credential: {
     outcome: "rejected",
     title: "連携キーが入っていません",
-    body: "キーを貼って、ショートカットを入れ直してください。",
+    body: "キーをコピーし直し、ショートカットを入れ直してください。",
     path: "/settings/share?reason=missing_credential",
   },
   unusable_credential: {
