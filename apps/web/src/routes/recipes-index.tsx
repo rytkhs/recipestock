@@ -1,3 +1,4 @@
+import { Menu } from "@base-ui/react/menu";
 import {
   CaretRight,
   CookingPot,
@@ -94,6 +95,9 @@ const listRecipeSkeletonKeys = [
 
 // URLにタグの指定がないときに使う。描画のたびに新しい配列にすると、条件が変わったと見なされる。
 const noTagIds: string[] = [];
+// 並び順と表示のメニューは、検索欄の中のボタンから開く。メニューの本体を検索欄の中に置くと、
+// 項目を押したクリックが欄まで伝わり、検索欄にフォーカスが移ってキーボードが開く。
+const shelfViewMenu = Menu.createHandle();
 
 // 絞り込んで0件になったときの見出し。どの条件で絞っているかを言葉にする。
 const describeFilterMiss = ({
@@ -407,15 +411,33 @@ export const RecipesIndexRoute = () => {
                     value={searchInput}
                     onChange={(event) => setSearchInput(event.target.value)}
                   />
-                  {searchInput ? (
+                  {searchInput || hasShelfToolbar ? (
                     <InputGroupAddon align="inline-end">
-                      <InputGroupButton
-                        aria-label="検索を消す"
-                        size="icon-xs"
-                        onClick={clearSearch}
-                      >
-                        <X weight="bold" />
-                      </InputGroupButton>
+                      {searchInput ? (
+                        <InputGroupButton
+                          aria-label="検索を消す"
+                          size="icon-xs"
+                          onClick={clearSearch}
+                        >
+                          <X weight="bold" />
+                        </InputGroupButton>
+                      ) : null}
+                      {/* 並び順と表示も一覧の見え方なので、検索と同じ欄に入れる。欄の外の設定と見分けられるようにする。 */}
+                      {hasShelfToolbar ? (
+                        <DropdownMenuTrigger
+                          handle={shelfViewMenu}
+                          aria-label={sort === "oldest" ? "表示の設定（古い順）" : "表示の設定"}
+                          render={<InputGroupButton className="relative" size="icon-xs" />}
+                        >
+                          <SlidersHorizontal className="size-4" weight="bold" />
+                          {sort === "oldest" ? (
+                            <span
+                              aria-hidden="true"
+                              className="absolute top-0 right-0 size-1.5 rounded-full bg-brand-orange"
+                            />
+                          ) : null}
+                        </DropdownMenuTrigger>
+                      ) : null}
                     </InputGroupAddon>
                   ) : null}
                 </InputGroup>
@@ -425,61 +447,47 @@ export const RecipesIndexRoute = () => {
               検索
             </Button>
           </form>
+          {hasShelfToolbar && shelfSummary ? (
+            <p className="hidden shrink-0 truncate text-brand-muted text-sm sm:block sm:max-w-56">
+              {shelfSummary}
+            </p>
+          ) : null}
           {hasShelfToolbar ? (
-            <>
-              {shelfSummary ? (
-                <p className="hidden shrink-0 truncate text-brand-muted text-sm sm:block sm:max-w-56">
-                  {shelfSummary}
-                </p>
-              ) : null}
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label={sort === "oldest" ? "表示の設定（古い順）" : "表示の設定"}
-                  render={<Button className="relative shrink-0" size="icon-lg" variant="outline" />}
+            <DropdownMenu handle={shelfViewMenu}>
+              <DropdownMenuContent align="end" className="w-auto min-w-40">
+                <DropdownMenuRadioGroup
+                  value={sort}
+                  onValueChange={(value) => {
+                    if (value === "newest" || value === "oldest") {
+                      changeSort(value);
+                    }
+                  }}
                 >
-                  <SlidersHorizontal weight="bold" />
-                  {sort === "oldest" ? (
-                    <span
-                      aria-hidden="true"
-                      className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand-orange"
-                    />
-                  ) : null}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-auto min-w-40">
-                  <DropdownMenuRadioGroup
-                    value={sort}
-                    onValueChange={(value) => {
-                      if (value === "newest" || value === "oldest") {
-                        changeSort(value);
-                      }
-                    }}
-                  >
-                    <DropdownMenuLabel>並び順</DropdownMenuLabel>
-                    <DropdownMenuRadioItem value="newest">新しい順</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="oldest">古い順</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioGroup
-                    value={viewMode}
-                    onValueChange={(value) => {
-                      if (value === "grid" || value === "list") {
-                        setViewMode(value);
-                      }
-                    }}
-                  >
-                    <DropdownMenuLabel>表示</DropdownMenuLabel>
-                    <DropdownMenuRadioItem value="grid">
-                      <SquaresFour weight="bold" />
-                      グリッド
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="list">
-                      <List weight="bold" />
-                      リスト
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
+                  <DropdownMenuLabel>並び順</DropdownMenuLabel>
+                  <DropdownMenuRadioItem value="newest">新しい順</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="oldest">古い順</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={viewMode}
+                  onValueChange={(value) => {
+                    if (value === "grid" || value === "list") {
+                      setViewMode(value);
+                    }
+                  }}
+                >
+                  <DropdownMenuLabel>表示</DropdownMenuLabel>
+                  <DropdownMenuRadioItem value="grid">
+                    <SquaresFour weight="bold" />
+                    グリッド
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="list">
+                    <List weight="bold" />
+                    リスト
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           <Link
             aria-label="設定"

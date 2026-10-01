@@ -105,9 +105,9 @@ export const TagFilterBar = ({
       >
         タグなし
       </button>
-      <Link aria-label="タグを管理" className={cn(tagChipClass(), "text-brand-muted")} to="/tags">
+      <Link className={cn(tagChipClass(), "text-brand-muted")} to="/tags">
         <PencilSimple weight="bold" />
-        編集
+        タグを管理
       </Link>
     </fieldset>
   );
