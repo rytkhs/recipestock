@@ -249,11 +249,16 @@ const seedCredentials =
     queryClient.setQueryData(shortcutCredentialsQueryKey, response);
   };
 
+// 読み込みの失敗は`setQueryData`では作れないので、キャッシュのクエリに状態を直接書く。
 const seedCredentialsError = (queryClient: QueryClient) => {
   queryClient
     .getQueryCache()
     .build(queryClient, { queryKey: shortcutCredentialsQueryKey })
-    .setState({ status: "error", error: new Error("Gallery"), errorUpdatedAt: Date.now() });
+    .setState({
+      status: "error",
+      error: new Error("The gallery seeds the shortcut credentials query as failed."),
+      errorUpdatedAt: Date.now(),
+    });
 };
 
 const linkedCredentials = linkedShortcutCredentialsFixture();
