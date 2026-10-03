@@ -7,7 +7,7 @@ import {
   createImportJobRepository,
   type ImportJobAiUsageLimits,
   type ImportJobRepository,
-} from "../../src/import-jobs";
+} from "../../src/import/jobs";
 
 const now = new Date("2026-07-14T00:00:00.000Z");
 

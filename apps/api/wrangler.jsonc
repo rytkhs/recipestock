@@ -24,7 +24,7 @@
       "head_sampling_rate": 1
     }
   },
-  // Import Queueの滞留を見るcron（`src/import-queue-health.ts`）。Sentry Cronsのmonitorは
+  // Import Queueの滞留を見るcron（`src/import/queue-health.ts`）。Sentry Cronsのmonitorは
   // Workerに届いたcron式で登録するので、ここを変えればmonitorのscheduleも追従する。
   "triggers": {
     "crons": ["*/5 * * * *"]

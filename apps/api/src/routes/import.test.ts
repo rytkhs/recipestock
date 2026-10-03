@@ -1,6 +1,6 @@
 import { MAX_RECIPE_SOURCE_URL_LENGTH } from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
-import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
+import { type ImportJobRecord, type ImportJobRepository } from "../import/jobs";
 import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
 const auth = createTestAuth();

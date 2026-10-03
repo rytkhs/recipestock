@@ -3,9 +3,9 @@ import {
   type IosShareShortcutImportResponse,
 } from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
-import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
+import { type ImportJobRecord, type ImportJobRepository } from "../import/jobs";
+import { type UrlImportJobSubmission } from "../import/url-import-job-submission";
 import { type AppDependencies } from "../index";
-import { type UrlImportJobSubmission } from "../lib/import/url-import-job-submission";
 import { createLogger, type LogEntry } from "../logger";
 import { type ShortcutCredentials } from "../shortcut-credentials";
 import { createSilentTestApp, createTestAuth } from "../test-helpers";

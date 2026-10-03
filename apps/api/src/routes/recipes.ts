@@ -28,10 +28,8 @@ import { createRecipeImageService, type RecipeImageService } from "../images";
 import { requireAuth } from "../middleware/auth";
 import {
   attachRecipeImageUrls,
-  deleteObjectsBestEffort,
-  finalizeRecipeDraftImages,
-  getRemovedRecipeImageKeys,
   RecipeImageFinalizeError,
+  saveRecipeWithDraftImages,
 } from "../recipe-images";
 import { createRecipeThumbnailUrl } from "../recipe-thumbnails";
 import {
@@ -93,16 +91,40 @@ export const createRecipeRoutes = ({
         }
 
         const recipeId = createRecipeId?.() ?? createDefaultRecipeId();
-        const images = imageService ?? createRecipeImageService(c.env);
-        let finalized: Awaited<ReturnType<typeof finalizeRecipeDraftImages>>;
+        let result: Awaited<ReturnType<RecipeRepository["createRecipeEnforcingPlanLimit"]>>;
 
         try {
-          finalized = await finalizeRecipeDraftImages({
+          result = await saveRecipeWithDraftImages({
             draft: request.data.content,
             userId,
             recipeId,
-            imageService: images,
+            imageService: imageService ?? createRecipeImageService(c.env),
             createImageId,
+            save: (content) => {
+              const source = normalizeRecipeSource(request.data.source);
+              const now = new Date();
+              const repository =
+                recipeRepository ??
+                createRecipeRepository(createDb(c.env.DATABASE_URL), {
+                  proPriceId: c.env.STRIPE_PRO_PRICE_ID,
+                  now,
+                });
+
+              return repository.createRecipeEnforcingPlanLimit({
+                id: recipeId,
+                userId,
+                title: content.title,
+                content,
+                originType: "manual",
+                sourceUrl: source.sourceUrl,
+                normalizedSourceUrl: source.normalizedSourceUrl,
+                sourceName: source.sourceName,
+                searchText: buildRecipeSearchText({ content, sourceName: source.sourceName }),
+                createdAt: now,
+                updatedAt: now,
+              });
+            },
+            isSaved: ({ status }) => status === "created",
           });
         } catch (error) {
           if (error instanceof RecipeImageFinalizeError) {
@@ -112,47 +134,13 @@ export const createRecipeRoutes = ({
           throw error;
         }
 
-        const content = finalized.content;
-        const source = normalizeRecipeSource(request.data.source);
-        const now = new Date();
-        const repository =
-          recipeRepository ??
-          createRecipeRepository(createDb(c.env.DATABASE_URL), {
-            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-            now,
-          });
-        let result: Awaited<ReturnType<RecipeRepository["createRecipeEnforcingPlanLimit"]>>;
-
-        try {
-          result = await repository.createRecipeEnforcingPlanLimit({
-            id: recipeId,
-            userId,
-            title: content.title,
-            content,
-            originType: "manual",
-            sourceUrl: source.sourceUrl,
-            normalizedSourceUrl: source.normalizedSourceUrl,
-            sourceName: source.sourceName,
-            searchText: buildRecipeSearchText({ content, sourceName: source.sourceName }),
-            createdAt: now,
-            updatedAt: now,
-          });
-        } catch (error) {
-          await deleteObjectsBestEffort(images, finalized.copiedKeys);
-          throw error;
-        }
-
         if (result.status === "limitExceeded") {
-          await deleteObjectsBestEffort(images, finalized.copiedKeys);
           return recipeLimitExceededResponse();
         }
 
-        const recipe = result.recipe;
-        await deleteObjectsBestEffort(images, finalized.tmpKeys);
-
         // タグは保存した後に詳細画面で付けるので、作成したRecipeにはまだない。
         return c.json(
-          createRecipeResponseSchema.parse({ recipe: toRecipeDetail(recipe, []) }),
+          createRecipeResponseSchema.parse({ recipe: toRecipeDetail(result.recipe, []) }),
           201,
         );
       })
@@ -267,17 +255,29 @@ export const createRecipeRoutes = ({
           return lockedRecipeResponse();
         }
 
-        const images = imageService ?? createRecipeImageService(c.env);
-        let finalized: Awaited<ReturnType<typeof finalizeRecipeDraftImages>>;
+        let recipe: Awaited<ReturnType<RecipeRepository["updateRecipe"]>>;
 
         try {
-          finalized = await finalizeRecipeDraftImages({
+          recipe = await saveRecipeWithDraftImages({
             draft: request.data.content,
             userId,
             recipeId: existingRecipe.id,
-            imageService: images,
+            imageService: imageService ?? createRecipeImageService(c.env),
             existingContent: existingRecipe.content,
             createImageId,
+            save: (content) =>
+              repository.updateRecipe({
+                userId,
+                recipeId: existingRecipe.id,
+                title: content.title,
+                content,
+                searchText: buildRecipeSearchText({
+                  content,
+                  sourceName: existingRecipe.sourceName,
+                }),
+                updatedAt: new Date(),
+              }),
+            isSaved: (updated) => updated !== null,
           });
         } catch (error) {
           if (error instanceof RecipeImageFinalizeError) {
@@ -287,36 +287,9 @@ export const createRecipeRoutes = ({
           throw error;
         }
 
-        const content = finalized.content;
-        let recipe: Awaited<ReturnType<RecipeRepository["updateRecipe"]>>;
-
-        try {
-          recipe = await repository.updateRecipe({
-            userId,
-            recipeId: existingRecipe.id,
-            title: content.title,
-            content,
-            searchText: buildRecipeSearchText({
-              content,
-              sourceName: existingRecipe.sourceName,
-            }),
-            updatedAt: new Date(),
-          });
-        } catch (error) {
-          await deleteObjectsBestEffort(images, finalized.copiedKeys);
-          throw error;
-        }
-
         if (!recipe) {
-          await deleteObjectsBestEffort(images, finalized.copiedKeys);
           return notFoundResponse("Recipe was not found.");
         }
-
-        await deleteObjectsBestEffort(images, finalized.tmpKeys);
-        await deleteObjectsBestEffort(
-          images,
-          getRemovedRecipeImageKeys(existingRecipe.content, content),
-        );
 
         // 本文の更新ではタグは変わらないので、更新前に読んだタグを返す。
         return c.json(

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { importRecipeFromUrl } from "../../../import-url";
-import { type AiUsageConsumptionRepository } from "../../../usage";
+import { type AiUsageConsumptionRepository } from "../../usage";
 import { type RecipeImportError } from "../types";
+import { importRecipeFromUrl } from "../url-import";
 import { delishKitchenImportAdapter } from "./delish-kitchen";
 
 const RECIPE_ID = "176147753863217510";

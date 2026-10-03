@@ -8,8 +8,8 @@ import { extractFirstUrl, IOS_SHARE_SETUP_CHECK_PATH } from "@recipestock/shared
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { type ApiEnv } from "../context";
+import { type UrlImportJobSubmissionFactory } from "../import/url-import-job-submission";
 import { buildIosShareShortcutImportResult } from "../ios-share-notices";
-import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
 import { type ShortcutCredentials } from "../shortcut-credentials";
 
 /**

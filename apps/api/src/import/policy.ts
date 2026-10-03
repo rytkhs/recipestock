@@ -1,5 +1,5 @@
 import { MAX_RECIPE_SOURCE_URL_LENGTH } from "@recipestock/schemas";
-import { isHttpFetchUrlAllowed } from "../../url-safety";
+import { isHttpFetchUrlAllowed } from "../url-safety";
 import { type FetchedImportPage, RecipeImportError } from "./types";
 
 const HTML_SNIFF_BYTES = 4 * 1024;
