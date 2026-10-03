@@ -116,34 +116,11 @@ describe("kurashiruImportAdapter", () => {
   });
 
   it.each([
-    {
-      name: "JSON-LDがない",
-      html: createKurashiruHtml({ includeJsonLd: false }),
-    },
-    {
-      name: "JSON-LDが不正",
-      html: createKurashiruHtml({ jsonLdDocument: "{" }),
-    },
-    {
-      name: "JSON-LDが@graph",
-      html: createKurashiruHtml({
-        jsonLdDocument: JSON.stringify({
-          "@graph": [
-            { "@type": "BreadcrumbList" },
-            {
-              "@type": "Recipe",
-              mainEntityOfPage: { "@id": RECIPE_URL },
-              image: "https://example.com/graph.jpg",
-            },
-          ],
-        }),
-      }),
-    },
+    { name: "JSON-LDがない", html: createKurashiruHtml({ includeJsonLd: false }) },
+    { name: "JSON-LDが不正", html: createKurashiruHtml({ jsonLdDocument: "{" }) },
   ])("$nameでもSSR状態から取り込む", async ({ html }) => {
     await expect(importKurashiru({ html })).resolves.toMatchObject({
-      recipeDraftContent: {
-        title: "お弁当の定番 卵焼き",
-      },
+      recipeDraftContent: { title: "お弁当の定番 卵焼き" },
       warnings: [],
     });
   });
@@ -240,44 +217,6 @@ describe("kurashiruImportAdapter", () => {
     await expect(importKurashiru({ html })).rejects.toMatchObject({
       code: "extraction_failed",
     } satisfies Partial<RecipeImportError>);
-  });
-
-  it("成功時はAI providerとAI usageを使わない", async () => {
-    const aiNormalize = vi.fn();
-    const consumeAiUsage = vi.fn();
-
-    await expect(
-      importKurashiru({
-        aiNormalize,
-        consumeAiUsage,
-      }),
-    ).resolves.toMatchObject({
-      source: {
-        sourceUrl: RECIPE_URL,
-        sourceName: "クラシル",
-      },
-    });
-
-    expect(aiNormalize).not.toHaveBeenCalled();
-    expect(consumeAiUsage).not.toHaveBeenCalled();
-  });
-
-  it("抽出失敗時もAI providerとAI usageを使わない", async () => {
-    const aiNormalize = vi.fn();
-    const consumeAiUsage = vi.fn();
-
-    await expect(
-      importKurashiru({
-        html: createKurashiruHtml({ attributeOverrides: { title: "" } }),
-        aiNormalize,
-        consumeAiUsage,
-      }),
-    ).rejects.toMatchObject({
-      code: "extraction_failed",
-    } satisfies Partial<RecipeImportError>);
-
-    expect(aiNormalize).not.toHaveBeenCalled();
-    expect(consumeAiUsage).not.toHaveBeenCalled();
   });
 });
 

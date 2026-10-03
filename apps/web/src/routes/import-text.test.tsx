@@ -188,17 +188,25 @@ describe("Import text route", () => {
     await renderApp("/import/text?fromJob=job_failed");
 
     await expect(screen.findByLabelText("テキスト")).resolves.toHaveValue(sourceText);
+    await userEvent.type(screen.getByLabelText("テキスト"), "\n塩 小さじ1");
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/import/text/jobs")).toEqual([
       "/api/import/text/jobs",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ text: sourceText }) }),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ text: `${sourceText}\n塩 小さじ1` }),
+      }),
     ]);
     expect(findFetchCall(fetchMock, "/api/import/jobs/job_failed/dismiss")).toEqual([
       "/api/import/jobs/job_failed/dismiss",
       expect.objectContaining({ method: "PATCH" }),
     ]);
+    const paths = fetchMock.mock.calls.map(([input]) => getRequestPath(input));
+    expect(paths.indexOf("/api/import/jobs/job_failed/dismiss")).toBeGreaterThan(
+      paths.indexOf("/api/import/text/jobs"),
+    );
   });
 
   it("URLから読めなかったjobからは、本文を貼って元のURLを出典として取り込む", async () => {

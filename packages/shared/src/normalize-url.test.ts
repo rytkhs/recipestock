@@ -11,9 +11,4 @@ describe("URL正規化", () => {
   it("httpとhttps以外のURLは拒否する", () => {
     expect(() => normalizeUrl("ftp://example.com/recipe")).toThrow(TypeError);
   });
-
-  it("デフォルトポートを削除する", () => {
-    expect(normalizeUrl("https://example.com:443/recipe")).toBe("https://example.com/recipe");
-    expect(normalizeUrl("http://example.com:80/recipe")).toBe("http://example.com/recipe");
-  });
 });

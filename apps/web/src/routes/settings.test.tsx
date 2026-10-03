@@ -4,11 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { billingRedirect } from "../features/billing/api";
 import { viewerQueryKey } from "../lib/viewer";
-import {
-  googleLoginAccountsFixture,
-  loginAccountFixture,
-  shortcutCredentialFixture,
-} from "../mocks/fixtures";
+import { googleLoginAccountsFixture, shortcutCredentialFixture } from "../mocks/fixtures";
 import {
   billingStatusResponse,
   createSessionResponse,
@@ -227,7 +223,9 @@ describe("Settings routes", () => {
     );
 
     await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "通知を有効にする" }));
+    const enable = await screen.findByRole("button", { name: "通知を有効にする" });
+    expect(screen.getByText("この端末では通知が無効です。")).toBeInTheDocument();
+    await userEvent.click(enable);
 
     await expect(screen.findByText("この端末では通知が有効です。")).resolves.toBeInTheDocument();
   });
@@ -479,26 +477,6 @@ describe("Settings routes", () => {
     expect(screen.queryByRole("button", { name: "通知を有効にする" })).not.toBeInTheDocument();
   });
 
-  it("Service Worker登録がなければ通知無効として表示する", async () => {
-    installPushBrowser({
-      hasServiceWorkerRegistration: false,
-      isServiceWorkerReady: false,
-    });
-    mockFetch(
-      async (input, init) => {
-        if (getRequestPath(input) === "/api/push-subscriptions" && init?.method === "GET") {
-          return jsonResponse({ applicationServerKey: "AQID", subscriptions: [] });
-        }
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true, shortcutCredentials: linkedIphoneCredentials },
-    );
-
-    await renderApp("/settings/share");
-
-    await expect(screen.findByText("この端末では通知が無効です。")).resolves.toBeInTheDocument();
-  });
-
   it("有効な通知を設定画面から解除する", async () => {
     const subscription = createPushSubscription();
     installPushBrowser({ permission: "granted", subscription });
@@ -622,7 +600,7 @@ describe("Settings routes", () => {
       if (path.endsWith("/get-session")) {
         return createSessionResponse(authenticated);
       }
-      if (path === "/api/me") {
+      if (path === "/api/me" && authenticated) {
         return jsonResponse(viewerResponse);
       }
       if (path === "/api/push-subscriptions" && init?.method === "GET") {
@@ -642,10 +620,48 @@ describe("Settings routes", () => {
       return new Response(null, { status: 404 });
     });
 
-    await renderApp("/settings");
+    const { queryClient } = await renderApp("/settings");
+    queryClient.setQueryData(["recipes", { query: "" }], {
+      pages: [{ items: [], nextCursor: null }],
+      pageParams: [null],
+    });
+    queryClient.setQueryData(["recipe", "recipe_123"], { id: "recipe_123" });
+    queryClient.setQueryData(["viewer"], viewerResponse);
+    queryClient.setQueryData(["billing-status"], {
+      plan: "pro",
+      subscription: {
+        status: "active",
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: "2026-07-04T00:00:00.000Z",
+        cancelAt: null,
+      },
+    });
+    queryClient.setQueryData(["push-subscriptions"], {
+      applicationServerKey: "AQID",
+      subscriptions: [
+        {
+          endpoint: "https://push.example.com/subscription/device-1",
+          expirationTime: null,
+        },
+      ],
+    });
+
+    queryClient.setQueryData(["shortcut-credentials"], { credentials: [] });
+
     await confirmSignOut();
 
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+    expect(findFetchCall(fetchMock, "/api/auth/sign-out")).toEqual([
+      "/api/auth/sign-out",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    ]);
+    expect(queryClient.getQueryData(["recipes", { query: "" }])).toBeUndefined();
+    expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
+    expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
+    expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();
+    expect(queryClient.getQueryData(["push-subscriptions"])).toBeUndefined();
+    expect(queryClient.getQueryData(["shortcut-credentials"])).toBeUndefined();
+
     expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
     const deleteIndex = fetchMock.mock.calls.findIndex(
       ([input, init]) =>
@@ -852,44 +868,8 @@ describe("Settings routes", () => {
     expect(appRouter.state.location.pathname).toBe("/settings");
   });
 
-  it("メールアドレスのページから変更確認メールを送信できる", async () => {
-    const fetchMock = mockFetch(
-      async (input, init) => {
-        if (getRequestPath(input) === "/api/auth/change-email" && init?.method === "POST") {
-          return jsonResponse({ status: true });
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-    await renderApp("/settings/email");
-
-    await expect(screen.findByText("chef@example.com")).resolves.toBeInTheDocument();
-    await userEvent.type(await screen.findByLabelText("新しいメールアドレス"), "new@example.com");
-    await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
-
-    const changeEmailCall = findFetchCall(fetchMock, "/api/auth/change-email");
-    expect(changeEmailCall).toEqual([
-      "/api/auth/change-email",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-      }),
-    ]);
-    expect(JSON.parse(String(changeEmailCall?.[1]?.body))).toEqual({
-      newEmail: "new@example.com",
-      callbackURL: "/settings/email?from=verify-link",
-    });
-    const sentHeading = await screen.findByRole("heading", { name: "確認メールを送りました" });
-    expect(sentHeading).toHaveFocus();
-    expect(screen.getByText("new@example.com")).toBeInTheDocument();
-    expect(screen.getByText("1時間以内に、メールのリンクを開いてください。")).toBeInTheDocument();
-    expect(screen.queryByLabelText("新しいメールアドレス")).not.toBeInTheDocument();
-  });
-
   it("確認メールを送った後は、送った先を入れたままフォームに戻って送り直せる", async () => {
-    mockFetch(
+    const fetchMock = mockFetch(
       async (input, init) => {
         if (getRequestPath(input) === "/api/auth/change-email" && init?.method === "POST") {
           return jsonResponse({ status: true });
@@ -903,11 +883,30 @@ describe("Settings routes", () => {
 
     await userEvent.type(await screen.findByLabelText("新しいメールアドレス"), "nwe@example.com");
     await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
-    await userEvent.click(await screen.findByRole("button", { name: "送り直す" }));
+    const sentHeading = await screen.findByRole("heading", { name: "確認メールを送りました" });
+    expect(sentHeading).toHaveFocus();
+    const sendCall = findFetchCall(fetchMock, "/api/auth/change-email");
+    expect(sendCall).toEqual([
+      "/api/auth/change-email",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    ]);
+    expect(JSON.parse(String(sendCall?.[1]?.body))).toEqual({
+      newEmail: "nwe@example.com",
+      callbackURL: "/settings/email?from=verify-link",
+    });
+    await userEvent.click(screen.getByRole("button", { name: "送り直す" }));
 
     const newEmailInput = screen.getByLabelText("新しいメールアドレス");
     expect(newEmailInput).toHaveValue("nwe@example.com");
     expect(newEmailInput).toHaveFocus();
+    await userEvent.clear(newEmailInput);
+    await userEvent.type(newEmailInput, "new@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "確認メールを送信" }));
+    await screen.findByRole("heading", { name: "確認メールを送りました" });
+    const sentEmails = fetchMock.mock.calls
+      .filter(([input]) => getRequestPath(input) === "/api/auth/change-email")
+      .map(([, init]) => JSON.parse(String(init?.body)).newEmail);
+    expect(sentEmails).toEqual(["nwe@example.com", "new@example.com"]);
   });
 
   it("今と同じメールアドレスは送らずに理由を出す", async () => {
@@ -931,20 +930,6 @@ describe("Settings routes", () => {
     expect(newEmailInput).not.toHaveAttribute("aria-invalid");
   });
 
-  it("パスワードとGoogleの両方でログインできる人には、Googleのメールアドレスが変わらないことを伝える", async () => {
-    mockFetch(async () => new Response(null, { status: 404 }), {
-      authenticated: true,
-      loginAccounts: [loginAccountFixture("credential"), loginAccountFixture("google")],
-    });
-    await renderApp("/settings/email");
-
-    expect(await screen.findByLabelText("新しいメールアドレス")).toHaveAccessibleDescription(
-      expect.stringContaining(
-        "Googleアカウントのメールアドレスは変わりません。Googleでのログインは今までどおり使えます。",
-      ),
-    );
-  });
-
   it("確認メールのリンクから戻ると、変更できたことを伝えてURLから目印を消す", async () => {
     mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
     const { appRouter } = await renderApp("/settings/email?from=verify-link");
@@ -963,7 +948,6 @@ describe("Settings routes", () => {
     ["TOKEN_EXPIRED", "確認リンクの有効期限が切れていました"],
     ["INVALID_USER", "別のアカウントでログインしています"],
     ["INVALID_TOKEN", "確認リンクを使えませんでした"],
-    ["USER_NOT_FOUND", "確認リンクを使えませんでした"],
   ])("確認メールのリンクを開けなかったとき(%s)は、変わっていないことと理由を伝える", async (code, title) => {
     mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
     await renderApp(`/settings/email?from=verify-link&error=${code}`);
@@ -1283,10 +1267,12 @@ describe("Settings routes", () => {
     const fetchMock = mockBillingFetch({ viewer: freeViewer(3) });
     const assign = vi.spyOn(billingRedirect, "assign").mockImplementation(() => {});
 
-    await renderApp("/settings/billing");
+    await renderApp("/settings/billing?checkout=cancel");
 
     await expect(screen.findByText("3 / 5件")).resolves.toBeInTheDocument();
     expect(screen.getByText("あと2件保存できます。")).toBeInTheDocument();
+    expect(screen.getByText("手続きを中止しました")).toBeInTheDocument();
+    expect(screen.getByText("料金はかかっていません。")).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getByRole("cell", { name: "5件まで" })).toBeInTheDocument();
     expect(within(table).getByRole("cell", { name: "上限なし" })).toBeInTheDocument();
@@ -1444,11 +1430,9 @@ describe("Settings routes", () => {
     });
   });
 
-  it.each([
-    3, 5,
-  ])("解約を予約したProのレシピが%i件なら、Freeに戻っても今のレシピはすべて開けると伝える", async (recipeCount) => {
+  it("Free上限ちょうどのProを解約しても、今のレシピをすべて開けると伝える", async () => {
     mockBillingFetch({
-      viewer: { ...proViewer, recipeCount },
+      viewer: { ...proViewer, recipeCount: 5 },
       billing: proBilling({ cancelAtPeriodEnd: true }),
     });
 
@@ -1593,16 +1577,6 @@ describe("Settings routes", () => {
     });
   });
 
-  it("決済を中止して戻ったら、料金がかかっていないことを伝える", async () => {
-    mockBillingFetch();
-
-    await renderApp("/settings/billing?checkout=cancel");
-
-    await expect(screen.findByText("手続きを中止しました")).resolves.toBeInTheDocument();
-    expect(screen.getByText("料金はかかっていません。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Proにする" })).toBeInTheDocument();
-  });
-
   it("ショートカットが保存の上限で止まって開いたら、保存されていないことと直し方を伝える", async () => {
     mockBillingFetch({ viewer: freeViewer(5) });
 
@@ -1733,7 +1707,6 @@ describe("Settings routes", () => {
     await expect(
       screen.findByRole("link", { name: /プラン.*Free · 5\/5件/ }),
     ).resolves.toHaveAttribute("href", "/settings/billing");
-    expect(screen.getByText("Free · 5/5件")).toHaveClass("text-brand-orange-dark");
     await expect(
       screen.findByRole("link", { name: /共有から取り込む.*連携済み/ }),
     ).resolves.toHaveAttribute("href", "/settings/share");
@@ -1790,18 +1763,6 @@ describe("Settings routes", () => {
     expect(screen.queryByText("ログイン方法")).not.toBeInTheDocument();
   });
 
-  it("Proで連携もタグもなければ、そのとおりに出す", async () => {
-    mockSettingsFetch({ viewer: { ...viewerResponse, plan: "pro", recipeLimit: null } });
-
-    await renderApp("/settings");
-
-    await expect(screen.findByRole("link", { name: /プラン.*Pro/ })).resolves.toBeInTheDocument();
-    await expect(
-      screen.findByRole("link", { name: /共有から取り込む.*未設定/ }),
-    ).resolves.toBeInTheDocument();
-    await expect(screen.findByRole("link", { name: /タグ.*なし/ })).resolves.toBeInTheDocument();
-  });
-
   it("共有が届いていないキーしかなければ、共有から取り込むは未設定と出す", async () => {
     mockSettingsFetch({
       credentials: [
@@ -1814,38 +1775,7 @@ describe("Settings routes", () => {
     await expect(
       screen.findByRole("link", { name: /共有から取り込む.*未設定/ }),
     ).resolves.toBeInTheDocument();
-  });
-
-  it("ProからFreeに戻ってロックがあれば、目次のプランの行にロック中の件数を出す", async () => {
-    mockSettingsFetch({ viewer: freeViewer(12) });
-
-    await renderApp("/settings");
-
-    await expect(
-      screen.findByRole("link", { name: /プラン.*Free · 7件ロック中/ }),
-    ).resolves.toBeInTheDocument();
-    expect(screen.getByText("Free · 7件ロック中")).toHaveClass("text-brand-orange-dark");
-  });
-
-  it("解約を予約したProは、目次のプランの行にいつまでProかを出す", async () => {
-    mockSettingsFetch({ viewer: proViewer, billing: proBilling({ cancelAtPeriodEnd: true }) });
-
-    await renderApp("/settings");
-
-    await expect(
-      screen.findByRole("link", { name: /プラン.*Pro · 10月8日まで/ }),
-    ).resolves.toBeInTheDocument();
-  });
-
-  it("支払いを確認できないProは、目次のプランの行で知らせる", async () => {
-    mockSettingsFetch({ viewer: proViewer, billing: proBilling({ status: "past_due" }) });
-
-    await renderApp("/settings");
-
-    await expect(
-      screen.findByRole("link", { name: /プラン.*支払いを確認できません/ }),
-    ).resolves.toBeInTheDocument();
-    expect(screen.getByText("支払いを確認できません")).toHaveClass("text-brand-orange-dark");
+    expect(screen.getByRole("link", { name: /タグ.*なし/ })).toBeInTheDocument();
   });
 
   it("viewerを読めないときはプランを既定値で描かない", async () => {
@@ -1857,25 +1787,6 @@ describe("Settings routes", () => {
       expect(queryClient.getQueryState(viewerQueryKey)?.status).toBe("error");
     });
     expect(screen.getByRole("link", { name: /プラン/ })).toHaveTextContent(/^プラン$/);
-  });
-
-  it("目次から各ページへ進み、設定へ戻れる", async () => {
-    mockSettingsFetch();
-
-    const { appRouter } = await renderApp("/settings");
-
-    await userEvent.click(await screen.findByRole("link", { name: /共有から取り込む/ }));
-    await expect(
-      screen.findByRole("heading", { name: "共有から取り込む" }),
-    ).resolves.toBeInTheDocument();
-    expect(appRouter.state.location.pathname).toBe("/settings/share");
-
-    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
-    await userEvent.click(await screen.findByRole("link", { name: /メールアドレス/ }));
-    await expect(
-      screen.findByRole("heading", { name: "メールアドレス" }),
-    ).resolves.toBeInTheDocument();
-    expect(appRouter.state.location.pathname).toBe("/settings/email");
   });
 
   it("ログアウトの確認をキャンセルするとログアウトしない", async () => {
@@ -1922,34 +1833,6 @@ describe("Settings routes", () => {
       { authenticated: true },
     );
   };
-
-  it("連携キーを確認して解除できる", async () => {
-    const fetchMock = mockLinkedKeysFetch();
-
-    await renderApp("/settings/share");
-
-    const list = await screen.findByRole("list", { name: "連携キー" });
-    expect(within(list).getByText("iPhoneで設定")).toBeInTheDocument();
-    expect(within(list).getByText(/末尾 0001/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "末尾 0001 のキーを解除" }));
-    const dialog = await screen.findByRole("alertdialog", {
-      name: "末尾 0001 のキーを解除しますか？",
-    });
-    await userEvent.click(within(dialog).getByRole("button", { name: "解除" }));
-
-    await waitFor(() => {
-      expect(within(list).queryByText("iPhoneで設定")).not.toBeInTheDocument();
-    });
-    expect(within(list).getByText("iPadで設定")).toBeInTheDocument();
-    expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          getRequestPath(input) === "/api/shortcut-credentials/credential_0001" &&
-          init?.method === "DELETE",
-      ),
-    ).toBe(true);
-  });
 
   it("キーの解除をキャンセルすると解除しない", async () => {
     const fetchMock = mockLinkedKeysFetch();

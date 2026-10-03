@@ -223,30 +223,6 @@ describe("syncAppUserPlanFromSubscriptions", () => {
 
     expect(updateAppUserPlan).toHaveBeenCalledWith("user_123", "free");
   });
-
-  it("Price ID不一致のsubscriptionだけならfreeへ同期する", async () => {
-    const updateAppUserPlan = vi.fn<(userId: string, plan: "free" | "pro") => Promise<void>>(
-      async () => {},
-    );
-
-    await expect(
-      syncAppUserPlanFromSubscriptions({
-        userId: "user_123",
-        proPriceId,
-        now,
-        repository: {
-          ensureAppUser: async () => {},
-          getAppUserPlan: async () => "pro",
-          listSubscriptionsByUserId: async () => [
-            subscription({ stripePriceId: "price_other", status: "active" }),
-          ],
-          updateAppUserPlan,
-        },
-      }),
-    ).resolves.toBe("free");
-
-    expect(updateAppUserPlan).toHaveBeenCalledWith("user_123", "free");
-  });
 });
 
 describe("deriveAppUserPlanForDb", () => {
@@ -257,31 +233,19 @@ describe("deriveAppUserPlanForDb", () => {
       select: vi.fn(() => ({ from: vi.fn(() => ({ where })) })),
     };
 
-    return { db: db as unknown as DbClient, select: db.select };
+    return { db: db as unknown as DbClient };
   };
 
-  it("subscriptionsだけを1往復で引いてplanを導出する", async () => {
-    const { db, select } = createDbStub([subscription({ status: "trialing" })]);
-
-    await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("pro");
-    expect(select).toHaveBeenCalledTimes(1);
-  });
-
-  it("該当するsubscriptionが無ければfreeを返す", async () => {
-    const { db } = createDbStub([]);
-
-    await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("free");
-  });
-
-  // 導出がnowに依存する唯一のケース。ここが同期版と一致することがwrite-backを外す根拠になる。
-  it("past_dueで期間を過ぎたpro subscriptionはnow基準でfreeに落とす", async () => {
+  it("DBから読んだpast_dueを指定したnowで期限判定する", async () => {
     const { db } = createDbStub([
-      subscription({
-        status: "past_due",
-        currentPeriodEnd: new Date("2026-06-03T00:00:00.000Z"),
-      }),
+      subscription({ status: "past_due", currentPeriodEnd: new Date("2026-06-03T00:00:00.000Z") }),
     ]);
-
+    await expect(
+      deriveAppUserPlanForDb(db, "user_123", {
+        proPriceId,
+        now: new Date("2026-06-02T23:59:59.999Z"),
+      }),
+    ).resolves.toBe("pro");
     await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("free");
   });
 

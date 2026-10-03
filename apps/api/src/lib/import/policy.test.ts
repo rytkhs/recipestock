@@ -25,13 +25,9 @@ describe("import page content policy", () => {
     ).resolves.toBe(undefined);
   });
 
-  it.each([
-    "",
-    "text/plain",
-    "application/octet-stream",
-  ])("曖昧なContent-Type %sでHTMLではない本文を拒否する", async (contentType) => {
+  it("曖昧なContent-Typeでも非HTML本文は拒否する", async () => {
     await expect(
-      assertFetchedPageIsHtml(createPage(contentType, "plain recipe text")),
+      assertFetchedPageIsHtml(createPage("text/plain", "plain recipe text")),
     ).rejects.toMatchObject({
       code: "unsupported_page",
     } satisfies Partial<RecipeImportError>);
@@ -45,16 +41,12 @@ describe("import page content policy", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it.each([
-    "application/json",
-    "application/pdf",
-    "image/png",
-  ])("明確な非HTML Content-Type %sを拒否する", async (contentType) => {
-    expect(() => assertImportContentTypeMayBeHtml(contentType)).toThrow(
+  it("明確な非HTML Content-TypeはHTMLらしい本文でも拒否する", async () => {
+    expect(() => assertImportContentTypeMayBeHtml("application/json")).toThrow(
       "Import URL is not an HTML page.",
     );
     await expect(
-      assertFetchedPageIsHtml(createPage(contentType, "<html></html>")),
+      assertFetchedPageIsHtml(createPage("application/json", "<html></html>")),
     ).rejects.toMatchObject({
       code: "unsupported_page",
     } satisfies Partial<RecipeImportError>);

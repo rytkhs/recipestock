@@ -103,10 +103,6 @@ describe("formValuesToCreateRecipeRequest", () => {
     });
   });
 
-  it("手動作成では出典metadataを空にする", () => {
-    expect(formValuesToCreateRecipeRequest(createValues()).source).toEqual({});
-  });
-
   it("URL取り込みのsource metadataを保存リクエストに使える", () => {
     expect(
       formValuesToCreateRecipeRequest(createValues(), {

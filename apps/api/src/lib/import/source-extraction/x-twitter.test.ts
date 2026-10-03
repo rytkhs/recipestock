@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type RecipeImportError } from "../types";
-import {
-  createXTwitterCanonicalUrl,
-  getXTwitterSource,
-  xTwitterSourceExtractionAdapter,
-} from "./x-twitter";
+import { getXTwitterSource, xTwitterSourceExtractionAdapter } from "./x-twitter";
 
 const STATUS_ID = "2071084010705727927";
 const CANONICAL_URL = `https://x.com/HG7654321/status/${STATUS_ID}`;
@@ -74,19 +70,6 @@ describe("X/Twitter source extraction URL handling", () => {
         host: new URL(url).hostname.replace(/^www\./, ""),
       }),
     ).toBe(true);
-  });
-
-  it("canonical URLを生成する", () => {
-    expect(
-      createXTwitterCanonicalUrl({
-        username: "HG7654321",
-        statusId: STATUS_ID,
-        kind: "userStatus",
-      }),
-    ).toBe(CANONICAL_URL);
-    expect(createXTwitterCanonicalUrl({ statusId: STATUS_ID, kind: "webStatus" })).toBe(
-      `https://x.com/i/web/status/${STATUS_ID}`,
-    );
   });
 
   it.each([

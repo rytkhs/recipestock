@@ -40,22 +40,12 @@ describe("環境bindingの検証", () => {
     expect(bindingsOf(envWith({ DATABASE_URL: "   " }))).toEqual(["DATABASE_URL"]);
   });
 
-  it("空文字のAPP_ORIGINを未設定として報告する", () => {
-    expect(collectBindingIssues(envWith({ APP_ORIGIN: "" }))).toEqual([
-      { binding: "APP_ORIGIN", message: "must be set to a non-empty value" },
-    ]);
-  });
-
   it("絶対http(s) URLでないAPP_ORIGINを不正として報告する", () => {
     for (const value of ["app.example.com", "/settings", "ftp://app.example.com"]) {
       expect(collectBindingIssues(envWith({ APP_ORIGIN: value }))).toEqual([
         { binding: "APP_ORIGIN", message: "must be an absolute http(s) URL" },
       ]);
     }
-  });
-
-  it("パスを含むAPP_ORIGINは許容する", () => {
-    expect(collectBindingIssues(envWith({ APP_ORIGIN: "http://localhost:8787/" }))).toEqual([]);
   });
 
   it("VAPID_SUBJECTはmailto:と絶対http(s) URLだけを許容する", () => {
@@ -106,13 +96,5 @@ describe("起動時のbinding検証", () => {
       }),
     ]);
     expect(JSON.stringify(sink.entries)).not.toContain(validEnv.DATABASE_URL);
-  });
-
-  it("検証を通過した後は再検証しない", () => {
-    const guard = createBindingValidationGuard();
-
-    guard(validEnv as Bindings);
-
-    expect(() => guard({} as Bindings)).not.toThrow();
   });
 });

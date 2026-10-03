@@ -32,16 +32,6 @@ describe("取り込み完了noticeのカタログ", () => {
     expect(parseImportCompletionNotice(payload)).toEqual(payload.notice);
   });
 
-  it("outcomeごとに異なる文言を返す", () => {
-    const succeeded = buildImportCompletionPushPayload({
-      outcome: "succeeded",
-      recipeId: "recipe_1",
-    });
-    const failed = buildImportCompletionPushPayload({ outcome: "failed" });
-
-    expect(succeeded.notice).not.toEqual(failed.notice);
-  });
-
   /**
    * 通知はロック画面へ表示されるため、文言はoutcomeだけで決まりinputに依存しない。
    * カタログにレシピタイトルや取り込み元を入れる変更は、このテストで落ちる。

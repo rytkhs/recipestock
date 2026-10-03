@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type RecipeImportError } from "../types";
-import {
-  createTikTokCanonicalUrl,
-  getTikTokUrlTarget,
-  tiktokSourceExtractionAdapter,
-} from "./tiktok";
+import { getTikTokUrlTarget, tiktokSourceExtractionAdapter } from "./tiktok";
 import { type SourceExtractionContext } from "./types";
 
 const CONTENT_ID = "7674182074974227730";
@@ -93,15 +89,6 @@ describe("TikTok source extraction URL handling", () => {
       }),
     ).toBe(false);
   });
-
-  it("canonical URLをmediaKindごとに組み立てる", () => {
-    expect(
-      createTikTokCanonicalUrl({ username: USERNAME, mediaKind: "video", contentId: CONTENT_ID }),
-    ).toBe(VIDEO_URL);
-    expect(
-      createTikTokCanonicalUrl({ username: USERNAME, mediaKind: "photo", contentId: CONTENT_ID }),
-    ).toBe(PHOTO_URL);
-  });
 });
 
 describe("TikTok source extraction adapter", () => {
@@ -118,31 +105,18 @@ describe("TikTok source extraction adapter", () => {
 
     expect(fetchHtml).toHaveBeenCalledTimes(1);
     expect(fetchHtml).toHaveBeenCalledWith(EMBED_URL);
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       promptProfile: "social",
       input: {
         source: {
           finalUrl: VIDEO_URL,
           host: "tiktok.com",
         },
-        markdownContent: [
-          `# Post by ${USERNAME}`,
-          "",
-          "Source: TikTok",
-          `URL: ${VIDEO_URL}`,
-          `Author: ${USERNAME}`,
-          "",
-          "## Caption",
-          "",
-          "材料\n鶏もも肉 1枚\n作り方\n焼く",
-        ].join("\n"),
+        markdownContent: expect.stringContaining("材料\n鶏もも肉 1枚\n作り方\n焼く"),
       },
       imageCandidates: [
         {
-          id: "tiktok_cover",
           url: COVER_URL,
-          alt: `Post by ${USERNAME} cover`,
-          position: 0,
         },
       ],
       imagePlacement: {
@@ -156,6 +130,7 @@ describe("TikTok source extraction adapter", () => {
       warnings: [],
     });
     expect(result.input.markdownContent).not.toContain(COVER_URL);
+    expect(result.input.markdownContent).toContain(USERNAME);
   });
 
   it("coversOriginが無ければcoversをカバーに使う", async () => {

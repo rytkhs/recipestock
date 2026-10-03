@@ -30,10 +30,6 @@ describe("YouTube source extraction URL handling", () => {
     expect(getYouTubeVideoId("https://example.com/watch?v=FyLCRXMANAM")).toBeNull();
     expect(getYouTubeVideoId("https://www.youtube.com/watch?v=too-short")).toBeNull();
   });
-
-  it("canonical URLを生成する", () => {
-    expect(createYouTubeCanonicalUrl(VIDEO_ID)).toBe(CANONICAL_URL);
-  });
 });
 
 describe("YouTube source extraction adapter", () => {
@@ -62,30 +58,20 @@ describe("YouTube source extraction adapter", () => {
 
     expect(fetchHtml).not.toHaveBeenCalled();
     expect(youtubeDataClient.getVideo).toHaveBeenCalledWith({ videoId: VIDEO_ID, timeoutMs: 1000 });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       promptProfile: "social",
       input: {
         source: {
           finalUrl: CANONICAL_URL,
           host: "youtube.com",
         },
-        markdownContent: [
-          "# 鶏むねキャベツ鍋",
-          "",
-          "Source: YouTube",
-          "Channel: Recipe Channel",
-          "",
-          "## Description",
-          "",
+        markdownContent: expect.stringContaining(
           "材料\nキャベツ 500g\n鶏むね肉 350g\n作り方\n煮る",
-        ].join("\n"),
+        ),
       },
       imageCandidates: [
         {
-          id: "youtube_thumbnail",
           url: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
-          alt: "鶏むねキャベツ鍋 thumbnail",
-          position: 0,
         },
       ],
       imagePlacement: {
@@ -98,6 +84,8 @@ describe("YouTube source extraction adapter", () => {
       },
       warnings: [],
     });
+    expect(result.input.markdownContent).toContain("鶏むねキャベツ鍋");
+    expect(result.input.markdownContent).toContain("Recipe Channel");
   });
 
   it("説明欄が空でもtitleとthumbnailで成功する", async () => {

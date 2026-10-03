@@ -100,7 +100,9 @@ describe("cookpadImportAdapter", () => {
 
     await vi.waitFor(() => expect(fetchedUrls).toHaveLength(2));
     resolvers.get(PRINT_URL)?.(createFetchedPage(PRINT_URL, createCookpadPrintHtml()));
-    resolvers.get(RECIPE_URL)?.(createFetchedPage(RECIPE_URL, createCookpadRecipeHtml()));
+    resolvers.get(RECIPE_URL)?.(
+      createFetchedPage(RECIPE_URL, createCookpadRecipeHtml({ title: "別のレシピ" })),
+    );
 
     await expect(importPromise).resolves.toEqual({
       recipeDraftContent: {
@@ -195,7 +197,10 @@ describe("cookpadImportAdapter", () => {
         imageIdsByStep: PREMIUM_STEP_IMAGE_IDS,
         pictureStepImages: true,
       }),
-      recipeHtml: createCookpadPremiumRecipeHtml(),
+      recipeHtml: createCookpadPremiumRecipeHtml({
+        title: "別のレシピ",
+        previewStepTexts: ["異なるpreview本文"],
+      }),
     });
 
     expect(result.recipeDraftContent).toMatchObject({
@@ -212,48 +217,6 @@ describe("cookpadImportAdapter", () => {
         })),
       })),
     });
-  });
-
-  it("プレミアムは通常ページのpreview手順を整合性検証に使わない", async () => {
-    const result = await importCookpad({
-      recipeId: PREMIUM_RECIPE_ID,
-      printHtml: createCookpadPrintHtml({
-        title: PREMIUM_TITLE,
-        stepTexts: PREMIUM_STEP_TEXTS,
-        imageIdsByStep: PREMIUM_STEP_IMAGE_IDS,
-        pictureStepImages: true,
-      }),
-      recipeHtml: createCookpadPremiumRecipeHtml({
-        previewStepTexts: ["異なるpreview本文"],
-      }),
-    });
-
-    expect(result.recipeDraftContent.steps).toHaveLength(PREMIUM_STEP_TEXTS.length);
-    expect(result.recipeDraftContent.steps[0].text).toBe(PREMIUM_STEP_TEXTS[0]);
-  });
-
-  it("printと通常ページのタイトルが異なってもprintのタイトルで抽出する", async () => {
-    const result = await importCookpad({
-      printHtml: createCookpadPrintHtml(),
-      recipeHtml: createCookpadRecipeHtml({ title: "別のレシピ" }),
-    });
-
-    expect(result.recipeDraftContent.title).toBe(TITLE);
-  });
-
-  it("プレミアムでも通常ページのタイトルを整合性検証に使わない", async () => {
-    const result = await importCookpad({
-      recipeId: PREMIUM_RECIPE_ID,
-      printHtml: createCookpadPrintHtml({
-        title: PREMIUM_TITLE,
-        stepTexts: PREMIUM_STEP_TEXTS,
-        imageIdsByStep: PREMIUM_STEP_IMAGE_IDS,
-        pictureStepImages: true,
-      }),
-      recipeHtml: createCookpadPremiumRecipeHtml({ title: "別のレシピ" }),
-    });
-
-    expect(result.recipeDraftContent.title).toBe(PREMIUM_TITLE);
   });
 
   it("カバー画像・手順画像がないレシピも抽出できる", async () => {

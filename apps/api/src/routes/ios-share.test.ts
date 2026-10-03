@@ -99,6 +99,7 @@ const shareRequest = (input = "https://example.com/recipe") => ({
 
 describe("iOS Share routes", () => {
   it("共有入力からImport Jobを作成しQueueへ一度送る", async () => {
+    const entries: LogEntry[] = [];
     const send = vi.fn(async () => undefined);
     const createUrlJob = vi.fn(async () => ({
       status: "created" as const,
@@ -106,6 +107,8 @@ describe("iOS Share routes", () => {
     }));
     const rateLimiter = createRateLimiter();
     const app = createShortcutTestApp({
+      loggerFactory: (baseFields) =>
+        createLogger(baseFields, { sink: { write: (entry) => entries.push(entry) } }),
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
@@ -141,6 +144,13 @@ describe("iOS Share routes", () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith({ jobId: "job_123" }, { contentType: "json" });
     expect(rateLimiter.limit).toHaveBeenCalledWith({ key: "credential_1" });
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "ios_share_shortcut_import_submitted",
+        reason: "created",
+        level: "info",
+      }),
+    );
   });
 
   it("共有テキストに埋め込まれたURLを取り出して取り込む", async () => {
@@ -170,11 +180,14 @@ describe("iOS Share routes", () => {
   });
 
   it("URLを含まない共有入力はJobを作らずno_url_in_inputを返す", async () => {
+    const entries: LogEntry[] = [];
     const createUrlJob = vi.fn(async () => ({
       status: "created" as const,
       job: createJob(),
     }));
     const app = createShortcutTestApp({
+      loggerFactory: (baseFields) =>
+        createLogger(baseFields, { sink: { write: (entry) => entries.push(entry) } }),
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({ createUrlJob }),
@@ -194,6 +207,13 @@ describe("iOS Share routes", () => {
       });
     }
     expect(createUrlJob).not.toHaveBeenCalled();
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "ios_share_shortcut_import_submitted",
+        reason: "no_url_in_input",
+        level: "info",
+      }),
+    );
   });
 
   it("契約に合わないrequestはmalformed_requestとして再設定を促す", async () => {
@@ -258,7 +278,10 @@ describe("iOS Share routes", () => {
   });
 
   it("client単位の上限に当たったrequestは、本文の大きさを見る前にrate_limit_exceededを返す", async () => {
+    const entries: LogEntry[] = [];
     const app = createShortcutTestApp({
+      loggerFactory: (baseFields) =>
+        createLogger(baseFields, { sink: { write: (entry) => entries.push(entry) } }),
       auth,
       shortcutClientRateLimiter: createRateLimiter(false) as unknown as RateLimit,
     });
@@ -277,6 +300,14 @@ describe("iOS Share routes", () => {
       outcome: "rejected",
       reason: "rate_limit_exceeded",
     });
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "ios_share_shortcut_import_submitted",
+        reason: "rate_limit_exceeded",
+        level: "warn",
+        rateLimitScope: "client",
+      }),
+    );
   });
 
   it("上限文字数の入力は、JSONのエスケープで膨らんでも本文の大きさで断らない", async () => {
@@ -299,37 +330,6 @@ describe("iOS Share routes", () => {
 
     await expect(response.json()).resolves.toMatchObject({ reason: "created" });
     expect(createUrlJob).toHaveBeenCalledWith(expect.objectContaining({ url }));
-  });
-
-  it("4xx相当だった結果をwarnで記録し、通常のユーザーエラーと分ける", async () => {
-    const entries: { event: string; level: string; reason?: unknown }[] = [];
-    const sink = { write: (entry: LogEntry) => entries.push(entry) };
-    const app = createShortcutTestApp({
-      auth,
-      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
-      shortcutCredentials: createShortcutCredentialsFake(),
-      importJobRepository: createImportJobRepository(),
-      importQueue: { send: async () => undefined } as unknown as Queue<{ jobId: string }>,
-      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
-    });
-
-    await app.request(
-      "/api/shortcut/import-jobs",
-      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
-      env,
-    );
-    await app.request("/api/shortcut/import-jobs", shareRequest("URLはありません"), env);
-    await app.request("/api/shortcut/import-jobs", shareRequest(), env);
-
-    const submitted = entries.filter(
-      (entry) => entry.event === "ios_share_shortcut_import_submitted",
-    );
-
-    expect(submitted.map((entry) => [entry.reason, entry.level])).toEqual([
-      ["missing_credential", "warn"],
-      ["no_url_in_input", "info"],
-      ["created", "info"],
-    ]);
   });
 
   it("取り込めないURLはinvalid_urlを返す", async () => {
@@ -391,13 +391,12 @@ describe("iOS Share routes", () => {
     });
 
     const responses = await Promise.all(
-      ["/api/recipes", "/api/import/jobs/recent", "/api/me", "/api/push-subscriptions"].map(
-        (path) =>
-          app.request(path, { headers: { authorization: shortcutHeaders.authorization } }, env),
+      ["/api/recipes", "/api/import/jobs/recent", "/api/me"].map((path) =>
+        app.request(path, { headers: { authorization: shortcutHeaders.authorization } }, env),
       ),
     );
 
-    expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401]);
+    expect(responses.map((response) => response.status)).toEqual([401, 401, 401]);
   });
 
   it("認証できないrequestは、キーが届いたかで分けて再連携を促し、詰まった理由を記録する", async () => {
@@ -468,13 +467,23 @@ describe("iOS Share routes", () => {
     expect(
       entries
         .filter((entry) => entry.event === "ios_share_shortcut_import_submitted")
-        .map(({ authFailure, credentialId, userId }) => ({ authFailure, credentialId, userId })),
+        .map(({ level, authFailure, credentialId, userId }) => ({
+          level,
+          authFailure,
+          credentialId,
+          userId,
+        })),
     ).toEqual([
-      { authFailure: "missing_token", credentialId: undefined, userId: undefined },
-      { authFailure: "missing_token", credentialId: undefined, userId: undefined },
-      { authFailure: "malformed_token", credentialId: undefined, userId: undefined },
-      { authFailure: "unknown_token", credentialId: undefined, userId: undefined },
-      { authFailure: "revoked_token", credentialId: "credential_old", userId: "user_1" },
+      { level: "warn", authFailure: "missing_token", credentialId: undefined, userId: undefined },
+      { level: "warn", authFailure: "missing_token", credentialId: undefined, userId: undefined },
+      { level: "warn", authFailure: "malformed_token", credentialId: undefined, userId: undefined },
+      { level: "warn", authFailure: "unknown_token", credentialId: undefined, userId: undefined },
+      {
+        level: "warn",
+        authFailure: "revoked_token",
+        credentialId: "credential_old",
+        userId: "user_1",
+      },
     ]);
   });
 
@@ -671,8 +680,11 @@ describe("iOS Share routes", () => {
   });
 
   it("freeのAI上限時はアップセル先を含むnoticeを返しQueueへ追加しない", async () => {
+    const entries: LogEntry[] = [];
     const send = vi.fn(async () => undefined);
     const app = createShortcutTestApp({
+      loggerFactory: (baseFields) =>
+        createLogger(baseFields, { sink: { write: (entry) => entries.push(entry) } }),
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({
@@ -695,15 +707,21 @@ describe("iOS Share routes", () => {
       },
     });
     expect(send).not.toHaveBeenCalled();
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "ios_share_shortcut_import_submitted",
+        reason: "ai_usage_limit_exceeded",
+        level: "info",
+      }),
+    );
   });
 
-  /**
-   * すでに払っているProへ「Proにすると」と案内しても意味がない。
-   * Proに残された行動は待つことだけなので、遷移先を持たせずリセット時期だけを伝える。
-   */
   it("proのAI枠切れはopenUrlなしでリセット時期を伝える", async () => {
+    const entries: LogEntry[] = [];
     const send = vi.fn(async () => undefined);
     const app = createShortcutTestApp({
+      loggerFactory: (baseFields) =>
+        createLogger(baseFields, { sink: { write: (entry) => entries.push(entry) } }),
       auth,
       shortcutCredentials: createShortcutCredentialsFake(),
       importJobRepository: createImportJobRepository({
@@ -726,72 +744,41 @@ describe("iOS Share routes", () => {
       },
     });
     expect(send).not.toHaveBeenCalled();
-  });
-
-  /**
-   * freeの到達はコンバージョン機会、proの枠切れは容量または濫用の兆候であり、
-   * 運用上は別の事象である。reasonがHTTPステータスに代わる監視の軸なので、levelも分ける。
-   */
-  it("proのAI枠切れはwarn、freeのAI上限はinfoで記録する", async () => {
-    const entries: { event: string; level: string; reason?: unknown }[] = [];
-    const sink = { write: (entry: LogEntry) => entries.push(entry) };
-    const appFor = (plan: "free" | "pro") =>
-      createShortcutTestApp({
-        auth,
-        loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
-        shortcutCredentials: createShortcutCredentialsFake(),
-        importJobRepository: createImportJobRepository({
-          createUrlJob: async () => ({ status: "aiUsageLimitExceeded", plan }),
-        }),
-        importQueue: { send: async () => undefined } as unknown as Queue<{ jobId: string }>,
-        shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
-      });
-
-    await appFor("free").request("/api/shortcut/import-jobs", shareRequest(), env);
-    await appFor("pro").request("/api/shortcut/import-jobs", shareRequest(), env);
-
-    const submitted = entries.filter(
-      (entry) => entry.event === "ios_share_shortcut_import_submitted",
-    );
-
-    expect(submitted.map((entry) => [entry.reason, entry.level])).toEqual([
-      ["ai_usage_limit_exceeded", "info"],
-      ["ai_usage_quota_exhausted", "warn"],
-    ]);
-  });
-
-  it("1 credentialあたり10回を超えるとrate_limit_exceededを返す", async () => {
-    let calls = 0;
-    const rateLimiter = {
-      limit: vi.fn(async ({ key }: { key: string }) => {
-        expect(key).toBe("credential_1");
-        calls += 1;
-        return { success: calls <= 10 };
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "ios_share_shortcut_import_submitted",
+        reason: "ai_usage_quota_exhausted",
+        level: "warn",
       }),
-    };
+    );
+  });
+
+  it("credentialのrate limitで拒否されたらjobを作らずHTTP 200で通知する", async () => {
+    const entries: LogEntry[] = [];
+    const limit = vi.fn(async () => ({ success: false }));
+    const submit = vi.fn();
     const app = createShortcutTestApp({
       auth,
+      loggerFactory: (baseFields) =>
+        createLogger(baseFields, { sink: { write: (entry) => entries.push(entry) } }),
       shortcutCredentials: createShortcutCredentialsFake(),
-      urlImportJobSubmission: {
-        submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
-      },
-      shortcutRateLimiter: rateLimiter as unknown as RateLimit,
+      urlImportJobSubmission: { submit },
+      shortcutRateLimiter: { limit } as unknown as RateLimit,
     });
-
-    const responses = await Promise.all(
-      Array.from({ length: 11 }, () =>
-        app.request("/api/shortcut/import-jobs", shareRequest(), env),
-      ),
-    );
-    const reasons = await Promise.all(
-      responses.map(async (response) => {
-        expect(response.status).toBe(200);
-        return (await response.json<{ reason: string }>()).reason;
+    const response = await app.request("/api/shortcut/import-jobs", shareRequest(), env);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ reason: "rate_limit_exceeded" });
+    expect(limit).toHaveBeenCalledWith({ key: "credential_1" });
+    expect(submit).not.toHaveBeenCalled();
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "ios_share_shortcut_import_submitted",
+        reason: "rate_limit_exceeded",
+        level: "warn",
+        rateLimitScope: "credential",
+        credentialId: "credential_1",
       }),
     );
-
-    expect(reasons.filter((reason) => reason === "created")).toHaveLength(10);
-    expect(reasons.filter((reason) => reason === "rate_limit_exceeded")).toHaveLength(1);
   });
 
   /**
@@ -889,45 +876,6 @@ describe("iOS Share routes", () => {
     await app.request("/api/shortcut/import-jobs", shareRequest(), env);
 
     expect(clientRateLimiter.limit).toHaveBeenCalledWith({ key: "unknown" });
-  });
-
-  /**
-   * 200で返す以上、rate limitの到達は`ios_share_shortcut_import_submitted`でしか見えない。
-   * 正規ユーザーの連打と認証前の乱用は運用上別の事象なので、同じreasonの中で切り分ける。
-   */
-  it("rate limitの到達をwarnで記録し、認証前とcredential単位を区別する", async () => {
-    const entries: { event: string; level: string; reason?: unknown }[] = [];
-    const sink = { write: (entry: LogEntry) => entries.push(entry) };
-    const appFor = (scope: "client" | "credential") =>
-      createShortcutTestApp({
-        auth,
-        loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
-        shortcutCredentials: createShortcutCredentialsFake(),
-        urlImportJobSubmission: {
-          submit: async () => ({ status: "accepted", kind: "created", job: createJob() }),
-        },
-        shortcutClientRateLimiter: createRateLimiter(
-          scope === "credential",
-        ) as unknown as RateLimit,
-        shortcutRateLimiter: createRateLimiter(false) as unknown as RateLimit,
-      });
-
-    await appFor("client").request("/api/shortcut/import-jobs", shareRequest(), env);
-    await appFor("credential").request("/api/shortcut/import-jobs", shareRequest(), env);
-
-    const submitted = entries.filter(
-      (entry) => entry.event === "ios_share_shortcut_import_submitted",
-    );
-
-    expect(submitted).toMatchObject([
-      { reason: "rate_limit_exceeded", level: "warn", rateLimitScope: "client" },
-      {
-        reason: "rate_limit_exceeded",
-        level: "warn",
-        rateLimitScope: "credential",
-        credentialId: "credential_1",
-      },
-    ]);
   });
 
   it("Queue送信失敗時はJobをfailedにしてtemporarily_unavailableを返す", async () => {

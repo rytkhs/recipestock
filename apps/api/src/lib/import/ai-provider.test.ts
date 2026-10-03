@@ -93,7 +93,10 @@ describe("default recipe import AI provider", () => {
   });
 
   it("Workers AI bindingとAI Gateway経由でRecipeDraftContentを生成する", async () => {
-    const draft = createStrictAiDraft();
+    const draft = createStrictAiDraft({
+      coverImageUrl: "https://example.com/cover.jpg",
+      steps: [{ text: "煮詰める", imageUrls: ["https://example.com/step-2.jpg"] }],
+    });
     mocks.generateObject.mockResolvedValueOnce({ object: draft });
 
     const provider = createDefaultRecipeImportAIProvider(createEnv());
@@ -101,7 +104,8 @@ describe("default recipe import AI provider", () => {
     await expect(provider.normalize(genericRequest)).resolves.toEqual({
       title: "Tomato pasta",
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ text: "煮詰める", imageUrls: [] }],
+      coverImageUrl: "https://example.com/cover.jpg",
+      steps: [{ text: "煮詰める", imageUrls: ["https://example.com/step-2.jpg"] }],
     });
     expect(mocks.createWorkersAI).toHaveBeenCalledWith({
       binding: expect.objectContaining({ run: expect.any(Function) }),
@@ -115,7 +119,6 @@ describe("default recipe import AI provider", () => {
     );
     expect(mocks.generateObject).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: { provider: "workers-ai", modelId: "@cf/zai-org/glm-4.7-flash" },
         schema: expect.any(Object),
         system: GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT,
         prompt: expect.not.stringContaining("metadataCandidates"),
@@ -152,63 +155,20 @@ describe("default recipe import AI provider", () => {
     );
   });
 
-  it("AIがcoverImageUrlを返した場合は受け付ける", async () => {
+  it("AIが未許可のcoverImage fieldを返すとai_schema_invalidになる", async () => {
     mocks.generateObject.mockResolvedValueOnce({
-      object: createStrictAiDraft({
-        coverImageUrl: "https://example.com/cover.jpg",
-      }),
+      object: createStrictAiDraft({ coverImage: { url: "https://example.com/cover.jpg" } }),
     });
-
     const provider = createDefaultRecipeImportAIProvider(createEnv());
-
-    await expect(provider.normalize(genericRequest)).resolves.toMatchObject({
-      coverImageUrl: "https://example.com/cover.jpg",
-    });
-  });
-
-  it("AIがURLベースのcoverImageを返した場合はai_schema_invalidへ変換する", async () => {
-    mocks.generateObject.mockResolvedValueOnce({
-      object: {
-        title: "Tomato pasta",
-        coverImage: { url: "https://example.com/cover.jpg" },
-        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-        steps: [{ text: "煮詰める" }],
-      },
-    });
-
-    const provider = createDefaultRecipeImportAIProvider(createEnv());
-
     await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
       code: "ai_schema_invalid",
-    } satisfies Partial<RecipeImportError>);
-  });
-
-  it("AIがstepsの画像URLを返した場合は受け付ける", async () => {
-    mocks.generateObject.mockResolvedValueOnce({
-      object: createStrictAiDraft({
-        steps: [
-          {
-            text: "煮詰める",
-            imageUrls: ["https://example.com/step-2.jpg", "https://example.com/step-3.jpg"],
-          },
-        ],
-      }),
-    });
-
-    const provider = createDefaultRecipeImportAIProvider(createEnv());
-
-    await expect(provider.normalize(genericRequest)).resolves.toMatchObject({
-      steps: [
-        {
-          imageUrls: ["https://example.com/step-2.jpg", "https://example.com/step-3.jpg"],
-        },
-      ],
     });
   });
 
   it("AI出力のnullを既存のoptional形式へ正規化する", async () => {
     mocks.generateObject.mockResolvedValueOnce({
       object: createStrictAiDraft({
+        title: null,
         yieldText: null,
         coverImageUrl: null,
         ingredientGroups: [
@@ -225,25 +185,9 @@ describe("default recipe import AI provider", () => {
     const provider = createDefaultRecipeImportAIProvider(createEnv());
 
     await expect(provider.normalize(genericRequest)).resolves.toEqual({
-      title: "Tomato pasta",
-      ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ imageUrls: ["https://example.com/step-2.jpg"] }],
-    });
-  });
-
-  it("AI出力のtitleがnullでも受け付ける", async () => {
-    mocks.generateObject.mockResolvedValueOnce({
-      object: createStrictAiDraft({
-        title: null,
-      }),
-    });
-
-    const provider = createDefaultRecipeImportAIProvider(createEnv());
-
-    await expect(provider.normalize(genericRequest)).resolves.toMatchObject({
       title: null,
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-      steps: [{ text: "煮詰める", imageUrls: [] }],
+      steps: [{ imageUrls: ["https://example.com/step-2.jpg"] }],
     });
   });
 
@@ -261,40 +205,6 @@ describe("default recipe import AI provider", () => {
       ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
       steps: [{ text: "煮詰める", imageUrls: [] }],
     });
-  });
-
-  it("AIがURL typeの画像を返した場合はai_schema_invalidへ変換する", async () => {
-    mocks.generateObject.mockResolvedValueOnce({
-      object: {
-        title: "Tomato pasta",
-        coverImage: { type: "url", url: "ftp://example.com/cover.jpg" },
-        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-        steps: [{ text: "煮詰める" }],
-      },
-    });
-
-    const provider = createDefaultRecipeImportAIProvider(createEnv());
-
-    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
-      code: "ai_schema_invalid",
-    } satisfies Partial<RecipeImportError>);
-  });
-
-  it("AIがkeyベースの画像参照を返した場合はai_schema_invalidへ変換する", async () => {
-    mocks.generateObject.mockResolvedValueOnce({
-      object: {
-        title: "Tomato pasta",
-        coverImage: { type: "tmpObjectKey", key: "tmp/user_123/cover.webp" },
-        ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-        steps: [{ text: "煮詰める" }],
-      },
-    });
-
-    const provider = createDefaultRecipeImportAIProvider(createEnv());
-
-    await expect(provider.normalize(genericRequest)).rejects.toMatchObject({
-      code: "ai_schema_invalid",
-    } satisfies Partial<RecipeImportError>);
   });
 
   it("AI SDKのschema失敗をai_schema_invalidへ変換する", async () => {

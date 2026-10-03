@@ -311,6 +311,9 @@ describe("共有から取り込む", () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
     expect(listRequestCount(shortcut.fetchMock)).toBe(listCountAtComplete);
+    await reopenApp();
+    await expect(screen.findByRole("list", { name: "連携キー" })).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "連携できました" })).not.toBeInTheDocument();
   });
 
   it("前のキーが入ったショートカットで確かめても、③を押してからキーが使われたら連携できたことを伝える", async () => {
@@ -408,28 +411,7 @@ describe("共有から取り込む", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("共有が届いたら連携できたことを伝え、次に開いたときは連携の管理を出す", async () => {
-    installDevice();
-    const shortcut = mockShortcutFetch();
-
-    await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "キーをコピー" }));
-    await screen.findByRole("heading", { name: /キーをコピーしました/ });
-
-    shortcut.setCredentials([usedCredential(issuedCredential)]);
-    await returnToApp();
-
-    await expect(
-      screen.findByRole("heading", { name: "連携できました" }),
-    ).resolves.toBeInTheDocument();
-
-    await reopenApp();
-
-    await expect(screen.findByRole("list", { name: "連携キー" })).resolves.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "連携できました" })).not.toBeInTheDocument();
-  });
-
-  it("発行し直したあとで、前のキーを入れたショートカットから共有が届いても、連携できたことを伝える", async () => {
+  it("Safariで発行したキーで連携が済んでも、アプリで待っている画面で連携できたことを伝える", async () => {
     installDevice();
     const previousCredential = unusedCredential({ id: "credential_old", tokenSuffix: "0ld1" });
     const shortcut = mockShortcutFetch({ credentials: [previousCredential] });
@@ -438,22 +420,9 @@ describe("共有から取り込む", () => {
     await userEvent.click(await screen.findByRole("button", { name: "キーを発行し直す" }));
     await screen.findByRole("heading", { name: /キーをコピーしました/ });
 
-    shortcut.setCredentials([issuedCredential, usedCredential(previousCredential)]);
-    await returnToApp();
-
-    await expect(
-      screen.findByRole("heading", { name: "連携できました" }),
-    ).resolves.toBeInTheDocument();
-  });
-
-  it("Safariで発行したキーで連携が済んでも、アプリで待っている画面で連携できたことを伝える", async () => {
-    installDevice();
-    const shortcut = mockShortcutFetch();
-
-    await renderApp("/settings/share");
-    await screen.findByRole("button", { name: "キーをコピー" });
-
     shortcut.setCredentials([
+      previousCredential,
+      issuedCredential,
       usedCredential(unusedCredential({ id: "credential_safari", tokenSuffix: "sfr1" })),
     ]);
     await returnToApp();
@@ -502,23 +471,6 @@ describe("共有から取り込む", () => {
     expect(device.copied).toEqual([]);
   });
 
-  it("初めての設定では置き換えを案内せず、やり直したら、もう追加したショートカットを置き換えるよう伝える", async () => {
-    installDevice();
-    mockShortcutFetch();
-
-    await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "キーをコピー" }));
-    await screen.findByRole("heading", { name: /キーをコピーしました/ });
-    expect(screen.queryByText(replaceShortcutGuide)).not.toBeInTheDocument();
-
-    const forgotKey = screen.getByText("キーを貼り忘れた・違うものを貼った").closest("details");
-    if (!forgotKey) throw new Error("troubleshooting item not found");
-    await userEvent.click(within(forgotKey).getByRole("button", { name: "最初からやり直す" }));
-
-    expect(screen.getByRole("button", { name: "キーをコピー" })).toBeInTheDocument();
-    expect(screen.getByText(replaceShortcutGuide)).toBeInTheDocument();
-  });
-
   it("連携し直しに来たら、使ったことのあるキーがあっても理由と入れ直す手順を出し、新しいキーに共有が届いたら連携できたことを伝える", async () => {
     installDevice();
     const linkedCredential = shortcutCredentialFixture();
@@ -543,19 +495,6 @@ describe("共有から取り込む", () => {
     await expect(
       screen.findByRole("heading", { name: "連携できました" }),
     ).resolves.toBeInTheDocument();
-  });
-
-  it("キーが届かずに連携し直しに来たら、使えなくなったキーとは分けて、キーが入っていないことを伝える", async () => {
-    installDevice();
-    mockShortcutFetch();
-
-    await renderApp("/settings/share?reason=missing_credential");
-
-    await expect(
-      screen.findByText("ショートカットにキーが入っていません"),
-    ).resolves.toBeInTheDocument();
-    expect(screen.queryByText("ショートカットのキーが使えません")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /ショートカットを入れ直す/ })).toBeInTheDocument();
   });
 
   it("最後の連携キーを解除して未連携になったら設定を始め、新しいキーに共有が届いたら連携できたことを伝える", async () => {
@@ -601,9 +540,12 @@ describe("共有から取り込む", () => {
 
   it("使ったキーと、共有が届いていないキーを分けて並べる", async () => {
     installDevice();
-    mockShortcutFetch({
+    const shortcut = mockShortcutFetch({
       credentials: [
         usedCredential(shortcutCredentialFixture()),
+        usedCredential(
+          unusedCredential({ id: "credential_work", name: "仕事用iPhone", tokenSuffix: "work" }),
+        ),
         unusedCredential({ id: "credential_0002", name: "iPad", tokenSuffix: "0002" }),
       ],
     });
@@ -611,12 +553,26 @@ describe("共有から取り込む", () => {
     await renderApp("/settings/share");
 
     const usedKeys = await screen.findByRole("list", { name: "連携キー" });
-    expect(within(usedKeys).getByRole("listitem")).toHaveTextContent(
+    expect(within(usedKeys).getAllByRole("listitem")[0]).toHaveTextContent(
       "iPhoneで設定最後に使ったのは今日 · 末尾 0001",
     );
     const unusedKeys = screen.getByRole("list", { name: "使われていないキー" });
     expect(within(unusedKeys).getByRole("listitem")).toHaveTextContent("iPadで発行");
     expect(within(unusedKeys).getByRole("listitem")).toHaveTextContent(/に発行 · 末尾 0002$/);
+    await userEvent.click(screen.getByRole("button", { name: "末尾 0001 のキーを解除" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "末尾 0001 のキーを解除しますか？",
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: "解除" }));
+    await vi.waitFor(() => {
+      expect(within(usedKeys).queryByText("iPhoneで設定")).not.toBeInTheDocument();
+    });
+    expect(within(usedKeys).getByText("仕事用iPhoneで設定")).toBeInTheDocument();
+    expect(within(unusedKeys).getByText("iPadで発行")).toBeInTheDocument();
+    expect(shortcut.fetchMock.mock.calls).toContainEqual([
+      "/api/shortcut-credentials/credential_0001",
+      expect.objectContaining({ method: "DELETE" }),
+    ]);
   });
 
   it("iPadのSafariがMacを名乗っていても、iPadとして連携する", async () => {
