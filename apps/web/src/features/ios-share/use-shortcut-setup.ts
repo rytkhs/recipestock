@@ -49,9 +49,12 @@ const shareCheckWaitMs = 5000;
  * どこまで進んだかは端末に覚えない。開き直したときの続きは、始めたときの連携キーの一覧から親が決めて渡す。
  */
 export const useShortcutSetup = ({
+  credentials,
   deviceName,
   resumableCredential,
 }: {
+  /** 親が読んでいる、いまの連携キーの一覧。③を押した時点の`lastUsedAt`を覚えるのに使う。 */
+  credentials: readonly ShortcutCredential[];
   deviceName: IosDeviceName;
   resumableCredential: ShortcutCredential | null;
 }) => {
@@ -119,9 +122,6 @@ export const useShortcutSetup = ({
    * 届いたかどうかは、押した時点からキーの`lastUsedAt`が進んだかで知る。WebKitの結果は、どの項目が完了したかを区別しない。
    */
   const openShareSheet = () => {
-    const credentials =
-      queryClient.getQueryData<ListShortcutCredentialsResponse>(shortcutCredentialsQueryKey)
-        ?.credentials ?? [];
     setLastUsedAtAtShare(new Map(credentials.map(({ id, lastUsedAt }) => [id, lastUsedAt])));
 
     if (!("share" in navigator)) {

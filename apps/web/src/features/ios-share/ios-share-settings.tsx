@@ -122,6 +122,7 @@ const ShortcutSetupSession = ({
     };
   });
   const setup = useShortcutSetup({
+    credentials,
     deviceName,
     resumableCredential: atStart.resumableCredential,
   });

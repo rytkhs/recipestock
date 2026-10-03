@@ -259,6 +259,7 @@ describe("共有から取り込む", () => {
     await renderApp("/settings/share");
     expect(await screen.findByRole("button", { name: "共有メニューを開く" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "キーをコピー" }));
+    await screen.findByRole("heading", { name: /キーをコピーしました/ });
     await openShortcutApp();
     await userEvent.click(screen.getByRole("button", { name: "共有メニューを開く" }));
 
