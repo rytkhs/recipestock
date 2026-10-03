@@ -1,4 +1,3 @@
-import { createDb } from "@recipestock/db";
 import { getAiUsageResponseSchema } from "@recipestock/schemas";
 import { Hono } from "hono";
 import { type AuthService } from "../auth";
@@ -6,7 +5,6 @@ import { type ApiEnv } from "../context";
 import { requireAuth } from "../middleware/auth";
 import {
   buildAiUsageResponse,
-  createUsageRepository,
   getCurrentJstMonth,
   getNextJstMonthResetAt,
   resolveAiMonthlyLimit,
@@ -15,13 +13,13 @@ import {
 
 type UsageRouteDependencies = {
   auth: AuthService;
-  usageRepository?: UsageRepository;
+  usageRepositoryFor: (env: ApiEnv["Bindings"]) => UsageRepository;
   getCurrentDate?: () => Date;
 };
 
 export const createUsageRoutes = ({
   auth,
-  usageRepository,
+  usageRepositoryFor,
   getCurrentDate,
 }: UsageRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
@@ -29,12 +27,7 @@ export const createUsageRoutes = ({
   return routes.get("/ai", requireAuth(auth), async (c) => {
     const userId = c.get("userId");
     const currentDate = getCurrentDate?.() ?? new Date();
-    const repository =
-      usageRepository ??
-      createUsageRepository(createDb(c.env.DATABASE_URL), {
-        proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-        now: currentDate,
-      });
+    const repository = usageRepositoryFor(c.env);
     const month = getCurrentJstMonth(currentDate);
     const [plan, storedUsage] = await Promise.all([
       repository.getAppUserPlan(userId),

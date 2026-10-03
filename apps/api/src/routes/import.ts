@@ -1,4 +1,3 @@
-import { createDb } from "@recipestock/db";
 import {
   cancelImportJobResponseSchema,
   createImportJobResponseSchema,
@@ -19,7 +18,6 @@ import {
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
 import {
-  createImportJobRepository,
   getImportJobExpiresBefore,
   type ImportJobRepository,
   resolveImportJobTimeoutMs,
@@ -40,7 +38,7 @@ type ImportRouteDependencies = {
   auth: AuthService;
   urlImportJobSubmissionFor: UrlImportJobSubmissionFactory;
   textImportJobSubmissionFor: TextImportJobSubmissionFactory;
-  importJobRepository?: ImportJobRepository;
+  importJobRepositoryFor: (env: ApiEnv["Bindings"]) => ImportJobRepository;
   getCurrentDate?: () => Date;
 };
 
@@ -48,7 +46,7 @@ export const createImportRoutes = ({
   auth,
   urlImportJobSubmissionFor,
   textImportJobSubmissionFor,
-  importJobRepository,
+  importJobRepositoryFor,
   getCurrentDate,
 }: ImportRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
@@ -141,8 +139,7 @@ export const createImportRoutes = ({
     .get("/jobs/recent", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
       const now = getCurrentDate?.() ?? new Date();
-      const repository =
-        importJobRepository ?? createImportJobRepository(createDb(c.env.DATABASE_URL));
+      const repository = importJobRepositoryFor(c.env);
       await repository.expireActiveJobsForUser({
         userId,
         expiresBefore: getImportJobExpiresBefore(now, resolveImportJobTimeoutMs(c.env)),
@@ -158,8 +155,7 @@ export const createImportRoutes = ({
     })
     .get("/jobs/:jobId", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
-      const repository =
-        importJobRepository ?? createImportJobRepository(createDb(c.env.DATABASE_URL));
+      const repository = importJobRepositoryFor(c.env);
       const job = await repository.getJob(userId, c.req.param("jobId"));
 
       if (!job) {
@@ -175,8 +171,7 @@ export const createImportRoutes = ({
     })
     .patch("/jobs/:jobId/dismiss", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
-      const repository =
-        importJobRepository ?? createImportJobRepository(createDb(c.env.DATABASE_URL));
+      const repository = importJobRepositoryFor(c.env);
       const job = await repository.dismissJob({
         userId,
         jobId: c.req.param("jobId"),
@@ -191,8 +186,7 @@ export const createImportRoutes = ({
     })
     .patch("/jobs/:jobId/cancel", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
-      const repository =
-        importJobRepository ?? createImportJobRepository(createDb(c.env.DATABASE_URL));
+      const repository = importJobRepositoryFor(c.env);
       const job = await repository.cancelJob({
         userId,
         jobId: c.req.param("jobId"),

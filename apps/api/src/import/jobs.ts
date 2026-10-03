@@ -283,10 +283,7 @@ const createImportJobWithSubmissionLimits = async (
   },
 ): Promise<CreateImportJobResult> => {
   if (planSyncOptions) {
-    await syncAppUserPlanForDb(db, userId, {
-      ...planSyncOptions,
-      now: planSyncOptions.now ?? now,
-    });
+    await syncAppUserPlanForDb(db, userId, planSyncOptions, now);
   }
 
   const nowIso = now.toISOString();
@@ -740,10 +737,7 @@ export const createImportJobRepository = (
     return row ? mapImportJobRow(row) : null;
   },
   async completeJobWithRecipe({ jobId, recipe, expiresBefore, now }) {
-    await syncAppUserPlanForDb(db, recipe.userId, {
-      ...planSyncOptions,
-      now: planSyncOptions?.now ?? now,
-    });
+    await syncAppUserPlanForDb(db, recipe.userId, planSyncOptions ?? {}, now);
 
     const result = await db.execute<{ resultStatus: string }>(sql`
       with locked_job as materialized (
