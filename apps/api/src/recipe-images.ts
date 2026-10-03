@@ -304,13 +304,10 @@ export const saveRecipeWithDraftImages = async <TResult>({
     return result;
   }
 
-  await deleteObjectsBestEffort(imageService, finalized.tmpKeys);
-  if (existingContent) {
-    await deleteObjectsBestEffort(
-      imageService,
-      getRemovedRecipeImageKeys(existingContent, finalized.content),
-    );
-  }
+  await deleteObjectsBestEffort(imageService, [
+    ...finalized.tmpKeys,
+    ...(existingContent ? getRemovedRecipeImageKeys(existingContent, finalized.content) : []),
+  ]);
 
   return result;
 };
