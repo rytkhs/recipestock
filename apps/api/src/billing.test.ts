@@ -245,12 +245,4 @@ describe("deriveAppUserPlanForDb", () => {
     ).resolves.toBe("pro");
     await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId }, now)).resolves.toBe("free");
   });
-
-  it("Pro price IDが無い設定では実行前に落とす", async () => {
-    const { db } = createDbStub([]);
-
-    await expect(deriveAppUserPlanForDb(db, "user_123", {}, now)).rejects.toThrow(
-      "Plan read requires a Stripe Pro price ID.",
-    );
-  });
 });

@@ -68,7 +68,7 @@ export const consumeAiUsage = async ({
 
 export const createUsageRepository = (
   db: DbClient,
-  planSyncOptions: AppUserPlanSyncOptions = {},
+  planSyncOptions: AppUserPlanSyncOptions,
 ): UsageRepository => ({
   async getOrCreateAppUser(userId) {
     const plan = await syncAppUserPlanForDb(db, userId, planSyncOptions);

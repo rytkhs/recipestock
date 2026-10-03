@@ -36,7 +36,7 @@ export type AppUserPlanSyncer = (userId: string, params?: { now?: Date }) => Pro
 
 // repositoryは環境ごとに作るので、planを判定する時刻はここに持たず、呼び出しごとに渡す。
 export type AppUserPlanReadOptions = {
-  proPriceId?: string;
+  proPriceId: string;
 };
 
 export type AppUserPlanSyncOptions = AppUserPlanReadOptions & {
@@ -142,10 +142,6 @@ export const syncAppUserPlanForDb = async (
     return syncAppUserPlan(userId, { now });
   }
 
-  if (!proPriceId) {
-    throw new Error("Plan sync requires a Stripe Pro price ID.");
-  }
-
   return syncAppUserPlanFromSubscriptions({
     userId,
     proPriceId,
@@ -167,13 +163,8 @@ export const deriveAppUserPlanForDb = async (
   userId: string,
   { proPriceId }: AppUserPlanReadOptions,
   now = new Date(),
-): Promise<Plan> => {
-  if (!proPriceId) {
-    throw new Error("Plan read requires a Stripe Pro price ID.");
-  }
-
-  return derivePlanFromSubscriptions(await listSubscriptionPlans(db, userId), { proPriceId, now });
-};
+): Promise<Plan> =>
+  derivePlanFromSubscriptions(await listSubscriptionPlans(db, userId), { proPriceId, now });
 
 const storageEnsureAppUser = async (db: DbClient, userId: string) => {
   await db.insert(appUsers).values({ userId }).onConflictDoNothing();
