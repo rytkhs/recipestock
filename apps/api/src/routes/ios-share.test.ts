@@ -467,13 +467,23 @@ describe("iOS Share routes", () => {
     expect(
       entries
         .filter((entry) => entry.event === "ios_share_shortcut_import_submitted")
-        .map(({ authFailure, credentialId, userId }) => ({ authFailure, credentialId, userId })),
+        .map(({ level, authFailure, credentialId, userId }) => ({
+          level,
+          authFailure,
+          credentialId,
+          userId,
+        })),
     ).toEqual([
-      { authFailure: "missing_token", credentialId: undefined, userId: undefined },
-      { authFailure: "missing_token", credentialId: undefined, userId: undefined },
-      { authFailure: "malformed_token", credentialId: undefined, userId: undefined },
-      { authFailure: "unknown_token", credentialId: undefined, userId: undefined },
-      { authFailure: "revoked_token", credentialId: "credential_old", userId: "user_1" },
+      { level: "warn", authFailure: "missing_token", credentialId: undefined, userId: undefined },
+      { level: "warn", authFailure: "missing_token", credentialId: undefined, userId: undefined },
+      { level: "warn", authFailure: "malformed_token", credentialId: undefined, userId: undefined },
+      { level: "warn", authFailure: "unknown_token", credentialId: undefined, userId: undefined },
+      {
+        level: "warn",
+        authFailure: "revoked_token",
+        credentialId: "credential_old",
+        userId: "user_1",
+      },
     ]);
   });
 

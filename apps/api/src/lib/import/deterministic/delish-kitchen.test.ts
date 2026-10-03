@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { importRecipeFromUrl } from "../../../import-url";
+import { type AiUsageConsumptionRepository } from "../../../usage";
 import { type RecipeImportError } from "../types";
 import { delishKitchenImportAdapter } from "./delish-kitchen";
 
@@ -348,6 +350,33 @@ describe("delishKitchenImportAdapter", () => {
     await expect(importDelishKitchen(options)).rejects.toMatchObject({
       code: "extraction_failed",
     } satisfies Partial<RecipeImportError>);
+  });
+
+  it("URL取り込みでは既定のdeterministic importerで取り込み、AI providerとAI usageを使わない", async () => {
+    const aiNormalize = vi.fn();
+    const consumeAiUsage = vi.fn();
+
+    await expect(
+      importRecipeFromUrl({
+        rawUrl: RECIPE_URL,
+        userId: "user_123",
+        env: {},
+        usageRepository: {
+          async getOrCreateAppUser(userId) {
+            return { userId, plan: "free" };
+          },
+          consumeAiUsage,
+        } satisfies AiUsageConsumptionRepository,
+        fetcher: async (url) => createFetchedPage(url, createDelishKitchenHtml()),
+        aiProvider: { normalize: aiNormalize },
+      }),
+    ).resolves.toMatchObject({
+      recipeDraftContent: { title: "人気の定番メニュー！ 基本の牛丼" },
+      source: { sourceUrl: RECIPE_URL, sourceName: "デリッシュキッチン" },
+    });
+
+    expect(aiNormalize).not.toHaveBeenCalled();
+    expect(consumeAiUsage).not.toHaveBeenCalled();
   });
 });
 
