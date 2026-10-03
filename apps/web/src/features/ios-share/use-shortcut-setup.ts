@@ -74,9 +74,11 @@ export const useShortcutSetup = ({
   const issueAndCopyKey = async () => {
     setKey({ status: "issuing" });
     // 新しいキーは、ショートカットを追加し直して貼るまで使われない。発行している間も②を押せないようにする。
-    // ③も押せなくなるので、前に確かめた結果は出さない。
+    // ③も押せなくなるので、前に確かめた結果は出さない。押したときに覚えた`lastUsedAt`も捨て、
+    // 新しいキーを入れる間に、ほかの端末からの共有でこの画面が完了にならないようにする。
     setHasOpenedShortcut(false);
     setShareCheck("idle");
+    setLastUsedAtAtShare(null);
 
     // 発行を待たずに、タップの処理の中でコピーを始める。
     const issuing = issueShortcutCredential(deviceName);
@@ -157,7 +159,7 @@ export const useShortcutSetup = ({
     isResumed,
     isWaitingForShare: hasOpenedShortcut || isResumed,
     shareCheck,
-    /** ③を最後に押した時点の、キーごとの`lastUsedAt`。押していなければ`null`。 */
+    /** ③を最後に押した時点の、キーごとの`lastUsedAt`。押していないか、そのあと発行し直したら`null`。 */
     lastUsedAtAtShare,
     issueAndCopyKey,
     copyKeyAgain,
