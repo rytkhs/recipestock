@@ -115,7 +115,7 @@ apps/api/src/
   monitoring.ts           Sentry options, error reporter, and cron check-ins
   push-subscriptions.ts   Push subscription repository
   recipe-image-keys.ts    R2 recipe image and thumbnail key parsing
-  recipe-images.ts        draft image finalization into R2
+  recipe-images.ts        draft image finalization into R2 and image cleanup around Recipe saves
   recipe-thumbnails.ts    thumbnail URLs and Cloudflare Images responses
   recipes.ts              recipe repository and response mapping
   shortcut-credentials.ts Shortcut credential repository and service

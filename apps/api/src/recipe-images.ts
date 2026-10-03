@@ -20,7 +20,7 @@ type FinalizeRecipeDraftImagesParams = {
   createImageId?: () => string;
 };
 
-export type FinalizedRecipeImages = {
+type FinalizedRecipeImages = {
   content: RecipeContent;
   copiedKeys: string[];
   tmpKeys: string[];
@@ -176,7 +176,7 @@ const resolveImageRefOnce = ({
   return resolved;
 };
 
-export const finalizeRecipeDraftImages = async ({
+const finalizeRecipeDraftImages = async ({
   draft,
   userId,
   recipeId,
@@ -250,7 +250,7 @@ export const finalizeRecipeDraftImages = async ({
   }
 };
 
-export const deleteObjectsBestEffort = async (
+const deleteObjectsBestEffort = async (
   imageService: RecipeImageService | undefined,
   objectKeys: Iterable<string>,
 ) => {
@@ -269,9 +269,50 @@ export const deleteObjectsBestEffort = async (
   );
 };
 
-export const getRemovedRecipeImageKeys = (previous: RecipeContent, next: RecipeContent) => {
+const getRemovedRecipeImageKeys = (previous: RecipeContent, next: RecipeContent) => {
   const nextKeys = getRecipeImageKeys(next);
   return Array.from(getRecipeImageKeys(previous)).filter((key) => !nextKeys.has(key));
+};
+
+/**
+ * 下書きの画像を確定してからRecipeを保存し、保存の結果に合わせて画像を片付ける。
+ * 保存しなかったときと失敗したときはコピーした画像を消し、保存したときは一時画像と、
+ * 更新で使われなくなった画像を消す。片付けを保存する経路ごとに書くと手順が食い違い、
+ * R2に参照されない画像が残る。
+ */
+export const saveRecipeWithDraftImages = async <TResult>({
+  save,
+  isSaved,
+  ...params
+}: FinalizeRecipeDraftImagesParams & {
+  save: (content: RecipeContent) => Promise<TResult>;
+  isSaved: (result: TResult) => boolean;
+}): Promise<TResult> => {
+  const { imageService, existingContent } = params;
+  const finalized = await finalizeRecipeDraftImages(params);
+  let result: TResult;
+
+  try {
+    result = await save(finalized.content);
+  } catch (error) {
+    await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
+    throw error;
+  }
+
+  if (!isSaved(result)) {
+    await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
+    return result;
+  }
+
+  await deleteObjectsBestEffort(imageService, finalized.tmpKeys);
+  if (existingContent) {
+    await deleteObjectsBestEffort(
+      imageService,
+      getRemovedRecipeImageKeys(existingContent, finalized.content),
+    );
+  }
+
+  return result;
 };
 
 export const attachRecipeImageUrls = async (

@@ -2,12 +2,7 @@ import { type ImportErrorCode } from "@recipestock/schemas";
 import { type Bindings } from "../env";
 import { type RecipeImageService } from "../images";
 import { createLogger, type Logger } from "../logger";
-import {
-  deleteObjectsBestEffort,
-  type FinalizedRecipeImages,
-  finalizeRecipeDraftImages,
-  RecipeImageFinalizeError,
-} from "../recipe-images";
+import { RecipeImageFinalizeError, saveRecipeWithDraftImages } from "../recipe-images";
 import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
@@ -110,9 +105,6 @@ export const processImportJob = async ({
     return;
   }
 
-  let finalized: FinalizedRecipeImages | null = null;
-  let recipeCreated = false;
-
   try {
     if (job.recipeId) {
       const existingRecipe = await recipeRepository.getRecipe(job.userId, job.recipeId);
@@ -168,46 +160,48 @@ export const processImportJob = async ({
       jobId,
       timeoutMs,
     });
-    finalized = await finalizeRecipeDraftImages({
+    const result = await saveRecipeWithDraftImages({
       draft: importResult.recipeDraftContent,
       userId: job.userId,
       recipeId: job.recipeId ?? recipeId,
       imageService,
       createImageId,
-    });
-    await assertImportJobIsActive({
-      deadline,
-      getCurrentDate,
-      importJobRepository,
-      jobId,
-      timeoutMs,
-    });
-    const source = normalizeRecipeSource(importResult.source);
-    const createdAt = getCurrentDate?.() ?? new Date();
-    const result = await importJobRepository.completeJobWithRecipe({
-      jobId,
-      expiresBefore: getImportJobExpiresBefore(createdAt, timeoutMs),
-      now: createdAt,
-      recipe: {
-        id: job.recipeId ?? recipeId,
-        userId: job.userId,
-        title: finalized.content.title,
-        content: finalized.content,
-        originType: job.kind,
-        sourceUrl: source.sourceUrl,
-        normalizedSourceUrl: source.normalizedSourceUrl,
-        sourceName: source.sourceName,
-        searchText: buildRecipeSearchText({
-          content: finalized.content,
-          sourceName: source.sourceName,
-        }),
-        createdAt,
-        updatedAt: createdAt,
+      save: async (content) => {
+        await assertImportJobIsActive({
+          deadline,
+          getCurrentDate,
+          importJobRepository,
+          jobId,
+          timeoutMs,
+        });
+        const source = normalizeRecipeSource(importResult.source);
+        const createdAt = getCurrentDate?.() ?? new Date();
+        return importJobRepository.completeJobWithRecipe({
+          jobId,
+          expiresBefore: getImportJobExpiresBefore(createdAt, timeoutMs),
+          now: createdAt,
+          recipe: {
+            id: job.recipeId ?? recipeId,
+            userId: job.userId,
+            title: content.title,
+            content,
+            originType: job.kind,
+            sourceUrl: source.sourceUrl,
+            normalizedSourceUrl: source.normalizedSourceUrl,
+            sourceName: source.sourceName,
+            searchText: buildRecipeSearchText({
+              content,
+              sourceName: source.sourceName,
+            }),
+            createdAt,
+            updatedAt: createdAt,
+          },
+        });
       },
+      isSaved: ({ status }) => status === "succeeded",
     });
 
     if (result.status === "limitExceeded") {
-      await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
       jobLogger.warn("recipe_import_job_failed", {
         errorCode: "recipe_limit_exceeded",
         errorMessage: "Recipe limit exceeded.",
@@ -219,7 +213,6 @@ export const processImportJob = async ({
     }
 
     if (result.status === "timedOut") {
-      await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
       jobLogger.warn("recipe_import_job_failed", {
         errorCode: "job_timeout",
         errorMessage: "Import job timed out.",
@@ -227,21 +220,8 @@ export const processImportJob = async ({
         sourceHost,
         userId: job.userId,
       });
-      return;
     }
-
-    if (result.status === "inactive") {
-      await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
-      return;
-    }
-
-    recipeCreated = true;
-    await deleteObjectsBestEffort(imageService, finalized.tmpKeys);
   } catch (error) {
-    if (finalized && !recipeCreated) {
-      await deleteObjectsBestEffort(imageService, finalized.copiedKeys);
-    }
-
     let failure = error;
     const failedAt = getCurrentDate?.() ?? new Date();
     if (failedAt.getTime() >= deadline.getTime()) {
