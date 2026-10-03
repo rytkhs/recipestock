@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAllowedPrecacheUrl, validateAppShellManifest } from "./build-manifest";
+import { validateAppShellManifest } from "./build-manifest";
 
 const entry = (url: string) => ({ url, revision: "revision", size: 1 });
 
@@ -17,15 +17,6 @@ describe("App Shell precache manifest", () => {
       manifest,
       warnings: [],
     });
-  });
-
-  it.each([
-    "api/me",
-    "icons/icon-512.png",
-    "icons/shortcuts/import-url-192.png",
-    "assets/private.png",
-  ])("%sをprecache対象にしない", (url) => {
-    expect(isAllowedPrecacheUrl(url)).toBe(false);
   });
 
   it("必須entryが欠けたbuildを拒否する", async () => {

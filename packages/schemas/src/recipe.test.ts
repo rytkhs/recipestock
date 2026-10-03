@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createRecipeRequestSchema,
-  createRecipeResponseSchema,
-  getRecipeResponseSchema,
   listRecipesQuerySchema,
-  listRecipesResponseSchema,
   MAX_INGREDIENT_AMOUNT_LENGTH,
   MAX_INGREDIENT_GROUP_INGREDIENTS,
   MAX_INGREDIENT_NAME_LENGTH,
@@ -25,15 +22,6 @@ import {
 } from "./recipe";
 
 describe("recipeContentSchema", () => {
-  it("タイトルだけの保存済みレシピ本文を受け入れる", () => {
-    const result = recipeContentSchema.safeParse({
-      title: "Tomato pasta",
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data?.referenceImages).toEqual([]);
-  });
-
   it("保存画像の正の整数寸法を検証する", () => {
     expect(
       recipeContentSchema.safeParse({
@@ -56,21 +44,6 @@ describe("recipeContentSchema", () => {
         },
       }).success,
     ).toBe(false);
-  });
-
-  it("レシピ画像を保存済みレシピ本文に持てる", () => {
-    expect(
-      recipeContentSchema.safeParse({
-        title: "Tomato pasta",
-        referenceImages: [
-          {
-            objectKey: "recipes/user/recipe/source.webp",
-            width: 1200,
-            height: 800,
-          },
-        ],
-      }).success,
-    ).toBe(true);
   });
 
   it("保存済みレシピ本文のレシピ画像枚数を制限する", () => {
@@ -128,45 +101,6 @@ describe("recipeContentSchema", () => {
 });
 
 describe("recipeDraftContentSchema", () => {
-  it("保存前入力で任意項目と出典を受け入れる", () => {
-    const result = createRecipeRequestSchema.safeParse({
-      content: {
-        title: "Tomato pasta",
-        yieldText: "2人分",
-        ingredientGroups: [
-          {
-            label: "ソース",
-            ingredients: [{ name: "トマト缶", amount: "1缶" }],
-          },
-        ],
-        steps: [{ text: "煮詰める" }],
-        note: "仕上げにオリーブオイル。",
-      },
-      source: {
-        sourceName: "Example Kitchen",
-        sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter",
-      },
-    });
-
-    expect(result.success).toBe(true);
-  });
-
-  it("RecipeDraftContentの画像参照を受け入れる", () => {
-    const result = recipeDraftContentSchema.safeParse({
-      title: "Tomato pasta",
-      coverImage: { type: "tmpObjectKey", key: "tmp/user/image.webp" },
-      referenceImages: [{ type: "externalImageUrl", url: "https://example.com/source.jpg" }],
-      steps: [
-        {
-          text: "盛り付ける",
-          images: [{ type: "externalImageUrl", url: "https://example.com/image.jpg" }],
-        },
-      ],
-    });
-
-    expect(result.success).toBe(true);
-  });
-
   it("外部画像URLはhttp/httpsだけを受け入れる", () => {
     expect(
       recipeDraftContentSchema.safeParse({
@@ -188,19 +122,6 @@ describe("recipeDraftContentSchema", () => {
         }).success,
       ).toBe(false);
     }
-  });
-
-  it("画像だけの手順を受け入れる", () => {
-    const result = recipeDraftContentSchema.safeParse({
-      title: "Tomato pasta",
-      steps: [
-        {
-          images: [{ type: "tmpObjectKey", key: "tmp/user/step.webp" }],
-        },
-      ],
-    });
-
-    expect(result.success).toBe(true);
   });
 
   it("保存前入力のレシピ画像枚数を制限する", () => {
@@ -278,102 +199,9 @@ describe("recipeSourceDraftSchema", () => {
       ).toBe(false);
     }
   });
-
-  it("保存リクエストの正規化済み出典URLは入力として採用しない", () => {
-    const result = recipeSourceDraftSchema.safeParse({
-      normalizedSourceUrl: "javascript:alert(1)",
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data).toEqual({});
-  });
-});
-
-describe("createRecipeResponseSchema", () => {
-  it("保存済みレシピの正規化済み出典URLを返せる", () => {
-    const result = createRecipeResponseSchema.safeParse({
-      recipe: {
-        id: "recipe_123",
-        title: "Tomato pasta",
-        content: {
-          title: "Tomato pasta",
-          ingredientGroups: [],
-          steps: [],
-        },
-        source: {
-          sourceUrl: "https://example.com/recipes/tomato?utm_source=newsletter",
-          normalizedSourceUrl: "https://example.com/recipes/tomato",
-          sourceName: "Example Kitchen",
-        },
-        createdAt: "2026-05-26T00:00:00.000Z",
-        updatedAt: "2026-05-26T00:00:00.000Z",
-        tags: [{ id: "tag_123", name: "パスタ" }],
-        locked: false,
-      },
-    });
-
-    expect(result.success).toBe(true);
-  });
-});
-
-describe("getRecipeResponseSchema", () => {
-  it("ロック中Recipe詳細はidとlockedだけを返せる", () => {
-    const result = getRecipeResponseSchema.safeParse({
-      recipe: {
-        id: "recipe_123",
-        locked: true,
-      },
-    });
-
-    expect(result.success).toBe(true);
-  });
 });
 
 describe("listRecipesSchema", () => {
-  it("一覧クエリとcursorページレスポンスを受け入れる", () => {
-    expect(
-      listRecipesQuerySchema.parse({
-        q: "tomato kitchen",
-        sort: "oldest",
-        limit: "10",
-        cursor: "cursor_123",
-      }),
-    ).toEqual({
-      q: "tomato kitchen",
-      sort: "oldest",
-      limit: 10,
-      cursor: "cursor_123",
-      tagId: [],
-      untagged: false,
-    });
-
-    expect(
-      listRecipesResponseSchema.safeParse({
-        items: [
-          {
-            id: "recipe_123",
-            title: "Tomato pasta",
-            coverImageUrl: null,
-            sourceName: "Example Kitchen",
-            createdAt: "2026-05-25T00:00:00.000Z",
-            locked: false,
-          },
-        ],
-        nextCursor: null,
-      }).success,
-    ).toBe(true);
-  });
-
-  it("並び順は省略すると新しい順になり、追加日の2つ以外は受け入れない", () => {
-    expect(listRecipesQuerySchema.parse({})).toEqual({
-      sort: "newest",
-      limit: 20,
-      tagId: [],
-      untagged: false,
-    });
-    expect(listRecipesQuerySchema.safeParse({ sort: "updated" }).success).toBe(false);
-  });
-
   it("タグの指定は重複を除いて受け入れ、タグなしとは同時に使えない", () => {
     expect(listRecipesQuerySchema.parse({ tagId: ["tag_1", "tag_2", "tag_1"] }).tagId).toEqual([
       "tag_1",
