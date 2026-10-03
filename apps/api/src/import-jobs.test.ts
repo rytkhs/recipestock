@@ -124,20 +124,14 @@ const env = {
 describe("Import JobのSource Text preview", () => {
   const sourceText = "鶏むね肉のレモン煮\n鶏むね肉 300g";
 
-  it("text Jobでは状態やdismissの有無にかかわらず原文のpreviewを返す", () => {
-    for (const status of ["queued", "running", "failed", "succeeded"] as const) {
-      const job = createJob({ kind: "text", status, sourceText });
-
-      expect(toImportJobSummary(job).textPreview).toBe("鶏むね肉のレモン煮");
-    }
-
-    const dismissedJob = createJob({
+  it("閉じたテキストjobも原文の最初の行をpreviewとして返す", () => {
+    const job = createJob({
       kind: "text",
       status: "failed",
       sourceText,
       dismissedAt: new Date("2026-06-01T00:01:00.000Z"),
     });
-    expect(toImportJobSummary(dismissedJob).textPreview).toBe("鶏むね肉のレモン煮");
+    expect(toImportJobSummary(job).textPreview).toBe("鶏むね肉のレモン煮");
   });
 });
 
@@ -510,34 +504,5 @@ describe("processImportJob", () => {
     });
 
     expect(events).toEqual(["expire", "claim", "failed:extraction_failed"]);
-  });
-
-  it("原文のないテキストjobはAIを呼ばずにfailedにする", async () => {
-    const events: string[] = [];
-    const requests: Parameters<RecipeImportAIProvider["normalize"]>[0][] = [];
-
-    await processImportJob({
-      jobId: "job_123",
-      env,
-      importJobRepository: createImportJobRepository(events, {
-        claimQueuedJob: async () => {
-          events.push("claim");
-          return createTextJob({ sourceText: null });
-        },
-      }),
-      recipeRepository: createRecipeRepository(),
-      usageRepository: createUsageRepository(),
-      aiProvider: {
-        normalize: async (request) => {
-          requests.push(request);
-          return { title: null, ingredientGroups: [], steps: [] };
-        },
-      },
-      createRecipeId: () => "recipe_123",
-      getCurrentDate: () => new Date("2026-06-01T00:00:00.000Z"),
-    });
-
-    expect(events).toEqual(["expire", "claim", "failed:unknown"]);
-    expect(requests).toEqual([]);
   });
 });

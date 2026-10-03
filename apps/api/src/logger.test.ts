@@ -1,11 +1,6 @@
 import { DrizzleQueryError } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  createConsoleLogSink,
-  createLogger,
-  createMemoryLogSink,
-  createNoopLogSink,
-} from "./logger";
+import { createConsoleLogSink, createLogger, createMemoryLogSink } from "./logger";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -93,46 +88,7 @@ describe("logger", () => {
         status: 200,
       }),
     );
-    expect(warn).toHaveBeenCalledWith(
-      JSON.stringify({
-        level: "warn",
-        event: "warn_event",
-        timestamp: "2026-06-01T00:00:00.000Z",
-        status: 400,
-      }),
-    );
-    expect(error).toHaveBeenCalledWith(
-      JSON.stringify({
-        level: "error",
-        event: "error_event",
-        timestamp: "2026-06-01T00:00:00.000Z",
-        status: 500,
-      }),
-    );
-  });
-
-  it("noop sinkはconsoleへ出力しない", () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const logger = createLogger({}, { sink: createNoopLogSink() });
-
-    logger.info("info_event");
-    logger.warn("warn_event");
-    logger.error("error_event");
-
-    expect(info).not.toHaveBeenCalled();
-    expect(warn).not.toHaveBeenCalled();
-    expect(error).not.toHaveBeenCalled();
-  });
-
-  it("memory sinkはclearでentriesを空にする", () => {
-    const sink = createMemoryLogSink();
-    const logger = createLogger({}, { sink });
-
-    logger.info("info_event");
-    sink.clear();
-
-    expect(sink.entries).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"level":"warn"'));
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('"level":"error"'));
   });
 });

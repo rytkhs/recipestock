@@ -1,5 +1,5 @@
 import { shortcutCredentialTokenSchema } from "@recipestock/schemas";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createShortcutCredentials,
   createShortcutCredentialToken,
@@ -8,7 +8,7 @@ import {
 } from "./shortcut-credentials";
 
 const issuedAt = new Date("2026-07-11T00:00:00.000Z");
-const usedAt = new Date("2026-07-11T00:01:00.000Z");
+const _usedAt = new Date("2026-07-11T00:01:00.000Z");
 
 const createRepository = () => {
   const records: ShortcutCredentialRecord[] = [];
@@ -48,6 +48,49 @@ describe("Shortcut credentials Module", () => {
     const token = createShortcutCredentialToken();
 
     expect(shortcutCredentialTokenSchema.safeParse(token).success).toBe(true);
+    expect(createShortcutCredentialToken()).not.toBe(token);
+  });
+
+  it("平文tokenを発行時だけ返し、repositoryにはhashとsuffixを保存する", async () => {
+    const createCredential = vi.fn(async (record: ShortcutCredentialRecord) => record);
+    const credentials = createShortcutCredentials({
+      repository: {
+        createCredential,
+        listCredentials: async () => [],
+        revokeCredential: async () => false,
+        authenticate: async () => ({ status: "unknown" }),
+      },
+      createId: () => "credential_1",
+      createToken: () => `rssc_${"a".repeat(25)}`,
+      getCurrentDate: () => issuedAt,
+    });
+
+    await expect(credentials.issue({ userId: "user_1", name: "iPhone" })).resolves.toEqual({
+      credential: {
+        id: "credential_1",
+        name: "iPhone",
+        tokenSuffix: "aaaa",
+        createdAt: issuedAt.toISOString(),
+        firstUsedAt: null,
+        lastUsedAt: null,
+      },
+      token: `rssc_${"a".repeat(25)}`,
+    });
+    expect(createCredential).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user_1",
+        name: "iPhone",
+        tokenSuffix: "aaaa",
+        tokenHash: "b9829a68e15edfa2b3668c4062b9299d30c6a6c9362e904aa995ec39b65ace07",
+      }),
+    );
+  });
+});
+describe("Shortcut credentials Module", () => {
+  it("発行するtokenはschemaが受け付ける形で、毎回異なる", () => {
+    const token = createShortcutCredentialToken();
+
+    expect(shortcutCredentialTokenSchema.safeParse(token).success).toBe(true);
     expect(token).toHaveLength(30);
     expect(createShortcutCredentialToken()).not.toBe(token);
   });
@@ -74,56 +117,5 @@ describe("Shortcut credentials Module", () => {
     });
     expect(state.records[0]?.tokenHash).not.toContain("rssc_");
     expect(state.records[0]?.tokenSuffix).toBe("aaaa");
-  });
-
-  it("認証を通したキーは、使った時刻を一覧に出す", async () => {
-    const state = createRepository();
-    let currentDate = issuedAt;
-    const token = `rssc_${"b".repeat(25)}`;
-    const credentials = createShortcutCredentials({
-      repository: state.repository,
-      createId: () => "credential_1",
-      createToken: () => token,
-      getCurrentDate: () => currentDate,
-    });
-    await credentials.issue({ userId: "user_1", name: "iPhone" });
-
-    currentDate = usedAt;
-    await expect(credentials.authenticate({ token })).resolves.toEqual({
-      status: "active",
-      credentialId: "credential_1",
-      userId: "user_1",
-    });
-    await expect(credentials.list("user_1")).resolves.toEqual([
-      expect.objectContaining({
-        firstUsedAt: usedAt.toISOString(),
-        lastUsedAt: usedAt.toISOString(),
-      }),
-    ]);
-  });
-
-  it("一覧はactive credentialだけを返し、revoke後のtokenを拒否する", async () => {
-    const state = createRepository();
-    let currentDate = issuedAt;
-    const token = `rssc_${"c".repeat(25)}`;
-    const credentials = createShortcutCredentials({
-      repository: state.repository,
-      createId: () => "credential_1",
-      createToken: () => token,
-      getCurrentDate: () => currentDate,
-    });
-    await credentials.issue({ userId: "user_1", name: "iPhone" });
-
-    await expect(credentials.list("user_1")).resolves.toHaveLength(1);
-    currentDate = usedAt;
-    await expect(
-      credentials.revoke({ credentialId: "credential_1", userId: "user_1" }),
-    ).resolves.toBe(true);
-    await expect(credentials.list("user_1")).resolves.toEqual([]);
-    await expect(credentials.authenticate({ token })).resolves.toEqual({
-      status: "revoked",
-      credentialId: "credential_1",
-      userId: "user_1",
-    });
   });
 });

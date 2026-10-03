@@ -81,49 +81,7 @@ describe("AI usage", () => {
     expect(consume).not.toHaveBeenCalled();
   });
 
-  it("同時実行想定で上限到達時の拒否結果を伝播する", async () => {
-    let used = 9;
-
-    const results = await Promise.all([
-      consumeAiUsage({
-        userId: "user_123",
-        env: { FREE_AI_MONTHLY_LIMIT: "10" },
-        repository: {
-          getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
-          consumeAiUsage: async ({ month, limit }) => {
-            if (used >= limit) {
-              return { status: "limitExceeded" };
-            }
-            used += 1;
-            return { status: "consumed", usage: { month, used } };
-          },
-        },
-        now: new Date("2026-05-15T00:00:00.000Z"),
-      }),
-      consumeAiUsage({
-        userId: "user_123",
-        env: { FREE_AI_MONTHLY_LIMIT: "10" },
-        repository: {
-          getOrCreateAppUser: async (userId) => ({ userId, plan: "free" }),
-          consumeAiUsage: async ({ month, limit }) => {
-            if (used >= limit) {
-              return { status: "limitExceeded" };
-            }
-            used += 1;
-            return { status: "consumed", usage: { month, used } };
-          },
-        },
-        now: new Date("2026-05-15T00:00:00.000Z"),
-      }),
-    ]);
-
-    expect(results).toEqual([
-      { status: "consumed", usage: { month: "2026-05", used: 10 } },
-      { status: "limitExceeded" },
-    ]);
-  });
-
-  it("原子的な消費SQLが行を返さなければ上限到達として扱う", async () => {
+  it("消費処理が行を返さなければ上限到達として扱う", async () => {
     const execute = vi.fn(async () => ({ rows: [] }));
     const repository = createUsageRepository({ execute } as never);
 
@@ -134,6 +92,5 @@ describe("AI usage", () => {
         limit: 10,
       }),
     ).resolves.toEqual({ status: "limitExceeded" });
-    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

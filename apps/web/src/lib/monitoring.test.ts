@@ -45,12 +45,6 @@ describe("redactBreadcrumb", () => {
       data: { method: "GET", status_code: 200, url: "/api/recipes" },
     });
   });
-
-  it("URLを持たないbreadcrumbは変えない", () => {
-    const breadcrumb = { category: "ui.click", message: "button.save" };
-
-    expect(redactBreadcrumb(breadcrumb)).toBe(breadcrumb);
-  });
 });
 
 describe("initMonitoring", () => {

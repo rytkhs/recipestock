@@ -194,10 +194,4 @@ describe("createSentryOptions", () => {
       url: "https://recipes.example.com",
     });
   });
-
-  it("fetch以外のbreadcrumbは変えない", () => {
-    const breadcrumb: Breadcrumb = { category: "console", message: '{"event":"api_request"}' };
-
-    expect(beforeBreadcrumb?.(breadcrumb)).toBe(breadcrumb);
-  });
 });

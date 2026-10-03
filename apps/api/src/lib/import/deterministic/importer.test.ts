@@ -2,6 +2,7 @@ import {
   MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
+  recipeDraftContentSchema,
 } from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { type RecipeImportError } from "../types";
@@ -209,14 +210,7 @@ describe("createDeterministicImporter", () => {
       fetchOptions: FETCH_OPTIONS,
     });
 
-    expect(result?.recipeDraftContent.referenceImages).toEqual(
-      createDraftImages(MAX_RECIPE_REFERENCE_IMAGES, "source"),
-    );
-    expect(
-      result?.recipeDraftContent.steps.every(
-        (step) => step.images.length <= MAX_RECIPE_STEP_IMAGES,
-      ),
-    ).toBe(true);
+    expect(recipeDraftContentSchema.safeParse(result?.recipeDraftContent).success).toBe(true);
     expect(countDraftImages(result?.recipeDraftContent)).toBe(MAX_RECIPE_TOTAL_IMAGES);
   });
 

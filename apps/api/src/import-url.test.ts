@@ -3,6 +3,7 @@ import {
   MAX_RECIPE_SOURCE_URL_LENGTH,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
+  recipeDraftContentSchema,
 } from "@recipestock/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -1266,10 +1267,7 @@ describe("URL import flow", () => {
       },
     });
 
-    expect(result.recipeDraftContent.referenceImages).toHaveLength(MAX_RECIPE_REFERENCE_IMAGES);
-    expect(
-      result.recipeDraftContent.steps.every((step) => step.images.length <= MAX_RECIPE_STEP_IMAGES),
-    ).toBe(true);
+    expect(recipeDraftContentSchema.safeParse(result.recipeDraftContent).success).toBe(true);
     expect(countDraftImages(result.recipeDraftContent)).toBe(MAX_RECIPE_TOTAL_IMAGES);
   });
 

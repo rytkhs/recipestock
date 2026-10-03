@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type RecipeImportError } from "../types";
-import {
-  createInstagramCanonicalUrl,
-  getInstagramSource,
-  instagramSourceExtractionAdapter,
-} from "./instagram";
+import { getInstagramSource, instagramSourceExtractionAdapter } from "./instagram";
 import { type SourceExtractionContext } from "./types";
 
 const CANONICAL_URL = "https://www.instagram.com/p/DYsxvKyAZMg/";
@@ -80,13 +76,6 @@ describe("Instagram source extraction URL handling", () => {
         host: new URL(url).hostname.replace(/^www\./, ""),
       }),
     ).toBe(true);
-  });
-
-  it.each([
-    ["post", "DYsxvKyAZMg", "https://www.instagram.com/p/DYsxvKyAZMg/"],
-    ["reel", "C9QigGTgKZf", "https://www.instagram.com/reel/C9QigGTgKZf/"],
-  ] as const)("canonical URLを生成する", (mediaKind, shortcode, expected) => {
-    expect(createInstagramCanonicalUrl({ mediaKind, shortcode })).toBe(expected);
   });
 
   it.each([

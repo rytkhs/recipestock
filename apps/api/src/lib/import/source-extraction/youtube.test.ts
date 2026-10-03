@@ -30,10 +30,6 @@ describe("YouTube source extraction URL handling", () => {
     expect(getYouTubeVideoId("https://example.com/watch?v=FyLCRXMANAM")).toBeNull();
     expect(getYouTubeVideoId("https://www.youtube.com/watch?v=too-short")).toBeNull();
   });
-
-  it("canonical URLを生成する", () => {
-    expect(createYouTubeCanonicalUrl(VIDEO_ID)).toBe(CANONICAL_URL);
-  });
 });
 
 describe("YouTube source extraction adapter", () => {

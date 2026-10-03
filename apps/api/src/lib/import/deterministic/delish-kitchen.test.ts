@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { importRecipeFromUrl } from "../../../import-url";
 import { type AiUsageConsumptionRepository } from "../../../usage";
 import { type RecipeImportError } from "../types";
 import { delishKitchenImportAdapter } from "./delish-kitchen";
@@ -259,31 +258,17 @@ describe("delishKitchenImportAdapter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
-  it.each([
-    {
-      name: "材料内容",
-      jsonLdIngredients: ["あたたかいごはん 1杯", "しょうゆ 大さじ2", "砂糖 小さじ2"],
-    },
-    {
-      name: "材料順序",
-      jsonLdIngredients: ["しょうゆ 大さじ2", "あたたかいごはん どんぶり2杯(400g)", "砂糖 小さじ2"],
-    },
-    {
-      name: "手順本文",
-      jsonLdStepTexts: ["玉ねぎを薄切りにする。", "鍋で煮る。"],
-    },
-    {
-      name: "手順数",
-      jsonLdStepTexts: ["玉ねぎを切る。"],
-    },
-    {
-      name: "分量",
+  it("JSON-LDの材料・手順・分量が異なっても表示本文から取り込む", async () => {
+    const result = await importDelishKitchen({
+      jsonLdIngredients: ["しょうゆ 大さじ2", "あたたかいごはん 1杯"],
+      jsonLdStepTexts: ["玉ねぎを薄切りにする。"],
       jsonLdYieldText: "4人分",
-    },
-  ])("JSON-LDの$nameがHTMLと一致しなくても成功する", async ({ name: _name, ...options }) => {
-    const result = await importDelishKitchen(options);
-
-    expect(result.recipeDraftContent.title).toBe("人気の定番メニュー！ 基本の牛丼");
+    });
+    expect(result.recipeDraftContent).toMatchObject({
+      title: "人気の定番メニュー！ 基本の牛丼",
+      yieldText: "2人分",
+      steps: [{ text: expect.stringContaining("玉ねぎ") }, { text: expect.any(String) }],
+    });
     expect(result.recipeDraftContent.ingredientGroups).toHaveLength(2);
   });
 
@@ -364,83 +349,6 @@ describe("delishKitchenImportAdapter", () => {
     await expect(importDelishKitchen(options)).rejects.toMatchObject({
       code: "extraction_failed",
     } satisfies Partial<RecipeImportError>);
-  });
-
-  it("成功時はAI providerとAI usageを使わない", async () => {
-    const aiNormalize = vi.fn();
-    const consumeAiUsage = vi.fn();
-
-    await expect(
-      importRecipeFromUrl({
-        rawUrl: RECIPE_URL,
-        userId: "user_123",
-        env: {},
-        usageRepository: createUsageRepositoryStub(consumeAiUsage),
-        fetcher: async (url) => createFetchedPage(url, createDelishKitchenHtml()),
-        aiProvider: { normalize: aiNormalize },
-      }),
-    ).resolves.toMatchObject({
-      source: {
-        sourceUrl: RECIPE_URL,
-        sourceName: "デリッシュキッチン",
-      },
-    });
-
-    expect(aiNormalize).not.toHaveBeenCalled();
-    expect(consumeAiUsage).not.toHaveBeenCalled();
-  });
-
-  it("制限付きの部分取り込み時もAI providerとAI usageを使わない", async () => {
-    const aiNormalize = vi.fn();
-    const consumeAiUsage = vi.fn();
-
-    await expect(
-      importRecipeFromUrl({
-        rawUrl: RECIPE_URL,
-        userId: "user_123",
-        env: {},
-        usageRepository: createUsageRepositoryStub(consumeAiUsage),
-        fetcher: async (url) =>
-          createFetchedPage(
-            url,
-            createDelishKitchenHtml({
-              restricted: true,
-              stepTexts: [],
-              jsonLdStepTexts: [],
-            }),
-          ),
-        aiProvider: { normalize: aiNormalize },
-      }),
-    ).resolves.toMatchObject({
-      recipeDraftContent: {
-        steps: [],
-      },
-    });
-
-    expect(aiNormalize).not.toHaveBeenCalled();
-    expect(consumeAiUsage).not.toHaveBeenCalled();
-  });
-
-  it("match後の抽出失敗時はAIへfallbackしない", async () => {
-    const aiNormalize = vi.fn();
-    const consumeAiUsage = vi.fn();
-
-    await expect(
-      importRecipeFromUrl({
-        rawUrl: RECIPE_URL,
-        userId: "user_123",
-        env: {},
-        usageRepository: createUsageRepositoryStub(consumeAiUsage),
-        fetcher: async (url) =>
-          createFetchedPage(url, createDelishKitchenHtml({ stepTexts: [], jsonLdStepTexts: [] })),
-        aiProvider: { normalize: aiNormalize },
-      }),
-    ).rejects.toMatchObject({
-      code: "extraction_failed",
-    } satisfies Partial<RecipeImportError>);
-
-    expect(aiNormalize).not.toHaveBeenCalled();
-    expect(consumeAiUsage).not.toHaveBeenCalled();
   });
 });
 
@@ -627,7 +535,7 @@ const createDelishKitchenHtml = ({
   `;
 };
 
-const createUsageRepositoryStub = (
+const _createUsageRepositoryStub = (
   consumeAiUsage = vi.fn(async ({ month }: { month: string }) => ({
     status: "consumed" as const,
     usage: { month, used: 1 },

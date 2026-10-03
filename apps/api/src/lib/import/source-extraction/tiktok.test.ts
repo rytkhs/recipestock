@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type RecipeImportError } from "../types";
-import {
-  createTikTokCanonicalUrl,
-  getTikTokUrlTarget,
-  tiktokSourceExtractionAdapter,
-} from "./tiktok";
+import { getTikTokUrlTarget, tiktokSourceExtractionAdapter } from "./tiktok";
 import { type SourceExtractionContext } from "./types";
 
 const CONTENT_ID = "7674182074974227730";
@@ -92,15 +88,6 @@ describe("TikTok source extraction URL handling", () => {
         host: "tiktok.com",
       }),
     ).toBe(false);
-  });
-
-  it("canonical URLをmediaKindごとに組み立てる", () => {
-    expect(
-      createTikTokCanonicalUrl({ username: USERNAME, mediaKind: "video", contentId: CONTENT_ID }),
-    ).toBe(VIDEO_URL);
-    expect(
-      createTikTokCanonicalUrl({ username: USERNAME, mediaKind: "photo", contentId: CONTENT_ID }),
-    ).toBe(PHOTO_URL);
   });
 });
 

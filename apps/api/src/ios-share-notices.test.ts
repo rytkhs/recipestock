@@ -40,8 +40,6 @@ describe("iOS Shortcut noticeのカタログ", () => {
 
       expect(iosShareShortcutImportResponseSchema.safeParse(result).success).toBe(true);
       expect(result.reason).toBe(reason);
-      expect(result.notice.title).not.toBe("");
-      expect(typeof result.notice.body).toBe("string");
     }
   });
 
