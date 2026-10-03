@@ -134,7 +134,21 @@ export const createIosShareRoutes = ({
 }: IosShareRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
   routes.use(
-    "*",
+    "/import-jobs",
+    /**
+     * `credentialId`単位の制限は認証を通過したrequestにしか効かない。無効なtokenは
+     * 1requestごとにhash照合のDBアクセスを起こすため、認証へ到達する前にも上限を置く。
+     * 本文の大きさより先に見る。`Content-Length`がないと`bodyLimit`は本文を読んで数えるので、
+     * 上限に当たった送信元には、本文を読ませない。
+     */
+    async (c, next) => {
+      const clientLimiter = shortcutClientRateLimiterFor(c.env);
+      const clientLimit = await clientLimiter.limit({ key: clientRateLimitKey(c) });
+      if (!clientLimit.success) {
+        return respondWithNotice(c, "rate_limit_exceeded", { rateLimitScope: "client" });
+      }
+      await next();
+    },
     bodyLimit({
       maxSize: IOS_SHARE_REQUEST_MAX_BYTES,
       onError: (c) => respondWithNotice(c, "malformed_request"),
@@ -142,16 +156,6 @@ export const createIosShareRoutes = ({
   );
 
   return routes.post("/import-jobs", async (c) => {
-    /**
-     * `credentialId`単位の制限は認証を通過したrequestにしか効かない。無効なtokenは
-     * 1requestごとにhash照合のDBアクセスを起こすため、認証へ到達する前にも上限を置く。
-     */
-    const clientLimiter = shortcutClientRateLimiterFor(c.env);
-    const clientLimit = await clientLimiter.limit({ key: clientRateLimitKey(c) });
-    if (!clientLimit.success) {
-      return respondWithNotice(c, "rate_limit_exceeded", { rateLimitScope: "client" });
-    }
-
     /**
      * 認証の失敗を返す前に、設定の確認かどうかを知る必要がある。確認への応答には遷移先を返さないため。
      * 認証できないrequestの本文も読むことになるが、回数はclient単位の上限で、大きさは`bodyLimit`で抑えている。
@@ -161,45 +165,28 @@ export const createIosShareRoutes = ({
     );
     const url = request.success ? extractFirstUrl(request.data.input) : "";
     const isSetupCheck = isSetupCheckUrl(url, c.env.APP_ORIGIN);
+    // ここから先の応答は、どれも確認かどうかを添えて返す。確認に遷移先を返すと #152 に戻る。
+    const respond = (reason: IosShareShortcutImportReason, logFields?: ShortcutImportLogFields) =>
+      respondWithNotice(c, reason, logFields, { isSetupCheck });
 
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
-      return respondWithNotice(
-        c,
-        "missing_credential",
-        { authFailure: "missing_token" },
-        { isSetupCheck },
-      );
+      return respond("missing_credential", { authFailure: "missing_token" });
     }
 
     const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
     if (identity.status === "revoked") {
-      return respondWithNotice(
-        c,
-        "unusable_credential",
-        {
-          authFailure: "revoked_token",
-          credentialId: identity.credentialId,
-          userId: identity.userId,
-        },
-        { isSetupCheck },
-      );
+      return respond("unusable_credential", {
+        authFailure: "revoked_token",
+        credentialId: identity.credentialId,
+        userId: identity.userId,
+      });
     }
     if (identity.status === "unknown") {
       // 形は、届いたものがキーかどうかを伝え分けるためだけに見る。認証はhash照合だけで行い、形の違う旧形式のキーも通す。
       return shortcutCredentialTokenSchema.safeParse(token).success
-        ? respondWithNotice(
-            c,
-            "unusable_credential",
-            { authFailure: "unknown_token" },
-            { isSetupCheck },
-          )
-        : respondWithNotice(
-            c,
-            "missing_credential",
-            { authFailure: "malformed_token" },
-            { isSetupCheck },
-          );
+        ? respond("unusable_credential", { authFailure: "unknown_token" })
+        : respond("missing_credential", { authFailure: "malformed_token" });
     }
 
     const logFields: ShortcutImportLogFields = {
@@ -213,24 +200,24 @@ export const createIosShareRoutes = ({
      * その上限で抑えるものがない。
      */
     if (isSetupCheck) {
-      return respondWithNotice(c, "setup_verified", logFields, { isSetupCheck });
+      return respond("setup_verified", logFields);
     }
 
     const limiter = shortcutRateLimiterFor(c.env);
     const { success } = await limiter.limit({ key: identity.credentialId });
     if (!success) {
-      return respondWithNotice(c, "rate_limit_exceeded", {
+      return respond("rate_limit_exceeded", {
         ...logFields,
         rateLimitScope: "credential",
       });
     }
 
     if (!request.success) {
-      return respondWithNotice(c, "malformed_request", logFields);
+      return respond("malformed_request", logFields);
     }
 
     if (!url) {
-      return respondWithNotice(c, "no_url_in_input", logFields);
+      return respond("no_url_in_input", logFields);
     }
 
     const result = await urlImportJobSubmissionFor(c.env).submit({
@@ -242,27 +229,25 @@ export const createIosShareRoutes = ({
     const submissionLogFields = { ...logFields, sourceHost: sourceHostOf(url) };
 
     if (result.status === "invalidUrl") {
-      return respondWithNotice(c, "invalid_url", submissionLogFields);
+      return respond("invalid_url", submissionLogFields);
     }
 
     if (result.status === "recipeLimitExceeded") {
-      return respondWithNotice(c, "recipe_limit_exceeded", submissionLogFields);
+      return respond("recipe_limit_exceeded", submissionLogFields);
     }
 
     if (result.status === "aiUsageLimitExceeded") {
-      return respondWithNotice(
-        c,
+      return respond(
         result.plan === "pro" ? "ai_usage_quota_exhausted" : "ai_usage_limit_exceeded",
         submissionLogFields,
       );
     }
 
     if (result.status === "temporarilyUnavailable") {
-      return respondWithNotice(c, "temporarily_unavailable", submissionLogFields);
+      return respond("temporarily_unavailable", submissionLogFields);
     }
 
-    return respondWithNotice(
-      c,
+    return respond(
       result.kind === "created" ? "created" : "existing_active_job",
       submissionLogFields,
     );

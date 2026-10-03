@@ -257,6 +257,28 @@ describe("iOS Share routes", () => {
     });
   });
 
+  it("client単位の上限に当たったrequestは、本文の大きさを見る前にrate_limit_exceededを返す", async () => {
+    const app = createShortcutTestApp({
+      auth,
+      shortcutClientRateLimiter: createRateLimiter(false) as unknown as RateLimit,
+    });
+
+    const response = await app.request(
+      "/api/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: "a".repeat(70_000) }),
+      },
+      env,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      outcome: "rejected",
+      reason: "rate_limit_exceeded",
+    });
+  });
+
   it("上限文字数の入力は、JSONのエスケープで膨らんでも本文の大きさで断らない", async () => {
     const createUrlJob = vi.fn(async () => ({
       status: "created" as const,
