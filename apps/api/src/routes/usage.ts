@@ -14,7 +14,7 @@ import {
 type UsageRouteDependencies = {
   auth: AuthService;
   usageRepositoryFor: (env: ApiEnv["Bindings"]) => UsageRepository;
-  getCurrentDate?: () => Date;
+  getCurrentDate: () => Date;
 };
 
 export const createUsageRoutes = ({
@@ -26,7 +26,7 @@ export const createUsageRoutes = ({
 
   return routes.get("/ai", requireAuth(auth), async (c) => {
     const userId = c.get("userId");
-    const currentDate = getCurrentDate?.() ?? new Date();
+    const currentDate = getCurrentDate();
     const repository = usageRepositoryFor(c.env);
     const month = getCurrentJstMonth(currentDate);
     const [plan, storedUsage] = await Promise.all([

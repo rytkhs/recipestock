@@ -17,7 +17,7 @@ type PushSubscriptionRouteDependencies = {
   auth: AuthService;
   pushSubscriptionRepositoryFor: (env: ApiEnv["Bindings"]) => PushSubscriptionRepository;
   createId?: () => string;
-  getCurrentDate?: () => Date;
+  getCurrentDate: () => Date;
 };
 
 export const createPushSubscriptionRoutes = ({
@@ -52,7 +52,7 @@ export const createPushSubscriptionRoutes = ({
         expirationTime: request.data.expirationTime,
         p256dh: request.data.keys.p256dh,
         auth: request.data.keys.auth,
-        now: getCurrentDate?.() ?? new Date(),
+        now: getCurrentDate(),
       });
       if (!subscription) {
         return forbiddenResponse("Push subscription belongs to another user.");

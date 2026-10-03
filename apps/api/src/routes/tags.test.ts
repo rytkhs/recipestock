@@ -31,6 +31,7 @@ const jsonRequest = (method: string, body: unknown): RequestInit => ({
 });
 
 const env = { APP_ENV: "development" };
+const now = new Date("2026-05-27T00:00:00.000Z");
 
 describe("Tag routes", () => {
   it("未ログインではタグ一覧を返さない", async () => {
@@ -81,6 +82,7 @@ describe("Tag routes", () => {
           return { status: "renamed", tag: { id: params.tagId, name: params.name.name } };
         },
       }),
+      getCurrentDate: () => now,
     });
 
     const response = await testApp.request(
@@ -95,7 +97,7 @@ describe("Tag routes", () => {
         userId: "user_123",
         tagId: "tag_1",
         name: { name: "BBQ", normalizedName: "bbq" },
-        now: expect.any(Date),
+        now,
       },
     ]);
     await expect(response.json()).resolves.toEqual({ tag: { id: "tag_1", name: "BBQ" } });
@@ -186,6 +188,7 @@ describe("Tag routes", () => {
           calls.push(params);
         },
       }),
+      getCurrentDate: () => now,
     });
 
     const response = await testApp.request(
@@ -195,9 +198,7 @@ describe("Tag routes", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(calls).toEqual([
-      { userId: "user_123", tagIds: ["tag_2", "tag_1"], now: expect.any(Date) },
-    ]);
+    expect(calls).toEqual([{ userId: "user_123", tagIds: ["tag_2", "tag_1"], now }]);
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 

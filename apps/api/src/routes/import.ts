@@ -39,7 +39,7 @@ type ImportRouteDependencies = {
   urlImportJobSubmissionFor: UrlImportJobSubmissionFactory;
   textImportJobSubmissionFor: TextImportJobSubmissionFactory;
   importJobRepositoryFor: (env: ApiEnv["Bindings"]) => ImportJobRepository;
-  getCurrentDate?: () => Date;
+  getCurrentDate: () => Date;
 };
 
 export const createImportRoutes = ({
@@ -138,7 +138,7 @@ export const createImportRoutes = ({
     )
     .get("/jobs/recent", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
-      const now = getCurrentDate?.() ?? new Date();
+      const now = getCurrentDate();
       const repository = importJobRepositoryFor(c.env);
       await repository.expireActiveJobsForUser({
         userId,
@@ -175,7 +175,7 @@ export const createImportRoutes = ({
       const job = await repository.dismissJob({
         userId,
         jobId: c.req.param("jobId"),
-        now: getCurrentDate?.() ?? new Date(),
+        now: getCurrentDate(),
       });
 
       if (!job) {
@@ -190,7 +190,7 @@ export const createImportRoutes = ({
       const job = await repository.cancelJob({
         userId,
         jobId: c.req.param("jobId"),
-        now: getCurrentDate?.() ?? new Date(),
+        now: getCurrentDate(),
       });
 
       if (!job) {

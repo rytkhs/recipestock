@@ -10,7 +10,7 @@ type MeRouteDependencies = {
   auth: AuthService;
   meRepositoryFor: (env: ApiEnv["Bindings"]) => MeRepository;
   getCurrentMonth?: () => string;
-  getCurrentDate?: () => Date;
+  getCurrentDate: () => Date;
 };
 
 export const createMeRoutes = ({
@@ -23,7 +23,7 @@ export const createMeRoutes = ({
 
   return routes.get("/", requireAuth(auth), async (c) => {
     const userId = c.get("userId");
-    const now = getCurrentDate?.() ?? new Date();
+    const now = getCurrentDate();
     const repository = meRepositoryFor(c.env);
     const month = getCurrentMonth?.() ?? getCurrentJstMonth(now);
     // planはcountともusageとも独立なので、同じ波で引く。

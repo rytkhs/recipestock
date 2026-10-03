@@ -58,6 +58,7 @@ type RecipeRouteDependencies = {
   imageService?: RecipeImageService;
   createRecipeId?: () => string;
   createImageId?: () => string;
+  getCurrentDate: () => Date;
 };
 
 export const createRecipeRoutes = ({
@@ -67,6 +68,7 @@ export const createRecipeRoutes = ({
   imageService,
   createRecipeId,
   createImageId,
+  getCurrentDate,
 }: RecipeRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
   routes.use(
@@ -100,7 +102,7 @@ export const createRecipeRoutes = ({
             createImageId,
             save: (content) => {
               const source = normalizeRecipeSource(request.data.source);
-              const now = new Date();
+              const now = getCurrentDate();
 
               return recipeRepositoryFor(c.env).createRecipeEnforcingPlanLimit({
                 id: recipeId,
@@ -252,7 +254,7 @@ export const createRecipeRoutes = ({
                   content,
                   sourceName: existingRecipe.sourceName,
                 }),
-                updatedAt: new Date(),
+                updatedAt: getCurrentDate(),
               }),
             isSaved: (updated) => updated !== null,
           });
@@ -304,7 +306,7 @@ export const createRecipeRoutes = ({
           userId,
           recipeId: existingRecipe.id,
           names,
-          now: new Date(),
+          now: getCurrentDate(),
         });
 
         if (!tags) {

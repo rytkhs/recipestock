@@ -22,7 +22,7 @@ type BillingRouteDependencies = {
   auth: AuthService;
   billingRepositoryFor: (env: ApiEnv["Bindings"]) => BillingRepository;
   stripeBillingClient?: StripeBillingClient;
-  getCurrentDate?: () => Date;
+  getCurrentDate: () => Date;
 };
 
 const buildUrl = (origin: string, path: string) => new URL(path, origin).toString();
@@ -98,7 +98,7 @@ export const createBillingRoutes = ({
       const repository = billingRepositoryFor(c.env);
       const stripeClient = stripeBillingClient ?? createStripeBillingClient(c.env);
       const proPriceId = c.env.STRIPE_PRO_PRICE_ID;
-      const now = getCurrentDate?.() ?? new Date();
+      const now = getCurrentDate();
       const appUser = await repository.getOrCreateAppUserBillingState(userId);
       const subscriptions = await repository.listSubscriptionsByUserId(userId);
 
@@ -177,7 +177,7 @@ export const createBillingRoutes = ({
       const status = await repository.getBillingStatus({
         userId,
         proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-        now: getCurrentDate?.() ?? new Date(),
+        now: getCurrentDate(),
       });
 
       return c.json(
