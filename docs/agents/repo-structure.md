@@ -101,7 +101,7 @@ Current internal shape:
 
 ```txt
 apps/api/src/
-  index.ts                Hono app composition plus Worker fetch, queue, and scheduled handlers
+  index.ts                Hono app composition and Worker fetch, queue, and scheduled entry points
   api-error.ts            API error response builders
   context.ts              Hono context types
   env.ts                  Cloudflare binding types and validation
@@ -126,6 +126,7 @@ apps/api/src/
   import/                 URL and text import, Import Jobs, and the Import Queue
     jobs.ts               Import Job repository and status mapping
     job-processor.ts      Import Job processing from the queue
+    queue.ts              Import Queue and dead letter queue consumers
     job-submission.ts     Import Job submission shared by url- and text-import-job-submission.ts
     queue-health.ts       Import Queue stall detection for the cron
     url-import.ts         URL import orchestration
