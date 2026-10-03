@@ -73,7 +73,9 @@ describe("Push subscription repository with Neon Postgres", () => {
     await expect(repository.listByUser(otherId)).resolves.toEqual([
       { endpoint: other.endpoint, expirationTime: null },
     ]);
-    await expect(repository.listDeliveryTargets(ownerId)).resolves.toEqual(
+    const ownerTargets = await repository.listDeliveryTargets(ownerId);
+    expect(ownerTargets).toHaveLength(2);
+    expect(ownerTargets).toEqual(
       expect.arrayContaining([
         { endpoint: owned.endpoint, p256dh: "original-p256dh", auth: "original-auth" },
         { endpoint: secondDevice.endpoint, p256dh: "original-p256dh", auth: "original-auth" },

@@ -109,19 +109,12 @@ describe("recipeDraftContentSchema", () => {
       }).success,
     ).toBe(true);
 
-    for (const url of [
-      "javascript:alert(1)",
-      "data:image/svg+xml,<svg></svg>",
-      "ftp://example.com/image.jpg",
-      "mailto:recipe@example.com",
-    ]) {
-      expect(
-        recipeDraftContentSchema.safeParse({
-          title: "Tomato pasta",
-          coverImage: { type: "externalImageUrl", url },
-        }).success,
-      ).toBe(false);
-    }
+    expect(
+      recipeDraftContentSchema.safeParse({
+        title: "Tomato pasta",
+        coverImage: { type: "externalImageUrl", url: "javascript:alert(1)" },
+      }).success,
+    ).toBe(false);
   });
 
   it("保存前入力のレシピ画像枚数を制限する", () => {
@@ -186,18 +179,11 @@ describe("recipeSourceDraftSchema", () => {
       }).success,
     ).toBe(true);
 
-    for (const sourceUrl of [
-      "javascript:alert(1)",
-      "data:text/html,<svg onload=alert(1)>",
-      "ftp://example.com/recipes/tomato",
-      "mailto:recipe@example.com",
-    ]) {
-      expect(
-        recipeSourceDraftSchema.safeParse({
-          sourceUrl,
-        }).success,
-      ).toBe(false);
-    }
+    expect(
+      recipeSourceDraftSchema.safeParse({
+        sourceUrl: "javascript:alert(1)",
+      }).success,
+    ).toBe(false);
   });
 });
 

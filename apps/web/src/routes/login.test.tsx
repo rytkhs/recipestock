@@ -132,6 +132,8 @@ describe("LoginRoute", () => {
     await expect(
       screen.findByRole("heading", { name: "パスワード再設定" }),
     ).resolves.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ログインに戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "パスワードを忘れた場合" }));
     await userEvent.type(screen.getByLabelText("メールアドレス"), "chef@example.com");
     await userEvent.click(screen.getByRole("button", { name: "再設定コードを送信" }));
     await userEvent.type(await screen.findByLabelText("確認コード"), "123456");

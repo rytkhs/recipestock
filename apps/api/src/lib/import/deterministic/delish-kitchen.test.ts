@@ -1,5 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-import { type AiUsageConsumptionRepository } from "../../../usage";
+import { describe, expect, it } from "vitest";
 import { type RecipeImportError } from "../types";
 import { delishKitchenImportAdapter } from "./delish-kitchen";
 
@@ -534,15 +533,3 @@ const createDelishKitchenHtml = ({
     </html>
   `;
 };
-
-const _createUsageRepositoryStub = (
-  consumeAiUsage = vi.fn(async ({ month }: { month: string }) => ({
-    status: "consumed" as const,
-    usage: { month, used: 1 },
-  })),
-): AiUsageConsumptionRepository => ({
-  async getOrCreateAppUser(userId) {
-    return { userId, plan: "free" };
-  },
-  consumeAiUsage,
-});

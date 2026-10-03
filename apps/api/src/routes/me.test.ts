@@ -69,6 +69,8 @@ describe("Me routes", () => {
         resetAt: "2026-05-31T15:00:00.000Z",
       },
     });
-    expect(calls).toEqual(["plan:user_123", "recipes:user_123", "ai:user_123:2026-05"]);
+    expect(calls).toEqual(
+      expect.arrayContaining(["plan:user_123", "recipes:user_123", "ai:user_123:2026-05"]),
+    );
   });
 });

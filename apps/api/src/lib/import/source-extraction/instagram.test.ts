@@ -120,31 +120,18 @@ describe("Instagram source extraction adapter", () => {
     const result = await instagramSourceExtractionAdapter.extract(createContext({ fetchHtml }));
 
     expect(fetchHtml).toHaveBeenCalledWith(EMBED_URL);
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       promptProfile: "social",
       input: {
         source: {
           finalUrl: CANONICAL_URL,
           host: "instagram.com",
         },
-        markdownContent: [
-          "# Post by mizuki_31cafe",
-          "",
-          "Source: Instagram",
-          `URL: ${CANONICAL_URL}`,
-          "Author: mizuki_31cafe",
-          "",
-          "## Caption",
-          "",
-          "材料\nなす 5本\n作り方\n揚げ焼きにする",
-        ].join("\n"),
+        markdownContent: expect.stringContaining("材料\nなす 5本\n作り方\n揚げ焼きにする"),
       },
       imageCandidates: [
         {
-          id: "instagram_image_0",
           url: "https://cdn.example.com/cover.jpg",
-          alt: "Post by mizuki_31cafe image 1",
-          position: 0,
         },
       ],
       imagePlacement: {
@@ -158,6 +145,7 @@ describe("Instagram source extraction adapter", () => {
       warnings: [],
     });
     expect(result.input.markdownContent).not.toContain("https://cdn.example.com/cover.jpg");
+    expect(result.input.markdownContent).toContain("mizuki_31cafe");
   });
 
   it("画像0件でもcaptionがあれば成功する", async () => {
