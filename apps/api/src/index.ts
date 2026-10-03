@@ -8,11 +8,15 @@ import { routePath } from "hono/route";
 import { secureHeaders } from "hono/secure-headers";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
-import { type BillingRepository } from "./billing";
+import { type BillingRepository, createBillingRepository } from "./billing";
 import { type ApiEnv } from "./context";
 import { type Bindings, createBindingValidationGuard } from "./env";
 import { type RecipeImageService } from "./images";
-import { type ImportJobRepository, resolveImportJobTimeoutMs } from "./import/jobs";
+import {
+  createImportJobRepository,
+  type ImportJobRepository,
+  resolveImportJobTimeoutMs,
+} from "./import/jobs";
 import { handleImportQueueBatch } from "./import/queue";
 import { checkImportQueueHealth } from "./import/queue-health";
 import { createTextImportJobSubmission } from "./import/text-import-job-submission";
@@ -21,15 +25,18 @@ import {
   type UrlImportJobSubmission,
 } from "./import/url-import-job-submission";
 import { createLogger, type LoggerFactory } from "./logger";
-import { type MeRepository } from "./me";
+import { createMeRepository, type MeRepository } from "./me";
 import {
   createSentryCheckInReporter,
   createSentryOptions,
   type ErrorReporter,
   sentryErrorReporter,
 } from "./monitoring";
-import { type PushSubscriptionRepository } from "./push-subscriptions";
-import { type RecipeRepository } from "./recipes";
+import {
+  createPushSubscriptionRepository,
+  type PushSubscriptionRepository,
+} from "./push-subscriptions";
+import { createRecipeRepository, type RecipeRepository } from "./recipes";
 import { createAuthRoutes } from "./routes/auth";
 import { createBillingRoutes } from "./routes/billing";
 import { createImageRoutes } from "./routes/images";
@@ -48,8 +55,8 @@ import {
   type ShortcutCredentials,
 } from "./shortcut-credentials";
 import { type StripeBillingClient } from "./stripe-billing";
-import { type TagRepository } from "./tags";
-import { type UsageRepository } from "./usage";
+import { createTagRepository, type TagRepository } from "./tags";
+import { createUsageRepository, type UsageRepository } from "./usage";
 
 const IMPORT_QUEUE_HEALTH_MONITOR_SLUG = "import-queue-health";
 
@@ -123,6 +130,27 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   const errorReporter = dependencies.errorReporter ?? sentryErrorReporter;
   const loggerFactory = dependencies.loggerFactory ?? createLogger;
   const csrfProtection = csrf();
+  // fetchの経路で使うrepositoryはここで作り、routesは受け取ったものを使う。
+  const planOptionsFor = (env: Bindings) => ({ proPriceId: env.STRIPE_PRO_PRICE_ID });
+  const recipeRepositoryFor = (env: Bindings) =>
+    dependencies.recipeRepository ??
+    createRecipeRepository(createDb(env.DATABASE_URL), planOptionsFor(env));
+  const tagRepositoryFor = (env: Bindings) =>
+    dependencies.tagRepository ?? createTagRepository(createDb(env.DATABASE_URL));
+  const meRepositoryFor = (env: Bindings) =>
+    dependencies.meRepository ??
+    createMeRepository(createDb(env.DATABASE_URL), planOptionsFor(env));
+  const usageRepositoryFor = (env: Bindings) =>
+    dependencies.usageRepository ??
+    createUsageRepository(createDb(env.DATABASE_URL), planOptionsFor(env));
+  const billingRepositoryFor = (env: Bindings) =>
+    dependencies.billingRepository ?? createBillingRepository(createDb(env.DATABASE_URL));
+  const importJobRepositoryFor = (env: Bindings) =>
+    dependencies.importJobRepository ??
+    createImportJobRepository(createDb(env.DATABASE_URL), planOptionsFor(env));
+  const pushSubscriptionRepositoryFor = (env: Bindings) =>
+    dependencies.pushSubscriptionRepository ??
+    createPushSubscriptionRepository(createDb(env.DATABASE_URL));
   const shortcutCredentialsFor = (env: Bindings) =>
     dependencies.shortcutCredentials ??
     createShortcutCredentials({
@@ -133,7 +161,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
     dependencies.urlImportJobSubmission ??
     createUrlImportJobSubmission({
       env,
-      importJobRepository: dependencies.importJobRepository,
+      importJobRepository: importJobRepositoryFor(env),
       importQueue: dependencies.importQueue,
       createImportJobId: dependencies.createImportJobId,
       getCurrentDate: dependencies.getCurrentDate,
@@ -141,7 +169,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   const textImportJobSubmissionFor = (env: Bindings) =>
     createTextImportJobSubmission({
       env,
-      importJobRepository: dependencies.importJobRepository,
+      importJobRepository: importJobRepositoryFor(env),
       importQueue: dependencies.importQueue,
       createImportJobId: dependencies.createImportJobId,
       getCurrentDate: dependencies.getCurrentDate,
@@ -210,7 +238,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         auth,
         urlImportJobSubmissionFor,
         textImportJobSubmissionFor,
-        importJobRepository: dependencies.importJobRepository,
+        importJobRepositoryFor,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )
@@ -234,7 +262,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/push-subscriptions",
       createPushSubscriptionRoutes({
         auth,
-        pushSubscriptionRepository: dependencies.pushSubscriptionRepository,
+        pushSubscriptionRepositoryFor,
         createId: dependencies.createPushSubscriptionId,
         getCurrentDate: dependencies.getCurrentDate,
       }),
@@ -243,7 +271,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/me",
       createMeRoutes({
         auth,
-        meRepository: dependencies.meRepository,
+        meRepositoryFor,
         getCurrentMonth: dependencies.getCurrentMonth,
         getCurrentDate: dependencies.getCurrentDate,
       }),
@@ -252,7 +280,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/usage",
       createUsageRoutes({
         auth,
-        usageRepository: dependencies.usageRepository,
+        usageRepositoryFor,
         getCurrentDate: dependencies.getCurrentDate,
       }),
     )
@@ -260,7 +288,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/billing",
       createBillingRoutes({
         auth,
-        billingRepository: dependencies.billingRepository,
+        billingRepositoryFor,
         stripeBillingClient: dependencies.stripeBillingClient,
         getCurrentDate: dependencies.getCurrentDate,
       }),
@@ -268,7 +296,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
     .route(
       "/stripe",
       createStripeRoutes({
-        billingRepository: dependencies.billingRepository,
+        billingRepositoryFor,
         stripeBillingClient: dependencies.stripeBillingClient,
       }),
     )
@@ -276,8 +304,8 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/recipes",
       createRecipeRoutes({
         auth,
-        recipeRepository: dependencies.recipeRepository,
-        tagRepository: dependencies.tagRepository,
+        recipeRepositoryFor,
+        tagRepositoryFor,
         imageService: dependencies.imageService,
         createRecipeId: dependencies.createRecipeId,
         createImageId: dependencies.createImageId,
@@ -287,7 +315,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       "/tags",
       createTagRoutes({
         auth,
-        tagRepository: dependencies.tagRepository,
+        tagRepositoryFor,
       }),
     );
 };

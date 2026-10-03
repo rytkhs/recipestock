@@ -1,11 +1,9 @@
-import { createDb } from "@recipestock/db";
 import { type Plan } from "@recipestock/shared";
 import { type Bindings } from "../env";
 import { getCurrentJstMonth, resolveAiMonthlyLimit } from "../usage";
 import {
   type CreateImportJobResult,
   createImportJobId,
-  createImportJobRepository,
   getImportJobExpiresBefore,
   type ImportJobAiUsageLimits,
   type ImportJobRecord,
@@ -25,7 +23,7 @@ export type SubmitImportJobResult =
 
 export type ImportJobSubmissionDependencies = {
   env: Bindings;
-  importJobRepository?: ImportJobRepository;
+  importJobRepository: ImportJobRepository;
   importQueue?: Queue<{ jobId: string }>;
   createImportJobId?: () => string;
   getCurrentDate?: () => Date;
@@ -43,7 +41,7 @@ type CreateJob = (
 export const submitImportJob = async (
   {
     env,
-    importJobRepository,
+    importJobRepository: repository,
     importQueue,
     createImportJobId: createJobId,
     getCurrentDate,
@@ -51,11 +49,6 @@ export const submitImportJob = async (
   { userId, createJob }: { userId: string; createJob: CreateJob },
 ): Promise<SubmitImportJobResult> => {
   const now = getCurrentDate?.() ?? new Date();
-  const repository =
-    importJobRepository ??
-    createImportJobRepository(createDb(env.DATABASE_URL), {
-      proPriceId: env.STRIPE_PRO_PRICE_ID,
-    });
 
   await repository.expireActiveJobsForUser({
     userId,

@@ -1,4 +1,3 @@
-import { createDb } from "@recipestock/db";
 import {
   createRecipeRequestSchema,
   createRecipeResponseSchema,
@@ -35,7 +34,6 @@ import { createRecipeThumbnailUrl } from "../recipe-thumbnails";
 import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
-  createRecipeRepository,
   InvalidRecipeListCursorError,
   type ListRecipesResult,
   normalizeRecipeSearchTerms,
@@ -45,7 +43,7 @@ import {
   toRecipeDetail,
   toRecipeListItem,
 } from "../recipes";
-import { createTagRepository, normalizeRequestedTagNames, type TagRepository } from "../tags";
+import { normalizeRequestedTagNames, type TagRepository } from "../tags";
 
 /**
  * 画像はR2へ直接PUTするので、本文のJSONが大きくなる理由がない。
@@ -55,8 +53,8 @@ const RECIPE_REQUEST_MAX_BYTES = 1024 * 1024;
 
 type RecipeRouteDependencies = {
   auth: AuthService;
-  recipeRepository?: RecipeRepository;
-  tagRepository?: TagRepository;
+  recipeRepositoryFor: (env: ApiEnv["Bindings"]) => RecipeRepository;
+  tagRepositoryFor: (env: ApiEnv["Bindings"]) => TagRepository;
   imageService?: RecipeImageService;
   createRecipeId?: () => string;
   createImageId?: () => string;
@@ -64,8 +62,8 @@ type RecipeRouteDependencies = {
 
 export const createRecipeRoutes = ({
   auth,
-  recipeRepository,
-  tagRepository,
+  recipeRepositoryFor,
+  tagRepositoryFor,
   imageService,
   createRecipeId,
   createImageId,
@@ -103,13 +101,8 @@ export const createRecipeRoutes = ({
             save: (content) => {
               const source = normalizeRecipeSource(request.data.source);
               const now = new Date();
-              const repository =
-                recipeRepository ??
-                createRecipeRepository(createDb(c.env.DATABASE_URL), {
-                  proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-                });
 
-              return repository.createRecipeEnforcingPlanLimit({
+              return recipeRepositoryFor(c.env).createRecipeEnforcingPlanLimit({
                 id: recipeId,
                 userId,
                 title: content.title,
@@ -155,11 +148,7 @@ export const createRecipeRoutes = ({
           return validationFailedResponse(query.error.flatten());
         }
 
-        const repository =
-          recipeRepository ??
-          createRecipeRepository(createDb(c.env.DATABASE_URL), {
-            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          });
+        const repository = recipeRepositoryFor(c.env);
         let result: ListRecipesResult;
 
         try {
@@ -201,11 +190,7 @@ export const createRecipeRoutes = ({
       })
       .get("/:recipeId", requireAuth(auth), async (c) => {
         const userId = c.get("userId");
-        const repository =
-          recipeRepository ??
-          createRecipeRepository(createDb(c.env.DATABASE_URL), {
-            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          });
+        const repository = recipeRepositoryFor(c.env);
         const recipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
         if (!recipe) {
@@ -236,11 +221,7 @@ export const createRecipeRoutes = ({
           return validationFailedResponse(request.error.flatten());
         }
 
-        const repository =
-          recipeRepository ??
-          createRecipeRepository(createDb(c.env.DATABASE_URL), {
-            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          });
+        const repository = recipeRepositoryFor(c.env);
         const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
         if (!existingRecipe) {
@@ -308,11 +289,7 @@ export const createRecipeRoutes = ({
           return invalidTagNameResponse("names");
         }
 
-        const repository =
-          recipeRepository ??
-          createRecipeRepository(createDb(c.env.DATABASE_URL), {
-            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          });
+        const repository = recipeRepositoryFor(c.env);
         const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
         if (!existingRecipe) {
@@ -323,9 +300,7 @@ export const createRecipeRoutes = ({
           return lockedRecipeResponse();
         }
 
-        const tags = await (
-          tagRepository ?? createTagRepository(createDb(c.env.DATABASE_URL))
-        ).replaceRecipeTags({
+        const tags = await tagRepositoryFor(c.env).replaceRecipeTags({
           userId,
           recipeId: existingRecipe.id,
           names,
@@ -340,11 +315,7 @@ export const createRecipeRoutes = ({
       })
       .delete("/:recipeId", requireAuth(auth), async (c) => {
         const userId = c.get("userId");
-        const repository =
-          recipeRepository ??
-          createRecipeRepository(createDb(c.env.DATABASE_URL), {
-            proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-          });
+        const repository = recipeRepositoryFor(c.env);
         const deleted = await repository.deleteRecipe(userId, c.req.param("recipeId"));
 
         if (!deleted) {

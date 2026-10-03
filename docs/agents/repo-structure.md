@@ -101,7 +101,7 @@ Current internal shape:
 
 ```txt
 apps/api/src/
-  index.ts                Hono app composition and Worker fetch, queue, and scheduled entry points
+  index.ts                Hono app composition, repository construction for routes, and Worker fetch, queue, and scheduled entry points
   api-error.ts            API error response builders
   context.ts              Hono context types
   env.ts                  Cloudflare binding types and validation
@@ -165,7 +165,7 @@ apps/api/src/
     email/
 ```
 
-Import-related modules live under `apps/api/src/import/`. Other repositories, services, and cross-cutting modules live directly under `apps/api/src/`, with their route handlers in `routes/`. Do not infer unlisted feature directories such as `recipes/` or `lib/billing/`; they do not exist in the current structure.
+Import-related modules live under `apps/api/src/import/`. Other repositories, services, and cross-cutting modules live directly under `apps/api/src/`, with their route handlers in `routes/`. Route handlers do not construct repositories: `createApp` in `index.ts` builds them per environment and passes `xRepositoryFor(env)` to each route. Do not infer unlisted feature directories such as `recipes/` or `lib/billing/`; they do not exist in the current structure.
 
 ## Packages
 

@@ -1,22 +1,21 @@
-import { createDb } from "@recipestock/db";
 import { getMeResponseSchema } from "@recipestock/schemas";
 import { Hono } from "hono";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
-import { buildMeResponse, createMeRepository, type MeRepository } from "../me";
+import { buildMeResponse, type MeRepository } from "../me";
 import { requireAuth } from "../middleware/auth";
 import { getCurrentJstMonth, resolveAiMonthlyLimit } from "../usage";
 
 type MeRouteDependencies = {
   auth: AuthService;
-  meRepository?: MeRepository;
+  meRepositoryFor: (env: ApiEnv["Bindings"]) => MeRepository;
   getCurrentMonth?: () => string;
   getCurrentDate?: () => Date;
 };
 
 export const createMeRoutes = ({
   auth,
-  meRepository,
+  meRepositoryFor,
   getCurrentMonth,
   getCurrentDate,
 }: MeRouteDependencies) => {
@@ -25,11 +24,7 @@ export const createMeRoutes = ({
   return routes.get("/", requireAuth(auth), async (c) => {
     const userId = c.get("userId");
     const now = getCurrentDate?.() ?? new Date();
-    const repository =
-      meRepository ??
-      createMeRepository(createDb(c.env.DATABASE_URL), {
-        proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-      });
+    const repository = meRepositoryFor(c.env);
     const month = getCurrentMonth?.() ?? getCurrentJstMonth(now);
     // planはcountともusageとも独立なので、同じ波で引く。
     const [plan, recipeCount, storedAiUsage] = await Promise.all([
