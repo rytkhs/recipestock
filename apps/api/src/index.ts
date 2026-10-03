@@ -9,27 +9,26 @@ import { secureHeaders } from "hono/secure-headers";
 import { unknownResponse } from "./api-error";
 import { type AuthService, authService } from "./auth";
 import { type BillingRepository } from "./billing";
+import { type ApiEnv } from "./context";
+import { type Bindings, createBindingValidationGuard } from "./env";
+import { createRecipeImageService, type RecipeImageService } from "./images";
 import {
   createPushSender,
   notifyImportJobCompletion,
   type PushSender,
-} from "./completion-notifications";
-import { type ApiEnv } from "./context";
-import { type Bindings, createBindingValidationGuard } from "./env";
-import { createRecipeImageService, type RecipeImageService } from "./images";
+} from "./import/completion-notifications";
 import {
   createImportJobRepository,
   type ImportJobRepository,
   processImportJob,
   resolveImportJobTimeoutMs,
-} from "./import-jobs";
-import { checkImportQueueHealth } from "./import-queue-health";
-import { type RecipeImportAIProvider, type RecipeImportFetcher } from "./import-url";
-import { createTextImportJobSubmission } from "./lib/import/text-import-job-submission";
+} from "./import/jobs";
+import { checkImportQueueHealth } from "./import/queue-health";
+import { createTextImportJobSubmission } from "./import/text-import-job-submission";
 import {
   createUrlImportJobSubmission,
   type UrlImportJobSubmission,
-} from "./lib/import/url-import-job-submission";
+} from "./import/url-import-job-submission";
 import { createLogger, type Logger, type LoggerFactory } from "./logger";
 import { type MeRepository } from "./me";
 import {
@@ -86,8 +85,6 @@ export type AppDependencies = {
   shortcutRateLimiter?: RateLimit;
   importQueue?: Queue<{ jobId: string }>;
   imageService?: RecipeImageService;
-  importAIProvider?: RecipeImportAIProvider;
-  importFetcher?: RecipeImportFetcher;
   stripeBillingClient?: StripeBillingClient;
   createImportJobId?: () => string;
   createRecipeId?: () => string;

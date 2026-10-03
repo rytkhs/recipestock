@@ -1,6 +1,6 @@
 import { parseImportCompletionNotice, parseImportCompletionRoute } from "@recipestock/shared";
 import { describe, expect, it } from "vitest";
-import { buildImportCompletionPushPayload } from "./import-completion-notices";
+import { buildImportCompletionPushPayload } from "./completion-notices";
 
 describe("取り込み完了noticeのカタログ", () => {
   it("成功payloadに表示文言と遷移用のrecipeIdを載せる", () => {

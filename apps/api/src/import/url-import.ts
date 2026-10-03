@@ -1,25 +1,21 @@
 import { type RecipeDraftContent, type RecipeSourceDraft } from "@recipestock/schemas";
 import { normalizeUrl } from "@recipestock/shared";
 import { z } from "zod";
-import { type Bindings, type BrowserRunBinding } from "./env";
-import { extractRecipePageEvidence } from "./import-page-evidence";
-import { normalizeRecipeWithAi } from "./lib/import/ai-normalization";
-import { assertImportJobDeadline, resolveBoundedTimeoutMs } from "./lib/import/deadline";
-import {
-  type DeterministicImporter,
-  defaultDeterministicImporter,
-} from "./lib/import/deterministic";
-import { trimRecipeDraftContent } from "./lib/import/draft-limits";
+import { type Bindings, type BrowserRunBinding } from "../env";
+import { createLogger, type Logger } from "../logger";
+import { type AiUsageConsumptionRepository } from "../usage";
+import { normalizeRecipeWithAi } from "./ai-normalization";
+import { assertImportJobDeadline, resolveBoundedTimeoutMs } from "./deadline";
+import { type DeterministicImporter, defaultDeterministicImporter } from "./deterministic";
+import { trimRecipeDraftContent } from "./draft-limits";
+import { extractRecipePageEvidence } from "./page-evidence";
 import {
   assertFetchedPageIsHtml,
   assertImportContentTypeMayBeHtml,
   assertImportUrlAllowed,
-} from "./lib/import/policy";
-import { defaultSourceExtractor, type SourceExtractor } from "./lib/import/source-extraction";
-import {
-  createYouTubeDataClient,
-  type YouTubeDataClient,
-} from "./lib/import/source-extraction/youtube-data";
+} from "./policy";
+import { defaultSourceExtractor, type SourceExtractor } from "./source-extraction";
+import { createYouTubeDataClient, type YouTubeDataClient } from "./source-extraction/youtube-data";
 import {
   type FetchedImportPage,
   type ImportErrorCode,
@@ -34,29 +30,7 @@ import {
   type RecipeImportImagePlacement,
   type RecipeImportResult,
   type RecipeImportUrlAINormalizeRequest,
-} from "./lib/import/types";
-import { createLogger, type Logger } from "./logger";
-import { type AiUsageConsumptionRepository } from "./usage";
-
-export { assertImportUrlAllowed } from "./lib/import/policy";
-export {
-  type FetchedImportPage,
-  type ImportErrorCode,
-  type RecipeImportAIDraftContent,
-  type RecipeImportAIImageUrl,
-  type RecipeImportAIInput,
-  type RecipeImportAINormalizeRequest,
-  type RecipeImportAIProvider,
-  RecipeImportError,
-  type RecipeImportFetcher,
-  type RecipeImportGenericAIInput,
-  type RecipeImportImageCandidate,
-  type RecipeImportPromptProfile,
-  type RecipeImportResult,
-  type RecipeImportSocialAIInput,
-  type RecipeImportStructuredEvidence,
-  type RecipeImportUrlAINormalizeRequest,
-} from "./lib/import/types";
+} from "./types";
 
 type RecipeImportConverterResult = {
   type: "requiresAi";

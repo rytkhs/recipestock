@@ -1,8 +1,8 @@
 import { generateObject } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
-import { type Bindings } from "../../env";
-import { createLogger, type Logger } from "../../logger";
+import { type Bindings } from "../env";
+import { createLogger, type Logger } from "../logger";
 import { getRecipeImportSystemPrompt } from "./prompts";
 import {
   type RecipeImportAIDraftContent,

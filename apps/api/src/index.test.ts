@@ -2,9 +2,9 @@ import { env as workerEnv } from "cloudflare:workers";
 import { isDatabaseUnavailableError } from "@recipestock/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type BillingRepository } from "./billing";
-import { type PushSender } from "./completion-notifications";
 import { type Bindings } from "./env";
-import { type ImportJobRecord, type ImportJobRepository } from "./import-jobs";
+import { type PushSender } from "./import/completion-notifications";
+import { type ImportJobRecord, type ImportJobRepository } from "./import/jobs";
 import worker, {
   handleDeadLetteredImportJobMessage,
   handleImportQueueMessage,

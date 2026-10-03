@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractRecipePageEvidence } from "./import-page-evidence";
+import { extractRecipePageEvidence } from "./page-evidence";
 
 describe("Recipe page evidence", () => {
   it("本文画像を絶対URL付きMarkdown画像としてAI入力に残す", async () => {

@@ -9,25 +9,17 @@ import {
 import { PLAN_LIMITS, type Plan } from "@recipestock/shared";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
-import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "./billing";
-import { type Bindings } from "./env";
-import { type RecipeImageService } from "./images";
-import {
-  importRecipeFromUrl,
-  type RecipeImportAIProvider,
-  RecipeImportError,
-  type RecipeImportFetcher,
-} from "./import-url";
-import { type YouTubeDataClient } from "./lib/import/source-extraction/youtube-data";
-import { importRecipeFromText } from "./lib/import/text-import";
-import { createLogger, type Logger } from "./logger";
+import { type AppUserPlanSyncOptions, syncAppUserPlanForDb } from "../billing";
+import { type Bindings } from "../env";
+import { type RecipeImageService } from "../images";
+import { createLogger, type Logger } from "../logger";
 import {
   deleteObjectsBestEffort,
   type FinalizedRecipeImages,
   finalizeRecipeDraftImages,
   RecipeImageFinalizeError,
-} from "./recipe-images";
-import { createRecipeThumbnailUrl } from "./recipe-thumbnails";
+} from "../recipe-images";
+import { createRecipeThumbnailUrl } from "../recipe-thumbnails";
 import {
   buildRecipeSearchText,
   createRecipeId as createDefaultRecipeId,
@@ -36,8 +28,12 @@ import {
   normalizeRecipeSource,
   type RecipeRepository,
   recipeCoverImageObjectKey,
-} from "./recipes";
-import { type AiUsageConsumptionRepository } from "./usage";
+} from "../recipes";
+import { type AiUsageConsumptionRepository } from "../usage";
+import { type YouTubeDataClient } from "./source-extraction/youtube-data";
+import { importRecipeFromText } from "./text-import";
+import { type RecipeImportAIProvider, RecipeImportError, type RecipeImportFetcher } from "./types";
+import { importRecipeFromUrl } from "./url-import";
 
 export type ImportJobRecord = {
   id: string;

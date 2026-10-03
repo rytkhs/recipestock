@@ -6,17 +6,12 @@ import {
   recipeDraftContentSchema,
 } from "@recipestock/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  assertImportUrlAllowed,
-  fetchImportPage,
-  importRecipeFromUrl,
-  normalizeImportableUrl,
-  RecipeImportError,
-  type RecipeImportUrlAINormalizeRequest,
-} from "./import-url";
-import { type DeterministicImporter } from "./lib/import/deterministic";
-import { type SourceExtractor } from "./lib/import/source-extraction";
-import { type AiUsageConsumptionRepository } from "./usage";
+import { type AiUsageConsumptionRepository } from "../usage";
+import { type DeterministicImporter } from "./deterministic";
+import { assertImportUrlAllowed } from "./policy";
+import { type SourceExtractor } from "./source-extraction";
+import { RecipeImportError, type RecipeImportUrlAINormalizeRequest } from "./types";
+import { fetchImportPage, importRecipeFromUrl, normalizeImportableUrl } from "./url-import";
 
 afterEach(() => {
   vi.unstubAllGlobals();

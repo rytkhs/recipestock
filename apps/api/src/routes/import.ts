@@ -25,9 +25,9 @@ import {
   resolveImportJobTimeoutMs,
   toImportJobSummary,
   toRecentImportJob,
-} from "../import-jobs";
-import { type TextImportJobSubmissionFactory } from "../lib/import/text-import-job-submission";
-import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
+} from "../import/jobs";
+import { type TextImportJobSubmissionFactory } from "../import/text-import-job-submission";
+import { type UrlImportJobSubmissionFactory } from "../import/url-import-job-submission";
 import { requireAuth } from "../middleware/auth";
 
 /**

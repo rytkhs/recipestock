@@ -1,9 +1,9 @@
 import { type RecipeDraftContent, type RecipeSourceDraft } from "@recipestock/schemas";
 import { normalizeUrl } from "@recipestock/shared";
 import { z } from "zod";
-import { type Bindings } from "../../env";
-import { createLogger, type Logger } from "../../logger";
-import { type AiUsageConsumptionRepository } from "../../usage";
+import { type Bindings } from "../env";
+import { createLogger, type Logger } from "../logger";
+import { type AiUsageConsumptionRepository } from "../usage";
 import { normalizeRecipeWithAi } from "./ai-normalization";
 import { assertImportJobDeadline } from "./deadline";
 import { trimRecipeDraftContent } from "./draft-limits";

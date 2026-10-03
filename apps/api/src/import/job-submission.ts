@@ -1,6 +1,7 @@
 import { createDb } from "@recipestock/db";
 import { type Plan } from "@recipestock/shared";
-import { type Bindings } from "../../env";
+import { type Bindings } from "../env";
+import { getCurrentJstMonth, resolveAiMonthlyLimit } from "../usage";
 import {
   type CreateImportJobResult,
   createImportJobId,
@@ -10,8 +11,7 @@ import {
   type ImportJobRecord,
   type ImportJobRepository,
   resolveImportJobTimeoutMs,
-} from "../../import-jobs";
-import { getCurrentJstMonth, resolveAiMonthlyLimit } from "../../usage";
+} from "./jobs";
 
 export type SubmitImportJobResult =
   | {

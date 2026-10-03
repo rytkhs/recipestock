@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { type Bindings } from "./env";
-import { type RecipeImageService } from "./images";
+import { type Bindings } from "../env";
+import { type RecipeImageService } from "../images";
+import { type RecipeRepository } from "../recipes";
+import { type AiUsageConsumptionRepository } from "../usage";
 import {
   getImportJobExpiresBefore,
   type ImportJobRecord,
@@ -8,10 +10,8 @@ import {
   processImportJob,
   resolveImportJobTimeoutMs,
   toImportJobSummary,
-} from "./import-jobs";
-import { type RecipeImportAIProvider, RecipeImportError } from "./import-url";
-import { type RecipeRepository } from "./recipes";
-import { type AiUsageConsumptionRepository } from "./usage";
+} from "./jobs";
+import { type RecipeImportAIProvider, RecipeImportError } from "./types";
 
 const htmlPage = `<!doctype html>
 <html>

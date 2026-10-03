@@ -1,5 +1,5 @@
-import { type Logger } from "./logger";
-import { type CheckInReporter } from "./monitoring";
+import { type Logger } from "../logger";
+import { type CheckInReporter } from "../monitoring";
 
 /**
  * 期限を過ぎたImport Jobは、次の配信で即座に`job_timeout`になりackされる。

@@ -108,14 +108,8 @@ apps/api/src/
   logger.ts               structured logging
   auth.ts                 Better Auth setup and auth service
   billing.ts              billing repository and plan synchronization
-  completion-notifications.ts Import Job completion Push delivery
   image-dimensions.ts     image dimension detection from uploaded bytes
   images.ts               R2 image service
-  import-completion-notices.ts Import Job completion Push payloads
-  import-jobs.ts          Import Job repository and queue processing
-  import-page-evidence.ts recipe evidence extraction from fetched pages
-  import-queue-health.ts  Import Queue stall detection for the cron
-  import-url.ts           URL import orchestration
   ios-share-notices.ts    iOS Shortcut import result copy and destinations
   me.ts                   current-user repository and response mapping
   monitoring.ts           Sentry options, error reporter, and cron check-ins
@@ -129,6 +123,17 @@ apps/api/src/
   tags.ts                 tag repository and normalization
   url-safety.ts           outbound fetch URL and hostname checks
   usage.ts                AI usage repository and limits
+  import/                 URL and text import, Import Jobs, and the Import Queue
+    jobs.ts               Import Job repository and queue processing
+    job-submission.ts     Import Job submission shared by url- and text-import-job-submission.ts
+    queue-health.ts       Import Queue stall detection for the cron
+    url-import.ts         URL import orchestration
+    text-import.ts        text import orchestration
+    page-evidence.ts      recipe evidence extraction from fetched pages
+    completion-notifications.ts Import Job completion Push delivery
+    completion-notices.ts Import Job completion Push payloads
+    deterministic/        site-specific importers that need no AI
+    source-extraction/    per-platform source extraction (ADR 0005)
   routes/
     auth.ts
     billing.ts
@@ -146,12 +151,9 @@ apps/api/src/
     auth.ts
   lib/
     email/
-    import/
-      deterministic/
-      source-extraction/
 ```
 
-Most repositories, services, and cross-cutting modules currently live directly under `apps/api/src/`. Do not infer unlisted feature directories such as `lib/recipe/` or `lib/billing/`; they do not exist in the current structure.
+Import-related modules live under `apps/api/src/import/`. Other repositories, services, and cross-cutting modules live directly under `apps/api/src/`, with their route handlers in `routes/`. Do not infer unlisted feature directories such as `recipes/` or `lib/billing/`; they do not exist in the current structure.
 
 ## Packages
 
