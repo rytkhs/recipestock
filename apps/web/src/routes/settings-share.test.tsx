@@ -46,18 +46,20 @@ const readBlobText = (blob: Blob) =>
   });
 
 /**
- * 端末とクリップボードを差し替える。書き込みを頼まれた文字列は`requested`に、書けたものは`copied`に残る。
- * `holdWrite`を渡すと、それが解決するまで書き込みを終えない。
+ * 端末とクリップボード、共有メニューを差し替える。書き込みを頼まれた文字列は`requested`に、書けたものは`copied`に残る。
+ * `holdWrite`を渡すと、それが解決するまで書き込みを終えない。共有メニューは、`share`を渡さなければ項目が完了したことにする。
  */
 const installDevice = ({
   canWriteClipboard = true,
   holdWrite,
   maxTouchPoints = 5,
+  share = vi.fn(async () => {}),
   userAgent = iPhoneUserAgent,
 }: {
   canWriteClipboard?: boolean;
   holdWrite?: Promise<void>;
   maxTouchPoints?: number;
+  share?: (data: ShareData) => Promise<void>;
   userAgent?: string;
 } = {}) => {
   const requested: string[] = [];
@@ -73,9 +75,15 @@ const installDevice = ({
   });
 
   vi.stubGlobal("ClipboardItem", ClipboardItemStub);
-  vi.stubGlobal("navigator", { ...navigator, userAgent, maxTouchPoints, clipboard: { write } });
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    userAgent,
+    maxTouchPoints,
+    clipboard: { write },
+    share,
+  });
 
-  return { copied, requested, write };
+  return { copied, requested, share, write };
 };
 
 /**
@@ -163,6 +171,13 @@ const reopenApp = async (path = "/settings/share") => {
   return renderApp(path);
 };
 
+// ②でショートカットAppを開く。jsdomは別のタブへ移れないので、リンクの既定の動きだけを止める。
+const openShortcutApp = async () => {
+  const link = screen.getByRole("link", { name: "ショートカットを追加" });
+  link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+  await userEvent.click(link);
+};
+
 // ショートカットAppやSafariから戻ってきたことにする。
 const returnToApp = () =>
   act(() => {
@@ -215,9 +230,8 @@ describe("共有から取り込む", () => {
     });
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
-    // 発行できても、コピーを終えるまでは次へ進めず、共有も待たない。
+    // 発行できても、コピーを終えるまでは次へ進めない。
     expect(screen.getByRole("button", { name: "ショートカットを追加" })).toBeDisabled();
-    expect(screen.queryByText("共有を待っています")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /キーを発行しました/ })).not.toBeInTheDocument();
 
     releaseWrite();
@@ -233,9 +247,27 @@ describe("共有から取り込む", () => {
     );
     // キーは貼り付けに使うだけなので、コピーできたときは画面に出さない。
     expect(screen.queryByLabelText("連携キー")).not.toBeInTheDocument();
+    // ショートカットを入れる前に確かめても、まだないか前のキーのままなので、②を開くまでは押せない。
+    expect(screen.getByRole("button", { name: "共有メニューを開く" })).toBeDisabled();
   });
 
-  it("発行したキーにまだ共有が届いていなければ、開き直しても共有を待つところから続ける", async () => {
+  it("②を開いたら共有メニューを開け、この画面のURLだけを渡す", async () => {
+    vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", shortcutUrl);
+    const device = installDevice();
+    mockShortcutFetch();
+
+    await renderApp("/settings/share");
+    expect(await screen.findByRole("button", { name: "共有メニューを開く" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "キーをコピー" }));
+    await screen.findByRole("heading", { name: /キーをコピーしました/ });
+    await openShortcutApp();
+    await userEvent.click(screen.getByRole("button", { name: "共有メニューを開く" }));
+
+    expect(device.share).toHaveBeenCalledTimes(1);
+    expect(device.share).toHaveBeenCalledWith({ url: `${window.location.origin}/settings/share` });
+  });
+
+  it("発行したキーにまだ共有が届いていなければ、開き直しても③を押せるところから続ける", async () => {
     vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", shortcutUrl);
     installDevice();
     mockShortcutFetch({ credentials: [issuedCredential] });
@@ -246,7 +278,7 @@ describe("共有から取り込む", () => {
       screen.findByRole("heading", { name: /キーを発行しました/ }),
     ).resolves.toBeInTheDocument();
     expect(screen.getByText(/末尾 a1B2/)).toBeInTheDocument();
-    expect(screen.getByText("共有を待っています")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "共有メニューを開く" })).toBeEnabled();
     // もう追加したかどうかは分からないので、まだなら追加できるようにしておく。
     expect(screen.getByRole("link", { name: "ショートカットを追加" })).toHaveAttribute(
       "href",
@@ -256,13 +288,13 @@ describe("共有から取り込む", () => {
     expect(screen.queryByRole("button", { name: "キーをコピー" })).not.toBeInTheDocument();
   });
 
-  it("共有を待っている間は、画面が見えたままでも、共有が届いたら連携できたことを伝え、そのあとは読み直さない", async () => {
+  it("③を押せる間は、画面が見えたままでも、共有が届いたら連携できたことを伝え、そのあとは読み直さない", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     installDevice();
     const shortcut = mockShortcutFetch({ credentials: [issuedCredential] });
 
     await renderApp("/settings/share");
-    await screen.findByText("共有を待っています");
+    await screen.findByRole("button", { name: "共有メニューを開く" });
 
     // iPadのSplit Viewでは、隣のアプリから共有してもこの画面は隠れず、アプリへ戻ったことにならない。
     shortcut.setCredentials([usedCredential(issuedCredential)]);
@@ -279,6 +311,101 @@ describe("共有から取り込む", () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
     expect(listRequestCount(shortcut.fetchMock)).toBe(listCountAtComplete);
+  });
+
+  it("前のキーが入ったショートカットで確かめても、③を押してからキーが使われたら連携できたことを伝える", async () => {
+    vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", shortcutUrl);
+    const linkedCredential = shortcutCredentialFixture();
+    const shortcut = mockShortcutFetch({ credentials: [linkedCredential] });
+    // iCloudで同期された前のショートカットを選んだ。新しいキーは使われず、前のキーの最後に使った時刻だけが進む。
+    installDevice({
+      share: async () => {
+        shortcut.setCredentials([
+          issuedCredential,
+          { ...linkedCredential, lastUsedAt: new Date().toISOString() },
+        ]);
+      },
+    });
+
+    await renderApp("/settings/share");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "このiPhoneでショートカットを追加する" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "キーをコピー" }));
+    await screen.findByRole("heading", { name: /キーをコピーしました/ });
+    await openShortcutApp();
+    await userEvent.click(screen.getByRole("button", { name: "共有メニューを開く" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "連携できました" }),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("共有メニューを閉じてもしばらく届かなければ、まだ確かめられていないと伝え、そのあとに届いたら連携できたことを伝える", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    installDevice();
+    const shortcut = mockShortcutFetch({ credentials: [issuedCredential] });
+
+    await renderApp("/settings/share");
+    await userEvent.click(await screen.findByRole("button", { name: "共有メニューを開く" }));
+
+    await expect(screen.findByText("確かめています")).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "共有メニューを開く" })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await expect(
+      screen.findByRole("heading", { name: "まだ確かめられていません" }),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "共有メニューを開く" })).toBeEnabled();
+
+    shortcut.setCredentials([usedCredential(issuedCredential)]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    await expect(
+      screen.findByRole("heading", { name: "連携できました" }),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("共有メニューがAbortErrorを返しても、届いていれば連携できたことを伝える", async () => {
+    const shortcut = mockShortcutFetch({ credentials: [issuedCredential] });
+    // 「Recipe Stock」を選び、requestを送ったあとでショートカットが止まった。
+    installDevice({
+      share: async () => {
+        shortcut.setCredentials([usedCredential(issuedCredential)]);
+        throw new DOMException("Share canceled", "AbortError");
+      },
+    });
+
+    await renderApp("/settings/share");
+    await userEvent.click(await screen.findByRole("button", { name: "共有メニューを開く" }));
+
+    await expect(
+      screen.findByRole("heading", { name: "連携できました" }),
+    ).resolves.toBeInTheDocument();
+  });
+
+  it("共有メニューを開けなかったら知らせ、もう一度押せるようにする", async () => {
+    installDevice({
+      share: async () => {
+        throw new DOMException("The request is not allowed.", "NotAllowedError");
+      },
+    });
+    mockShortcutFetch({ credentials: [issuedCredential] });
+
+    await renderApp("/settings/share");
+    await userEvent.click(await screen.findByRole("button", { name: "共有メニューを開く" }));
+
+    await expect(
+      screen.findByText("共有メニューを開けませんでした。"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "共有メニューを開く" })).toBeEnabled();
+    expect(
+      screen.queryByRole("heading", { name: "まだ確かめられていません" }),
+    ).not.toBeInTheDocument();
   });
 
   it("共有が届いたら連携できたことを伝え、次に開いたときは連携の管理を出す", async () => {

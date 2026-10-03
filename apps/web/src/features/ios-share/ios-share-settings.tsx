@@ -27,6 +27,20 @@ const usedCredentialIds = (credentials: readonly ShortcutCredential[]): Readonly
   new Set(credentials.filter(isShortcutCredentialUsed).map(({ id }) => id));
 
 /**
+ * ③を押してから、どれかのキーに共有が届いた。認証を通ったrequestは必ず`lastUsedAt`を進めるので、前のキーが入った
+ * ショートカットで確かめても分かる。押したときになかったキーは、`lastUsedAt`が入れば届いたとみなす。
+ */
+const hasUsedKeySince = (
+  credentials: readonly ShortcutCredential[],
+  lastUsedAtAtShare: ReadonlyMap<string, string | null> | null,
+) =>
+  lastUsedAtAtShare !== null &&
+  credentials.some(
+    ({ id, lastUsedAt }) =>
+      lastUsedAt !== null && lastUsedAt !== (lastUsedAtAtShare.get(id) ?? null),
+  );
+
+/**
  * 1回分の設定。始めるたびに`id`を変え、手順の状態と完了の基準を作り直す。
  * 値は始まり方で決まる（docs/shortcut/ios-share.mdの表1）。
  */
@@ -108,22 +122,25 @@ const ShortcutSetupSession = ({
     };
   });
   const setup = useShortcutSetup({
+    credentials,
     deviceName,
     resumableCredential: atStart.resumableCredential,
   });
-  const hasNewlyUsedKey = credentials.some(
-    (credential) => isShortcutCredentialUsed(credential) && !atStart.usedIds.has(credential.id),
-  );
-  // 一覧は親が読んでいる。ここでは、共有を待っている間の読み直しだけを足す。iPadのSplit ViewやStage Managerでは、
-  // この画面が見えたまま共有するので、アプリへ戻ったときの読み直しが起きない。
+  // 始めた時点の基準に、③を押してからの基準を足す。③を押さずにほかのアプリから共有した人も、通知や誘いと同じく完了にする。
+  const isComplete =
+    credentials.some(
+      (credential) => isShortcutCredentialUsed(credential) && !atStart.usedIds.has(credential.id),
+    ) || hasUsedKeySince(credentials, setup.lastUsedAtAtShare);
+  // 一覧は親が読んでいる。ここでは、③を押せる間の読み直しだけを足す。iPadのSplit ViewやStage Managerでは、
+  // この画面が見えたまま共有するので、アプリへ戻ったときの読み直しが起きない。③を押さずに共有する人のためにも続ける。
   useQuery({
     queryKey: shortcutCredentialsQueryKey,
     queryFn: listShortcutCredentials,
     refetchOnMount: false,
-    refetchInterval: setup.isWaitingForShare && !hasNewlyUsedKey ? sharePollIntervalMs : false,
+    refetchInterval: setup.isWaitingForShare && !isComplete ? sharePollIntervalMs : false,
   });
 
-  if (hasNewlyUsedKey) {
+  if (isComplete) {
     return <ShortcutSetupComplete />;
   }
 
@@ -206,7 +223,7 @@ const IosShareSettingsContent = ({
 
 /**
  * iPhoneとiPadの「共有から取り込む」。まだ連携していないか、連携し直しに来たか、この端末で追加するときは
- * 設定の手順を、それ以外は連携の管理を出す。共有が届いたかどうかは、アプリへ戻ったときと、共有を待っている間の一覧の読み直しで知る。
+ * 設定の手順を、それ以外は連携の管理を出す。共有が届いたかどうかは、アプリへ戻ったときと、③を押せる間の一覧の読み直しで知る。
  */
 export const IosShareSettings = ({
   deviceName,

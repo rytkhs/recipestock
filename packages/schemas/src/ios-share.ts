@@ -11,6 +11,7 @@ export const iosShareShortcutImportOutcomeSchema = z.enum(["accepted", "rejected
 export const iosShareShortcutImportReasonSchema = z.enum([
   "created",
   "existing_active_job",
+  "setup_verified",
   "no_url_in_input",
   "invalid_url",
   "malformed_request",

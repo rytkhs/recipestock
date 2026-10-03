@@ -1,4 +1,4 @@
-import { ArrowSquareOut, Check, Copy, WarningCircle } from "@phosphor-icons/react";
+import { ArrowSquareOut, Check, Copy, Export, WarningCircle } from "@phosphor-icons/react";
 import { type ShortcutCredential } from "@recipestock/schemas";
 import { type ReactNode, useId } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -94,7 +94,7 @@ const relinkNotice = (reason: ShortcutRelinkReason, deviceName: IosDeviceName) =
 
 const shortcutStepText =
   "ショートカットAppが開きます。キーを聞かれたら貼り付けて、「ショートカットを追加」を押してください。";
-// 開き直したときは、もう追加したかどうか分からない。③で待ちながら、まだなら追加できるようにしておく。
+// 開き直したときは、もう追加したかどうか分からない。③を押せるようにしたまま、まだなら追加できるようにしておく。
 const resumedShortcutStepText =
   "まだ追加していなければ、ショートカットAppで追加してください。キーを聞かれたら貼り付けます。";
 // 同じ名前のショートカットがあると、iOSは置き換えるか追加するかを聞く。追加すると、古いキーのものと2つ並ぶ。
@@ -267,9 +267,105 @@ const ShortcutStep = ({
   );
 };
 
+const shareCheckBoxClass =
+  "rounded-[16px] border border-brand-orange-soft bg-brand-orange-soft/25 px-4 py-3.5";
+
+/**
+ * 押したあとに出すもの。「届きませんでした」とは言わない。キーが入っていない・使えないときもrequestは届いていて、
+ * 遅れて届けば完了に変わる。見つからないときと、選んでも変わらないときの直し方を1つにまとめて出す。
+ */
+const ShareCheckFeedback = ({
+  onRestart,
+  setup,
+}: {
+  onRestart: () => void;
+  setup: ShortcutSetupState;
+}) => {
+  if (setup.shareCheck === "checking") {
+    return (
+      <div className={cn(shareCheckBoxClass, "flex items-center gap-3.5")} role="status">
+        <span
+          aria-hidden="true"
+          className="size-2.5 shrink-0 animate-pulse rounded-full bg-brand-orange motion-reduce:animate-none"
+        />
+        <p className="font-bold text-brand-walnut text-sm">確かめています</p>
+      </div>
+    );
+  }
+
+  if (setup.shareCheck === "unconfirmed") {
+    return (
+      <div className={cn(shareCheckBoxClass, "grid gap-2")} role="status">
+        <h4 className="font-bold text-brand-walnut text-sm">まだ確かめられていません</h4>
+        <p className="text-brand-walnut text-sm leading-6">
+          共有メニューに「Recipe
+          Stock」がなければ、いちばん下までスクロールしてください。それでもなければ、②でショートカットを追加してください。
+        </p>
+        <p className="text-brand-walnut text-sm leading-6">
+          「Recipe Stock」を選んでも変わらないときは、ショートカットAppで「Recipe
+          Stock」を削除してから、キーのコピーからやり直してください。
+        </p>
+        <Button className="mt-1 justify-self-start" variant="secondary" onClick={onRestart}>
+          最初からやり直す
+        </Button>
+      </div>
+    );
+  }
+
+  if (setup.shareCheck === "failed") {
+    return (
+      <p className="text-brand-danger text-sm" role="alert">
+        共有メニューを開けませんでした。
+      </p>
+    );
+  }
+
+  return null;
+};
+
+/**
+ * ③は、この画面をRecipe Stockへ共有して、その場で確かめる。②を開くか続きのキーがあるまでは押せない。
+ * それまでに確かめても、ショートカットがないか、前のキーのままなので意味がない。押す前に共有メニューと接続の確認を図で見せておく。
+ */
+const ShareStep = ({ onRestart, setup }: { onRestart: () => void; setup: ShortcutSetupState }) => {
+  const canOpen =
+    setup.isWaitingForShare && setup.shareCheck !== "sharing" && setup.shareCheck !== "checking";
+
+  return (
+    <SetupStep
+      isLast
+      number={3}
+      status={setup.isWaitingForShare ? "active" : "todo"}
+      title="試しに共有する"
+    >
+      <p className={guideTextClass}>
+        共有メニューが開いたら、いちばん下の「Recipe Stock」を選びます。
+      </p>
+      <ShareSheetIllustration />
+      <p className={guideTextClass}>
+        初回だけ、接続してよいか聞かれます。
+        <strong className="font-bold text-brand-walnut">「常に許可」</strong>
+        を選んでください。
+      </p>
+      <ConnectionPermissionIllustration host={window.location.host} />
+      {/* 押すとすること（共有メニューを開く）を書く。「共有する」だと、人に送るものと読める。 */}
+      <Button
+        className={primaryActionClass}
+        disabled={!canOpen}
+        variant={setup.isWaitingForShare ? "default" : "secondary"}
+        onClick={setup.openShareSheet}
+      >
+        <Export data-icon="inline-start" weight="bold" />
+        共有メニューを開く
+      </Button>
+      <ShareCheckFeedback setup={setup} onRestart={onRestart} />
+    </SetupStep>
+  );
+};
+
 /**
  * 連携の設定を、アプリの外で起きることまで含めて順に見せる。ショートカットAppで追加したあと、
- * ここへ戻らずにSafariやInstagramへ行く人がいるので、③の中身は②を押す前から見せておく。
+ * ここへ戻らずにほかのアプリから共有する人もいるので、③の共有メニューと接続の確認は②を押す前から見せておく。
  * 何を出すかは、始まり方で決まった値（表1）と手順の段階（表2）だけから決める（docs/shortcut/ios-share.md）。
  */
 export const ShortcutSetup = ({
@@ -333,44 +429,7 @@ export const ShortcutSetup = ({
             mayHaveShortcut={mayHaveShortcut}
             setup={setup}
           />
-          <SetupStep
-            isLast
-            number={3}
-            status={setup.isWaitingForShare ? "active" : "todo"}
-            title="試しに共有する"
-          >
-            {setup.isWaitingForShare ? (
-              <div
-                className="flex items-center gap-3.5 rounded-[16px] border border-brand-orange-soft bg-brand-orange-soft/25 px-4 py-3.5"
-                role="status"
-              >
-                <span
-                  aria-hidden="true"
-                  className="size-2.5 shrink-0 animate-pulse rounded-full bg-brand-orange motion-reduce:animate-none"
-                />
-                <div className="min-w-0">
-                  <p className="font-bold text-brand-walnut text-sm">共有を待っています</p>
-                  <p className="text-brand-muted text-xs leading-5">
-                    届くと、ここが「連携できました」に変わります。
-                  </p>
-                </div>
-              </div>
-            ) : null}
-            <p className={guideTextClass}>
-              SafariでレシピのページやInstagramの投稿を開いて、共有 → いちばん下の「Recipe
-              Stock」を選びます。
-            </p>
-            <ShareSheetIllustration />
-            <p className={guideTextClass}>
-              初回だけ、接続してよいか聞かれます。
-              <strong className="font-bold text-brand-walnut">「常に許可」</strong>
-              を選んでください。
-            </p>
-            <ConnectionPermissionIllustration host={window.location.host} />
-            <p className="text-brand-muted text-xs leading-5">
-              InstagramやYouTubeでは、アプリの共有画面で「その他」を押すと、このメニューが開きます。
-            </p>
-          </SetupStep>
+          <ShareStep setup={setup} onRestart={onRestart} />
         </ol>
       </section>
 
