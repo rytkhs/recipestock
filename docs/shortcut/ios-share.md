@@ -116,19 +116,20 @@ AI月次上限はプランでreasonを分ける。保存上限がfreeの投稿�
 
 routeの順:
 
-1. client IP単位の上限 → `rate_limit_exceeded`
-2. 本文を読む（ここでは返さない）
-3. 本文が契約に合い、最初のURLが確認用のURLか → 確認かどうか
-4. Bearerがない → `missing_credential`
-5. 認証（ここで`first_used_at`と`last_used_at`を書く） → `unusable_credential` / `missing_credential`
-6. 確認なら → `setup_verified`
-7. `credentialId`単位の上限 → `rate_limit_exceeded`
-8. 本文が契約に合わない → `malformed_request`
-9. `no_url_in_input`、取り込みの作成
+1. 本文が64KBを超える → `malformed_request`（超えた分は読まない）
+2. client IP単位の上限 → `rate_limit_exceeded`
+3. 本文を読む（ここでは返さない）
+4. 本文が契約に合い、最初のURLが確認用のURLか → 確認かどうか
+5. Bearerがない → `missing_credential`
+6. 認証（ここで`first_used_at`と`last_used_at`を書く） → `unusable_credential` / `missing_credential`
+7. 確認なら → `setup_verified`
+8. `credentialId`単位の上限 → `rate_limit_exceeded`
+9. 本文が契約に合わない → `malformed_request`
+10. `no_url_in_input`、取り込みの作成
 
 `setup_verified`は、認証の直後、`credentialId`単位の上限より前に返す。上限のあとに置くと、上限に当たった確認では、通知は「少し時間をおいてください」なのに、認証で記録した時刻を見た画面は「連携できました」になる。`credentialId`単位の上限が抑えているのは取り込みの作成だけで、確認は取り込みを作らない。DBへの書き込みは、認証の前のclient IP単位の上限で抑える。
 
-確認への応答は、どの`reason`でも`openUrl`を返さない。確認は設定画面の上で起きるので戻る先にはもういて、Safariで開くと、ホーム画面アプリで設定している人がログインもlocalStorageも別の入れ物へ移される（#152）。そのために、認証の失敗を返す前に本文を読む。認証できないrequestの本文も読むことになるが、その前にclient IP単位の上限がかかる。
+確認への応答は、どの`reason`でも`openUrl`を返さない。確認は設定画面の上で起きるので戻る先にはもういて、Safariで開くと、ホーム画面アプリで設定している人がログインもlocalStorageも別の入れ物へ移される（#152）。そのために、認証の失敗を返す前に本文を読む。認証できないrequestの本文も読むことになるが、回数はclient IP単位の上限で、1回の大きさは読む前の64KBの上限で抑える。64KBは、上限文字数の入力がJSONのエスケープで膨らんでも収まる大きさである。
 
 確認からの認証の失敗は、`reason`も文言も変えず、`openUrl`だけを返さない。`reason`は起きたこと（キーが入っていない、使えない）を表し、確認かどうかは別の軸である。確認と分かった応答のログには`setupCheck: true`を足す。
 

@@ -6,10 +6,17 @@ import {
 } from "@recipestock/schemas";
 import { extractFirstUrl, IOS_SHARE_SETUP_CHECK_PATH } from "@recipestock/shared";
 import { type Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { type ApiEnv } from "../context";
 import { buildIosShareShortcutImportResult } from "../ios-share-notices";
 import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
 import { type ShortcutCredentials } from "../shortcut-credentials";
+
+/**
+ * 確認かどうかを知るため、認証より前に本文を読む。キーのないrequestにも大きな本文を読ませないよう、読む前に大きさで止める。
+ * 上限文字数の入力がJSONのエスケープで膨らんでも収まる大きさにしている。
+ */
+const IOS_SHARE_REQUEST_MAX_BYTES = 64 * 1024;
 
 type IosShareRouteDependencies = {
   shortcutCredentialsFor: (env: ApiEnv["Bindings"]) => Pick<ShortcutCredentials, "authenticate">;
@@ -126,6 +133,13 @@ export const createIosShareRoutes = ({
   shortcutRateLimiterFor,
 }: IosShareRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
+  routes.use(
+    "*",
+    bodyLimit({
+      maxSize: IOS_SHARE_REQUEST_MAX_BYTES,
+      onError: (c) => respondWithNotice(c, "malformed_request"),
+    }),
+  );
 
   return routes.post("/import-jobs", async (c) => {
     /**
@@ -140,13 +154,13 @@ export const createIosShareRoutes = ({
 
     /**
      * 認証の失敗を返す前に、設定の確認かどうかを知る必要がある。確認への応答には遷移先を返さないため。
-     * 認証できないrequestの本文も読むことになるが、ここまでにclient単位の上限がかかっている。
+     * 認証できないrequestの本文も読むことになるが、回数はclient単位の上限で、大きさは`bodyLimit`で抑えている。
      */
     const request = iosShareShortcutImportRequestSchema.safeParse(
       await c.req.json().catch(() => null),
     );
     const url = request.success ? extractFirstUrl(request.data.input) : "";
-    const isSetupCheck = url !== "" && isSetupCheckUrl(url, c.env.APP_ORIGIN);
+    const isSetupCheck = isSetupCheckUrl(url, c.env.APP_ORIGIN);
 
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {

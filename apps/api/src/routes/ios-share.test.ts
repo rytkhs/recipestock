@@ -1,4 +1,7 @@
-import { type IosShareShortcutImportResponse } from "@recipestock/schemas";
+import {
+  IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH,
+  type IosShareShortcutImportResponse,
+} from "@recipestock/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { type ImportJobRecord, type ImportJobRepository } from "../import-jobs";
 import { type AppDependencies } from "../index";
@@ -232,6 +235,48 @@ describe("iOS Share routes", () => {
       });
     }
     expect(createUrlJob).not.toHaveBeenCalled();
+  });
+
+  it("本文が大きすぎるrequestは、キーを見る前にmalformed_requestを返す", async () => {
+    const app = createShortcutTestApp({ auth });
+
+    const response = await app.request(
+      "/api/shortcut/import-jobs",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: "a".repeat(70_000) }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      outcome: "rejected",
+      reason: "malformed_request",
+    });
+  });
+
+  it("上限文字数の入力は、JSONのエスケープで膨らんでも本文の大きさで断らない", async () => {
+    const createUrlJob = vi.fn(async () => ({
+      status: "created" as const,
+      job: createJob(),
+    }));
+    const app = createShortcutTestApp({
+      auth,
+      shortcutCredentials: createShortcutCredentialsFake(),
+      importJobRepository: createImportJobRepository({ createUrlJob }),
+      importQueue: { send: async () => undefined } as unknown as Queue<{ jobId: string }>,
+      shortcutRateLimiter: createRateLimiter() as unknown as RateLimit,
+    });
+    const url = "https://example.com/recipe";
+    // 制御文字はJSONで`\u0001`の6バイトになり、1文字あたりでいちばん膨らむ。
+    const input = `${url} ${"\u0001".repeat(IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH - url.length - 1)}`;
+
+    const response = await app.request("/api/shortcut/import-jobs", shareRequest(input), env);
+
+    await expect(response.json()).resolves.toMatchObject({ reason: "created" });
+    expect(createUrlJob).toHaveBeenCalledWith(expect.objectContaining({ url }));
   });
 
   it("4xx相当だった結果をwarnで記録し、通常のユーザーエラーと分ける", async () => {
