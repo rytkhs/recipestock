@@ -255,10 +255,7 @@ export const createRecipeRepository = (
   planSyncOptions: AppUserPlanSyncOptions = {},
 ): RecipeRepository => ({
   async createRecipeEnforcingPlanLimit(recipe) {
-    await syncAppUserPlanForDb(db, recipe.userId, {
-      ...planSyncOptions,
-      now: planSyncOptions.now ?? recipe.createdAt,
-    });
+    await syncAppUserPlanForDb(db, recipe.userId, planSyncOptions, recipe.createdAt);
 
     const result = await db.execute<RecipeSqlRow>(sql`
       with reserved_user as (

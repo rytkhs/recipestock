@@ -107,7 +107,6 @@ export const createRecipeRoutes = ({
                 recipeRepository ??
                 createRecipeRepository(createDb(c.env.DATABASE_URL), {
                   proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-                  now,
                 });
 
               return repository.createRecipeEnforcingPlanLimit({
@@ -160,7 +159,6 @@ export const createRecipeRoutes = ({
           recipeRepository ??
           createRecipeRepository(createDb(c.env.DATABASE_URL), {
             proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-            now: new Date(),
           });
         let result: ListRecipesResult;
 
@@ -207,7 +205,6 @@ export const createRecipeRoutes = ({
           recipeRepository ??
           createRecipeRepository(createDb(c.env.DATABASE_URL), {
             proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-            now: new Date(),
           });
         const recipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
@@ -243,7 +240,6 @@ export const createRecipeRoutes = ({
           recipeRepository ??
           createRecipeRepository(createDb(c.env.DATABASE_URL), {
             proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-            now: new Date(),
           });
         const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
@@ -316,7 +312,6 @@ export const createRecipeRoutes = ({
           recipeRepository ??
           createRecipeRepository(createDb(c.env.DATABASE_URL), {
             proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-            now: new Date(),
           });
         const existingRecipe = await repository.getRecipe(userId, c.req.param("recipeId"));
 
@@ -349,7 +344,6 @@ export const createRecipeRoutes = ({
           recipeRepository ??
           createRecipeRepository(createDb(c.env.DATABASE_URL), {
             proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-            now: new Date(),
           });
         const deleted = await repository.deleteRecipe(userId, c.req.param("recipeId"));
 

@@ -241,18 +241,15 @@ describe("deriveAppUserPlanForDb", () => {
       subscription({ status: "past_due", currentPeriodEnd: new Date("2026-06-03T00:00:00.000Z") }),
     ]);
     await expect(
-      deriveAppUserPlanForDb(db, "user_123", {
-        proPriceId,
-        now: new Date("2026-06-02T23:59:59.999Z"),
-      }),
+      deriveAppUserPlanForDb(db, "user_123", { proPriceId }, new Date("2026-06-02T23:59:59.999Z")),
     ).resolves.toBe("pro");
-    await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId, now })).resolves.toBe("free");
+    await expect(deriveAppUserPlanForDb(db, "user_123", { proPriceId }, now)).resolves.toBe("free");
   });
 
   it("Pro price IDが無い設定では実行前に落とす", async () => {
     const { db } = createDbStub([]);
 
-    await expect(deriveAppUserPlanForDb(db, "user_123", { now })).rejects.toThrow(
+    await expect(deriveAppUserPlanForDb(db, "user_123", {}, now)).rejects.toThrow(
       "Plan read requires a Stripe Pro price ID.",
     );
   });

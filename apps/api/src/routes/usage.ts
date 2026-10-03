@@ -33,7 +33,6 @@ export const createUsageRoutes = ({
       usageRepository ??
       createUsageRepository(createDb(c.env.DATABASE_URL), {
         proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-        now: currentDate,
       });
     const month = getCurrentJstMonth(currentDate);
     const [plan, storedUsage] = await Promise.all([

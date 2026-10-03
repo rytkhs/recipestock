@@ -29,7 +29,6 @@ export const createMeRoutes = ({
       meRepository ??
       createMeRepository(createDb(c.env.DATABASE_URL), {
         proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-        now,
       });
     const month = getCurrentMonth?.() ?? getCurrentJstMonth(now);
     // planはcountともusageとも独立なので、同じ波で引く。

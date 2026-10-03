@@ -55,7 +55,6 @@ export const submitImportJob = async (
     importJobRepository ??
     createImportJobRepository(createDb(env.DATABASE_URL), {
       proPriceId: env.STRIPE_PRO_PRICE_ID,
-      now,
     });
 
   await repository.expireActiveJobsForUser({
