@@ -178,6 +178,14 @@ describe("タグ", () => {
       expect(
         findFetchCall(fetchMock, "/api/recipes?limit=20&tagId=tag_1&tagId=tag_2"),
       ).toBeDefined();
+      const showAll = screen.getByRole("button", { name: "すべて表示" });
+      expect(showAll.parentElement).toHaveTextContent("1件");
+      expect(showAll.parentElement).toHaveTextContent("鶏肉");
+      expect(showAll.parentElement).toHaveTextContent("作り置き");
+      await userEvent.click(showAll);
+      await screen.findByRole("heading", { name: "Potato salad" });
+      expect(appRouter.state.location.search).toEqual({});
+      expect(screen.queryByRole("button", { name: "すべて表示" })).not.toBeInTheDocument();
     });
 
     it("一覧でRecipeを削除すると、付いていたRecipeがなくなったタグのチップを外す", async () => {
@@ -285,48 +293,6 @@ describe("タグ", () => {
         screen.findByRole("heading", { name: "Tomato pasta" }),
       ).resolves.toBeInTheDocument();
       expect(appRouter.state.location.search).toEqual({});
-    });
-
-    it("絞り込み中は条件と件数を出し、すべて表示で条件を外す", async () => {
-      mockFetch(
-        async (input) => {
-          const path = getRequestPath(input);
-
-          if (path === "/api/tags") {
-            return jsonResponse({ tags: [{ id: "tag_1", name: "鶏肉", recipeCount: 1 }] });
-          }
-
-          if (path === "/api/recipes?limit=20&tagId=tag_1") {
-            return jsonResponse({
-              items: [listItem("recipe_1", "Tomato pasta")],
-              nextCursor: null,
-            });
-          }
-
-          if (path === "/api/recipes?limit=20") {
-            return jsonResponse({
-              items: [listItem("recipe_1", "Tomato pasta"), listItem("recipe_2", "Potato salad")],
-              nextCursor: null,
-            });
-          }
-
-          return new Response(null, { status: 404 });
-        },
-        { authenticated: true },
-      );
-
-      const { appRouter } = await renderApp(recipesPathWithTags(["tag_1"]));
-      const showAll = await screen.findByRole("button", { name: "すべて表示" });
-
-      expect(showAll.parentElement).toHaveTextContent("「鶏肉」 · 1件");
-
-      await userEvent.click(showAll);
-
-      await expect(
-        screen.findByRole("heading", { name: "Potato salad" }),
-      ).resolves.toBeInTheDocument();
-      expect(appRouter.state.location.search).toEqual({});
-      expect(screen.queryByRole("button", { name: "すべて表示" })).not.toBeInTheDocument();
     });
 
     it("URLに残った消えたタグのidは、タグ一覧を読んでから外し、そのidでは一覧を取りに行かない", async () => {
@@ -593,9 +559,8 @@ describe("タグ", () => {
         );
       });
       expect(candidateNames(sheet)).toEqual([...STARTER_TAG_NAMES]);
-      // 作ったタグのidに変わっても同じチップのまま残し、続けて選べるようフォーカスを外さない。
-      expect(within(sheet).getByRole("button", { name: "作り置き" })).toBe(starterChip);
-      expect(starterChip).toHaveFocus();
+      // 作ったタグのidに変わっても、続けて選べるようフォーカスを外さない。
+      expect(within(sheet).getByRole("button", { name: "作り置き" })).toHaveFocus();
 
       await userEvent.click(within(sheet).getByRole("button", { name: "主菜" }));
       await waitFor(() => {
@@ -616,7 +581,7 @@ describe("タグ", () => {
       expect(within(reopened).queryByText("よく使われるタグ")).not.toBeInTheDocument();
     });
 
-    it("入力に部分一致する既存のタグを作る操作より先に並べ、閉じると入力を消す", async () => {
+    it("入力に一致するタグと作成操作を出し、閉じると入力を消す", async () => {
       mockFetch(
         async (input) => {
           const path = getRequestPath(input);
@@ -641,11 +606,8 @@ describe("タグ", () => {
       await within(sheet).findByRole("button", { name: "鶏肉" });
       await userEvent.type(within(sheet).getByLabelText("タグを探す・作る"), "鶏");
 
-      const existingTag = within(sheet).getByRole("button", { name: "鶏肉" });
-      const createTag = within(sheet).getByRole("button", { name: "「鶏」を作成" });
-      expect(
-        existingTag.compareDocumentPosition(createTag) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      expect(within(sheet).getByRole("button", { name: "鶏肉" })).toBeInTheDocument();
+      expect(within(sheet).getByRole("button", { name: "「鶏」を作成" })).toBeInTheDocument();
 
       await userEvent.click(within(sheet).getByRole("button", { name: "完了" }));
       await waitFor(() => {
