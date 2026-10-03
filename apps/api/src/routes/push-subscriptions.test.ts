@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type PushSubscriptionRepository } from "../push-subscriptions";
 import { createSilentTestApp, createTestAuth, sameOriginHeaders } from "../test-helpers";
 
@@ -35,42 +35,6 @@ const createRepository = (
   ...overrides,
 });
 
-const createStatefulRepository = (): PushSubscriptionRepository => {
-  const subscriptions = new Map<
-    string,
-    { userId: string; endpoint: string; expirationTime: string | null }
-  >();
-
-  return {
-    async listByUser(userId) {
-      return [...subscriptions.values()]
-        .filter((item) => item.userId === userId)
-        .map(({ endpoint, expirationTime }) => ({ endpoint, expirationTime }));
-    },
-    async listDeliveryTargets() {
-      return [];
-    },
-    async register(input) {
-      const existing = subscriptions.get(input.endpoint);
-      if (existing && existing.userId !== input.userId) return null;
-
-      const saved = {
-        userId: input.userId,
-        endpoint: input.endpoint,
-        expirationTime:
-          input.expirationTime === null ? null : new Date(input.expirationTime).toISOString(),
-      };
-      subscriptions.set(input.endpoint, saved);
-      return { endpoint: saved.endpoint, expirationTime: saved.expirationTime };
-    },
-    async revoke({ userId, endpoint }) {
-      const existing = subscriptions.get(endpoint);
-      if (!existing || existing.userId !== userId) return false;
-      return subscriptions.delete(endpoint);
-    },
-  };
-};
-
 describe("Push subscription routes", () => {
   it("認証ユーザーがVAPID公開鍵と自分のsubscriptionを参照できる", async () => {
     const app = createSilentTestApp({
@@ -99,76 +63,60 @@ describe("Push subscription routes", () => {
     });
   });
 
-  it("同じendpointの再登録をユーザー所有のsubscriptionとして更新する", async () => {
-    const repository = createStatefulRepository();
+  it("登録内容を認証ユーザーと現在時刻に結び付けて保存する", async () => {
+    const register = vi.fn<PushSubscriptionRepository["register"]>(async () => ({
+      endpoint: subscription.endpoint,
+      expirationTime: null,
+    }));
+    const now = new Date("2026-07-13T00:00:00.000Z");
     const app = createSilentTestApp({
       auth,
-      pushSubscriptionRepository: repository,
+      pushSubscriptionRepository: createRepository({ register }),
       createPushSubscriptionId: () => "push_1",
-      getCurrentDate: () => new Date("2026-07-13T00:00:00.000Z"),
+      getCurrentDate: () => now,
     });
-
-    const request = () =>
-      app.request(
-        "/api/push-subscriptions",
-        {
-          method: "POST",
-          headers: jsonHeaders,
-          body: JSON.stringify(subscription),
-        },
-        env,
-      );
-
-    expect((await request()).status).toBe(200);
-    expect((await request()).status).toBe(200);
-
-    const listed = await app.request("/api/push-subscriptions", {}, env);
-    await expect(listed.json()).resolves.toMatchObject({
-      subscriptions: [{ endpoint: subscription.endpoint }],
+    const response = await app.request(
+      "/api/push-subscriptions",
+      {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({ ...subscription, userId: "attacker" }),
+      },
+      env,
+    );
+    expect(response.status).toBe(200);
+    expect(register).toHaveBeenCalledWith({
+      id: "push_1",
+      userId: "user_1",
+      endpoint: subscription.endpoint,
+      expirationTime: null,
+      p256dh: "p256dh-key",
+      auth: "auth-key",
+      now,
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      subscription: { endpoint: subscription.endpoint, expirationTime: null },
     });
   });
 
-  it("別端末のsubscriptionを残したまま指定endpointだけを解除する", async () => {
-    const repository = createStatefulRepository();
+  it("指定endpointの解除を認証ユーザーの範囲で実行する", async () => {
+    const revoke = vi.fn<PushSubscriptionRepository["revoke"]>(async () => true);
     const app = createSilentTestApp({
       auth,
-      pushSubscriptionRepository: repository,
+      pushSubscriptionRepository: createRepository({ revoke }),
     });
-    const secondSubscription = {
-      ...subscription,
-      endpoint: "https://push.example.com/subscription/device-2",
-    };
-
-    for (const requestBody of [subscription, secondSubscription]) {
-      const registered = await app.request(
-        "/api/push-subscriptions",
-        {
-          method: "POST",
-          headers: jsonHeaders,
-          body: JSON.stringify(requestBody),
-        },
-        env,
-      );
-      expect(registered.status).toBe(200);
-    }
-
     const response = await app.request(
       "/api/push-subscriptions",
       {
         method: "DELETE",
         headers: jsonHeaders,
-        body: JSON.stringify({ endpoint: subscription.endpoint }),
+        body: JSON.stringify({ endpoint: subscription.endpoint, userId: "attacker" }),
       },
       env,
     );
-
     expect(response.status).toBe(200);
+    expect(revoke).toHaveBeenCalledWith({ userId: "user_1", endpoint: subscription.endpoint });
     await expect(response.json()).resolves.toEqual({ revoked: true });
-
-    const listed = await app.request("/api/push-subscriptions", {}, env);
-    await expect(listed.json()).resolves.toMatchObject({
-      subscriptions: [{ endpoint: secondSubscription.endpoint }],
-    });
   });
 
   it("Shortcut Bearer tokenではsubscriptionを登録、参照、解除できない", async () => {
