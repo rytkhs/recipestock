@@ -17,7 +17,7 @@ export type MeRepository = {
 
 export const createMeRepository = (
   db: DbClient,
-  planReadOptions: AppUserPlanReadOptions = {},
+  planReadOptions: AppUserPlanReadOptions,
 ): MeRepository => ({
   async getAppUserPlan(userId) {
     return deriveAppUserPlanForDb(db, userId, planReadOptions);

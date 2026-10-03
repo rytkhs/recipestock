@@ -263,7 +263,7 @@ type NewImportJobInput =
  */
 const createImportJobWithSubmissionLimits = async (
   db: DbClient,
-  planSyncOptions: AppUserPlanSyncOptions | undefined,
+  planSyncOptions: AppUserPlanSyncOptions,
   {
     id,
     userId,
@@ -282,9 +282,7 @@ const createImportJobWithSubmissionLimits = async (
     now: Date;
   },
 ): Promise<CreateImportJobResult> => {
-  if (planSyncOptions) {
-    await syncAppUserPlanForDb(db, userId, planSyncOptions, now);
-  }
+  await syncAppUserPlanForDb(db, userId, planSyncOptions, now);
 
   const nowIso = now.toISOString();
   const url = input.kind === "url" ? input.url : input.sourceUrl;
@@ -586,7 +584,7 @@ const getUserImportJob = async (db: DbClient, userId: string, jobId: string) => 
 
 export const createImportJobRepository = (
   db: DbClient,
-  planSyncOptions?: AppUserPlanSyncOptions,
+  planSyncOptions: AppUserPlanSyncOptions,
 ): ImportJobRepository => ({
   async createUrlJob({
     id,
@@ -737,7 +735,7 @@ export const createImportJobRepository = (
     return row ? mapImportJobRow(row) : null;
   },
   async completeJobWithRecipe({ jobId, recipe, expiresBefore, now }) {
-    await syncAppUserPlanForDb(db, recipe.userId, planSyncOptions ?? {}, now);
+    await syncAppUserPlanForDb(db, recipe.userId, planSyncOptions, now);
 
     const result = await db.execute<{ resultStatus: string }>(sql`
       with locked_job as materialized (

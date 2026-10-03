@@ -252,7 +252,7 @@ const likePattern = (term: string) => `%${term.replace(/[\\%_]/g, "\\$&")}%`;
 
 export const createRecipeRepository = (
   db: DbClient,
-  planSyncOptions: AppUserPlanSyncOptions = {},
+  planSyncOptions: AppUserPlanSyncOptions,
 ): RecipeRepository => ({
   async createRecipeEnforcingPlanLimit(recipe) {
     await syncAppUserPlanForDb(db, recipe.userId, planSyncOptions, recipe.createdAt);
