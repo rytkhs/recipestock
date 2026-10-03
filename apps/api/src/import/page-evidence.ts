@@ -1,4 +1,4 @@
-/// <reference path="../html2md4llm.d.ts" />
+/// <reference path="./html2md4llm.d.ts" />
 
 import html2md4llm from "html2md4llm";
 import { normalizeMultilineText } from "./text";
