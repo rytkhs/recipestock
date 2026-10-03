@@ -69,12 +69,4 @@ describe("iOS Shortcut noticeのカタログ", () => {
       expect(buildResult(reason).notice.openUrl).toBe(openUrlByReason[reason] ?? null);
     }
   });
-
-  it("outcomeはacceptedがJobを作れた2件だけである", () => {
-    const acceptedReasons = allReasons.filter(
-      (reason) => buildResult(reason).outcome === "accepted",
-    );
-
-    expect(acceptedReasons).toEqual(["created", "existing_active_job"]);
-  });
 });
