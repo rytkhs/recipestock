@@ -622,7 +622,7 @@ describe("Settings routes", () => {
       if (path.endsWith("/get-session")) {
         return createSessionResponse(authenticated);
       }
-      if (path === "/api/me") {
+      if (path === "/api/me" && authenticated) {
         return jsonResponse(viewerResponse);
       }
       if (path === "/api/push-subscriptions" && init?.method === "GET") {
@@ -642,10 +642,48 @@ describe("Settings routes", () => {
       return new Response(null, { status: 404 });
     });
 
-    await renderApp("/settings");
+    const { queryClient } = await renderApp("/settings");
+    queryClient.setQueryData(["recipes", { query: "" }], {
+      pages: [{ items: [], nextCursor: null }],
+      pageParams: [null],
+    });
+    queryClient.setQueryData(["recipe", "recipe_123"], { id: "recipe_123" });
+    queryClient.setQueryData(["viewer"], viewerResponse);
+    queryClient.setQueryData(["billing-status"], {
+      plan: "pro",
+      subscription: {
+        status: "active",
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: "2026-07-04T00:00:00.000Z",
+        cancelAt: null,
+      },
+    });
+    queryClient.setQueryData(["push-subscriptions"], {
+      applicationServerKey: "AQID",
+      subscriptions: [
+        {
+          endpoint: "https://push.example.com/subscription/device-1",
+          expirationTime: null,
+        },
+      ],
+    });
+
+    queryClient.setQueryData(["shortcut-credentials"], { credentials: [] });
+
     await confirmSignOut();
 
     await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
+    expect(findFetchCall(fetchMock, "/api/auth/sign-out")).toEqual([
+      "/api/auth/sign-out",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    ]);
+    expect(queryClient.getQueryData(["recipes", { query: "" }])).toBeUndefined();
+    expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
+    expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
+    expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();
+    expect(queryClient.getQueryData(["push-subscriptions"])).toBeUndefined();
+    expect(queryClient.getQueryData(["shortcut-credentials"])).toBeUndefined();
+
     expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
     const deleteIndex = fetchMock.mock.calls.findIndex(
       ([input, init]) =>

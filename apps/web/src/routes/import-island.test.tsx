@@ -401,6 +401,10 @@ describe("取り込みのアイランド", () => {
       "/api/import/jobs/job_failed/dismiss",
       expect.objectContaining({ method: "PATCH" }),
     ]);
+    const paths = fetchMock.mock.calls.map(([input]) => getRequestPath(input));
+    expect(paths.indexOf("/api/import/jobs/job_failed/dismiss")).toBeGreaterThan(
+      paths.indexOf("/api/import/url/jobs"),
+    );
   });
 
   it("中身を読めなかったURLは、本文を貼って取り込む画面へ案内する", async () => {

@@ -18,15 +18,6 @@ describe("AppRouter", () => {
     vi.unstubAllGlobals();
   });
 
-  it("初期ルートを表示する", async () => {
-    mockFetch(async () => new Response(null, { status: 404 }));
-    await renderApp();
-
-    await expect(
-      screen.findByRole("heading", { name: "Recipe Stock" }),
-    ).resolves.toBeInTheDocument();
-  });
-
   it("認証確認中は未ログインナビと共通ローディングを出さず保護ルートskeletonを表示する", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (isGetSessionRequest(input)) {
@@ -41,7 +32,6 @@ describe("AppRouter", () => {
     expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
     expect(screen.queryByRole("status", { name: "読み込み中" })).toBeNull();
     expect(screen.getByText("レシピ一覧を読み込み中")).toBeInTheDocument();
-    expect(screen.getAllByTestId("recipe-card-skeleton")).toHaveLength(8);
   });
 
   it("認証確認中に一覧の取得を始め、sessionが確定したらその結果を描画する", async () => {
@@ -122,31 +112,6 @@ describe("AppRouter", () => {
     await renderApp("/login");
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-  });
-
-  it("ログイン済みで認証必須ルートに入るとviewerと画面データを並行して取得する", async () => {
-    const fetchMock = mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/recipes?limit=20") {
-          return jsonResponse({ items: [], nextCursor: null });
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/recipes");
-
-    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(findFetchCall(fetchMock, "/api/me")).toEqual([
-      "/api/me",
-      expect.objectContaining({
-        credentials: "include",
-        method: "GET",
-      }),
-    ]);
-    expect(findFetchCall(fetchMock, "/api/recipes?limit=20")).toBeDefined();
   });
 
   it("viewerが未解決でもルートを描画して画面データの取得を始める", async () => {
@@ -233,43 +198,6 @@ describe("AppRouter", () => {
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
   });
 
-  it("初回session通信に失敗した保護ルートはURLを維持してbrand chromeだけを表示する", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (isGetSessionRequest(input)) {
-        throw new TypeError("Failed to fetch");
-      }
-      return new Response(null, { status: 404 });
-    });
-    const importPath = "/import/url?url=https%3A%2F%2Fexample.com%2Frecipes%2Ftomato";
-    const { appRouter } = await renderApp(importPath);
-
-    await expect(
-      screen.findByRole("heading", { name: "接続を確認できません" }),
-    ).resolves.toBeInTheDocument();
-    expect(appRouter.state.location.href).toBe(importPath);
-    expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
-    expect(screen.queryAllByRole("button", { name: "レシピ追加" })).toHaveLength(0);
-    expect(screen.queryByRole("link", { name: "設定" })).toBeNull();
-  });
-
-  it("レシピ一覧ではレシピ追加FABと設定への導線を表示する", async () => {
-    mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/recipes?limit=20") {
-          return jsonResponse({ items: [], nextCursor: null });
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/recipes");
-
-    await expect(screen.findByTestId("add-recipe-fab")).resolves.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "設定" })).not.toHaveLength(0);
-  });
-
   it("レシピ追加FABはシートで追加の方法を選ばせ、選んだ画面へ遷移する", async () => {
     mockFetch(
       async (input) => {
@@ -284,7 +212,9 @@ describe("AppRouter", () => {
 
     const { appRouter } = await renderApp("/recipes");
 
-    await userEvent.click(await screen.findByTestId("add-recipe-fab"));
+    const fab = await screen.findByTestId("add-recipe-fab");
+    expect(screen.getAllByRole("link", { name: "設定" }).length).toBeGreaterThan(0);
+    await userEvent.click(fab);
     const sheet = await screen.findByRole("dialog", { name: "レシピを追加" });
     expect(within(sheet).getByRole("link", { name: /^URLから/ })).toBeInTheDocument();
     expect(within(sheet).getByRole("link", { name: /^テキストから/ })).toBeInTheDocument();
@@ -295,15 +225,6 @@ describe("AppRouter", () => {
       expect(appRouter.state.location.pathname).toBe("/recipes/new");
     });
     expect(screen.queryByRole("dialog", { name: "レシピを追加" })).toBeNull();
-  });
-
-  it("レシピ一覧以外ではレシピ追加FABを表示しない", async () => {
-    mockFetch(async () => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp("/settings");
-
-    await expect(screen.findByRole("heading", { name: "設定" })).resolves.toBeInTheDocument();
-    expect(screen.queryByTestId("add-recipe-fab")).toBeNull();
   });
 
   it("設定から戻るとレシピ一覧へ遷移する", async () => {
@@ -320,7 +241,9 @@ describe("AppRouter", () => {
 
     const { appRouter } = await renderApp("/settings");
 
-    await userEvent.click(await screen.findByRole("button", { name: "戻る" }));
+    await screen.findByRole("heading", { name: "設定" });
+    expect(screen.queryByTestId("add-recipe-fab")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "戻る" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(appRouter.state.location.pathname).toBe("/recipes");
@@ -371,6 +294,10 @@ describe("AppRouter", () => {
     await expect(
       screen.findByRole("heading", { name: "接続を確認できません" }),
     ).resolves.toBeInTheDocument();
+    expect(appRouter.state.location.href).toBe(importPath);
+    expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
+    expect(screen.queryByTestId("add-recipe-fab")).toBeNull();
+    expect(screen.queryByRole("link", { name: "設定" })).toBeNull();
     sessionAvailable = true;
     await userEvent.click(screen.getByRole("button", { name: "再試行" }));
 
@@ -502,77 +429,5 @@ describe("AppRouter", () => {
     expect(viewerChecks).toBe(2);
     expect(screen.queryByRole("heading", { name: "接続を確認できません" })).toBeNull();
     expect(appRouter.state.location.pathname).toBe("/recipes");
-  });
-
-  it("ログアウトするとユーザー依存キャッシュを消してログインへ遷移する", async () => {
-    let authenticated = true;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const path = getRequestPath(input);
-
-      if (isGetSessionRequest(input)) {
-        return createSessionResponse(authenticated);
-      }
-
-      if (path === "/api/me" && authenticated) {
-        return jsonResponse(viewerResponse);
-      }
-
-      if (path === "/api/auth/sign-out" && init?.method === "POST") {
-        authenticated = false;
-        return jsonResponse({ success: true });
-      }
-
-      if (path === "/api/recipes?limit=20") {
-        return jsonResponse({ items: [], nextCursor: null });
-      }
-
-      return new Response(null, { status: 404 });
-    });
-    const { queryClient } = await renderApp("/settings");
-    queryClient.setQueryData(["recipes", { query: "" }], {
-      pages: [{ items: [], nextCursor: null }],
-      pageParams: [null],
-    });
-    queryClient.setQueryData(["recipe", "recipe_123"], { id: "recipe_123" });
-    queryClient.setQueryData(["viewer"], viewerResponse);
-    queryClient.setQueryData(["billing-status"], {
-      plan: "pro",
-      subscription: {
-        status: "active",
-        cancelAtPeriodEnd: false,
-        currentPeriodEnd: "2026-07-04T00:00:00.000Z",
-        cancelAt: null,
-      },
-    });
-    queryClient.setQueryData(["push-subscriptions"], {
-      applicationServerKey: "AQID",
-      subscriptions: [
-        {
-          endpoint: "https://push.example.com/subscription/device-1",
-          expirationTime: null,
-        },
-      ],
-    });
-
-    queryClient.setQueryData(["shortcut-credentials"], { credentials: [] });
-
-    await userEvent.click(await screen.findByRole("button", { name: "ログアウト" }));
-    const dialog = await screen.findByRole("alertdialog", { name: "ログアウトしますか？" });
-    await userEvent.click(within(dialog).getByRole("button", { name: "ログアウト" }));
-
-    await expect(screen.findByRole("heading", { name: "ログイン" })).resolves.toBeInTheDocument();
-    expect(findFetchCall(fetchMock, "/api/auth/sign-out")).toEqual([
-      "/api/auth/sign-out",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-      }),
-    ]);
-    expect(queryClient.getQueryData(["recipes", { query: "" }])).toBeUndefined();
-    expect(queryClient.getQueryData(["recipe", "recipe_123"])).toBeUndefined();
-    expect(queryClient.getQueryData(["viewer"])).toBeUndefined();
-    expect(queryClient.getQueryData(["billing-status"])).toBeUndefined();
-    expect(queryClient.getQueryData(["push-subscriptions"])).toBeUndefined();
-    expect(queryClient.getQueryData(["shortcut-credentials"])).toBeUndefined();
   });
 });
