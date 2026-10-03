@@ -2,7 +2,7 @@ import { type GetBillingStatusResponse, type GetMeResponse } from "@recipestock/
 
 /**
  * 保存件数の状態。上限を超えているのは、ProからFreeに戻った人だけである。
- * 超えた分は消さず、新しく保存した上限件数のほかをロックする（ADR 0020）。
+ * 超えた分は消さず、新しく保存した上限件数のほかをロックする。
  */
 export type SavedRecipesState = "unlimited" | "room" | "full" | "locked";
 
@@ -125,7 +125,7 @@ export const planRowValue = (state: PlanState): { text: string; tone: "muted" | 
 
 /**
  * プランを変えれば直る上限のエラーか。AI取り込みの上限はProにもあるので、Freeのときだけ当てはまる。
- * Webの取り込みAPIはプランでエラーを分けないので、画面が知っているプランで見分ける（ADR 0010）。
+ * Webの取り込みAPIはプランでエラーを分けないので、画面が知っているプランで見分ける。
  */
 export const isResolvedByUpgrade = (
   code: string | null | undefined,

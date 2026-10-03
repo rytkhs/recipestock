@@ -3,6 +3,7 @@ import {
   MAX_RECIPE_SOURCE_URL_LENGTH,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
+  recipeDraftContentSchema,
 } from "@recipestock/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -120,6 +121,29 @@ describe("URL import fetcher", () => {
       "https://example.com/recipes/tomato",
       expect.objectContaining({ redirect: "manual" }),
     );
+  });
+
+  it.each([
+    [401, "unsupported_page"],
+    [403, "unsupported_page"],
+    [451, "unsupported_page"],
+    [404, "invalid_url"],
+    [410, "invalid_url"],
+    [429, "fetch_failed"],
+    [500, "fetch_failed"],
+    [503, "fetch_failed"],
+  ] as const)("取り込み先の%iを%sにする", async (status, code) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html><body>Blocked</body></html>", { status })),
+    );
+
+    await expect(
+      fetchImportPage("https://example.com/recipe", { timeoutMs: 1000, maxBytes: 1024 }),
+    ).rejects.toMatchObject({
+      code,
+      message: `Import URL responded with ${status}.`,
+    } satisfies Partial<RecipeImportError>);
   });
 
   it("明確な非HTMLは本文サイズの確認前に拒否する", async () => {
@@ -817,7 +841,7 @@ describe("URL import flow", () => {
         },
       }),
     ).rejects.toMatchObject({
-      code: "extraction_failed",
+      code: "unknown",
     } satisfies Partial<RecipeImportError>);
 
     expect(aiNormalize).not.toHaveBeenCalled();
@@ -1243,10 +1267,7 @@ describe("URL import flow", () => {
       },
     });
 
-    expect(result.recipeDraftContent.referenceImages).toHaveLength(MAX_RECIPE_REFERENCE_IMAGES);
-    expect(
-      result.recipeDraftContent.steps.every((step) => step.images.length <= MAX_RECIPE_STEP_IMAGES),
-    ).toBe(true);
+    expect(recipeDraftContentSchema.safeParse(result.recipeDraftContent).success).toBe(true);
     expect(countDraftImages(result.recipeDraftContent)).toBe(MAX_RECIPE_TOTAL_IMAGES);
   });
 

@@ -144,10 +144,12 @@ describe("Stripe webhook route", () => {
   });
 
   it("重複eventは同期処理せず200を返す", async () => {
+    const sink = createMemoryLogSink();
     const setStripeCustomerId = vi.fn<BillingRepository["setStripeCustomerId"]>();
     const markStripeEventProcessed = vi.fn<BillingRepository["markStripeEventProcessed"]>();
     const retrieveSubscription = vi.fn<StripeBillingClient["retrieveSubscription"]>();
     const response = await requestWebhook({
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
       billingRepository: createRepository({
         hasProcessedStripeEvent: async () => true,
         setStripeCustomerId,
@@ -160,34 +162,19 @@ describe("Stripe webhook route", () => {
     });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ received: true });
-    expect(setStripeCustomerId).not.toHaveBeenCalled();
-    expect(retrieveSubscription).not.toHaveBeenCalled();
-    expect(markStripeEventProcessed).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    [false, false],
-    [true, true],
-  ])("処理済みにしたeventをevent IDと重複かどうか付きでログに残す(既処理: %s)", async (processed, duplicate) => {
-    const sink = createMemoryLogSink();
-    const response = await requestWebhook({
-      billingRepository: createRepository({ hasProcessedStripeEvent: async () => processed }),
-      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
-      stripeBillingClient: createStripeClient(checkoutCompletedEvent()),
-    });
-
-    expect(response.status).toBe(200);
     expect(sink.entries).toContainEqual(
       expect.objectContaining({
         event: "stripe_webhook_processed",
         level: "info",
         eventId: "evt_checkout",
         kind: "checkout_completed",
-        duplicate,
-        durationMs: expect.any(Number),
+        duplicate: true,
       }),
     );
+    await expect(response.json()).resolves.toEqual({ received: true });
+    expect(setStripeCustomerId).not.toHaveBeenCalled();
+    expect(retrieveSubscription).not.toHaveBeenCalled();
+    expect(markStripeEventProcessed).not.toHaveBeenCalled();
   });
 
   it("署名検証後の処理の失敗はevent ID付きでログに残し、500を返してerror reporterへ送る", async () => {
@@ -222,12 +209,14 @@ describe("Stripe webhook route", () => {
   });
 
   it("checkout.session.completedはcustomer idを保存しeventを処理済みにする", async () => {
+    const sink = createMemoryLogSink();
     const setStripeCustomerId = vi.fn<BillingRepository["setStripeCustomerId"]>();
     const markStripeEventProcessed = vi.fn<BillingRepository["markStripeEventProcessed"]>();
     const syncAppUserPlanFromSubscriptions =
       vi.fn<BillingRepository["syncAppUserPlanFromSubscriptions"]>();
 
     const response = await requestWebhook({
+      loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
       billingRepository: createRepository({
         setStripeCustomerId,
         markStripeEventProcessed,
@@ -237,6 +226,15 @@ describe("Stripe webhook route", () => {
     });
 
     expect(response.status).toBe(200);
+    expect(sink.entries).toContainEqual(
+      expect.objectContaining({
+        event: "stripe_webhook_processed",
+        level: "info",
+        eventId: "evt_checkout",
+        kind: "checkout_completed",
+        duplicate: false,
+      }),
+    );
     expect(setStripeCustomerId).toHaveBeenCalledWith("user_123", "cus_123");
     expect(syncAppUserPlanFromSubscriptions).not.toHaveBeenCalled();
     expect(markStripeEventProcessed).toHaveBeenCalledWith("evt_checkout");
@@ -261,7 +259,7 @@ describe("Stripe webhook route", () => {
       return "pro";
     });
     const retrieveSubscription = vi.fn<StripeBillingClient["retrieveSubscription"]>(async () =>
-      subscriptionState(),
+      subscriptionState({ stripePriceId: "price_other" }),
     );
 
     const response = await requestWebhook({
@@ -283,7 +281,7 @@ describe("Stripe webhook route", () => {
       userId: "user_123",
       stripeCustomerId: "cus_123",
       stripeSubscriptionId: "sub_123",
-      stripePriceId: "price_pro",
+      stripePriceId: "price_other",
       stripeProductId: "prod_123",
       status: "active",
       currentPeriodStart: new Date("2026-06-04T00:00:00.000Z"),
@@ -301,11 +299,7 @@ describe("Stripe webhook route", () => {
     expect(calls).toEqual(["save-customer:user_123:cus_123", "upsert-subscription", "sync-plan"]);
   });
 
-  it.each([
-    "canceled",
-    "unpaid",
-    "incomplete",
-  ])("customer.subscription.updated %sは同期repositoryへ渡す", async (status) => {
+  it("subscription更新はstatusを改変せず同期repositoryへ渡す", async () => {
     const upsertSubscriptionFromStripeEvent = vi.fn<
       BillingRepository["upsertSubscriptionFromStripeEvent"]
     >(async () => {});
@@ -320,13 +314,13 @@ describe("Stripe webhook route", () => {
       }),
       stripeBillingClient: createStripeClient(
         subscriptionChangedEvent(),
-        subscriptionState({ status }),
+        subscriptionState({ status: "unpaid" }),
       ),
     });
 
     expect(response.status).toBe(200);
     expect(upsertSubscriptionFromStripeEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ status }),
+      expect.objectContaining({ status: "unpaid" }),
     );
     expect(syncAppUserPlanFromSubscriptions).toHaveBeenCalledWith({
       userId: "user_123",
@@ -456,36 +450,7 @@ describe("Stripe webhook route", () => {
     expect(markStripeEventProcessed).not.toHaveBeenCalled();
   });
 
-  it("price不一致のcurrent stateも保存するがPro判定は同期repositoryに委ねる", async () => {
-    const upsertSubscriptionFromStripeEvent = vi.fn<
-      BillingRepository["upsertSubscriptionFromStripeEvent"]
-    >(async () => {});
-    const syncAppUserPlanFromSubscriptions = vi.fn<
-      BillingRepository["syncAppUserPlanFromSubscriptions"]
-    >(async () => "free");
-
-    const response = await requestWebhook({
-      billingRepository: createRepository({
-        upsertSubscriptionFromStripeEvent,
-        syncAppUserPlanFromSubscriptions,
-      }),
-      stripeBillingClient: createStripeClient(
-        subscriptionChangedEvent(),
-        subscriptionState({ stripePriceId: "price_other" }),
-      ),
-    });
-
-    expect(response.status).toBe(200);
-    expect(upsertSubscriptionFromStripeEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ stripePriceId: "price_other" }),
-    );
-    expect(syncAppUserPlanFromSubscriptions).toHaveBeenCalled();
-  });
-
-  it.each([
-    "invoice.payment_failed",
-    "invoice.payment_succeeded",
-  ])("%sはno-opとして処理済みにする", async (type) => {
+  it("対象外eventはsubscriptionを変更せず処理済みにする", async () => {
     const upsertSubscriptionFromStripeEvent =
       vi.fn<BillingRepository["upsertSubscriptionFromStripeEvent"]>();
     const markStripeEventProcessed = vi.fn<BillingRepository["markStripeEventProcessed"]>();
@@ -495,11 +460,11 @@ describe("Stripe webhook route", () => {
         upsertSubscriptionFromStripeEvent,
         markStripeEventProcessed,
       }),
-      stripeBillingClient: createStripeClient(noopEvent(type)),
+      stripeBillingClient: createStripeClient(noopEvent("invoice.payment_failed")),
     });
 
     expect(response.status).toBe(200);
     expect(upsertSubscriptionFromStripeEvent).not.toHaveBeenCalled();
-    expect(markStripeEventProcessed).toHaveBeenCalledWith(`evt_${type}`);
+    expect(markStripeEventProcessed).toHaveBeenCalledWith("evt_invoice.payment_failed");
   });
 });

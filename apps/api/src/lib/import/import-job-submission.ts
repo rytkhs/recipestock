@@ -38,7 +38,7 @@ type CreateJob = (
 
 /**
  * 検証を終えた入力からImport Jobを作り、Queueへ送る。期限切れJobの処理、上限の判定、active Jobの
- * 再利用、Queueへ送れなかったJobの後始末は、入力の種類や認証方式ごとに実装しない(ADR 0006)。
+ * 再利用、Queueへ送れなかったJobの後始末は、入力の種類や認証方式ごとに実装しない(ADR 0002)。
  */
 export const submitImportJob = async (
   {

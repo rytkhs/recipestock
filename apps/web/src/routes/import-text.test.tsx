@@ -65,7 +65,9 @@ describe("Import text route", () => {
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    await expect(screen.findByText("1件を取り込み中")).resolves.toBeInTheDocument();
+    const island = await screen.findByTestId("import-island");
+    expect(island).toHaveTextContent("取り込み待ち");
+    expect(island).toHaveTextContent("鶏むね肉のレモン煮");
     expect(findFetchCall(fetchMock, "/api/import/text/jobs")).toEqual([
       "/api/import/text/jobs",
       expect.objectContaining({
@@ -186,15 +188,85 @@ describe("Import text route", () => {
     await renderApp("/import/text?fromJob=job_failed");
 
     await expect(screen.findByLabelText("テキスト")).resolves.toHaveValue(sourceText);
+    await userEvent.type(screen.getByLabelText("テキスト"), "\n塩 小さじ1");
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
     expect(findFetchCall(fetchMock, "/api/import/text/jobs")).toEqual([
       "/api/import/text/jobs",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ text: sourceText }) }),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ text: `${sourceText}\n塩 小さじ1` }),
+      }),
     ]);
     expect(findFetchCall(fetchMock, "/api/import/jobs/job_failed/dismiss")).toEqual([
       "/api/import/jobs/job_failed/dismiss",
+      expect.objectContaining({ method: "PATCH" }),
+    ]);
+    const paths = fetchMock.mock.calls.map(([input]) => getRequestPath(input));
+    expect(paths.indexOf("/api/import/jobs/job_failed/dismiss")).toBeGreaterThan(
+      paths.indexOf("/api/import/text/jobs"),
+    );
+  });
+
+  it("URLから読めなかったjobからは、本文を貼って元のURLを出典として取り込む", async () => {
+    const pastedText = "なすの揚げ浸し\nなす 3本";
+    const fetchMock = mockFetch(
+      async (input, init) => {
+        const path = getRequestPath(input);
+
+        if (path === "/api/import/jobs/job_private" && init?.method === "GET") {
+          return jsonResponse({
+            job: textJob({
+              id: "job_private",
+              kind: "url",
+              status: "failed",
+              url: "https://www.instagram.com/p/abc/",
+              textPreview: null,
+              errorCode: "private_or_login_required",
+            }),
+            sourceText: null,
+          });
+        }
+
+        if (path === "/api/import/text/jobs") {
+          return jsonResponse({ kind: "created", job: textJob() }, { status: 202 });
+        }
+
+        if (path === "/api/import/jobs/job_private/dismiss") {
+          return jsonResponse({ job: textJob({ id: "job_private", status: "failed" }) });
+        }
+
+        if (path === "/api/recipes?limit=20") {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+
+        return new Response(null, { status: 404 });
+      },
+      { authenticated: true },
+    );
+
+    await renderApp("/import/text?fromJob=job_private");
+
+    await expect(
+      screen.findByText("instagram.comの内容を読み取れませんでした"),
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("出典：instagram.com")).toBeInTheDocument();
+    expect(screen.queryByText(/元のテキストを読み込めませんでした/)).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("テキスト"), pastedText);
+    await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
+
+    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
+    expect(findFetchCall(fetchMock, "/api/import/text/jobs")).toEqual([
+      "/api/import/text/jobs",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ text: pastedText, sourceUrl: "https://www.instagram.com/p/abc/" }),
+      }),
+    ]);
+    expect(findFetchCall(fetchMock, "/api/import/jobs/job_private/dismiss")).toEqual([
+      "/api/import/jobs/job_private/dismiss",
       expect.objectContaining({ method: "PATCH" }),
     ]);
   });

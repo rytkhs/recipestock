@@ -15,16 +15,26 @@ export type ShortcutCredentialRecord = {
   tokenHash: string;
   tokenSuffix: string;
   createdAt: Date;
+  firstUsedAt: Date | null;
+  lastUsedAt: Date | null;
   revokedAt: Date | null;
 };
+
+/**
+ * 解除済みのキーは認証を通さない。ただ、連携し直しを促した理由を監視で見分けられるよう、
+ * 知らないキーとは分けて返す。
+ */
+export type ShortcutCredentialAuthentication =
+  | { status: "active"; credentialId: string; userId: string }
+  | { status: "revoked"; credentialId: string; userId: string }
+  | { status: "unknown" };
 
 export type ShortcutCredentialRepository = {
   createCredential(credential: ShortcutCredentialRecord): Promise<ShortcutCredentialRecord>;
   listCredentials(userId: string): Promise<ShortcutCredentialRecord[]>;
   revokeCredential(params: { credentialId: string; userId: string; now: Date }): Promise<boolean>;
-  authenticate(params: {
-    tokenHash: string;
-  }): Promise<{ credentialId: string; userId: string } | null>;
+  /** 認証を通したキーには、使った時刻を同じ書き込みで残す。 */
+  authenticate(params: { tokenHash: string; now: Date }): Promise<ShortcutCredentialAuthentication>;
 };
 
 export type ShortcutCredentials = {
@@ -34,7 +44,7 @@ export type ShortcutCredentials = {
   }): Promise<{ credential: ShortcutCredential; token: string }>;
   list(userId: string): Promise<ShortcutCredential[]>;
   revoke(params: { credentialId: string; userId: string }): Promise<boolean>;
-  authenticate(params: { token: string }): Promise<{ credentialId: string; userId: string } | null>;
+  authenticate(params: { token: string }): Promise<ShortcutCredentialAuthentication>;
 };
 
 const mapCredential = (credential: ShortcutCredentialRecord): ShortcutCredential => ({
@@ -42,6 +52,8 @@ const mapCredential = (credential: ShortcutCredentialRecord): ShortcutCredential
   name: credential.name,
   tokenSuffix: credential.tokenSuffix,
   createdAt: credential.createdAt.toISOString(),
+  firstUsedAt: credential.firstUsedAt?.toISOString() ?? null,
+  lastUsedAt: credential.lastUsedAt?.toISOString() ?? null,
 });
 
 export const createShortcutCredentialToken = () =>
@@ -89,16 +101,42 @@ export const createShortcutCredentialRepository = (db: DbClient): ShortcutCreden
     return Boolean(row);
   },
 
-  async authenticate({ tokenHash }) {
-    const result = await db.execute<{ credentialId: string; userId: string }>(sql`
-      select id as "credentialId", user_id as "userId"
+  /**
+   * 照合と使った時刻の記録を1つのSQLで済ませ、ショートカットからのrequestに往復を足さない。
+   * token hashは解除済みの行を含めて一意なので、結果は高々1行である。
+   */
+  async authenticate({ tokenHash, now }) {
+    const nowIso = now.toISOString();
+    const result = await db.execute<{ credentialId: string; userId: string; revoked: boolean }>(sql`
+      with used_credential as (
+        update shortcut_credentials
+        set
+          first_used_at = coalesce(shortcut_credentials.first_used_at, ${nowIso}::timestamptz),
+          last_used_at = ${nowIso}::timestamptz
+        where token_hash = ${tokenHash}
+          and revoked_at is null
+        returning id, user_id
+      )
+      select id as "credentialId", user_id as "userId", false as "revoked"
+      from used_credential
+      union all
+      select id, user_id, true
       from shortcut_credentials
       where token_hash = ${tokenHash}
-        and revoked_at is null
+        and revoked_at is not null
       limit 1
     `);
+    const row = result.rows[0];
 
-    return result.rows[0] ?? null;
+    if (!row) {
+      return { status: "unknown" };
+    }
+
+    return {
+      status: row.revoked ? "revoked" : "active",
+      credentialId: row.credentialId,
+      userId: row.userId,
+    };
   },
 });
 
@@ -122,6 +160,8 @@ export const createShortcutCredentials = ({
       tokenHash: await hashShortcutCredentialToken(token),
       tokenSuffix: token.slice(-TOKEN_SUFFIX_LENGTH),
       createdAt: getCurrentDate(),
+      firstUsedAt: null,
+      lastUsedAt: null,
       revokedAt: null,
     });
     return { credential: mapCredential(credential), token };
@@ -138,6 +178,7 @@ export const createShortcutCredentials = ({
   async authenticate({ token }) {
     return repository.authenticate({
       tokenHash: await hashShortcutCredentialToken(token),
+      now: getCurrentDate(),
     });
   },
 });

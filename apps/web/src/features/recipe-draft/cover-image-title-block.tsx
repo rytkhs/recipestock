@@ -94,7 +94,7 @@ export const CoverImageTitleBlock = ({
       revokeLocalPreviewUrl(currentUrl);
       return null;
     });
-    coverImageField.onChange(undefined);
+    coverImageField.onChange(null);
   };
 
   return (

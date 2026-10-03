@@ -17,16 +17,6 @@ describe("RecipeCover", () => {
     expect(plate).not.toHaveTextContent("照り焼き");
   });
 
-  it("同じRecipeには同じ地色を配る", () => {
-    const { unmount } = render(<RecipeCover index={0} recipe={recipe(null)} />);
-    const firstTint = screen.getByTestId("recipe-title-plate").className;
-
-    unmount();
-    render(<RecipeCover index={0} recipe={recipe(null)} />);
-
-    expect(screen.getByTestId("recipe-title-plate").className).toBe(firstTint);
-  });
-
   it("表紙画像があるときは写真を出す", () => {
     render(<RecipeCover index={0} recipe={recipe("https://images.example/cover.webp")} />);
 

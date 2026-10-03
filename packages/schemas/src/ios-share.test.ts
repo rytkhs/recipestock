@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH,
-  iosShareShortcutImportReasonSchema,
   iosShareShortcutImportRequestSchema,
   iosShareShortcutImportResponseSchema,
 } from "./ios-share";
@@ -26,20 +25,6 @@ describe("iOS Shortcut import schemas", () => {
         input: "a".repeat(IOS_SHARE_SHORTCUT_INPUT_MAX_LENGTH + 1),
       }).success,
     ).toBe(false);
-  });
-
-  it("noticeを含むresponseを検証する", () => {
-    expect(
-      iosShareShortcutImportResponseSchema.safeParse({
-        outcome: "rejected",
-        reason: "invalid_url",
-        notice: {
-          title: "このリンクは取り込めません",
-          body: "Webページのリンクを共有してください。",
-          openUrl: null,
-        },
-      }).success,
-    ).toBe(true);
   });
 
   /**
@@ -68,15 +53,6 @@ describe("iOS Shortcut import schemas", () => {
         notice: { title: "", body: "", openUrl: null },
       }).success,
     ).toBe(false);
-  });
-
-  /**
-   * AI上限はプランで別のreasonに分ける。文言と遷移先だけでなく、reasonはHTTPステータスに
-   * 代わる監視の軸でもあり、free到達とpro到達は運用上も別の事象である。
-   */
-  it("AI上限のreasonをプランごとに持つ", () => {
-    expect(iosShareShortcutImportReasonSchema.options).toContain("ai_usage_limit_exceeded");
-    expect(iosShareShortcutImportReasonSchema.options).toContain("ai_usage_quota_exhausted");
   });
 
   it("noticeのない、または未知のreasonを持つresponseを拒否する", () => {

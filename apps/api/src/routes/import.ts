@@ -1,5 +1,6 @@
 import { createDb } from "@recipestock/db";
 import {
+  cancelImportJobResponseSchema,
   createImportJobResponseSchema,
   dismissImportJobResponseSchema,
   getImportJobResponseSchema,
@@ -23,6 +24,7 @@ import {
   type ImportJobRepository,
   resolveImportJobTimeoutMs,
   toImportJobSummary,
+  toRecentImportJob,
 } from "../import-jobs";
 import { type TextImportJobSubmissionFactory } from "../lib/import/text-import-job-submission";
 import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
@@ -64,6 +66,7 @@ export const createImportRoutes = ({
         userId,
         url,
         notifyOnCompletion: false,
+        shortcutCredentialId: null,
       });
 
       if (result.status === "invalidUrl") {
@@ -100,12 +103,15 @@ export const createImportRoutes = ({
       async (c) => {
         const userId = c.get("userId");
         const rawBody = await c.req.json().catch(() => null);
-        const text =
-          typeof rawBody === "object" && rawBody !== null && "text" in rawBody
-            ? rawBody.text
-            : undefined;
+        const body = typeof rawBody === "object" && rawBody !== null ? rawBody : {};
+        const text = "text" in body ? body.text : undefined;
+        const sourceUrl = "sourceUrl" in body ? body.sourceUrl : undefined;
 
-        const result = await textImportJobSubmissionFor(c.env).submit({ userId, text });
+        const result = await textImportJobSubmissionFor(c.env).submit({
+          userId,
+          text,
+          sourceUrl,
+        });
 
         if (result.status === "invalidText") {
           return validationFailedResponse(result.issues);
@@ -146,7 +152,7 @@ export const createImportRoutes = ({
 
       return c.json(
         recentImportJobsResponseSchema.parse({
-          jobs: jobs.map(toImportJobSummary),
+          jobs: jobs.map(toRecentImportJob),
         }),
       );
     })
@@ -182,5 +188,21 @@ export const createImportRoutes = ({
       }
 
       return c.json(dismissImportJobResponseSchema.parse({ job: toImportJobSummary(job) }));
+    })
+    .patch("/jobs/:jobId/cancel", requireAuth(auth), async (c) => {
+      const userId = c.get("userId");
+      const repository =
+        importJobRepository ?? createImportJobRepository(createDb(c.env.DATABASE_URL));
+      const job = await repository.cancelJob({
+        userId,
+        jobId: c.req.param("jobId"),
+        now: getCurrentDate?.() ?? new Date(),
+      });
+
+      if (!job) {
+        return notFoundResponse("Import job was not found.");
+      }
+
+      return c.json(cancelImportJobResponseSchema.parse({ job: toImportJobSummary(job) }));
     });
 };

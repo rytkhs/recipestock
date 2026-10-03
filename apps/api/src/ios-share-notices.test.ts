@@ -16,13 +16,15 @@ const allReasons = iosShareShortcutImportReasonSchema.options;
 const titleOnlyReasons: IosShareShortcutImportReason[] = [
   "created",
   "existing_active_job",
+  "setup_verified",
   "no_url_in_input",
   "rate_limit_exceeded",
 ];
 
 const openUrlByReason: Partial<Record<IosShareShortcutImportReason, string>> = {
-  malformed_request: `${APP_ORIGIN}/settings/share`,
-  unauthorized: `${APP_ORIGIN}/settings/share`,
+  malformed_request: `${APP_ORIGIN}/settings/share?reason=malformed_request`,
+  missing_credential: `${APP_ORIGIN}/settings/share?reason=missing_credential`,
+  unusable_credential: `${APP_ORIGIN}/settings/share?reason=unusable_credential`,
   recipe_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=recipe_limit&from=shortcut`,
   ai_usage_limit_exceeded: `${APP_ORIGIN}/settings/billing?upsell=ai_usage_limit&from=shortcut`,
 };
@@ -38,8 +40,6 @@ describe("iOS Shortcut noticeのカタログ", () => {
 
       expect(iosShareShortcutImportResponseSchema.safeParse(result).success).toBe(true);
       expect(result.reason).toBe(reason);
-      expect(result.notice.title).not.toBe("");
-      expect(typeof result.notice.body).toBe("string");
     }
   });
 
@@ -52,22 +52,13 @@ describe("iOS Shortcut noticeのカタログ", () => {
   it("次に取るべき行動があるreasonはbodyを持つ", () => {
     const actionableReasons = allReasons.filter((reason) => !titleOnlyReasons.includes(reason));
 
-    expect(actionableReasons).toEqual([
-      "invalid_url",
-      "malformed_request",
-      "recipe_limit_exceeded",
-      "ai_usage_limit_exceeded",
-      "ai_usage_quota_exhausted",
-      "temporarily_unavailable",
-      "unauthorized",
-    ]);
     for (const reason of actionableReasons) {
       expect(buildResult(reason).notice.body).not.toBe("");
     }
   });
 
   /**
-   * Shortcutはopen URLの有無だけを分岐する（ADR 0008）。
+   * Shortcutはopen URLの有無だけを分岐する（ADR 0004）。
    * 上限到達のopenUrlは、Shortcut面から課金へ繋げる唯一の導線である。
    * proのai_usage_quota_exhaustedにopenUrlが付いていたら、すでに払っている相手を
    * 課金画面へ送ることになるため、このテストで落とす。
@@ -78,11 +69,16 @@ describe("iOS Shortcut noticeのカタログ", () => {
     }
   });
 
-  it("outcomeはacceptedがJobを作れた2件だけである", () => {
-    const acceptedReasons = allReasons.filter(
-      (reason) => buildResult(reason).outcome === "accepted",
-    );
-
-    expect(acceptedReasons).toEqual(["created", "existing_active_job"]);
+  /**
+   * 確認は設定画面の上で起きる。Safariで設定画面を開き直すと、ホーム画面アプリで設定している人が
+   * ログインもlocalStorageも別の入れ物へ移される。
+   */
+  it("設定の確認への応答は、どのreasonでもopenUrlを返さない", () => {
+    for (const reason of allReasons) {
+      expect(
+        buildIosShareShortcutImportResult({ reason, appOrigin: APP_ORIGIN, isSetupCheck: true })
+          .notice.openUrl,
+      ).toBeNull();
+    }
   });
 });

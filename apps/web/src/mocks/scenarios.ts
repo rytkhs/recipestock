@@ -3,7 +3,7 @@ import {
   type GetMeResponse,
   type GetProPriceResponse,
   type GetPushSubscriptionsResponse,
-  type ImportJobSummary,
+  type ImportErrorCode,
   type ListShortcutCredentialsResponse,
   MAX_INGREDIENT_AMOUNT_LENGTH,
   MAX_INGREDIENT_GROUP_LABEL_LENGTH,
@@ -16,6 +16,7 @@ import {
   MAX_RECIPE_TAGS,
   MAX_RECIPE_TITLE_LENGTH,
   MAX_RECIPE_TOTAL_IMAGES,
+  type RecentImportJob,
   type RecipeListItem,
 } from "@recipestock/schemas";
 import { FREE_RECIPE_LIMIT } from "@recipestock/shared";
@@ -42,6 +43,7 @@ import {
   recipeTagsFixture,
   type SessionFixture,
   sessionFixture,
+  shortcutCredentialFixture,
   shortcutCredentialsFixture,
   tagsFixture,
   viewerFixture,
@@ -67,7 +69,7 @@ export type MockState = {
   recipeTags: Record<string, string[]>;
   /** Recipeのidごとに、詳細の本文をfixtureから差し替える部分。 */
   recipeContents: Record<string, RecipeContentOverride>;
-  importJobs: ImportJobSummary[];
+  importJobs: RecentImportJob[];
   /** テキスト取り込みのjobが保持し、本人向けの詳細APIから返す原文。 */
   importJobSourceTexts: Record<string, string>;
   pushSubscriptions: GetPushSubscriptionsResponse;
@@ -75,6 +77,11 @@ export type MockState = {
   proPrice: GetProPriceResponse;
   /** 指定すると、課金の状態をこの回数より多く読んだところでProに変わる(決済から戻った直後の再現)。 */
   upgradeAfterBillingReads?: number;
+  /**
+   * 指定すると、発行した連携キーをこのミリ秒が過ぎてから読み直したとき、使われたことにする
+   * (ショートカットから最初の共有が届いたときの再現)。
+   */
+  shortcutFirstUseAfterMs?: number;
   failures: {
     /** "always" は全ページ、"after-first-page" は2ページ目以降を500にする。 */
     listRecipes?: "always" | "after-first-page";
@@ -103,6 +110,9 @@ export type MockState = {
     listShortcutCredentials?: boolean;
     issueShortcutCredential?: boolean;
     revokeShortcutCredential?: boolean;
+    /** 指定すると、このあと送るURLの取り込みをこのエラーで失敗させる。 */
+    importJob?: ImportErrorCode;
+    cancelImportJob?: boolean;
   };
 };
 
@@ -158,6 +168,14 @@ const freeState = (recipeCount: number): MockState => {
     recipeTags: recipeTagsFixture({ count: recipeCount }),
   };
 };
+
+const withAiUsageLimitReached = (state: MockState): MockState => ({
+  ...state,
+  viewer: {
+    ...state.viewer,
+    aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
+  },
+});
 
 // 一覧のサムネイルと、開いた詳細の画像がどちらも読み込めないRecipe。
 const brokenImageRecipeIndexes = [1, 4, 7];
@@ -591,33 +609,13 @@ export const scenarios: Scenario[] = [
     id: "import-limit",
     group: "plan",
     label: "Free(今月のAI取り込みが上限)",
-    build: () => {
-      const state = freeState(2);
-
-      return {
-        ...state,
-        viewer: {
-          ...state.viewer,
-          aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
-        },
-      };
-    },
+    build: () => withAiUsageLimitReached(freeState(2)),
   },
   {
     id: "pro-import-limit",
     group: "plan",
     label: "Pro(今月のAI取り込みが上限)",
-    build: () => {
-      const state = baseState();
-
-      return {
-        ...state,
-        viewer: {
-          ...state.viewer,
-          aiUsage: { ...state.viewer.aiUsage, used: state.viewer.aiUsage.limit },
-        },
-      };
-    },
+    build: () => withAiUsageLimitReached(baseState()),
   },
   {
     id: "checkout-pending",
@@ -682,12 +680,57 @@ export const scenarios: Scenario[] = [
     build: () => ({ ...baseState(), failures: { createBillingPortal: true } }),
   },
   {
-    id: "linked-devices",
+    id: "shortcut-linked-keys",
     group: "settings",
-    label: "共有を2台と連携中",
+    label: "共有を連携済み(使ったキー2本)",
     build: () => ({
       ...baseState(),
       shortcutCredentials: linkedShortcutCredentialsFixture(),
+    }),
+  },
+  {
+    // 端末の判定はブラウザのUser-Agentで行う。iPhoneの画面は開発者ツールで端末を切り替えて見る。
+    id: "shortcut-first-share",
+    group: "settings",
+    label: "共有を連携する(発行の10秒後に最初の共有が届く)",
+    build: () => ({ ...baseState(), shortcutFirstUseAfterMs: 10_000 }),
+  },
+  {
+    // ショートカットAppへ移っている間にアプリが閉じられ、開き直したとき。
+    id: "shortcut-setup-resumed",
+    group: "settings",
+    label: "共有の設定の途中(発行したキーにまだ共有が届いていない)",
+    build: () => ({
+      ...baseState(),
+      shortcutCredentials: shortcutCredentialsFixture({
+        credentials: [
+          shortcutCredentialFixture({
+            createdAt: new Date().toISOString(),
+            firstUsedAt: null,
+            lastUsedAt: null,
+          }),
+        ],
+      }),
+    }),
+  },
+  {
+    id: "shortcut-linked-and-unused-keys",
+    group: "settings",
+    label: "共有を連携済み・使われていないキーあり",
+    build: () => ({
+      ...baseState(),
+      shortcutCredentials: shortcutCredentialsFixture({
+        credentials: [
+          shortcutCredentialFixture({ lastUsedAt: new Date().toISOString() }),
+          shortcutCredentialFixture({
+            id: "credential_0002",
+            name: "iPad",
+            tokenSuffix: "0002",
+            firstUsedAt: null,
+            lastUsedAt: null,
+          }),
+        ],
+      }),
     }),
   },
   {
@@ -705,7 +748,7 @@ export const scenarios: Scenario[] = [
   {
     id: "shortcut-credentials-error",
     group: "settings",
-    label: "連携端末の取得失敗",
+    label: "連携キーの取得失敗",
     build: () => ({ ...baseState(), failures: { listShortcutCredentials: true } }),
   },
   {
@@ -723,7 +766,7 @@ export const scenarios: Scenario[] = [
   {
     id: "shortcut-revoke-error",
     group: "settings",
-    label: "端末の連携解除失敗",
+    label: "連携キーの解除失敗",
     build: () => ({
       ...baseState(),
       shortcutCredentials: linkedShortcutCredentialsFixture(),
@@ -738,6 +781,156 @@ export const scenarios: Scenario[] = [
       ...baseState(),
       importJobs: [importJobFixture({ status: "running" })],
     }),
+  },
+  {
+    id: "import-queued",
+    group: "import",
+    label: "取り込み待ち（取り消しに失敗）",
+    build: () => ({
+      ...baseState(),
+      importJobs: [importJobFixture({ status: "queued", startedAt: null })],
+      failures: { cancelImportJob: true },
+    }),
+  },
+  {
+    id: "import-saved",
+    group: "import",
+    label: "取り込んで保存した直後",
+    build: () => {
+      const state = baseState();
+      const [recipe] = state.recipes;
+
+      return {
+        ...state,
+        importJobs: recipe
+          ? [
+              importJobFixture({
+                id: "job_saved",
+                status: "succeeded",
+                url: "https://www.youtube.com/watch?v=mock",
+                recipeId: recipe.id,
+                finishedAt: new Date().toISOString(),
+                recipe: { title: recipe.title, coverImageUrl: recipe.coverImageUrl },
+              }),
+            ]
+          : [],
+      };
+    },
+  },
+  {
+    id: "import-saved-multiple",
+    group: "import",
+    label: "取り込んで複数保存した直後（1件は削除済み）",
+    build: () => {
+      const state = baseState();
+      const savedJob = (id: string, url: string, recipe?: RecipeListItem) =>
+        importJobFixture({
+          id,
+          status: "succeeded",
+          url,
+          recipeId: recipe?.id ?? "recipe_deleted",
+          finishedAt: new Date().toISOString(),
+          recipe: recipe ? { title: recipe.title, coverImageUrl: recipe.coverImageUrl } : null,
+        });
+      const [first, second] = state.recipes;
+
+      return {
+        ...state,
+        importJobs: [
+          savedJob("job_saved_1", "https://www.youtube.com/watch?v=mock", first),
+          savedJob("job_saved_2", "https://example.com/recipes/mock", second),
+          // 保存したあと、ほかの端末で消したRecipe。
+          savedJob("job_saved_deleted", "https://www.tiktok.com/@mock/video/1"),
+        ],
+      };
+    },
+  },
+  {
+    id: "import-saved-while-importing",
+    group: "import",
+    label: "複数を取り込む途中で1件保存した直後",
+    build: () => {
+      const state = baseState();
+      const [recipe] = state.recipes;
+
+      return {
+        ...state,
+        importJobs: [
+          importJobFixture({
+            id: "job_running",
+            url: "https://www.youtube.com/watch?v=mock",
+          }),
+          importJobFixture({
+            id: "job_queued",
+            status: "queued",
+            url: "https://www.tiktok.com/@mock/video/1",
+            startedAt: null,
+          }),
+          ...(recipe
+            ? [
+                importJobFixture({
+                  id: "job_saved",
+                  status: "succeeded",
+                  url: "https://example.com/recipes/mock",
+                  recipeId: recipe.id,
+                  finishedAt: new Date().toISOString(),
+                  recipe: { title: recipe.title, coverImageUrl: recipe.coverImageUrl },
+                }),
+              ]
+            : []),
+        ],
+      };
+    },
+  },
+  {
+    id: "importing-multiple",
+    group: "import",
+    label: "複数を取り込み中（失敗を含む）",
+    build: () => ({
+      ...baseState(),
+      importJobs: [
+        importJobFixture({
+          id: "job_running",
+          url: "https://www.youtube.com/watch?v=mock",
+        }),
+        importJobFixture({
+          id: "job_queued",
+          status: "queued",
+          url: "https://www.tiktok.com/@mock/video/1",
+          startedAt: null,
+        }),
+        importJobFixture({
+          id: "job_private",
+          status: "failed",
+          url: "https://www.instagram.com/p/mock/",
+          errorCode: "private_or_login_required",
+          finishedAt: new Date(Date.now() - 10_000).toISOString(),
+        }),
+      ],
+    }),
+  },
+  {
+    id: "import-private-post",
+    group: "import",
+    label: "非公開の投稿で取り込み失敗",
+    build: () => ({
+      ...baseState(),
+      importJobs: [
+        importJobFixture({
+          id: "job_private",
+          status: "failed",
+          url: "https://www.instagram.com/p/mock/",
+          errorCode: "private_or_login_required",
+          finishedAt: new Date(Date.now() - 10_000).toISOString(),
+        }),
+      ],
+    }),
+  },
+  {
+    id: "import-will-fail",
+    group: "import",
+    label: "これから送るURLが取り込めない",
+    build: () => ({ ...baseState(), failures: { importJob: "private_or_login_required" } }),
   },
   {
     id: "import-failed",
@@ -778,6 +971,56 @@ export const scenarios: Scenario[] = [
         job_text_failed: "今日の夕飯\n鶏むね肉を焼いただけ。おいしかった。",
       },
     }),
+  },
+  {
+    id: "import-recoveries",
+    group: "import",
+    label: "取り込めなかったときの直し方（Free・AI上限）",
+    build: () => {
+      const failedJob = (overrides: Partial<RecentImportJob>) =>
+        importJobFixture({
+          status: "failed",
+          finishedAt: new Date(Date.now() - 10_000).toISOString(),
+          ...overrides,
+        });
+
+      // AI取り込みを使い切っているので、再試行とテキストでの取り込み直しも上限で断られる。
+      return {
+        ...withAiUsageLimitReached(freeState(2)),
+        importJobs: [
+          failedJob({
+            id: "job_ai_limit",
+            url: "https://www.youtube.com/watch?v=mock",
+            errorCode: "ai_usage_limit_exceeded",
+          }),
+          failedJob({
+            id: "job_fetch_failed",
+            url: "https://example.com/recipes/mock",
+            errorCode: "fetch_failed",
+          }),
+          failedJob({
+            id: "job_extraction_failed",
+            url: "https://www.tiktok.com/@mock/video/1",
+            errorCode: "extraction_failed",
+          }),
+          failedJob({
+            id: "job_text_failed",
+            kind: "text",
+            url: null,
+            textPreview: "今日の夕飯",
+            errorCode: "extraction_failed",
+          }),
+          failedJob({
+            id: "job_invalid_url",
+            url: "https://x.com/mock",
+            errorCode: "invalid_url",
+          }),
+        ],
+        importJobSourceTexts: {
+          job_text_failed: "今日の夕飯\n鶏むね肉を焼いただけ。おいしかった。",
+        },
+      };
+    },
   },
   {
     id: "google-login",

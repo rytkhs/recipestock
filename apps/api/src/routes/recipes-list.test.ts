@@ -59,18 +59,22 @@ describe("Recipe list routes", () => {
       },
     });
 
-    const response = await testApp.request("/api/recipes?q=Tomato%20Kitchen&limit=10", undefined, {
-      APP_ENV: "development",
-    });
+    const response = await testApp.request(
+      "/api/recipes?q=Tomato%20Kitchen&limit=10&sort=oldest&cursor=page_cursor",
+      undefined,
+      {
+        APP_ENV: "development",
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(calls).toEqual([
       {
         userId: "user_123",
         searchTerms: ["tomato", "kitchen"],
-        sort: "newest",
+        sort: "oldest",
         limit: 10,
-        cursor: null,
+        cursor: "page_cursor",
         tagIds: [],
         untagged: false,
       },
@@ -88,42 +92,6 @@ describe("Recipe list routes", () => {
       ],
       nextCursor: "next_cursor",
     });
-  });
-
-  it("並び順を指定してレシピ一覧を取得できる", async () => {
-    const calls: unknown[] = [];
-    const testApp = createSilentTestApp({
-      auth: createTestAuth(),
-      recipeRepository: {
-        createRecipeEnforcingPlanLimit: async () => {
-          throw new Error("should not create a recipe");
-        },
-        getRecipe: async () => null,
-        listRecipes: async (params) => {
-          calls.push(params);
-          return { items: [], nextCursor: null };
-        },
-        updateRecipe: unusedUpdateRecipe,
-        deleteRecipe: unusedDeleteRecipe,
-      },
-    });
-
-    const response = await testApp.request("/api/recipes?sort=oldest", undefined, {
-      APP_ENV: "development",
-    });
-
-    expect(response.status).toBe(200);
-    expect(calls).toEqual([
-      {
-        userId: "user_123",
-        searchTerms: [],
-        sort: "oldest",
-        limit: 20,
-        cursor: null,
-        tagIds: [],
-        untagged: false,
-      },
-    ]);
   });
 
   it("並び順が不正な場合はvalidation_failedを返す", async () => {
@@ -150,7 +118,7 @@ describe("Recipe list routes", () => {
     });
   });
 
-  it("Freeユーザーは新しく保存した5件以外のレシピがlockedとして一覧に表示される", async () => {
+  it("lockedとして取得したレシピは一覧でも画像を返さない", async () => {
     const testApp = createSilentTestApp({
       auth: createTestAuth(),
       recipeRepository: {

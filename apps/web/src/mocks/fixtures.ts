@@ -3,8 +3,8 @@ import {
   type GetMeResponse,
   type GetProPriceResponse,
   type GetPushSubscriptionsResponse,
-  type ImportJobSummary,
   type ListShortcutCredentialsResponse,
+  type RecentImportJob,
   type RecipeDetail,
   type RecipeListItem,
   type ShortcutCredential,
@@ -427,7 +427,7 @@ export const recipeDetailFixture = (
 export type RecipeContentOverride = Partial<RecipeDetail["content"]>;
 
 /**
- * SNSの画像だけの投稿から取り込んだ本文(ADR 0017)。表紙とレシピ画像だけを持つ。
+ * SNSの画像だけの投稿から取り込んだ本文。表紙とレシピ画像だけを持つ。
  * 取り込みと同じく、表紙は投稿の1枚目で、レシピ画像にも1枚目から投稿の順に入る。
  */
 export const imageOnlyRecipeContentFixture = (
@@ -455,7 +455,7 @@ export const brokenImageRecipeContentFixture = (recipeId: string): RecipeContent
   ),
 });
 
-export const importJobFixture = (overrides: Partial<ImportJobSummary> = {}): ImportJobSummary => {
+export const importJobFixture = (overrides: Partial<RecentImportJob> = {}): RecentImportJob => {
   const now = new Date();
 
   return {
@@ -469,6 +469,7 @@ export const importJobFixture = (overrides: Partial<ImportJobSummary> = {}): Imp
     createdAt: new Date(now.getTime() - 20_000).toISOString(),
     startedAt: new Date(now.getTime() - 15_000).toISOString(),
     finishedAt: null,
+    recipe: null,
     ...overrides,
   };
 };
@@ -495,10 +496,12 @@ export const shortcutCredentialFixture = (
   name: "iPhone",
   tokenSuffix: "0001",
   createdAt: "2026-06-01T00:00:00.000Z",
+  firstUsedAt: "2026-06-01T00:05:00.000Z",
+  lastUsedAt: "2026-06-20T09:00:00.000Z",
   ...overrides,
 });
 
-/** 設定の台数表示と、連携済み端末の一覧を確認する2台。 */
+/** 連携済みの表示と、使ったキーの一覧を確認する2本。 */
 export const linkedShortcutCredentialsFixture = (): ListShortcutCredentialsResponse => ({
   credentials: [
     shortcutCredentialFixture(),
@@ -507,6 +510,8 @@ export const linkedShortcutCredentialsFixture = (): ListShortcutCredentialsRespo
       name: "iPad",
       tokenSuffix: "0002",
       createdAt: "2025-12-20T00:00:00.000Z",
+      firstUsedAt: "2025-12-20T00:03:00.000Z",
+      lastUsedAt: "2026-05-02T12:00:00.000Z",
     }),
   ],
 });

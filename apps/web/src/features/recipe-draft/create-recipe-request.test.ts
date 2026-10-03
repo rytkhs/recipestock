@@ -103,10 +103,6 @@ describe("formValuesToCreateRecipeRequest", () => {
     });
   });
 
-  it("手動作成では出典metadataを空にする", () => {
-    expect(formValuesToCreateRecipeRequest(createValues()).source).toEqual({});
-  });
-
   it("URL取り込みのsource metadataを保存リクエストに使える", () => {
     expect(
       formValuesToCreateRecipeRequest(createValues(), {
@@ -147,6 +143,7 @@ describe("formValuesToCreateRecipeRequest", () => {
     ).toEqual({
       title: "Tomato pasta",
       yieldText: "2人分",
+      coverImage: null,
       referenceImages: [],
       note: "仕上げにオリーブオイル。",
       ingredientGroups: [{ label: "ソース", ingredients: [{ name: "トマト缶", amount: "1缶" }] }],

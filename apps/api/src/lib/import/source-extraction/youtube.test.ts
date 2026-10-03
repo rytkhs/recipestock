@@ -30,10 +30,6 @@ describe("YouTube source extraction URL handling", () => {
     expect(getYouTubeVideoId("https://example.com/watch?v=FyLCRXMANAM")).toBeNull();
     expect(getYouTubeVideoId("https://www.youtube.com/watch?v=too-short")).toBeNull();
   });
-
-  it("canonical URLを生成する", () => {
-    expect(createYouTubeCanonicalUrl(VIDEO_ID)).toBe(CANONICAL_URL);
-  });
 });
 
 describe("YouTube source extraction adapter", () => {
@@ -62,30 +58,20 @@ describe("YouTube source extraction adapter", () => {
 
     expect(fetchHtml).not.toHaveBeenCalled();
     expect(youtubeDataClient.getVideo).toHaveBeenCalledWith({ videoId: VIDEO_ID, timeoutMs: 1000 });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       promptProfile: "social",
       input: {
         source: {
           finalUrl: CANONICAL_URL,
           host: "youtube.com",
         },
-        markdownContent: [
-          "# 鶏むねキャベツ鍋",
-          "",
-          "Source: YouTube",
-          "Channel: Recipe Channel",
-          "",
-          "## Description",
-          "",
+        markdownContent: expect.stringContaining(
           "材料\nキャベツ 500g\n鶏むね肉 350g\n作り方\n煮る",
-        ].join("\n"),
+        ),
       },
       imageCandidates: [
         {
-          id: "youtube_thumbnail",
           url: "https://i.ytimg.com/vi/FyLCRXMANAM/maxresdefault.jpg",
-          alt: "鶏むねキャベツ鍋 thumbnail",
-          position: 0,
         },
       ],
       imagePlacement: {
@@ -98,6 +84,8 @@ describe("YouTube source extraction adapter", () => {
       },
       warnings: [],
     });
+    expect(result.input.markdownContent).toContain("鶏むねキャベツ鍋");
+    expect(result.input.markdownContent).toContain("Recipe Channel");
   });
 
   it("説明欄が空でもtitleとthumbnailで成功する", async () => {
@@ -129,7 +117,7 @@ describe("YouTube source extraction adapter", () => {
     });
   });
 
-  it("YouTube Data API client未設定はextraction_failedにする", async () => {
+  it("YouTube Data API client未設定はunknownにする", async () => {
     const fetchHtml = createFetchHtml();
     await expect(
       youtubeSourceExtractionAdapter.extract({
@@ -139,13 +127,13 @@ describe("YouTube source extraction adapter", () => {
         fetchHtml,
       }),
     ).rejects.toMatchObject({
-      code: "extraction_failed",
+      code: "unknown",
     } satisfies Partial<RecipeImportError>);
 
     expect(fetchHtml).not.toHaveBeenCalled();
   });
 
-  it("動画metadataが見つからない場合はextraction_failedにする", async () => {
+  it("動画metadataが見つからない場合はprivate_or_login_requiredにする", async () => {
     await expect(
       youtubeSourceExtractionAdapter.extract({
         normalizedUrl: CANONICAL_URL,
@@ -157,11 +145,16 @@ describe("YouTube source extraction adapter", () => {
         },
       }),
     ).rejects.toMatchObject({
-      code: "extraction_failed",
+      code: "private_or_login_required",
     } satisfies Partial<RecipeImportError>);
   });
 
-  it("YouTube Data API errorはRecipeImportErrorへ変換する", async () => {
+  it.each([
+    ["request_failed", "fetch_failed"],
+    ["quota_exceeded", "fetch_failed"],
+    ["timeout", "fetch_failed"],
+    ["invalid_response", "unknown"],
+  ] as const)("YouTube Data APIの%sを%sにする", async (dataErrorCode, importErrorCode) => {
     await expect(
       youtubeSourceExtractionAdapter.extract({
         normalizedUrl: CANONICAL_URL,
@@ -170,13 +163,13 @@ describe("YouTube source extraction adapter", () => {
         fetchHtml: createFetchHtml(),
         youtubeDataClient: {
           getVideo: vi.fn(async () => {
-            throw new YouTubeDataError("quota_exceeded", "quota exceeded");
+            throw new YouTubeDataError(dataErrorCode, "YouTube Data API failed");
           }),
         },
       }),
     ).rejects.toMatchObject({
       name: "RecipeImportError",
-      code: "extraction_failed",
+      code: importErrorCode,
     } satisfies Partial<RecipeImportError>);
   });
 

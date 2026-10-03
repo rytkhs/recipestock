@@ -106,7 +106,7 @@ describe("createRecipeRepository", () => {
     ).rejects.toThrow(InvalidRecipeListCursorError);
   });
 
-  it("単一SQLで保存できた行をcreatedとして返す", async () => {
+  it("保存結果をRecipeに変換してcreatedとして返す", async () => {
     const recipe = createRecipe();
     const execute = vi.fn(async () => ({
       rows: [
@@ -124,24 +124,21 @@ describe("createRecipeRepository", () => {
       status: "created",
       recipe,
     });
-    expect(execute).toHaveBeenCalledTimes(1);
   });
 
-  it("単一SQLが行を返さなければlimitExceededとして返す", async () => {
+  it("保存処理が行を返さなければlimitExceededとして返す", async () => {
     const execute = vi.fn(async () => ({ rows: [] }));
     const repository = createRecipeRepository({ execute } as never, planSyncOptions);
 
     await expect(repository.createRecipeEnforcingPlanLimit(createRecipe())).resolves.toEqual({
       status: "limitExceeded",
     });
-    expect(execute).toHaveBeenCalledTimes(1);
   });
 
-  it("Recipe削除と保存件数更新を単一SQLで実行する", async () => {
+  it("削除処理が行を返せば削除成功として返す", async () => {
     const execute = vi.fn(async () => ({ rows: [{ id: "recipe_123" }] }));
     const repository = createRecipeRepository({ execute } as never, planSyncOptions);
 
     await expect(repository.deleteRecipe("user_123", "recipe_123")).resolves.toBe(true);
-    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

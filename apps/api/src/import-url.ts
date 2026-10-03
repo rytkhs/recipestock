@@ -103,7 +103,7 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, max
     );
 
     if (!response.ok) {
-      throw new RecipeImportError("fetch_failed", "Import URL could not be fetched.");
+      throw toResponseStatusError(response.status);
     }
 
     const contentType = response.headers.get("content-type") ?? "";
@@ -127,6 +127,25 @@ export const fetchImportPage: RecipeImportFetcher = async (url, { timeoutMs, max
   } finally {
     clearTimeout(timeout);
   }
+};
+
+/**
+ * 取り込み先に断られたページは、同じURLで試し直しても読めない。
+ * 401・403・451は本人のブラウザでは読めることが多いので、本文を貼って取り込み直せる`unsupported_page`にする。
+ * 404・410はページが無いので`invalid_url`にする。それ以外は一時的な失敗として、同じURLで試し直せるようにする。
+ */
+const toResponseStatusError = (status: number) => {
+  const message = `Import URL responded with ${status}.`;
+
+  if (status === 401 || status === 403 || status === 451) {
+    return new RecipeImportError("unsupported_page", message);
+  }
+
+  if (status === 404 || status === 410) {
+    return new RecipeImportError("invalid_url", message);
+  }
+
+  return new RecipeImportError("fetch_failed", message);
 };
 
 const createBrowserRunImportFetcher =

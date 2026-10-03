@@ -2,7 +2,7 @@
 
 ## Repository Context
 
-Recipe Stock is a PWA for converting recipes from websites, YouTube, social posts, books, images, and screenshots into one searchable saved format.
+Recipe Stock is a PWA for converting recipes from websites, YouTube, social posts, and books into one searchable saved format. Image and screenshot imports are out of scope for now.
 
 ## Communication
 

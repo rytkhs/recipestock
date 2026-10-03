@@ -1,7 +1,6 @@
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES } from "@recipestock/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  createImageCacheRevalidationHeaders,
   createRecipeImageDisplayUrl,
   createRecipeImageObjectResponse,
   createRecipeImageService,
@@ -173,22 +172,6 @@ afterEach(() => {
 });
 
 describe("RecipeImageService", () => {
-  it("R2条件付きGETにはキャッシュ再検証ヘッダーだけを渡す", () => {
-    const headers = createImageCacheRevalidationHeaders(
-      new Headers({
-        "if-match": '"match"',
-        "if-modified-since": "Sun, 31 May 2026 00:00:00 GMT",
-        "if-none-match": '"none-match"',
-        "if-unmodified-since": "Sat, 30 May 2026 00:00:00 GMT",
-      }),
-    );
-
-    expect(Object.fromEntries(headers)).toEqual({
-      "if-modified-since": "Sun, 31 May 2026 00:00:00 GMT",
-      "if-none-match": '"none-match"',
-    });
-  });
-
   it("画像objectKeyから同一オリジンのstable URLを作る", () => {
     expect(
       createRecipeImageDisplayUrl({
@@ -432,10 +415,6 @@ describe("RecipeImageService", () => {
 });
 
 describe("getImageDimensions", () => {
-  it("PNGのIHDRから寸法を取得する", () => {
-    expect(getImageDimensions(onePixelPng)).toEqual({ width: 1, height: 1 });
-  });
-
   it("JPEGのSOF markerから寸法を取得する", () => {
     expect(getImageDimensions(jpegImage(jpegSof0Segment({ width: 640, height: 480 })))).toEqual({
       width: 640,

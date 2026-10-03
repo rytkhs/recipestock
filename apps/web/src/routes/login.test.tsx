@@ -41,52 +41,6 @@ describe("LoginRoute", () => {
     expect(assign).toHaveBeenCalledWith("https://accounts.google.com/o/oauth2/v2/auth");
   });
 
-  it("ログインルートからメールとパスワードでログインする", async () => {
-    let authenticated = false;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const path = getRequestPath(input);
-
-      if (path.endsWith("/get-session")) {
-        return createSessionResponse(authenticated);
-      }
-
-      if (path === "/api/auth/sign-in/email" && init?.method === "POST") {
-        authenticated = true;
-        return jsonResponse({ token: "session_token" });
-      }
-
-      if (path === "/api/me" && authenticated) {
-        return jsonResponse(viewerResponse);
-      }
-
-      if (path === "/api/recipes?limit=20") {
-        return jsonResponse({ items: [], nextCursor: null });
-      }
-
-      return new Response(null, { status: 404 });
-    });
-    await renderApp("/login");
-
-    await userEvent.type(await screen.findByLabelText("メールアドレス"), "chef@example.com");
-    await userEvent.type(screen.getByLabelText("パスワード"), "password123");
-    await userEvent.click(screen.getByRole("button", { name: "ログイン" }));
-
-    const signInCall = findFetchCall(fetchMock, "/api/auth/sign-in/email");
-    expect(signInCall).toEqual([
-      "/api/auth/sign-in/email",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-      }),
-    ]);
-    expect(JSON.parse(String(signInCall?.[1]?.body))).toMatchObject({
-      email: "chef@example.com",
-      password: "password123",
-    });
-    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(findFetchCall(fetchMock, "/api/me")).toBeDefined();
-  });
-
   it("メールとパスワードでログインした後に共有URLへ戻る", async () => {
     let authenticated = false;
     const sharedUrl = "https://example.com/recipes/tomato";
@@ -116,37 +70,18 @@ describe("LoginRoute", () => {
     await userEvent.click(screen.getByRole("button", { name: "ログイン" }));
 
     const signInCall = findFetchCall(fetchMock, "/api/auth/sign-in/email");
+    expect(signInCall).toEqual([
+      "/api/auth/sign-in/email",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    ]);
     expect(JSON.parse(String(signInCall?.[1]?.body))).toMatchObject({
+      email: "chef@example.com",
+      password: "password123",
       callbackURL: redirect,
     });
     await expect(screen.findByLabelText("URL")).resolves.toHaveValue(sharedUrl);
     // ログイン画面は履歴に残さないので、着いた画面の戻るでログインへ戻らない。
     expect(appRouter.history.canGoBack()).toBe(false);
-  });
-
-  it("ログインルートから新規登録してOTP検証に進む", async () => {
-    const fetchMock = mockFetch(async () => jsonResponse({ token: null }));
-    await renderApp("/login");
-
-    await userEvent.click(await screen.findByRole("button", { name: "アカウントを作成" }));
-    await userEvent.type(screen.getByLabelText("メールアドレス"), "chef@example.com");
-    await userEvent.type(screen.getByLabelText("パスワード"), "password123");
-    await userEvent.click(screen.getByRole("button", { name: "登録してコードを送信" }));
-
-    const signUpCall = findFetchCall(fetchMock, "/api/auth/sign-up/email");
-    expect(signUpCall).toEqual([
-      "/api/auth/sign-up/email",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-      }),
-    ]);
-    expect(JSON.parse(String(signUpCall?.[1]?.body))).toMatchObject({
-      name: "chef",
-      email: "chef@example.com",
-      password: "password123",
-    });
-    await expect(screen.findByLabelText("確認コード")).resolves.toBeInTheDocument();
   });
 
   it("ログインルートで登録OTPを検証する", async () => {
@@ -163,6 +98,16 @@ describe("LoginRoute", () => {
     await userEvent.type(screen.getByLabelText("メールアドレス"), "chef@example.com");
     await userEvent.type(screen.getByLabelText("パスワード"), "password123");
     await userEvent.click(screen.getByRole("button", { name: "登録してコードを送信" }));
+    const signUpCall = findFetchCall(fetchMock, "/api/auth/sign-up/email");
+    expect(signUpCall).toEqual([
+      "/api/auth/sign-up/email",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    ]);
+    expect(JSON.parse(String(signUpCall?.[1]?.body))).toMatchObject({
+      name: "chef",
+      email: "chef@example.com",
+      password: "password123",
+    });
     await userEvent.type(await screen.findByLabelText("確認コード"), "123456");
     await userEvent.click(screen.getByRole("button", { name: "登録を完了" }));
 
@@ -182,9 +127,13 @@ describe("LoginRoute", () => {
 
   it("ログインルートでOTP方式のパスワードリセットを実行する", async () => {
     const fetchMock = mockFetch(async () => jsonResponse({ success: true }));
-    await renderApp("/login");
+    await renderApp("/login?mode=reset");
 
-    await userEvent.click(await screen.findByRole("button", { name: "パスワードを忘れた場合" }));
+    await expect(
+      screen.findByRole("heading", { name: "パスワード再設定" }),
+    ).resolves.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ログインに戻る" }));
+    await userEvent.click(screen.getByRole("button", { name: "パスワードを忘れた場合" }));
     await userEvent.type(screen.getByLabelText("メールアドレス"), "chef@example.com");
     await userEvent.click(screen.getByRole("button", { name: "再設定コードを送信" }));
     await userEvent.type(await screen.findByLabelText("確認コード"), "123456");
@@ -215,19 +164,5 @@ describe("LoginRoute", () => {
       otp: "123456",
       password: "newpassword123",
     });
-  });
-
-  // 設定のパスワードのページからは、ログアウトしてこのURLへ送る。
-  it("mode=resetで開くとパスワード再設定から始まる", async () => {
-    mockFetch(async () => new Response(null, { status: 404 }));
-    await renderApp("/login?mode=reset");
-
-    await expect(
-      screen.findByRole("heading", { name: "パスワード再設定" }),
-    ).resolves.toBeInTheDocument();
-    expect(
-      screen.getByText("登録しているメールアドレスに確認コードを送ります。"),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "再設定コードを送信" })).toBeInTheDocument();
   });
 });

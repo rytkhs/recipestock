@@ -27,6 +27,9 @@ import {
   SettingsSkeleton,
 } from "../components/loading";
 import { RouteChunkError } from "../components/route-chunk-error";
+import { ImportIsland, useImportIsland } from "../features/import-jobs";
+import { shortcutRelinkReasonSchema } from "../features/ios-share/api";
+import { prefetchShortcutSetupOffer } from "../features/ios-share/use-shortcut-setup-offer";
 import { recipeListQueryOptions } from "../features/recipes";
 import { readRecipeListSort } from "../features/recipes/list-search";
 import { AuthStateProvider, useAuthState } from "../lib/auth-state";
@@ -121,6 +124,10 @@ const ProtectedRouteSkeleton = () => {
   return <RecipeListSkeleton />;
 };
 
+// 入力の画面では、送信や下の保存バーと重なるのでアイランドを出さない。
+const isFormPath = (pathname: string) =>
+  pathname.startsWith("/import/") || pathname === "/recipes/new" || pathname.endsWith("/edit");
+
 const ProtectedLayout = () => {
   const access = useProtectedAccess();
   const navigate = useNavigate();
@@ -139,15 +146,22 @@ const ProtectedLayout = () => {
 
   const isReady = access.status === "ready";
   const isHome = currentPathname === "/recipes";
+  const importIsland = useImportIsland({
+    enabled: isReady,
+    isShown: isReady && !isFormPath(currentPathname),
+    pathname: currentPathname,
+  });
+  // アイランドが出ている間は、最後の行が隠れないよう下を空ける。
+  const mainPaddingClass = importIsland.isVisible
+    ? "pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-28"
+    : isReady && isHome
+      ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8"
+      : "pb-8";
 
   return (
     <>
       <Header isMobileVisible={false} variant={isReady ? "private" : "brand"} />
-      <main
-        className={
-          isReady && isHome ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8" : "pb-8"
-        }
-      >
+      <main className={mainPaddingClass}>
         {access.status === "pending" ? <ProtectedRouteSkeleton /> : null}
         {access.status === "ready" ? <Outlet /> : null}
         {access.status === "unavailable" ? (
@@ -155,6 +169,7 @@ const ProtectedLayout = () => {
         ) : null}
       </main>
       {isReady && isHome ? <MobileAddRecipeFab /> : null}
+      <ImportIsland island={importIsland} placement={isHome ? "beside-fab" : "center"} />
     </>
   );
 };
@@ -268,7 +283,7 @@ const recipesRoute = createRoute({
     middlewares: [
       stripSearchParams({ sort: "newest" }),
       // 並び順を指定せずに一覧へ移るときは、一覧で最後に使った並び順を引き継ぐ。
-      // 絞り込み条件はここでは埋めず、戻る操作だけがsearchで渡す（ADR 0021）。
+      // 絞り込み条件はここでは埋めず、戻る操作だけがsearchで渡す。
       // stripSearchParamsより内側に置き、指定された新しい順が消される前に判定する。
       ({ search, next }) => {
         const result = next(search);
@@ -277,7 +292,7 @@ const recipesRoute = createRoute({
     ],
   },
   loaderDeps: ({ search }) => search,
-  // 起動の入口（start_url）の一覧は、画面がsessionの確定を待つ間に取り始める（ADR 0012）。
+  // 起動の入口（start_url）の一覧は、画面がsessionの確定を待つ間に取り始める。
   // APIは自分でsessionを確かめるので、未ログインなら401が返るだけで、画面には出ない。
   // 起動時は絞り込みがないので、絞り込んだ一覧は画面に任せる。
   // Promiseは返さない。返すとrouterが取得の完了を待ち、その間skeletonを出し続ける。
@@ -292,6 +307,8 @@ const recipesRoute = createRoute({
         untagged: false,
       }),
     );
+    // 一覧に出す共有の設定への誘いは、連携の状態を読めるまで出せない。一覧と並べて取り始める。
+    prefetchShortcutSetupOffer(context.queryClient);
   },
   component: RecipesIndexRoute,
   errorComponent: RouteChunkError,
@@ -418,9 +435,15 @@ const settingsBillingRoute = createRoute({
   pendingMs: 0,
 });
 
+// ショートカットが連携し直しへ送るときの理由。ページは一度だけ読んでURLから消す。読めない値は理由なしとして扱う。
+const settingsShareSearchSchema = z.object({
+  reason: shortcutRelinkReasonSchema.optional().catch(undefined),
+});
+
 const settingsShareRoute = createRoute({
   getParentRoute: () => protectedLayoutRoute,
   path: "/settings/share",
+  validateSearch: settingsShareSearchSchema,
   component: SettingsShareRoute,
   errorComponent: RouteChunkError,
   pendingComponent: SettingsPageSkeleton,

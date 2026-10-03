@@ -46,9 +46,32 @@ describe("Recipe detail routes", () => {
           content: {
             title: "Tomato pasta",
             yieldText: "2人分",
-            referenceImages: [],
+            coverImage: {
+              objectKey: "recipes/user_123/recipe_123/cover.webp",
+              width: 1200,
+              height: 800,
+            },
+            referenceImages: [
+              { objectKey: "recipes/user_123/recipe_123/source.webp", width: 1080, height: 1080 },
+            ],
             ingredientGroups: [{ ingredients: [{ name: "トマト缶", amount: "1缶" }] }],
-            steps: [{ text: "煮詰める", images: [] }],
+            steps: [
+              {
+                text: "煮詰める",
+                images: [
+                  {
+                    objectKey: "recipes/user_123/recipe_123/step-a.webp",
+                    width: 1200,
+                    height: 800,
+                  },
+                  {
+                    objectKey: "recipes/user_123/recipe_123/step-b.webp",
+                    width: 800,
+                    height: 1200,
+                  },
+                ],
+              },
+            ],
             note: "仕上げにオリーブオイル。",
           },
           originType: "manual",
@@ -78,78 +101,6 @@ describe("Recipe detail routes", () => {
         content: {
           title: "Tomato pasta",
           yieldText: "2人分",
-        },
-        source: {
-          sourceName: "Example Kitchen",
-        },
-        tags: [{ id: "tag_1", name: "パスタ" }],
-        locked: false,
-      },
-    });
-  });
-
-  it("保存済みレシピの画像に表示用URLを付与する", async () => {
-    const testApp = createSilentTestApp({
-      auth: createTestAuth(),
-      recipeRepository: {
-        createRecipeEnforcingPlanLimit: async () => {
-          throw new Error("should not create a recipe");
-        },
-        getRecipe: async (userId, recipeId) => ({
-          id: recipeId,
-          userId,
-          title: "Tomato pasta",
-          content: {
-            title: "Tomato pasta",
-            coverImage: {
-              objectKey: "recipes/user_123/recipe_123/cover.webp",
-              width: 1200,
-              height: 800,
-            },
-            referenceImages: [
-              {
-                objectKey: "recipes/user_123/recipe_123/source.webp",
-                width: 1080,
-                height: 1080,
-              },
-            ],
-            ingredientGroups: [],
-            steps: [
-              {
-                text: "煮詰める",
-                images: [
-                  {
-                    objectKey: "recipes/user_123/recipe_123/step.webp",
-                    width: 800,
-                    height: 1200,
-                  },
-                ],
-              },
-            ],
-          },
-          originType: "manual",
-          sourceUrl: null,
-          normalizedSourceUrl: null,
-          sourceName: null,
-          searchText: "tomato pasta",
-          createdAt: new Date("2026-05-26T00:00:00.000Z"),
-          updatedAt: new Date("2026-05-26T00:00:00.000Z"),
-          tags: [{ id: "tag_1", name: "パスタ" }],
-        }),
-        listRecipes: unusedListRecipes,
-        updateRecipe: unusedUpdateRecipe,
-        deleteRecipe: unusedDeleteRecipe,
-      },
-    });
-
-    const response = await testApp.request("/api/recipes/recipe_123", undefined, {
-      APP_ENV: "development",
-    });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      recipe: {
-        content: {
           coverImage: {
             objectKey: "recipes/user_123/recipe_123/cover.webp",
             width: 1200,
@@ -169,79 +120,6 @@ describe("Recipe detail routes", () => {
               text: "煮詰める",
               images: [
                 {
-                  objectKey: "recipes/user_123/recipe_123/step.webp",
-                  width: 800,
-                  height: 1200,
-                  url: "/api/images/object/recipes/user_123/recipe_123/step.webp",
-                },
-              ],
-            },
-          ],
-        },
-      },
-    });
-  });
-
-  it("複数の手順画像にstable URLを付与して対応関係を保持する", async () => {
-    const testApp = createSilentTestApp({
-      auth: createTestAuth(),
-      recipeRepository: {
-        createRecipeEnforcingPlanLimit: async () => {
-          throw new Error("should not create a recipe");
-        },
-        getRecipe: async (userId, recipeId) => ({
-          id: recipeId,
-          userId,
-          title: "Tomato pasta",
-          content: {
-            title: "Tomato pasta",
-            referenceImages: [],
-            ingredientGroups: [],
-            steps: [
-              {
-                text: "煮詰める",
-                images: [
-                  {
-                    objectKey: "recipes/user_123/recipe_123/step-a.webp",
-                    width: 1200,
-                    height: 800,
-                  },
-                  {
-                    objectKey: "recipes/user_123/recipe_123/step-b.webp",
-                    width: 800,
-                    height: 1200,
-                  },
-                ],
-              },
-            ],
-          },
-          originType: "manual",
-          sourceUrl: null,
-          normalizedSourceUrl: null,
-          sourceName: null,
-          searchText: "tomato pasta",
-          createdAt: new Date("2026-05-26T00:00:00.000Z"),
-          updatedAt: new Date("2026-05-26T00:00:00.000Z"),
-          tags: [{ id: "tag_1", name: "パスタ" }],
-        }),
-        listRecipes: unusedListRecipes,
-        updateRecipe: unusedUpdateRecipe,
-        deleteRecipe: unusedDeleteRecipe,
-      },
-    });
-
-    const response = await testApp.request("/api/recipes/recipe_123", undefined, {
-      APP_ENV: "development",
-    });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      recipe: {
-        content: {
-          steps: [
-            {
-              images: [
-                {
                   objectKey: "recipes/user_123/recipe_123/step-a.webp",
                   width: 1200,
                   height: 800,
@@ -257,6 +135,11 @@ describe("Recipe detail routes", () => {
             },
           ],
         },
+        source: {
+          sourceName: "Example Kitchen",
+        },
+        tags: [{ id: "tag_1", name: "パスタ" }],
+        locked: false,
       },
     });
   });

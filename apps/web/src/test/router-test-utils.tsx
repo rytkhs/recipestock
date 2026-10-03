@@ -1,3 +1,4 @@
+import { type ShortcutCredential } from "@recipestock/schemas";
 import { PLAN_LIMITS } from "@recipestock/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
@@ -69,10 +70,13 @@ export const mockFetch = (
   {
     authenticated = false,
     loginAccounts = loginAccountsResponse,
+    shortcutCredentials,
     viewer = viewerResponse,
   }: {
     authenticated?: boolean;
     loginAccounts?: typeof loginAccountsResponse;
+    /** 指定すると、連携キーの一覧をこの内容で返す。 */
+    shortcutCredentials?: ShortcutCredential[];
     viewer?: typeof viewerResponse;
   } = {},
 ) =>
@@ -95,8 +99,29 @@ export const mockFetch = (
       return jsonResponse(billingStatusResponse);
     }
 
+    if (
+      path === "/api/shortcut-credentials" &&
+      (init?.method ?? "GET") === "GET" &&
+      authenticated &&
+      shortcutCredentials
+    ) {
+      return jsonResponse({ credentials: shortcutCredentials });
+    }
+
     return handler(input, init);
   });
+
+// 共有から取り込む方法は端末で変わるので、画面を開く端末をUser-Agentで決める。
+export const iPhoneUserAgent =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+export const iPadUserAgent =
+  "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+export const androidUserAgent =
+  "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
+
+/** navigatorごと差し替えるテストでは、差し替えるnavigatorに`userAgent`を含める。 */
+export const stubUserAgent = (userAgent: string) =>
+  vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
 
 export type FetchMock = {
   mock: {

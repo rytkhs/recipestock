@@ -50,6 +50,7 @@ const createRepository = (overrides: Partial<ImportJobRepository> = {}): ImportJ
   markJobFailed: async () => undefined,
   markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
+  cancelJob: async () => null,
   ...overrides,
 });
 
@@ -106,6 +107,7 @@ describe("Text import job routes", () => {
       userId: "user_123",
       sourceText,
       sourceTextDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      sourceUrl: null,
       aiUsage: { month: "2026-06", freeLimit: 10, proLimit: 300 },
       now: new Date("2026-06-01T00:00:00.000Z"),
     });
@@ -135,11 +137,37 @@ describe("Text import job routes", () => {
     expect(other?.sourceTextDigest).not.toBe(first?.sourceTextDigest);
   });
 
+  it("出典URLを添えた原文は、そのURLを出典として持つjobにする", async () => {
+    const createTextJob = vi.fn<ImportJobRepository["createTextJob"]>(async () => ({
+      status: "created",
+      job: createJob({ url: "https://www.instagram.com/p/abc/" }),
+    }));
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({ createTextJob }),
+      importQueue: createQueue(),
+    });
+
+    const response = await postText(testApp, {
+      text: sourceText,
+      sourceUrl: "https://www.instagram.com/p/abc/",
+    });
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      job: { kind: "text", url: "https://www.instagram.com/p/abc/" },
+    });
+    expect(createTextJob).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceUrl: "https://www.instagram.com/p/abc/" }),
+    );
+  });
+
   it.each([
     ["空白だけの原文", { text: " \n\t " }],
     ["上限文字数を超える原文", { text: "あ".repeat(IMPORT_TEXT_MAX_LENGTH + 1) }],
     ["文字列ではない原文", { text: 123 }],
     ["textのないbody", {}],
+    ["HTTP(S)ではない出典URL", { text: sourceText, sourceUrl: "ftp://example.com/recipe" }],
   ])("%sはvalidation_failedを返しjobを作らない", async (_label, body) => {
     const createTextJob = vi.fn<ImportJobRepository["createTextJob"]>();
     const testApp = createSilentTestApp({
@@ -318,53 +346,6 @@ describe("Import job detail route", () => {
     await expect(response.json()).resolves.toMatchObject({
       job: { kind: "url", url: "https://example.com/recipe", textPreview: null },
       sourceText: null,
-    });
-  });
-
-  it("成功したテキストjobも保存された原文を返す", async () => {
-    const testApp = createSilentTestApp({
-      auth,
-      importJobRepository: createRepository({
-        getJob: async () =>
-          createJob({
-            status: "succeeded",
-            sourceText,
-            recipeId: "recipe_123",
-            finishedAt: new Date("2026-06-01T00:00:10.000Z"),
-          }),
-      }),
-    });
-
-    const response = await testApp.request("/api/import/jobs/job_123");
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      job: { status: "succeeded", textPreview: "鶏むね肉のレモン煮" },
-      sourceText,
-    });
-  });
-
-  it("閉じた失敗テキストjobも保存された原文を返す", async () => {
-    const testApp = createSilentTestApp({
-      auth,
-      importJobRepository: createRepository({
-        getJob: async () =>
-          createJob({
-            status: "failed",
-            sourceText,
-            errorCode: "extraction_failed",
-            dismissedAt: new Date("2026-06-01T00:00:20.000Z"),
-            finishedAt: new Date("2026-06-01T00:00:10.000Z"),
-          }),
-      }),
-    });
-
-    const response = await testApp.request("/api/import/jobs/job_123");
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      job: { status: "failed", textPreview: "鶏むね肉のレモン煮" },
-      sourceText,
     });
   });
 });

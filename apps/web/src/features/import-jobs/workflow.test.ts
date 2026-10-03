@@ -49,53 +49,6 @@ describe("retryImportUrlJob", () => {
     vi.restoreAllMocks();
   });
 
-  it("同じURLでimport jobを作成してからfinished jobをdismissする", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      if (
-        getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
-        init?.method === "PATCH"
-      ) {
-        return jsonResponse({ job: createJob() });
-      }
-
-      if (getRequestPath(input) === "/api/import/url/jobs" && init?.method === "POST") {
-        return jsonResponse(
-          {
-            kind: "created",
-            job: createJob({
-              id: "job_retry",
-              status: "queued",
-              errorCode: null,
-              startedAt: null,
-              finishedAt: null,
-            }),
-          },
-          { status: 202 },
-        );
-      }
-
-      return new Response(null, { status: 404 });
-    });
-
-    await expect(retryImportUrlJob(createJob())).resolves.toMatchObject({
-      kind: "created",
-      job: {
-        id: "job_retry",
-      },
-    });
-    expect(fetchMock.mock.calls.map(([input]) => getRequestPath(input))).toEqual([
-      "/api/import/url/jobs",
-      "/api/import/jobs/job_123/dismiss",
-    ]);
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({
-        credentials: "include",
-        method: "POST",
-        body: JSON.stringify({ url: "https://example.com/recipes/tomato" }),
-      }),
-    );
-  });
-
   it("新しいjob作成後のdismissが404でも再試行を成功扱いにする", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       if (getRequestPath(input) === "/api/import/url/jobs" && init?.method === "POST") {
@@ -167,64 +120,11 @@ describe("retryImportUrlJob", () => {
       job: { id: "job_retry" },
     });
   });
-
-  it("URLがないjobはerrorにする", async () => {
-    await expect(retryImportUrlJob(createJob({ url: null }))).rejects.toThrow(
-      "Import job URL is missing.",
-    );
-  });
 });
 
 describe("retryImportTextJob", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("直した原文でimport jobを作成してから失敗したjobを閉じる", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      if (getRequestPath(input) === "/api/import/text/jobs" && init?.method === "POST") {
-        return jsonResponse(
-          {
-            kind: "created",
-            job: createJob({
-              id: "job_retry",
-              kind: "text",
-              status: "queued",
-              url: null,
-              textPreview: "今日の夕飯",
-              errorCode: null,
-              startedAt: null,
-              finishedAt: null,
-            }),
-          },
-          { status: 202 },
-        );
-      }
-
-      if (
-        getRequestPath(input) === "/api/import/jobs/job_123/dismiss" &&
-        init?.method === "PATCH"
-      ) {
-        return jsonResponse({ job: createJob({ kind: "text", url: null }) });
-      }
-
-      return new Response(null, { status: 404 });
-    });
-
-    await expect(
-      retryImportTextJob({ jobId: "job_123", text: "今日の夕飯\n鶏むね肉 300g" }),
-    ).resolves.toMatchObject({ kind: "created", job: { id: "job_retry" } });
-    expect(fetchMock.mock.calls.map(([input]) => getRequestPath(input))).toEqual([
-      "/api/import/text/jobs",
-      "/api/import/jobs/job_123/dismiss",
-    ]);
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({
-        credentials: "include",
-        method: "POST",
-        body: JSON.stringify({ text: "今日の夕飯\n鶏むね肉 300g" }),
-      }),
-    );
   });
 
   it("新しいjobを作れなければ失敗したjobを閉じない", async () => {

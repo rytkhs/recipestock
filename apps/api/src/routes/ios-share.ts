@@ -2,13 +2,21 @@ import {
   type IosShareShortcutImportReason,
   iosShareShortcutImportRequestSchema,
   iosShareShortcutImportResponseSchema,
+  shortcutCredentialTokenSchema,
 } from "@recipestock/schemas";
-import { extractFirstUrl } from "@recipestock/shared";
+import { extractFirstUrl, IOS_SHARE_SETUP_CHECK_PATH } from "@recipestock/shared";
 import { type Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { type ApiEnv } from "../context";
 import { buildIosShareShortcutImportResult } from "../ios-share-notices";
 import { type UrlImportJobSubmissionFactory } from "../lib/import/url-import-job-submission";
 import { type ShortcutCredentials } from "../shortcut-credentials";
+
+/**
+ * 確認かどうかを知るため、認証より前に本文を読む。キーのないrequestにも大きな本文を読ませないよう、読む前に大きさで止める。
+ * 上限文字数の入力がJSONのエスケープで膨らんでも収まる大きさにしている。
+ */
+const IOS_SHARE_REQUEST_MAX_BYTES = 64 * 1024;
 
 type IosShareRouteDependencies = {
   shortcutCredentialsFor: (env: ApiEnv["Bindings"]) => Pick<ShortcutCredentials, "authenticate">;
@@ -17,7 +25,14 @@ type IosShareRouteDependencies = {
   shortcutRateLimiterFor: (env: ApiEnv["Bindings"]) => RateLimit;
 };
 
+/**
+ * `missing_credential`と`unusable_credential`の内訳。キーを貼らずに追加した、別のものを貼った、
+ * 解除したキーを使い続けている、を見分け、連携の設定のどこで詰まっているかを数える。
+ */
+type ShortcutAuthFailure = "missing_token" | "malformed_token" | "unknown_token" | "revoked_token";
+
 type ShortcutImportLogFields = {
+  authFailure?: ShortcutAuthFailure;
   credentialId?: string;
   rateLimitScope?: "client" | "credential";
   sourceHost?: string;
@@ -45,12 +60,29 @@ const sourceHostOf = (url: string) => {
 };
 
 /**
+ * 設定画面の③は、設定画面そのもののURLを共有させる。originとpathが完全に一致したときだけ確認とし、
+ * queryとhashは見ない。自分のoriginの別のpathは、ふつうの取り込みとして扱う。
+ */
+const isSetupCheckUrl = (url: string, appOrigin: string) => {
+  try {
+    const sharedUrl = new URL(url);
+    return (
+      sharedUrl.origin === new URL(appOrigin).origin &&
+      sharedUrl.pathname === IOS_SHARE_SETUP_CHECK_PATH
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
  * 200で返す以上、HTTPステータスからlevelを決める`api_request_completed`では拾えない。
  * 従来4xx/5xxとしてwarnになっていた結果は、このlevelで引き続きアラートできるようにする。
  */
 const warnedReasons = new Set<IosShareShortcutImportReason>([
   "malformed_request",
-  "unauthorized",
+  "missing_credential",
+  "unusable_credential",
   "rate_limit_exceeded",
   "temporarily_unavailable",
   /**
@@ -68,14 +100,18 @@ const respondWithNotice = (
   c: Context<ApiEnv>,
   reason: IosShareShortcutImportReason,
   logFields: ShortcutImportLogFields = {},
+  { isSetupCheck = false }: { isSetupCheck?: boolean } = {},
 ) => {
   const result = buildIosShareShortcutImportResult({
     reason,
     appOrigin: c.env.APP_ORIGIN,
+    isSetupCheck,
   });
   const logger = c.get("logger");
   const fields = {
     ...logFields,
+    // reasonは起きたこと、確認かどうかは別の軸として残す。
+    ...(isSetupCheck ? { setupCheck: true } : {}),
     outcome: result.outcome,
     reason,
     shortcutVersion: c.req.header("x-shortcut-version"),
@@ -97,26 +133,60 @@ export const createIosShareRoutes = ({
   shortcutRateLimiterFor,
 }: IosShareRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
-
-  return routes.post("/import-jobs", async (c) => {
+  routes.use(
+    "/import-jobs",
     /**
      * `credentialId`単位の制限は認証を通過したrequestにしか効かない。無効なtokenは
      * 1requestごとにhash照合のDBアクセスを起こすため、認証へ到達する前にも上限を置く。
+     * 本文の大きさより先に見る。`Content-Length`がないと`bodyLimit`は本文を読んで数えるので、
+     * 上限に当たった送信元には、本文を読ませない。
      */
-    const clientLimiter = shortcutClientRateLimiterFor(c.env);
-    const clientLimit = await clientLimiter.limit({ key: clientRateLimitKey(c) });
-    if (!clientLimit.success) {
-      return respondWithNotice(c, "rate_limit_exceeded", { rateLimitScope: "client" });
-    }
+    async (c, next) => {
+      const clientLimiter = shortcutClientRateLimiterFor(c.env);
+      const clientLimit = await clientLimiter.limit({ key: clientRateLimitKey(c) });
+      if (!clientLimit.success) {
+        return respondWithNotice(c, "rate_limit_exceeded", { rateLimitScope: "client" });
+      }
+      await next();
+    },
+    bodyLimit({
+      maxSize: IOS_SHARE_REQUEST_MAX_BYTES,
+      onError: (c) => respondWithNotice(c, "malformed_request"),
+    }),
+  );
+
+  return routes.post("/import-jobs", async (c) => {
+    /**
+     * 認証の失敗を返す前に、設定の確認かどうかを知る必要がある。確認への応答には遷移先を返さないため。
+     * 認証できないrequestの本文も読むことになるが、回数はclient単位の上限で、大きさは`bodyLimit`で抑えている。
+     */
+    const request = iosShareShortcutImportRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    const url = request.success ? extractFirstUrl(request.data.input) : "";
+    const isSetupCheck = isSetupCheckUrl(url, c.env.APP_ORIGIN);
+    // ここから先の応答は、どれも確認かどうかを添えて返す。確認に遷移先を返すと #152 に戻る。
+    const respond = (reason: IosShareShortcutImportReason, logFields?: ShortcutImportLogFields) =>
+      respondWithNotice(c, reason, logFields, { isSetupCheck });
 
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
-      return respondWithNotice(c, "unauthorized");
+      return respond("missing_credential", { authFailure: "missing_token" });
     }
 
     const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
-    if (!identity) {
-      return respondWithNotice(c, "unauthorized");
+    if (identity.status === "revoked") {
+      return respond("unusable_credential", {
+        authFailure: "revoked_token",
+        credentialId: identity.credentialId,
+        userId: identity.userId,
+      });
+    }
+    if (identity.status === "unknown") {
+      // 形は、届いたものがキーかどうかを伝え分けるためだけに見る。認証はhash照合だけで行い、形の違う旧形式のキーも通す。
+      return shortcutCredentialTokenSchema.safeParse(token).success
+        ? respond("unusable_credential", { authFailure: "unknown_token" })
+        : respond("missing_credential", { authFailure: "malformed_token" });
     }
 
     const logFields: ShortcutImportLogFields = {
@@ -124,56 +194,60 @@ export const createIosShareRoutes = ({
       userId: identity.userId,
     };
 
+    /**
+     * 認証は通った時点でキーの使った時刻を記録し、設定画面はそれを見て「連携できました」に変わる。
+     * credential単位の上限より前に返し、通知と画面が食い違わないようにする。確認は取り込みを作らないので、
+     * その上限で抑えるものがない。
+     */
+    if (isSetupCheck) {
+      return respond("setup_verified", logFields);
+    }
+
     const limiter = shortcutRateLimiterFor(c.env);
     const { success } = await limiter.limit({ key: identity.credentialId });
     if (!success) {
-      return respondWithNotice(c, "rate_limit_exceeded", {
+      return respond("rate_limit_exceeded", {
         ...logFields,
         rateLimitScope: "credential",
       });
     }
 
-    const request = iosShareShortcutImportRequestSchema.safeParse(
-      await c.req.json().catch(() => null),
-    );
     if (!request.success) {
-      return respondWithNotice(c, "malformed_request", logFields);
+      return respond("malformed_request", logFields);
     }
 
-    const url = extractFirstUrl(request.data.input);
     if (!url) {
-      return respondWithNotice(c, "no_url_in_input", logFields);
+      return respond("no_url_in_input", logFields);
     }
 
     const result = await urlImportJobSubmissionFor(c.env).submit({
       userId: identity.userId,
       url,
       notifyOnCompletion: true,
+      shortcutCredentialId: identity.credentialId,
     });
     const submissionLogFields = { ...logFields, sourceHost: sourceHostOf(url) };
 
     if (result.status === "invalidUrl") {
-      return respondWithNotice(c, "invalid_url", submissionLogFields);
+      return respond("invalid_url", submissionLogFields);
     }
 
     if (result.status === "recipeLimitExceeded") {
-      return respondWithNotice(c, "recipe_limit_exceeded", submissionLogFields);
+      return respond("recipe_limit_exceeded", submissionLogFields);
     }
 
     if (result.status === "aiUsageLimitExceeded") {
-      return respondWithNotice(
-        c,
+      return respond(
         result.plan === "pro" ? "ai_usage_quota_exhausted" : "ai_usage_limit_exceeded",
         submissionLogFields,
       );
     }
 
     if (result.status === "temporarilyUnavailable") {
-      return respondWithNotice(c, "temporarily_unavailable", submissionLogFields);
+      return respond("temporarily_unavailable", submissionLogFields);
     }
 
-    return respondWithNotice(
-      c,
+    return respond(
       result.kind === "created" ? "created" : "existing_active_job",
       submissionLogFields,
     );

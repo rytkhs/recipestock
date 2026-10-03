@@ -5,7 +5,7 @@ import { parseImportCompletionNotice, parseImportCompletionRoute } from "@recipe
 /**
  * payloadが契約に合わないときに表示する最終手段。`userVisibleOnly`のため
  * pushを受け取った以上は必ず何か表示しなければならず、他に出せる文字列がない。
- * 通常運用では到達しない。表示文言はサーバーが決める（ADR 0009）。
+ * 通常運用では到達しない。表示文言はサーバーが決める（ADR 0004）。
  */
 const lastResortNotification = {
   title: "レシピの取り込み結果があります",

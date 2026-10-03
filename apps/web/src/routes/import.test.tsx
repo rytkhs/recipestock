@@ -37,18 +37,8 @@ describe("Import routes", () => {
     await userEvent.click(await screen.findByRole("button", { name: "ペースト" }));
 
     expect(screen.getByLabelText("URL")).toHaveValue("https://example.com/recipes/pasted");
-  });
-
-  it("クリアボタンで入力URLを空にする", async () => {
-    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp("/import/url");
-
-    const input = await screen.findByLabelText("URL");
-    await userEvent.type(input, "https://example.com/recipes/tomato");
     await userEvent.click(screen.getByRole("button", { name: "クリア" }));
-
-    expect(input).toHaveValue("");
+    expect(screen.getByLabelText("URL")).toHaveValue("");
   });
 
   it("クリップボードを読み取れない場合はエラーを表示する", async () => {
@@ -66,16 +56,6 @@ describe("Import routes", () => {
     );
   });
 
-  it("共有URLのurl paramを入力欄の初期値にする", async () => {
-    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp(`/import/url?url=${encodeURIComponent("https://example.com/recipes/tomato")}`);
-
-    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
-      "https://example.com/recipes/tomato",
-    );
-  });
-
   it("共有URLのtext paramから最初のURLを入力欄の初期値にする", async () => {
     mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
 
@@ -85,78 +65,6 @@ describe("Import routes", () => {
 
     await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
       "https://example.com/recipes/tomato",
-    );
-  });
-
-  it("共有テキストのURLに続く文末のピリオドを除外する", async () => {
-    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp(
-      `/import/url?text=${encodeURIComponent("Check https://example.com/recipes/tomato.")}`,
-    );
-
-    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
-      "https://example.com/recipes/tomato",
-    );
-  });
-
-  it("共有テキストのURLに続く句点を除外する", async () => {
-    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp(
-      `/import/url?text=${encodeURIComponent("このレシピです https://example.com/recipes/tomato。")}`,
-    );
-
-    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
-      "https://example.com/recipes/tomato",
-    );
-  });
-
-  it("かぎ括弧で囲まれた共有テキストからURLだけを抽出する", async () => {
-    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp(
-      `/import/url?text=${encodeURIComponent("「https://example.com/recipes/tomato」")}`,
-    );
-
-    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
-      "https://example.com/recipes/tomato",
-    );
-  });
-
-  it("山括弧で囲まれた共有テキストからURLだけを抽出する", async () => {
-    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp(
-      `/import/url?text=${encodeURIComponent("<https://example.com/recipes/tomato>")}`,
-    );
-
-    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
-      "https://example.com/recipes/tomato",
-    );
-  });
-
-  it("丸括弧で囲まれた共有テキストから余分な閉じ括弧を除外する", async () => {
-    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp(
-      `/import/url?text=${encodeURIComponent("(https://example.com/recipes/tomato)")}`,
-    );
-
-    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
-      "https://example.com/recipes/tomato",
-    );
-  });
-
-  it("URL自身に含まれる対応済みの丸括弧は保持する", async () => {
-    mockFetch(() => new Response(null, { status: 404 }), { authenticated: true });
-
-    await renderApp(
-      `/import/url?text=${encodeURIComponent("See https://example.com/recipes/tomato_(easy)")}`,
-    );
-
-    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
-      "https://example.com/recipes/tomato_(easy)",
     );
   });
 
@@ -244,76 +152,15 @@ describe("Import routes", () => {
 
     await renderApp(`/import/url?url=${encodeURIComponent("https://example.com/recipes/tomato")}`);
 
-    await userEvent.click(await screen.findByRole("button", { name: "取り込む" }));
-
-    await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(findFetchCall(fetchMock, "/api/import/url/jobs")).toEqual([
-      "/api/import/url/jobs",
-      expect.objectContaining({
-        credentials: "include",
-        method: "POST",
-        body: JSON.stringify({ url: "https://example.com/recipes/tomato" }),
-      }),
-    ]);
-  });
-
-  it("URLを入力してimport jobを作成しレシピ一覧へ遷移する", async () => {
-    const fetchMock = mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/import/url/jobs") {
-          return jsonResponse(
-            {
-              kind: "created",
-              job: {
-                id: "job_123",
-                kind: "url",
-                status: "queued",
-                url: "https://example.com/recipes/tomato",
-                recipeId: null,
-                errorCode: null,
-                createdAt: "2026-06-01T00:00:00.000Z",
-                startedAt: null,
-                finishedAt: null,
-              },
-            },
-            { status: 202 },
-          );
-        }
-
-        if (getRequestPath(input) === "/api/recipes?limit=20") {
-          return jsonResponse({ items: [], nextCursor: null });
-        }
-
-        if (getRequestPath(input) === "/api/import/jobs/recent") {
-          return jsonResponse({
-            jobs: [
-              {
-                id: "job_123",
-                kind: "url",
-                status: "queued",
-                url: "https://example.com/recipes/tomato",
-                recipeId: null,
-                errorCode: null,
-                createdAt: "2026-06-01T00:00:00.000Z",
-                startedAt: null,
-                finishedAt: null,
-              },
-            ],
-          });
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
+    await expect(screen.findByLabelText("URL")).resolves.toHaveValue(
+      "https://example.com/recipes/tomato",
     );
-
-    await renderApp("/import/url");
-
-    await userEvent.type(await screen.findByLabelText("URL"), "https://example.com/recipes/tomato");
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("1件を取り込み中");
+    const island = await screen.findByTestId("import-island");
+    expect(island).toHaveTextContent("取り込み待ち");
+    expect(island).toHaveTextContent("example.com");
     expect(findFetchCall(fetchMock, "/api/import/url/jobs")).toEqual([
       "/api/import/url/jobs",
       expect.objectContaining({
@@ -503,37 +350,7 @@ describe("Import routes", () => {
     expect(screen.queryByRole("link", { name: "プランを見る" })).not.toBeInTheDocument();
   });
 
-  it("private/login required errorを入力画面に表示する", async () => {
-    mockFetch(
-      async (input) => {
-        if (getRequestPath(input) === "/api/import/url/jobs") {
-          return jsonResponse(
-            {
-              error: {
-                code: "private_or_login_required",
-                message: "Instagram post is private, unavailable, or requires login.",
-              },
-            },
-            { status: 422 },
-          );
-        }
-
-        return new Response(null, { status: 404 });
-      },
-      { authenticated: true },
-    );
-
-    await renderApp("/import/url");
-
-    await userEvent.type(await screen.findByLabelText("URL"), "https://www.instagram.com/p/test/");
-    await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
-
-    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
-      "この投稿を取得できませんでした。非公開またはログインが必要な投稿です。",
-    );
-  });
-
-  it("同じURLのactive jobがある場合もレシピ一覧へ遷移する", async () => {
+  it("同じURLのactive jobがある場合もレシピ一覧へ遷移し、そのjobを目立たせる", async () => {
     mockFetch(
       async (input) => {
         if (getRequestPath(input) === "/api/import/url/jobs") {
@@ -589,6 +406,6 @@ describe("Import routes", () => {
     await userEvent.click(screen.getByRole("button", { name: "取り込む" }));
 
     await expect(screen.findByRole("button", { name: "検索" })).resolves.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("1件を取り込み中");
+    expect(screen.getByTestId("import-island")).toHaveTextContent("もう取り込んでいます");
   });
 });

@@ -69,6 +69,7 @@ type InstagramEmbedProjection = {
 
 export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
   id: "instagram",
+  sourceName: INSTAGRAM_SOURCE_NAME,
 
   match(input: SourceExtractionMatchInput) {
     return getInstagramSource(input.normalizedUrl) !== null;

@@ -42,7 +42,6 @@ export type Bindings = {
   R2_SECRET_ACCESS_KEY: string;
   AI_GATEWAY_NAME: string;
   AI_TEXT_MODEL: string;
-  AI_VISION_MODEL: string;
   IMPORT_FETCH_MODE?: string;
   YOUTUBE_DATA_API_KEY?: string;
   FREE_AI_MONTHLY_LIMIT?: string;

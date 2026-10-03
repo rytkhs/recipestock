@@ -28,6 +28,14 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     outcome: "accepted",
     title: "すでに取り込み中です",
   },
+  /**
+   * 設定画面の③から、設定画面のURLを共有した。取り込みは作らず、キーと接続の許可が済んで届いたことだけを伝える。
+   * 断ったのではないので`accepted`とする。
+   */
+  setup_verified: {
+    outcome: "accepted",
+    title: "連携できました",
+  },
   no_url_in_input: {
     outcome: "rejected",
     title: "リンクが見つかりませんでした",
@@ -41,7 +49,8 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     outcome: "rejected",
     title: "共有できませんでした",
     body: "ショートカットを追加し直してください。",
-    path: "/settings/share",
+    // 開いた画面が、なぜ来たのかを先に伝えてから入れ直しの手順を出せるよう、理由を添える。
+    path: "/settings/share?reason=malformed_request",
   },
   recipe_limit_exceeded: {
     outcome: "rejected",
@@ -55,7 +64,7 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
    * Proへ「Proにすると」と案内しても意味がないため、プランでreasonを分ける。
    *
    * 上限値は運用中にenvで変えられるため、このカタログには回数を書かず静的に保つ。
-   * Freeの回数は、遷移先のプランのページが今の値から出す（ADR 0026）。
+   * Freeの回数は、遷移先のプランのページが今の値から出す。
    * 利用者には「AI取り込み」の上限として見せる。
    */
   ai_usage_limit_exceeded: {
@@ -82,20 +91,37 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     title: "いま取り込めませんでした",
     body: "時間をおいて共有し直してください。",
   },
-  unauthorized: {
+  /**
+   * 認証の失敗は、キーの形をしたものが届いたかで分ける。届いていなければ貼り忘れか別のものを貼った、
+   * 届いていれば解除されたなどで使えなくなったキーである。どちらも入れ直すしかないが、起きたことを
+   * そのまま伝えるため、文言と連携し直しの画面へ添える理由を分ける。
+   */
+  missing_credential: {
+    outcome: "rejected",
+    title: "連携キーが入っていません",
+    body: "キーをコピーし直し、ショートカットを入れ直してください。",
+    path: "/settings/share?reason=missing_credential",
+  },
+  unusable_credential: {
     outcome: "rejected",
     title: "連携が無効になっています",
     body: "もう一度連携してください。",
-    path: "/settings/share",
+    path: "/settings/share?reason=unusable_credential",
   },
 };
 
+/**
+ * 設定の確認への応答は、どのreasonでも遷移先を返さない。確認は設定画面の上で起きるので、戻る先にはもういる。
+ * `openUrl`はSafariで開くため、ホーム画面アプリで設定している人をログインもlocalStorageも別の入れ物へ移してしまう（#152）。
+ */
 export const buildIosShareShortcutImportResult = ({
   reason,
   appOrigin,
+  isSetupCheck = false,
 }: {
   reason: IosShareShortcutImportReason;
   appOrigin: string;
+  isSetupCheck?: boolean;
 }): IosShareShortcutImportResponse => {
   const template = iosShareNoticeTemplates[reason];
 
@@ -105,7 +131,7 @@ export const buildIosShareShortcutImportResult = ({
     notice: {
       title: template.title,
       body: template.body ?? "",
-      openUrl: template.path ? new URL(template.path, appOrigin).toString() : null,
+      openUrl: template.path && !isSetupCheck ? new URL(template.path, appOrigin).toString() : null,
     },
   };
 };

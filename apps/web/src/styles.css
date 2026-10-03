@@ -84,6 +84,40 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ── Motion ── */
+@theme {
+  /* 取り込みから届いたレシピが一覧に入るとき */
+  --animate-recipe-arrive: recipe-arrive 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.12) both;
+  --animate-recipe-arrive-glow: recipe-arrive-glow 2.4s ease-out 0.4s both;
+
+  @keyframes recipe-arrive {
+    0% {
+      opacity: 0;
+      transform: translateY(-12px) scale(0.92);
+    }
+    60% {
+      opacity: 1;
+      transform: translateY(0) scale(1.03);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes recipe-arrive-glow {
+    0% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+    20% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-orange) 45%, transparent);
+    }
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+}
+
 /* ── Theme ── */
 :root {
   font-synthesis: none;

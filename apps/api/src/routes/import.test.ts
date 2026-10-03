@@ -46,6 +46,7 @@ const createRepository = (overrides: Partial<ImportJobRepository> = {}): ImportJ
   markJobFailed: async () => undefined,
   markCompletionNotificationSent: async () => false,
   dismissJob: async () => null,
+  cancelJob: async () => null,
   ...overrides,
 });
 
@@ -72,7 +73,7 @@ describe("Import job routes", () => {
         headers: { "content-type": "application/json", ...sameOriginHeaders },
         body: JSON.stringify({ url: "https://example.com:443/recipe?utm_source=x#step" }),
       },
-      env,
+      { ...env, FREE_AI_MONTHLY_LIMIT: "3", PRO_AI_MONTHLY_LIMIT: "1000" },
     );
 
     expect(response.status).toBe(202);
@@ -97,7 +98,8 @@ describe("Import job routes", () => {
       url: "https://example.com:443/recipe?utm_source=x#step",
       normalizedUrl: "https://example.com/recipe",
       completionNotificationRequested: false,
-      aiUsage: { month: "2026-06", freeLimit: 10, proLimit: 300 },
+      shortcutCredentialId: null,
+      aiUsage: { month: "2026-06", freeLimit: 3, proLimit: 1000 },
       now: new Date("2026-06-01T00:00:00.000Z"),
     });
     expect(expireActiveJobsForUser).toHaveBeenCalledWith({
@@ -222,19 +224,12 @@ describe("Import job routes", () => {
     });
   });
 
-  /**
-   * Shortcutはプランで別のnoticeを返すが、Webは同じ判定を既存の429へ写す。
-   * 画面側にはプラン情報があり、reasonを分けても伝えられる文言は増えない。
-   */
-  it.each([
-    "free",
-    "pro",
-  ] as const)("AI月次上限に達した%sの投稿はjobを作らず429を返す", async (plan) => {
+  it("AI月次上限到達の結果はQueueに送らず429にする", async () => {
     const send = vi.fn(async () => undefined);
     const testApp = createSilentTestApp({
       auth,
       importJobRepository: createRepository({
-        createUrlJob: async () => ({ status: "aiUsageLimitExceeded", plan }),
+        createUrlJob: async () => ({ status: "aiUsageLimitExceeded", plan: "free" }),
       }),
       importQueue: { send } as unknown as Queue<{ jobId: string }>,
     });
@@ -254,35 +249,6 @@ describe("Import job routes", () => {
       error: { code: "ai_usage_limit_exceeded" },
     });
     expect(send).not.toHaveBeenCalled();
-  });
-
-  it("上限値を環境変数から解決して判定へ渡す", async () => {
-    const createUrlJob = vi.fn(async () => ({
-      status: "created" as const,
-      job: createJob(),
-    }));
-    const testApp = createSilentTestApp({
-      auth,
-      importJobRepository: createRepository({ createUrlJob }),
-      importQueue: { send: vi.fn(async () => undefined) } as unknown as Queue<{ jobId: string }>,
-      getCurrentDate: () => new Date("2026-06-01T00:00:00.000Z"),
-    });
-
-    await testApp.request(
-      "/api/import/url/jobs",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", ...sameOriginHeaders },
-        body: JSON.stringify({ url: "https://example.com/recipe" }),
-      },
-      { ...env, FREE_AI_MONTHLY_LIMIT: "3", PRO_AI_MONTHLY_LIMIT: "1000" },
-    );
-
-    expect(createUrlJob).toHaveBeenCalledWith(
-      expect.objectContaining({
-        aiUsage: { month: "2026-06", freeLimit: 3, proLimit: 1000 },
-      }),
-    );
   });
 
   it("Queue投入に失敗したjobをfailedにして一時利用不可を返す", async () => {
@@ -327,13 +293,23 @@ describe("Import job routes", () => {
       importJobRepository: createRepository({
         expireActiveJobsForUser,
         listRecentJobs: async () => [
-          createJob({ id: "job_running", status: "running" }),
-          createJob({
-            id: "job_done",
-            status: "succeeded",
-            recipeId: "recipe_123",
-            finishedAt: new Date("2026-06-01T00:01:00.000Z"),
-          }),
+          { ...createJob({ id: "job_running", status: "running" }), recipe: null },
+          {
+            ...createJob({
+              id: "job_done",
+              status: "succeeded",
+              recipeId: "recipe_123",
+              finishedAt: new Date("2026-06-01T00:01:00.000Z"),
+            }),
+            recipe: {
+              title: "トマトパスタ",
+              coverImageObjectKey: "recipes/user_123/recipe_123/cover.jpg",
+            },
+          },
+          {
+            ...createJob({ id: "job_plain", status: "succeeded", recipeId: "recipe_456" }),
+            recipe: { title: "ほうれん草の胡麻和え", coverImageObjectKey: null },
+          },
         ],
       }),
       getCurrentDate: () => new Date("2026-06-01T00:10:00.000Z"),
@@ -344,8 +320,20 @@ describe("Import job routes", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       jobs: [
-        { id: "job_running", status: "running", recipeId: null },
-        { id: "job_done", status: "succeeded", recipeId: "recipe_123" },
+        { id: "job_running", status: "running", recipeId: null, recipe: null },
+        {
+          id: "job_done",
+          status: "succeeded",
+          recipeId: "recipe_123",
+          recipe: {
+            title: "トマトパスタ",
+            coverImageUrl: "/api/images/thumbnail/v1/recipes/user_123/recipe_123/cover.jpg",
+          },
+        },
+        {
+          id: "job_plain",
+          recipe: { title: "ほうれん草の胡麻和え", coverImageUrl: null },
+        },
       ],
     });
     expect(expireActiveJobsForUser).toHaveBeenCalledWith({
@@ -381,5 +369,50 @@ describe("Import job routes", () => {
         errorCode: "fetch_failed",
       },
     });
+  });
+
+  it("jobを取り消す", async () => {
+    const cancelJob = vi.fn<ImportJobRepository["cancelJob"]>(async () =>
+      createJob({
+        status: "canceled",
+        finishedAt: new Date("2026-06-01T00:02:00.000Z"),
+        dismissedAt: new Date("2026-06-01T00:02:00.000Z"),
+      }),
+    );
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({ cancelJob }),
+      getCurrentDate: () => new Date("2026-06-01T00:02:00.000Z"),
+    });
+
+    const response = await testApp.request("/api/import/jobs/job_123/cancel", {
+      method: "PATCH",
+      headers: sameOriginHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      job: { id: "job_123", status: "canceled", finishedAt: "2026-06-01T00:02:00.000Z" },
+    });
+    expect(cancelJob).toHaveBeenCalledWith({
+      userId: "user_123",
+      jobId: "job_123",
+      now: new Date("2026-06-01T00:02:00.000Z"),
+    });
+  });
+
+  it("見つからないjobの取り消しはnot_foundを返す", async () => {
+    const testApp = createSilentTestApp({
+      auth,
+      importJobRepository: createRepository({ cancelJob: async () => null }),
+    });
+
+    const response = await testApp.request("/api/import/jobs/job_missing/cancel", {
+      method: "PATCH",
+      headers: sameOriginHeaders,
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "not_found" } });
   });
 });

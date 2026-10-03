@@ -14,11 +14,19 @@ describe("共有入力からのURL抽出", () => {
     );
   });
 
-  it("末尾の句読点や閉じ括弧を取り除く", () => {
-    expect(extractFirstUrl("レシピはこちら→https://example.com/recipe。")).toBe(
-      "https://example.com/recipe",
+  it("共有文の句読点や余分な閉じ括弧を取り除く", () => {
+    for (const text of [
+      "レシピはこちら→https://example.com/recipe。",
+      "https://example.com/recipe.",
+      "「https://example.com/recipe」",
+      "<https://example.com/recipe>",
+      "(https://example.com/recipe)",
+    ]) {
+      expect(extractFirstUrl(text), text).toBe("https://example.com/recipe");
+    }
+    expect(extractFirstUrl("(https://example.com/recipe_(2026))")).toBe(
+      "https://example.com/recipe_(2026)",
     );
-    expect(extractFirstUrl("「https://example.com/recipe」")).toBe("https://example.com/recipe");
   });
 
   it("URLの一部として釣り合っている括弧は残す", () => {

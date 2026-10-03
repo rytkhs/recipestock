@@ -11,6 +11,7 @@ export const iosShareShortcutImportOutcomeSchema = z.enum(["accepted", "rejected
 export const iosShareShortcutImportReasonSchema = z.enum([
   "created",
   "existing_active_job",
+  "setup_verified",
   "no_url_in_input",
   "invalid_url",
   "malformed_request",
@@ -19,7 +20,8 @@ export const iosShareShortcutImportReasonSchema = z.enum([
   "ai_usage_quota_exhausted",
   "rate_limit_exceeded",
   "temporarily_unavailable",
-  "unauthorized",
+  "missing_credential",
+  "unusable_credential",
 ]);
 
 export const iosShareNoticeSchema = z.object({

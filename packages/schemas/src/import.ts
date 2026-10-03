@@ -23,7 +23,17 @@ export const importErrorCodeSchema = z.enum([
 
 export const importJobKindSchema = z.enum(["url", "text"]);
 
-export const importJobStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
+/**
+ * `canceled`は利用者が取り消したJobで、Recipeを作らない。取り消すと同時に閉じるので、
+ * 取り消しの応答のほかには返らない。
+ */
+export const importJobStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "canceled",
+]);
 
 /**
  * 取り込んだURLはそのままRecipeの出典になるので、出典として保存できる長さだけを受け入れる。
@@ -36,8 +46,12 @@ export const importUrlRequestSchema = z.object({
   url: importableUrlSchema,
 });
 
+/**
+ * `sourceUrl`は、URLから読み取れなかった投稿の本文を貼り直したときに、元のURLを出典として残すためのもの。
+ */
 export const importTextRequestSchema = z.object({
   text: z.string().trim().min(1).max(IMPORT_TEXT_MAX_LENGTH),
+  sourceUrl: importableUrlSchema.optional(),
 });
 
 export const importJobSummarySchema = z.object({
@@ -58,8 +72,20 @@ export const createImportJobResponseSchema = z.object({
   job: importJobSummarySchema,
 });
 
+/**
+ * 取り込み状況に添えて見せる、成功したJobが作ったRecipe。Recipeが消されていれば`null`になる。
+ */
+export const importedRecipePreviewSchema = z.object({
+  title: z.string().min(1),
+  coverImageUrl: z.string().nullable(),
+});
+
+export const recentImportJobSchema = importJobSummarySchema.extend({
+  recipe: importedRecipePreviewSchema.nullable(),
+});
+
 export const recentImportJobsResponseSchema = z.object({
-  jobs: z.array(importJobSummarySchema),
+  jobs: z.array(recentImportJobSchema),
 });
 
 /**
@@ -75,6 +101,13 @@ export const dismissImportJobResponseSchema = z.object({
   job: importJobSummarySchema,
 });
 
+/**
+ * 取り消す前に終わっていたJobは、そのままの状態で返る。
+ */
+export const cancelImportJobResponseSchema = z.object({
+  job: importJobSummarySchema,
+});
+
 export type ImportErrorCode = z.infer<typeof importErrorCodeSchema>;
 export type ImportJobKind = z.infer<typeof importJobKindSchema>;
 export type ImportJobStatus = z.infer<typeof importJobStatusSchema>;
@@ -82,6 +115,9 @@ export type ImportUrlRequest = z.infer<typeof importUrlRequestSchema>;
 export type ImportTextRequest = z.infer<typeof importTextRequestSchema>;
 export type ImportJobSummary = z.infer<typeof importJobSummarySchema>;
 export type CreateImportJobResponse = z.infer<typeof createImportJobResponseSchema>;
+export type ImportedRecipePreview = z.infer<typeof importedRecipePreviewSchema>;
+export type RecentImportJob = z.infer<typeof recentImportJobSchema>;
 export type RecentImportJobsResponse = z.infer<typeof recentImportJobsResponseSchema>;
 export type GetImportJobResponse = z.infer<typeof getImportJobResponseSchema>;
 export type DismissImportJobResponse = z.infer<typeof dismissImportJobResponseSchema>;
+export type CancelImportJobResponse = z.infer<typeof cancelImportJobResponseSchema>;

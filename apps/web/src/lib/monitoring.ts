@@ -6,7 +6,7 @@ const stripQuery = (value: string) => value.split(/[?#]/, 1)[0];
 const stripQueryOf = (value: unknown) => (typeof value === "string" ? stripQuery(value) : value);
 
 /**
- * 一覧の絞り込みや取り込み元のURLはqueryに載るので、Sentryへ送るURLからは落とす（ADR 0021）。
+ * 一覧の絞り込みや取り込み元のURLはqueryに載るので、Sentryへ送るURLからは落とす。
  */
 export const redactEvent = (event: Sentry.ErrorEvent): Sentry.ErrorEvent => {
   if (event.request?.url) {
@@ -48,7 +48,7 @@ export const redactBreadcrumb = (breadcrumb: Sentry.Breadcrumb): Sentry.Breadcru
  * 5xxはWorker側で送る。releaseはbuild時に`@sentry/vite-plugin`が埋め込む。
  *
  * `dataCollection`の既定では、SentryがeventとsessionのIPを送信元から推定するので、`userInfo: false`で止める。
- * headerはSDKが`Referer`と`User-Agent`しか付けないので既定のままにする（ADR 0029）。
+ * headerはSDKが`Referer`と`User-Agent`しか付けないので既定のままにする。
  */
 export const initMonitoring = (): RootOptions => {
   const dsn = import.meta.env.VITE_SENTRY_DSN;

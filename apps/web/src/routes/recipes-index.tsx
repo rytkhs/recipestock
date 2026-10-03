@@ -1,8 +1,10 @@
+import { Menu } from "@base-ui/react/menu";
 import {
   CaretRight,
-  CheckCircle,
   CookingPot,
+  Export,
   GearSix,
+  Link as LinkIcon,
   List,
   MagnifyingGlass,
   SlidersHorizontal,
@@ -10,14 +12,19 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import {
-  MAX_RECIPE_TAGS,
-  type RecentImportJobsResponse,
-  type RecipeListSort,
-} from "@recipestock/schemas";
+import { MAX_RECIPE_TAGS, type RecipeListSort } from "@recipestock/schemas";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,22 +55,10 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { RecipeCardSkeleton } from "../components/loading";
-import { PlanLink } from "../features/billing/plan-link";
-import { derivePlanState, isStillResolvedByUpgrade } from "../features/billing/plan-state";
-import {
-  dismissFinishedImportJob,
-  fetchRecentImportJobs,
-  getImportJobFailureMessage,
-  hasActiveImportJob,
-  importJobQueryKeys,
-  retryImportUrlJob,
-} from "../features/import-jobs";
-import {
-  deleteRecipe,
-  invalidateRecipeLists,
-  recipeListQueryOptions,
-  syncDeletedRecipeCaches,
-} from "../features/recipes";
+import { DeviceBadge } from "../features/ios-share/device-badge";
+import { ShortcutSetupNudge } from "../features/ios-share/setup-nudge";
+import { useShortcutSetupOffer } from "../features/ios-share/use-shortcut-setup-offer";
+import { deleteRecipe, recipeListQueryOptions, syncDeletedRecipeCaches } from "../features/recipes";
 import { writeRecipeListSort } from "../features/recipes/list-search";
 import { LockedShelfNotice, RecipeCard } from "../features/recipes/recipe-card";
 import { groupRecipesByPeriod, recipeShelfContainerClass } from "../features/recipes/recipe-shelf";
@@ -74,12 +69,11 @@ import {
 } from "../features/recipes/view-mode";
 import { listTags, tagsQueryKeys } from "../features/tags";
 import { TagFilterBar } from "../features/tags/tag-filter-bar";
-import { useViewer } from "../lib/viewer";
+import { type IosDeviceName } from "../pwa/platform";
 
 // routeには遅延読み込みのcomponentをそのまま渡し、routerに画面のコードを先読みさせる。
 // そのため並び順はpropsではなく、ここでrouteから読む。
 const recipesRouteApi = getRouteApi("/_protected/recipes");
-const importJobSuccessDismissDelayMs = 4000;
 const nextPageRootMargin = "480px 0px";
 const gridRecipeSkeletonKeys = [
   "grid-recipe-skeleton-1",
@@ -99,218 +93,11 @@ const listRecipeSkeletonKeys = [
   "list-recipe-skeleton-5",
 ];
 
-const ImportJobIsland = () => {
-  const queryClient = useQueryClient();
-  const viewer = useViewer({ enabled: true });
-  const planState = viewer.data ? derivePlanState(viewer.data) : undefined;
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
-  const observedSuccessIdsRef = useRef(new Set<string>());
-  const successTimersRef = useRef(new Map<string, number>());
-  const { data } = useQuery({
-    queryKey: importJobQueryKeys.recent(),
-    queryFn: fetchRecentImportJobs,
-    refetchInterval: (query) => (hasActiveImportJob(query.state.data?.jobs ?? []) ? 2500 : false),
-  });
-  const dismissMutation = useMutation({
-    mutationFn: dismissFinishedImportJob,
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
-    },
-  });
-  const retryMutation = useMutation({
-    mutationFn: retryImportUrlJob,
-    onSuccess: async () => {
-      setRetryError(null);
-      await queryClient.invalidateQueries({ queryKey: importJobQueryKeys.recent() });
-    },
-    onError: () => {
-      setRetryError("再試行を開始できませんでした。");
-    },
-  });
-  const jobs = data?.jobs ?? [];
-
-  const dismissImportJob = useCallback(
-    (jobId: string) => {
-      const timer = successTimersRef.current.get(jobId);
-      if (timer) {
-        window.clearTimeout(timer);
-        successTimersRef.current.delete(jobId);
-      }
-      queryClient.setQueryData<RecentImportJobsResponse>(importJobQueryKeys.recent(), (current) =>
-        current
-          ? {
-              ...current,
-              jobs: current.jobs.filter((job) => job.id !== jobId),
-            }
-          : current,
-      );
-      dismissMutation.mutate(jobId);
-    },
-    [dismissMutation, queryClient],
-  );
-
-  useEffect(() => {
-    return () => {
-      for (const timer of successTimersRef.current.values()) {
-        window.clearTimeout(timer);
-      }
-      successTimersRef.current.clear();
-    };
-  }, []);
-
-  useEffect(() => {
-    for (const job of jobs) {
-      if (job.status !== "succeeded" || observedSuccessIdsRef.current.has(job.id)) {
-        continue;
-      }
-
-      observedSuccessIdsRef.current.add(job.id);
-      void invalidateRecipeLists(queryClient);
-      const timer = window.setTimeout(() => {
-        successTimersRef.current.delete(job.id);
-        dismissImportJob(job.id);
-      }, importJobSuccessDismissDelayMs);
-      successTimersRef.current.set(job.id, timer);
-    }
-  }, [dismissImportJob, jobs, queryClient]);
-
-  if (jobs.length === 0) {
-    return null;
-  }
-
-  const activeJobs = jobs.filter((job) => job.status === "queued" || job.status === "running");
-  const failedJobs = jobs.filter((job) => job.status === "failed");
-  const succeededJobs = jobs.filter((job) => job.status === "succeeded");
-  const summary = [
-    activeJobs.length > 0 ? `${activeJobs.length}件を取り込み中` : null,
-    failedJobs.length > 0 ? `${failedJobs.length}件取り込めませんでした` : null,
-    succeededJobs.length > 0 ? `${succeededJobs.length}件保存しました` : null,
-  ]
-    .filter(Boolean)
-    .join("・");
-  const hasFailure = failedJobs.length > 0;
-  const hasActive = activeJobs.length > 0;
-
-  return (
-    <div
-      className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 mx-auto max-w-[520px] rounded-[20px] border border-brand-line-soft bg-brand-paper/95 text-sm shadow-pantry backdrop-blur-xl sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-[76px] sm:w-[min(520px,calc(100vw-2rem))] sm:-translate-x-1/2"
-      role={hasFailure ? "alert" : "status"}
-    >
-      <button
-        aria-expanded={isExpanded}
-        className="flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left"
-        type="button"
-        onClick={() => setIsExpanded((current) => !current)}
-      >
-        <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-            hasFailure
-              ? "bg-brand-danger/10 text-brand-danger"
-              : hasActive
-                ? "bg-brand-orange-soft/60 text-brand-orange"
-                : "bg-brand-sage-soft text-brand-sage-dark"
-          }`}
-        >
-          {hasActive && !hasFailure ? <Spinner aria-hidden="true" role="presentation" /> : null}
-          {!hasActive && !hasFailure ? <CheckCircle size={19} weight="fill" /> : null}
-          {hasFailure ? <WarningCircle size={19} weight="fill" /> : null}
-        </div>
-
-        <p className="min-w-0 flex-1 truncate font-semibold text-brand-ink text-sm">{summary}</p>
-        <CaretRight
-          className={`shrink-0 text-brand-muted transition-transform ${isExpanded ? "rotate-90" : ""}`}
-          size={17}
-          weight="bold"
-        />
-      </button>
-
-      {isExpanded ? (
-        <div className="max-h-[min(55vh,420px)] overflow-y-auto border-brand-line-soft border-t px-3 py-2">
-          {jobs.map((job) => {
-            const isActive = job.status === "queued" || job.status === "running";
-            const isFailed = job.status === "failed";
-            const isSucceeded = job.status === "succeeded";
-            const status =
-              job.status === "queued"
-                ? "取り込み待ち"
-                : job.status === "running"
-                  ? "取り込み中"
-                  : isFailed
-                    ? "取り込めませんでした"
-                    : "保存しました";
-            const label = job.kind === "text" ? (job.textPreview ?? "貼り付けたテキスト") : job.url;
-            // 上限で止まったものは、今も上限にいれば再試行しても同じ理由で止まる。直せる先へ案内する。
-            const needsPlanChange = isFailed && isStillResolvedByUpgrade(job.errorCode, planState);
-
-            return (
-              <div
-                className="flex min-w-0 items-center gap-3 rounded-[14px] px-2 py-2"
-                key={job.id}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-brand-ink text-xs">{status}</p>
-                  <p className="mt-0.5 truncate text-brand-muted text-xs">
-                    {isFailed ? getImportJobFailureMessage(job) : label}
-                  </p>
-                </div>
-                {isSucceeded && job.recipeId ? (
-                  <Link
-                    className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
-                    params={{ recipeId: job.recipeId }}
-                    to="/recipes/$recipeId"
-                    onClick={() => dismissImportJob(job.id)}
-                  >
-                    開く
-                  </Link>
-                ) : null}
-                {needsPlanChange ? <PlanLink variant="default" /> : null}
-                {isFailed && !needsPlanChange && job.kind === "text" ? (
-                  <Link
-                    className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}
-                    search={{ fromJob: job.id }}
-                    to="/import/text"
-                  >
-                    再試行
-                  </Link>
-                ) : null}
-                {isFailed && !needsPlanChange && job.kind === "url" ? (
-                  <Button
-                    className="shrink-0"
-                    disabled={!job.url || retryMutation.isPending}
-                    size="sm"
-                    onClick={() => retryMutation.mutate(job)}
-                  >
-                    再試行
-                  </Button>
-                ) : null}
-                {!isActive ? (
-                  <Button
-                    aria-label={`${label ?? status}を閉じる`}
-                    className="shrink-0"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => dismissImportJob(job.id)}
-                  >
-                    <X weight="bold" />
-                  </Button>
-                ) : null}
-              </div>
-            );
-          })}
-          {retryError ? (
-            <p className="px-2 pb-1 text-brand-danger text-xs" role="alert">
-              {retryError}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
 // URLにタグの指定がないときに使う。描画のたびに新しい配列にすると、条件が変わったと見なされる。
 const noTagIds: string[] = [];
+// 並び順と表示のメニューは、検索欄の中のボタンから開く。メニューの本体を検索欄の中に置くと、
+// 項目を押したクリックが欄まで伝わり、検索欄にフォーカスが移ってキーボードが開く。
+const shelfViewMenu = Menu.createHandle();
 
 // 絞り込んで0件になったときの見出し。どの条件で絞っているかを言葉にする。
 const describeFilterMiss = ({
@@ -339,8 +126,51 @@ const describeFilterMiss = ({
   return query ? `「${query}」に一致するレシピはありません` : "条件に合うレシピはありません";
 };
 
+// 空の一覧から始め方を選ぶ行。どちらも同じ重さで並べる。
+const ShelfStartOption = ({
+  deviceName,
+  description,
+  icon,
+  iconClassName,
+  title,
+  to,
+}: {
+  /** この端末での設定だと分かるよう、名前に添える。 */
+  deviceName?: IosDeviceName;
+  description: string;
+  icon: ReactNode;
+  iconClassName: string;
+  title: string;
+  to: "/import/url" | "/settings/share";
+}) => (
+  <li>
+    <Link
+      className="grid grid-cols-[2.75rem_minmax(0,1fr)_1rem] items-center gap-x-3.5 rounded-[16px] border border-brand-line-soft bg-brand-paper p-4 text-left text-brand-ink no-underline shadow-pantry-sm transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-brand-orange focus-visible:outline-offset-2"
+      to={to}
+    >
+      <span
+        aria-hidden="true"
+        className={cn("grid size-11 place-items-center rounded-full", iconClassName)}
+      >
+        {icon}
+      </span>
+      <span className="grid gap-0.5">
+        <span className="flex items-center gap-2 font-bold text-base">
+          {title}
+          {deviceName ? (
+            <DeviceBadge className="bg-brand-paper-muted" deviceName={deviceName} />
+          ) : null}
+        </span>
+        <span className="text-brand-muted text-[13px] leading-[21px]">{description}</span>
+      </span>
+      <CaretRight aria-hidden="true" className="text-brand-muted" size={16} weight="bold" />
+    </Link>
+  </li>
+);
+
 export const RecipesIndexRoute = () => {
   const queryClient = useQueryClient();
+  const shortcutSetupOffer = useShortcutSetupOffer();
   const {
     sort = "newest",
     q: query = "",
@@ -581,15 +411,33 @@ export const RecipesIndexRoute = () => {
                     value={searchInput}
                     onChange={(event) => setSearchInput(event.target.value)}
                   />
-                  {searchInput ? (
+                  {searchInput || hasShelfToolbar ? (
                     <InputGroupAddon align="inline-end">
-                      <InputGroupButton
-                        aria-label="検索を消す"
-                        size="icon-xs"
-                        onClick={clearSearch}
-                      >
-                        <X weight="bold" />
-                      </InputGroupButton>
+                      {searchInput ? (
+                        <InputGroupButton
+                          aria-label="検索を消す"
+                          size="icon-xs"
+                          onClick={clearSearch}
+                        >
+                          <X weight="bold" />
+                        </InputGroupButton>
+                      ) : null}
+                      {/* 並び順と表示も一覧の見え方なので、検索と同じ欄に入れる。欄の外の設定と見分けられるようにする。 */}
+                      {hasShelfToolbar ? (
+                        <DropdownMenuTrigger
+                          handle={shelfViewMenu}
+                          aria-label={sort === "oldest" ? "表示の設定（古い順）" : "表示の設定"}
+                          render={<InputGroupButton className="relative" size="icon-xs" />}
+                        >
+                          <SlidersHorizontal className="size-4" weight="bold" />
+                          {sort === "oldest" ? (
+                            <span
+                              aria-hidden="true"
+                              className="absolute top-0 right-0 size-1.5 rounded-full bg-brand-orange"
+                            />
+                          ) : null}
+                        </DropdownMenuTrigger>
+                      ) : null}
                     </InputGroupAddon>
                   ) : null}
                 </InputGroup>
@@ -599,61 +447,47 @@ export const RecipesIndexRoute = () => {
               検索
             </Button>
           </form>
+          {hasShelfToolbar && shelfSummary ? (
+            <p className="hidden shrink-0 truncate text-brand-muted text-sm sm:block sm:max-w-56">
+              {shelfSummary}
+            </p>
+          ) : null}
           {hasShelfToolbar ? (
-            <>
-              {shelfSummary ? (
-                <p className="hidden shrink-0 truncate text-brand-muted text-sm sm:block sm:max-w-56">
-                  {shelfSummary}
-                </p>
-              ) : null}
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label={sort === "oldest" ? "表示の設定（古い順）" : "表示の設定"}
-                  render={<Button className="relative shrink-0" size="icon-lg" variant="outline" />}
+            <DropdownMenu handle={shelfViewMenu}>
+              <DropdownMenuContent align="end" className="w-auto min-w-40">
+                <DropdownMenuRadioGroup
+                  value={sort}
+                  onValueChange={(value) => {
+                    if (value === "newest" || value === "oldest") {
+                      changeSort(value);
+                    }
+                  }}
                 >
-                  <SlidersHorizontal weight="bold" />
-                  {sort === "oldest" ? (
-                    <span
-                      aria-hidden="true"
-                      className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand-orange"
-                    />
-                  ) : null}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-auto min-w-40">
-                  <DropdownMenuRadioGroup
-                    value={sort}
-                    onValueChange={(value) => {
-                      if (value === "newest" || value === "oldest") {
-                        changeSort(value);
-                      }
-                    }}
-                  >
-                    <DropdownMenuLabel>並び順</DropdownMenuLabel>
-                    <DropdownMenuRadioItem value="newest">新しい順</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="oldest">古い順</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioGroup
-                    value={viewMode}
-                    onValueChange={(value) => {
-                      if (value === "grid" || value === "list") {
-                        setViewMode(value);
-                      }
-                    }}
-                  >
-                    <DropdownMenuLabel>表示</DropdownMenuLabel>
-                    <DropdownMenuRadioItem value="grid">
-                      <SquaresFour weight="bold" />
-                      グリッド
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="list">
-                      <List weight="bold" />
-                      リスト
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
+                  <DropdownMenuLabel>並び順</DropdownMenuLabel>
+                  <DropdownMenuRadioItem value="newest">新しい順</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="oldest">古い順</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={viewMode}
+                  onValueChange={(value) => {
+                    if (value === "grid" || value === "list") {
+                      setViewMode(value);
+                    }
+                  }}
+                >
+                  <DropdownMenuLabel>表示</DropdownMenuLabel>
+                  <DropdownMenuRadioItem value="grid">
+                    <SquaresFour weight="bold" />
+                    グリッド
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="list">
+                    <List weight="bold" />
+                    リスト
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           <Link
             aria-label="設定"
@@ -692,8 +526,6 @@ export const RecipesIndexRoute = () => {
         </div>
       ) : null}
 
-      <ImportJobIsland />
-
       {error ? (
         <div className="mt-6 rounded-[14px] border border-brand-danger/20 bg-brand-danger/5 p-4">
           <p className="text-brand-danger text-sm" role="alert">
@@ -720,12 +552,42 @@ export const RecipesIndexRoute = () => {
             <CookingPot size={28} className="text-brand-sage-dark" weight="bold" />
           </div>
           <p className="mt-5 font-semibold text-brand-walnut text-lg">レシピはまだありません</p>
-          <p className="mt-2 max-w-xs text-brand-muted text-sm leading-relaxed">
-            サイトや動画のURLを貼ると、材料と手順に整えて保存します。
-          </p>
-          <Link className={cn(buttonVariants(), "mt-6 no-underline")} to="/import/url">
-            URLから取り込む
-          </Link>
+          {/* iPhoneとiPadでは、見つけたその場で送れる共有を、URLを貼るのと並べて最初から見せる。
+              連携の状態を読めるまではどちらも出さず、URLだけの始め方から2択へ差し替わらないようにする。 */}
+          {shortcutSetupOffer.status === "offer" ? (
+            <>
+              <p className="mt-2 max-w-xs text-brand-muted text-sm leading-relaxed">
+                どちらからでも始められます。
+              </p>
+              <ul className="mt-7 grid w-full max-w-md gap-3">
+                <ShelfStartOption
+                  description="サイトや動画のURLから、材料と手順に整えて保存します。"
+                  icon={<LinkIcon size={20} weight="bold" />}
+                  iconClassName="bg-brand-sage-soft text-brand-sage-dark"
+                  title="URLを貼って取り込む"
+                  to="/import/url"
+                />
+                <ShelfStartOption
+                  deviceName={shortcutSetupOffer.deviceName}
+                  description="InstagramやYouTubeを見ながら、アプリを開かずに保存できます。設定は1分ほどです。"
+                  icon={<Export size={20} weight="bold" />}
+                  iconClassName="bg-brand-orange-soft text-brand-orange-dark"
+                  title="共有ボタンから送る"
+                  to="/settings/share"
+                />
+              </ul>
+            </>
+          ) : null}
+          {shortcutSetupOffer.status === "none" ? (
+            <>
+              <p className="mt-2 max-w-xs text-brand-muted text-sm leading-relaxed">
+                サイトや動画のURLを貼ると、材料と手順に整えて保存します。
+              </p>
+              <Link className={cn(buttonVariants(), "mt-6 no-underline")} to="/import/url">
+                URLから取り込む
+              </Link>
+            </>
+          ) : null}
         </div>
       ) : null}
       {isFilterMiss ? (
@@ -753,6 +615,9 @@ export const RecipesIndexRoute = () => {
           ))}
         </div>
       ) : null}
+
+      {/* 絞り込み中は探している最中なので、誘いで一覧を押し下げない。 */}
+      {recipes.length > 0 && !hasFilter ? <ShortcutSetupNudge /> : null}
 
       {shelf.sections.map((section, sectionIndex) => {
         const headingId = `${shelfId}-${section.key}`;

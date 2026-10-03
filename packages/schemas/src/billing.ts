@@ -28,7 +28,7 @@ export const getBillingStatusResponseSchema = z.object({
 export type GetBillingStatusResponse = z.infer<typeof getBillingStatusResponseSchema>;
 
 /**
- * Proの値段。StripeのPriceから読み、円・月ごとの定期払いのものだけを返す（ADR 0027）。
+ * Proの値段。StripeのPriceから読み、円・月ごとの定期払いのものだけを返す。
  * 円は小数のない通貨なので、`amount`はそのまま円の額である。
  */
 export const getProPriceResponseSchema = z.object({

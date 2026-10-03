@@ -31,7 +31,8 @@ export const recipeDraftFormSchema = z
         `できあがり量は${MAX_RECIPE_YIELD_TEXT_LENGTH}文字までです。`,
       )
       .optional(),
-    coverImage: draftImageRefSchema.optional(),
+    // 表紙がないことはnullで持つ。undefinedにすると欄が最初の値を返し続け、外しても表紙が残って見える。
+    coverImage: draftImageRefSchema.nullable(),
     referenceImages: z
       .array(draftImageRefSchema)
       .max(MAX_RECIPE_REFERENCE_IMAGES, `レシピ画像は${MAX_RECIPE_REFERENCE_IMAGES}枚までです。`),
@@ -124,7 +125,7 @@ export const createEmptyStep = () => ({ text: "", images: [] });
 export const createEmptyRecipeDraftFormValues = (): RecipeDraftFormValues => ({
   title: "",
   yieldText: "",
-  coverImage: undefined,
+  coverImage: null,
   referenceImages: [],
   note: "",
   ingredientGroups: [createEmptyIngredientGroup()],

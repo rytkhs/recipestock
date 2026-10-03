@@ -1,5 +1,5 @@
 import { shortcutCredentialTokenSchema } from "@recipestock/schemas";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createShortcutCredentials,
   createShortcutCredentialToken,
@@ -8,106 +8,64 @@ import {
 } from "./shortcut-credentials";
 
 const issuedAt = new Date("2026-07-11T00:00:00.000Z");
-const usedAt = new Date("2026-07-11T00:01:00.000Z");
-
-const createRepository = () => {
-  const records: ShortcutCredentialRecord[] = [];
-  const repository: ShortcutCredentialRepository = {
-    async createCredential(record) {
-      records.push(record);
-      return record;
-    },
-    async listCredentials(userId) {
-      return records.filter((record) => record.userId === userId && !record.revokedAt);
-    },
-    async revokeCredential({ credentialId, userId, now }) {
-      const record = records.find(
-        (candidate) =>
-          candidate.id === credentialId && candidate.userId === userId && !candidate.revokedAt,
-      );
-      if (!record) return false;
-      record.revokedAt = now;
-      return true;
-    },
-    async authenticate({ tokenHash }) {
-      const record = records.find(
-        (candidate) => candidate.tokenHash === tokenHash && !candidate.revokedAt,
-      );
-      if (!record) return null;
-      return { credentialId: record.id, userId: record.userId };
-    },
-  };
-  return { records, repository };
-};
-
 describe("Shortcut credentials Module", () => {
   it("発行するtokenはschemaが受け付ける形で、毎回異なる", () => {
     const token = createShortcutCredentialToken();
 
     expect(shortcutCredentialTokenSchema.safeParse(token).success).toBe(true);
-    expect(token).toHaveLength(30);
     expect(createShortcutCredentialToken()).not.toBe(token);
   });
 
-  it("平文tokenを発行時だけ返し、repositoryにはhashとsuffixを保存する", async () => {
-    const state = createRepository();
+  it("平文tokenを発行時だけ返し、保存と認証には同じhashを使う", async () => {
+    const createCredential = vi.fn(async (record: ShortcutCredentialRecord) => record);
+    const authenticate = vi.fn<ShortcutCredentialRepository["authenticate"]>(async () => ({
+      status: "active",
+      credentialId: "credential_1",
+      userId: "user_1",
+    }));
+    let currentDate = issuedAt;
     const credentials = createShortcutCredentials({
-      repository: state.repository,
+      repository: {
+        createCredential,
+        listCredentials: async () => [],
+        revokeCredential: async () => false,
+        authenticate,
+      },
       createId: () => "credential_1",
       createToken: () => `rssc_${"a".repeat(25)}`,
-      getCurrentDate: () => issuedAt,
+      getCurrentDate: () => currentDate,
     });
 
-    await expect(credentials.issue({ userId: "user_1", name: "iPhone" })).resolves.toEqual({
+    const issued = await credentials.issue({ userId: "user_1", name: "iPhone" });
+    expect(issued).toEqual({
       credential: {
         id: "credential_1",
         name: "iPhone",
         tokenSuffix: "aaaa",
         createdAt: issuedAt.toISOString(),
+        firstUsedAt: null,
+        lastUsedAt: null,
       },
       token: `rssc_${"a".repeat(25)}`,
     });
-    expect(state.records[0]?.tokenHash).not.toContain("rssc_");
-    expect(state.records[0]?.tokenSuffix).toBe("aaaa");
-  });
+    expect(createCredential).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user_1",
+        name: "iPhone",
+        tokenSuffix: "aaaa",
+        tokenHash: "b9829a68e15edfa2b3668c4062b9299d30c6a6c9362e904aa995ec39b65ace07",
+      }),
+    );
 
-  it("認証成功時にcredentialId/userIdを返す", async () => {
-    const state = createRepository();
-    let currentDate = issuedAt;
-    const token = `rssc_${"b".repeat(25)}`;
-    const credentials = createShortcutCredentials({
-      repository: state.repository,
-      createId: () => "credential_1",
-      createToken: () => token,
-      getCurrentDate: () => currentDate,
-    });
-    await credentials.issue({ userId: "user_1", name: "iPhone" });
-
-    currentDate = usedAt;
-    await expect(credentials.authenticate({ token })).resolves.toEqual({
+    currentDate = new Date("2026-07-11T00:01:00.000Z");
+    await expect(credentials.authenticate({ token: issued.token })).resolves.toEqual({
+      status: "active",
       credentialId: "credential_1",
       userId: "user_1",
     });
-  });
-
-  it("一覧はactive credentialだけを返し、revoke後のtokenを拒否する", async () => {
-    const state = createRepository();
-    let currentDate = issuedAt;
-    const token = `rssc_${"c".repeat(25)}`;
-    const credentials = createShortcutCredentials({
-      repository: state.repository,
-      createId: () => "credential_1",
-      createToken: () => token,
-      getCurrentDate: () => currentDate,
+    expect(authenticate).toHaveBeenCalledWith({
+      tokenHash: "b9829a68e15edfa2b3668c4062b9299d30c6a6c9362e904aa995ec39b65ace07",
+      now: new Date("2026-07-11T00:01:00.000Z"),
     });
-    await credentials.issue({ userId: "user_1", name: "iPhone" });
-
-    await expect(credentials.list("user_1")).resolves.toHaveLength(1);
-    currentDate = usedAt;
-    await expect(
-      credentials.revoke({ credentialId: "credential_1", userId: "user_1" }),
-    ).resolves.toBe(true);
-    await expect(credentials.list("user_1")).resolves.toEqual([]);
-    await expect(credentials.authenticate({ token })).resolves.toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 # Recipe Stock
 
-Recipe Stock is a PWA for turning recipes from websites, videos, social posts, books, images, and screenshots into one searchable saved format.
+Recipe Stock is a PWA for turning recipes from websites, videos, social posts, and books into one searchable saved format. Image and screenshot imports are out of scope for now.
 
 ## Language
 
@@ -25,6 +25,10 @@ _Avoid_: Origin, reference, citation
 A user-owned label attached to **Recipes** to narrow the recipe list. Tags form the user's vocabulary: a **Tag** exists independently of any **Recipe** and is renamed, merged, or deleted as a whole. The vocabulary is kept in an order the user decides; it does not change with how many **Recipes** carry a **Tag**. A **Tag** is not part of **RecipeContent** or **Source**.
 _Avoid_: Category, Folder, Label
 
+**Locked Recipe**:
+A **Recipe** whose content a Free user cannot read or edit because they hold more **Recipes** than the Free plan allows, which happens only after returning from Pro. The newest saved **Recipes** up to the Free limit stay open and the rest are locked. A **Locked Recipe** is not deleted, lock state is not stored, and editing a **Recipe** does not change which **Recipes** are locked.
+_Avoid_: Hidden recipe, disabled recipe
+
 **Import Job**:
 A user-requested attempt to create one **Recipe** from an external source, such as a URL or pasted text. An **Import Job** may finish successfully, fail, or be canceled before producing a **Recipe**.
 _Avoid_: Import task, background import
@@ -36,6 +40,14 @@ _Avoid_: Raw text, original text, text draft
 **Import Cancellation**:
 A user's request that an active **Import Job** must not produce a **Recipe**. Cancellation does not imply that already-started external processing stops immediately.
 _Avoid_: Dismiss, close, force stop
+
+**AI Import Limit**:
+The monthly cap on **Import Jobs** read with AI; imports read without AI do not count, but once the cap is reached no **Import Job** is accepted until the month resets. Users see it as the limit on 「AI取り込み」 (the Free cap as a number, the Pro cap only as generous) and never see how many they have used, because uncounted imports would make that number disagree with what they imported.
+_Avoid_: Import count, remaining imports, 取り込み回数, AI利用回数
+
+**Shortcut Credential**:
+A bearer key the user pastes into the iOS Shortcut when adding it, so that shared input creates **Import Jobs** in their account. Users see it as 「連携キー」. A **Shortcut Credential** belongs to the Shortcut it was pasted into, not to a device: the Shortcut can sync to the user's other Apple devices with the same key, and reissuing or relinking can leave several keys behind for one device. Its name only records where it was issued. Sharing is set up once any **Shortcut Credential** has been used; one that was issued but never used is a leftover of an unfinished setup, not a linked device.
+_Avoid_: Device, linked device, 連携している端末, token (in user-facing text), 連携トークン
 
 ## Example Dialogue
 

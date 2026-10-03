@@ -8,7 +8,7 @@ import { AppRouter, createAppRouter } from "./routes/router";
 import "./styles.css";
 
 // 見つからないものは読み直しても見つからないので、待たせずに結果を出す。回数はTanStack Queryの既定と同じ。
-// 401も読み直しでは変わらない。sessionの回復はviewerの経路が担う（ADR 0011）。
+// 401も読み直しでは変わらない。sessionの回復はviewerの経路が担う。
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

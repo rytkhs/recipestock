@@ -52,6 +52,7 @@ Put browser-facing UI and client behavior here:
 - PWA manifest and service worker
 - URL share-target handling
 - development-only MSW handlers, fixtures, and scenarios
+- development-only UI gallery that lays out screen patterns side by side
 
 Do not put server-only secrets, database access, Stripe server calls, R2 signing, or AI provider calls in `apps/web`.
 
@@ -62,6 +63,7 @@ apps/web/src/
   components/
     ui/                  vendored shadcn/ui components
   features/              feature-specific UI and client logic
+  gallery/               development-only UI gallery, opened at /gallery.html
   lib/                   app-wide browser utilities and API clients
   mocks/                 MSW handlers, fixtures, and scenarios
   pwa/                   service worker and PWA browser behavior
@@ -82,7 +84,6 @@ Put server-side behavior here:
 - recipe CRUD route handlers
 - URL and text Import Job submission and lifecycle
 - Cloudflare Queue consumption and Import Job processing
-- image import route handlers
 - AI usage-limit checks
 - Free / Pro save limits
 - recipe lock computation
@@ -107,17 +108,26 @@ apps/api/src/
   logger.ts               structured logging
   auth.ts                 Better Auth setup and auth service
   billing.ts              billing repository and plan synchronization
+  completion-notifications.ts Import Job completion Push delivery
+  image-dimensions.ts     image dimension detection from uploaded bytes
   images.ts               R2 image service
+  import-completion-notices.ts Import Job completion Push payloads
   import-jobs.ts          Import Job repository and queue processing
+  import-page-evidence.ts recipe evidence extraction from fetched pages
   import-queue-health.ts  Import Queue stall detection for the cron
   import-url.ts           URL import orchestration
+  ios-share-notices.ts    iOS Shortcut import result copy and destinations
   me.ts                   current-user repository and response mapping
   monitoring.ts           Sentry options, error reporter, and cron check-ins
   push-subscriptions.ts   Push subscription repository
+  recipe-image-keys.ts    R2 recipe image and thumbnail key parsing
+  recipe-images.ts        draft image finalization into R2
+  recipe-thumbnails.ts    thumbnail URLs and Cloudflare Images responses
   recipes.ts              recipe repository and response mapping
   shortcut-credentials.ts Shortcut credential repository and service
   stripe-billing.ts       Stripe client
   tags.ts                 tag repository and normalization
+  url-safety.ts           outbound fetch URL and hostname checks
   usage.ts                AI usage repository and limits
   routes/
     auth.ts
