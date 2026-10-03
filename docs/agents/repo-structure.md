@@ -128,10 +128,20 @@ apps/api/src/
     job-processor.ts      Import Job processing from the queue
     queue.ts              Import Queue and dead letter queue consumers
     job-submission.ts     Import Job submission shared by url- and text-import-job-submission.ts
+    url-import-job-submission.ts URL Import Job submission
+    text-import-job-submission.ts text Import Job submission
     queue-health.ts       Import Queue stall detection for the cron
     url-import.ts         URL import orchestration
     text-import.ts        text import orchestration
     page-evidence.ts      recipe evidence extraction from fetched pages
+    policy.ts             import URL and fetched content-type checks
+    ai-normalization.ts   AI normalization with AI usage consumption
+    ai-provider.ts        default AI provider and its timeout
+    prompts.ts            AI system prompts per import profile
+    draft-limits.ts       recipe draft trimming to content limits
+    deadline.ts           Import Job deadline checks and bounded timeouts
+    text.ts               text normalization helpers
+    types.ts              shared import types and RecipeImportError
     completion-notifications.ts Import Job completion Push delivery
     completion-notices.ts Import Job completion Push payloads
     deterministic/        site-specific importers that need no AI
