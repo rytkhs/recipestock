@@ -4,7 +4,7 @@ import {
   iosShareShortcutImportResponseSchema,
   shortcutCredentialTokenSchema,
 } from "@recipestock/schemas";
-import { extractFirstUrl } from "@recipestock/shared";
+import { extractFirstUrl, IOS_SHARE_SETUP_CHECK_PATH } from "@recipestock/shared";
 import { type Context, Hono } from "hono";
 import { type ApiEnv } from "../context";
 import { buildIosShareShortcutImportResult } from "../ios-share-notices";
@@ -53,6 +53,22 @@ const sourceHostOf = (url: string) => {
 };
 
 /**
+ * 設定画面の③は、設定画面そのもののURLを共有させる。originとpathが完全に一致したときだけ確認とし、
+ * queryとhashは見ない。自分のoriginの別のpathは、ふつうの取り込みとして扱う。
+ */
+const isSetupCheckUrl = (url: string, appOrigin: string) => {
+  try {
+    const sharedUrl = new URL(url);
+    return (
+      sharedUrl.origin === new URL(appOrigin).origin &&
+      sharedUrl.pathname === IOS_SHARE_SETUP_CHECK_PATH
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
  * 200で返す以上、HTTPステータスからlevelを決める`api_request_completed`では拾えない。
  * 従来4xx/5xxとしてwarnになっていた結果は、このlevelで引き続きアラートできるようにする。
  */
@@ -77,14 +93,18 @@ const respondWithNotice = (
   c: Context<ApiEnv>,
   reason: IosShareShortcutImportReason,
   logFields: ShortcutImportLogFields = {},
+  { isSetupCheck = false }: { isSetupCheck?: boolean } = {},
 ) => {
   const result = buildIosShareShortcutImportResult({
     reason,
     appOrigin: c.env.APP_ORIGIN,
+    isSetupCheck,
   });
   const logger = c.get("logger");
   const fields = {
     ...logFields,
+    // reasonは起きたこと、確認かどうかは別の軸として残す。
+    ...(isSetupCheck ? { setupCheck: true } : {}),
     outcome: result.outcome,
     reason,
     shortcutVersion: c.req.header("x-shortcut-version"),
@@ -118,30 +138,69 @@ export const createIosShareRoutes = ({
       return respondWithNotice(c, "rate_limit_exceeded", { rateLimitScope: "client" });
     }
 
+    /**
+     * 認証の失敗を返す前に、設定の確認かどうかを知る必要がある。確認への応答には遷移先を返さないため。
+     * 認証できないrequestの本文も読むことになるが、ここまでにclient単位の上限がかかっている。
+     */
+    const request = iosShareShortcutImportRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    const url = request.success ? extractFirstUrl(request.data.input) : "";
+    const isSetupCheck = url !== "" && isSetupCheckUrl(url, c.env.APP_ORIGIN);
+
     const token = bearerToken(c.req.header("authorization"));
     if (!token) {
-      return respondWithNotice(c, "missing_credential", { authFailure: "missing_token" });
+      return respondWithNotice(
+        c,
+        "missing_credential",
+        { authFailure: "missing_token" },
+        { isSetupCheck },
+      );
     }
 
     const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
     if (identity.status === "revoked") {
-      return respondWithNotice(c, "unusable_credential", {
-        authFailure: "revoked_token",
-        credentialId: identity.credentialId,
-        userId: identity.userId,
-      });
+      return respondWithNotice(
+        c,
+        "unusable_credential",
+        {
+          authFailure: "revoked_token",
+          credentialId: identity.credentialId,
+          userId: identity.userId,
+        },
+        { isSetupCheck },
+      );
     }
     if (identity.status === "unknown") {
       // 形は、届いたものがキーかどうかを伝え分けるためだけに見る。認証はhash照合だけで行い、形の違う旧形式のキーも通す。
       return shortcutCredentialTokenSchema.safeParse(token).success
-        ? respondWithNotice(c, "unusable_credential", { authFailure: "unknown_token" })
-        : respondWithNotice(c, "missing_credential", { authFailure: "malformed_token" });
+        ? respondWithNotice(
+            c,
+            "unusable_credential",
+            { authFailure: "unknown_token" },
+            { isSetupCheck },
+          )
+        : respondWithNotice(
+            c,
+            "missing_credential",
+            { authFailure: "malformed_token" },
+            { isSetupCheck },
+          );
     }
 
     const logFields: ShortcutImportLogFields = {
       credentialId: identity.credentialId,
       userId: identity.userId,
     };
+
+    /**
+     * 認証は通った時点でキーの使った時刻を記録し、設定画面はそれを見て「連携できました」に変わる。
+     * credential単位の上限より前に返し、通知と画面が食い違わないようにする。確認は取り込みを作らないので、
+     * その上限で抑えるものがない。
+     */
+    if (isSetupCheck) {
+      return respondWithNotice(c, "setup_verified", logFields, { isSetupCheck });
+    }
 
     const limiter = shortcutRateLimiterFor(c.env);
     const { success } = await limiter.limit({ key: identity.credentialId });
@@ -152,14 +211,10 @@ export const createIosShareRoutes = ({
       });
     }
 
-    const request = iosShareShortcutImportRequestSchema.safeParse(
-      await c.req.json().catch(() => null),
-    );
     if (!request.success) {
       return respondWithNotice(c, "malformed_request", logFields);
     }
 
-    const url = extractFirstUrl(request.data.input);
     if (!url) {
       return respondWithNotice(c, "no_url_in_input", logFields);
     }

@@ -11,6 +11,7 @@ import { IosShareSettings } from "../features/ios-share/ios-share-settings";
 import { ShortcutSetupComplete } from "../features/ios-share/setup-complete";
 import { ShortcutSetup } from "../features/ios-share/shortcut-setup";
 import {
+  type ShareCheckPhase,
   type ShortcutKeyPhase,
   type ShortcutSetupState,
 } from "../features/ios-share/use-shortcut-setup";
@@ -160,6 +161,7 @@ const occursIn = (stage: SetupStage, start: SetupStart) =>
 const setupStateAt = (
   stage: SetupStage,
   resumableCredential: ShortcutCredential | null,
+  shareCheck: ShareCheckPhase = "idle",
 ): ShortcutSetupState => {
   const hasOpenedShortcut = stage.hasOpenedShortcut ?? false;
   const isResumed = stage.key.status === "none" && resumableCredential !== null;
@@ -169,9 +171,12 @@ const setupStateAt = (
     hasOpenedShortcut,
     isResumed,
     isWaitingForShare: hasOpenedShortcut || isResumed,
+    shareCheck,
+    lastUsedAtAtShare: null,
     issueAndCopyKey: asyncNoop,
     copyKeyAgain: asyncNoop,
     markShortcutOpened: noop,
+    openShareSheet: noop,
   };
 };
 
@@ -241,6 +246,46 @@ const SetupScreens = ({
         </Fragment>
       );
     })}
+  </div>
+);
+
+/**
+ * ③を押したあとの状態。押せない・押せるは上の列に出ているので、②を開いた段階で、押したあとの状態だけを並べる。
+ * どの始まり方でも③は同じなので、行は1つにする。
+ */
+const shareCheckStates: { label: string; phase: ShareCheckPhase }[] = [
+  { label: "共有中", phase: "sharing" },
+  { label: "確かめている", phase: "checking" },
+  { label: "まだ確かめられていない", phase: "unconfirmed" },
+  { label: "開けなかった", phase: "failed" },
+];
+
+const shareCheckStage: SetupStage = {
+  label: "②を開いた",
+  key: issuedKey(),
+  hasOpenedShortcut: true,
+};
+
+const ShareCheckScreens = ({
+  deviceName,
+  frameSize,
+}: {
+  deviceName: IosDeviceName;
+  frameSize: FrameSize;
+}) => (
+  <div className="flex items-start gap-6">
+    {shareCheckStates.map(({ label, phase }) => (
+      <Frame key={phase} label={label} size={frameSize}>
+        <ShortcutSetup
+          deviceName={deviceName}
+          mayHaveShortcut={false}
+          resumableCredential={null}
+          setup={setupStateAt(shareCheckStage, null, phase)}
+          showsIntro
+          onRestart={noop}
+        />
+      </Frame>
+    ))}
   </div>
 );
 
@@ -339,6 +384,12 @@ export const IosShareGallery = ({
         title="共有から取り込む：設定の手順"
       >
         <SetupScreens deviceName={deviceName} frameSize={frameSize} relinkReason={relinkReason} />
+      </GallerySection>
+      <GallerySection
+        description="表2の③の状態。未連携で開き、②を開いたあとに③を押した。"
+        title="共有から取り込む：③を押したあと"
+      >
+        <ShareCheckScreens deviceName={deviceName} frameSize={frameSize} />
       </GallerySection>
       <GallerySection
         description="表3。Androidと、PC・Macの画面は端末の切り替えに関わらず同じ。"

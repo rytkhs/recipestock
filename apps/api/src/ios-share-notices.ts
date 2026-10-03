@@ -28,6 +28,14 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
     outcome: "accepted",
     title: "すでに取り込み中です",
   },
+  /**
+   * 設定画面の③から、設定画面のURLを共有した。取り込みは作らず、キーと接続の許可が済んで届いたことだけを伝える。
+   * 断ったのではないので`accepted`とする。
+   */
+  setup_verified: {
+    outcome: "accepted",
+    title: "連携できました",
+  },
   no_url_in_input: {
     outcome: "rejected",
     title: "リンクが見つかりませんでした",
@@ -102,12 +110,18 @@ const iosShareNoticeTemplates: Record<IosShareShortcutImportReason, IosShareNoti
   },
 };
 
+/**
+ * 設定の確認への応答は、どのreasonでも遷移先を返さない。確認は設定画面の上で起きるので、戻る先にはもういる。
+ * `openUrl`はSafariで開くため、ホーム画面アプリで設定している人をログインもlocalStorageも別の入れ物へ移してしまう（#152）。
+ */
 export const buildIosShareShortcutImportResult = ({
   reason,
   appOrigin,
+  isSetupCheck = false,
 }: {
   reason: IosShareShortcutImportReason;
   appOrigin: string;
+  isSetupCheck?: boolean;
 }): IosShareShortcutImportResponse => {
   const template = iosShareNoticeTemplates[reason];
 
@@ -117,7 +131,7 @@ export const buildIosShareShortcutImportResult = ({
     notice: {
       title: template.title,
       body: template.body ?? "",
-      openUrl: template.path ? new URL(template.path, appOrigin).toString() : null,
+      openUrl: template.path && !isSetupCheck ? new URL(template.path, appOrigin).toString() : null,
     },
   };
 };

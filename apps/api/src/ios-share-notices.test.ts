@@ -16,6 +16,7 @@ const allReasons = iosShareShortcutImportReasonSchema.options;
 const titleOnlyReasons: IosShareShortcutImportReason[] = [
   "created",
   "existing_active_job",
+  "setup_verified",
   "no_url_in_input",
   "rate_limit_exceeded",
 ];
@@ -67,6 +68,19 @@ describe("iOS Shortcut noticeのカタログ", () => {
   it("openUrlはユーザーの操作が必要なreasonにだけ付く", () => {
     for (const reason of allReasons) {
       expect(buildResult(reason).notice.openUrl).toBe(openUrlByReason[reason] ?? null);
+    }
+  });
+
+  /**
+   * 確認は設定画面の上で起きる。Safariで設定画面を開き直すと、ホーム画面アプリで設定している人が
+   * ログインもlocalStorageも別の入れ物へ移される。
+   */
+  it("設定の確認への応答は、どのreasonでもopenUrlを返さない", () => {
+    for (const reason of allReasons) {
+      expect(
+        buildIosShareShortcutImportResult({ reason, appOrigin: APP_ORIGIN, isSetupCheck: true })
+          .notice.openUrl,
+      ).toBeNull();
     }
   });
 });
