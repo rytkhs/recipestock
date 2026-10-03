@@ -130,6 +130,8 @@ export const createApp = (dependencies: AppDependencies = {}) => {
   const errorReporter = dependencies.errorReporter ?? sentryErrorReporter;
   const loggerFactory = dependencies.loggerFactory ?? createLogger;
   const csrfProtection = csrf();
+  // fetchの経路で使う時刻はここで決めた時計から取る。テストはgetCurrentDateを渡して固定する。
+  const getCurrentDate = dependencies.getCurrentDate ?? (() => new Date());
   // fetchの経路で使うrepositoryはここで作り、routesは受け取ったものを使う。
   const planOptionsFor = (env: Bindings) => ({ proPriceId: env.STRIPE_PRO_PRICE_ID });
   const recipeRepositoryFor = (env: Bindings) =>
@@ -155,7 +157,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
     dependencies.shortcutCredentials ??
     createShortcutCredentials({
       repository: createShortcutCredentialRepository(createDb(env.DATABASE_URL)),
-      getCurrentDate: dependencies.getCurrentDate,
+      getCurrentDate,
     });
   const urlImportJobSubmissionFor = (env: Bindings) =>
     dependencies.urlImportJobSubmission ??
@@ -164,7 +166,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       importJobRepository: importJobRepositoryFor(env),
       importQueue: dependencies.importQueue,
       createImportJobId: dependencies.createImportJobId,
-      getCurrentDate: dependencies.getCurrentDate,
+      getCurrentDate,
     });
   const textImportJobSubmissionFor = (env: Bindings) =>
     createTextImportJobSubmission({
@@ -172,7 +174,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       importJobRepository: importJobRepositoryFor(env),
       importQueue: dependencies.importQueue,
       createImportJobId: dependencies.createImportJobId,
-      getCurrentDate: dependencies.getCurrentDate,
+      getCurrentDate,
     });
   const shortcutRateLimiterFor = (env: Bindings) =>
     dependencies.shortcutRateLimiter ?? env.SHORTCUT_RATE_LIMITER;
@@ -239,7 +241,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         urlImportJobSubmissionFor,
         textImportJobSubmissionFor,
         importJobRepositoryFor,
-        getCurrentDate: dependencies.getCurrentDate,
+        getCurrentDate,
       }),
     )
     .route(
@@ -264,7 +266,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         auth,
         pushSubscriptionRepositoryFor,
         createId: dependencies.createPushSubscriptionId,
-        getCurrentDate: dependencies.getCurrentDate,
+        getCurrentDate,
       }),
     )
     .route(
@@ -273,7 +275,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         auth,
         meRepositoryFor,
         getCurrentMonth: dependencies.getCurrentMonth,
-        getCurrentDate: dependencies.getCurrentDate,
+        getCurrentDate,
       }),
     )
     .route(
@@ -281,7 +283,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createUsageRoutes({
         auth,
         usageRepositoryFor,
-        getCurrentDate: dependencies.getCurrentDate,
+        getCurrentDate,
       }),
     )
     .route(
@@ -290,7 +292,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         auth,
         billingRepositoryFor,
         stripeBillingClient: dependencies.stripeBillingClient,
-        getCurrentDate: dependencies.getCurrentDate,
+        getCurrentDate,
       }),
     )
     .route(
@@ -309,6 +311,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
         imageService: dependencies.imageService,
         createRecipeId: dependencies.createRecipeId,
         createImageId: dependencies.createImageId,
+        getCurrentDate,
       }),
     )
     .route(
@@ -316,6 +319,7 @@ export const createApp = (dependencies: AppDependencies = {}) => {
       createTagRoutes({
         auth,
         tagRepositoryFor,
+        getCurrentDate,
       }),
     );
 };

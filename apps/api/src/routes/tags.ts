@@ -23,9 +23,14 @@ import { normalizeRequestedTagName, type TagRepository } from "../tags";
 type TagRouteDependencies = {
   auth: AuthService;
   tagRepositoryFor: (env: ApiEnv["Bindings"]) => TagRepository;
+  getCurrentDate: () => Date;
 };
 
-export const createTagRoutes = ({ auth, tagRepositoryFor }: TagRouteDependencies) => {
+export const createTagRoutes = ({
+  auth,
+  tagRepositoryFor,
+  getCurrentDate,
+}: TagRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
 
   return routes
@@ -48,7 +53,7 @@ export const createTagRoutes = ({ auth, tagRepositoryFor }: TagRouteDependencies
       await repository.reorderTags({
         userId: c.get("userId"),
         tagIds: [...new Set(request.data.tagIds)],
-        now: new Date(),
+        now: getCurrentDate(),
       });
 
       return c.json(reorderTagsResponseSchema.parse({ ok: true }));
@@ -72,7 +77,7 @@ export const createTagRoutes = ({ auth, tagRepositoryFor }: TagRouteDependencies
         userId: c.get("userId"),
         tagId: c.req.param("tagId"),
         name,
-        now: new Date(),
+        now: getCurrentDate(),
       });
 
       if (result.status === "notFound") {

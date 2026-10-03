@@ -89,6 +89,7 @@ describe("Recipe tag routes", () => {
 
   it("名前を揃えて同じ名前をまとめてから、Recipeのタグを置き換える", async () => {
     const calls: ReplaceRecipeTagsParams[] = [];
+    const now = new Date("2026-05-27T00:00:00.000Z");
     const testApp = createSilentTestApp({
       auth: createTestAuth(),
       recipeRepository: createRecipeRepositoryStub(async (userId, recipeId) =>
@@ -101,6 +102,7 @@ describe("Recipe tag routes", () => {
           { id: "tag_2", name: "作り置き" },
         ];
       }),
+      getCurrentDate: () => now,
     });
 
     const response = await putRecipeTags(testApp, { names: ["#BBQ", "ｂｂｑ", " 作り置き "] });
@@ -114,7 +116,7 @@ describe("Recipe tag routes", () => {
           { name: "BBQ", normalizedName: "bbq" },
           { name: "作り置き", normalizedName: "作り置き" },
         ],
-        now: expect.any(Date),
+        now,
       },
     ]);
     await expect(response.json()).resolves.toEqual({
