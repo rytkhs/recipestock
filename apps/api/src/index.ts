@@ -17,10 +17,10 @@ import {
   notifyImportJobCompletion,
   type PushSender,
 } from "./import/completion-notifications";
+import { processImportJob } from "./import/job-processor";
 import {
   createImportJobRepository,
   type ImportJobRepository,
-  processImportJob,
   resolveImportJobTimeoutMs,
 } from "./import/jobs";
 import { checkImportQueueHealth } from "./import/queue-health";

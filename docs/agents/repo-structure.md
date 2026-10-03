@@ -124,7 +124,8 @@ apps/api/src/
   url-safety.ts           outbound fetch URL and hostname checks
   usage.ts                AI usage repository and limits
   import/                 URL and text import, Import Jobs, and the Import Queue
-    jobs.ts               Import Job repository and queue processing
+    jobs.ts               Import Job repository and status mapping
+    job-processor.ts      Import Job processing from the queue
     job-submission.ts     Import Job submission shared by url- and text-import-job-submission.ts
     queue-health.ts       Import Queue stall detection for the cron
     url-import.ts         URL import orchestration
