@@ -183,6 +183,15 @@ export const RecipeDraftForm = ({
         />
 
         <CoverImageTitleBlock
+          belowCover={
+            <ReferenceImagesSection
+              control={control}
+              maxAddable={remainingReferenceImages}
+              onUploadStateChange={handleUploadStateChange}
+              previewUrlsByImageId={imagePreviewUrlsByImageId}
+              uploadImage={uploadImage}
+            />
+          }
           control={control}
           coverImagePreviewUrl={coverImagePreviewUrl}
           onUploadStateChange={handleUploadStateChange}
@@ -201,13 +210,6 @@ export const RecipeDraftForm = ({
               uploadImage={uploadImage}
             />
             <NoteSection control={control} />
-            <ReferenceImagesSection
-              control={control}
-              maxAddable={remainingReferenceImages}
-              onUploadStateChange={handleUploadStateChange}
-              previewUrlsByImageId={imagePreviewUrlsByImageId}
-              uploadImage={uploadImage}
-            />
           </div>
         </div>
 

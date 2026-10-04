@@ -53,28 +53,34 @@ const RecipeImageZoomButton = ({
   </button>
 );
 
+// 文字の入らない小さな枠では、アイコンだけにする。
 const RecipeImageUnavailable = ({
   className,
+  isCompact = false,
   label,
   style,
 }: {
   className: string;
+  isCompact?: boolean;
   label: string;
   style?: CSSProperties;
 }) => (
   <span
     aria-label={label}
     className={cn(
-      "flex flex-col items-center justify-center gap-1.5 bg-brand-paper-muted px-3 text-center text-brand-muted",
+      "flex flex-col items-center justify-center gap-1.5 bg-brand-paper-muted text-center text-brand-muted",
+      !isCompact && "px-3",
       className,
     )}
     role="img"
     style={style}
   >
-    <ImageBroken aria-hidden="true" size={22} weight="bold" />
-    <span aria-hidden="true" className="text-balance text-xs">
-      画像を表示できません
-    </span>
+    <ImageBroken aria-hidden="true" size={isCompact ? 18 : 22} weight="bold" />
+    {isCompact ? null : (
+      <span aria-hidden="true" className="text-balance text-xs">
+        画像を表示できません
+      </span>
+    )}
   </span>
 );
 
@@ -192,4 +198,56 @@ export const RecipeImageStrip = ({
       );
     })}
   </div>
+);
+
+// 表紙の下に置く小さな見本の列。材料を押し下げずに、表紙のほかに何枚あるか・何が写っているかを見せる。
+// 押すとその画像の位置からライトボックスで開く。
+export const RecipeImageThumbnails = ({
+  className,
+  failedImageIds,
+  images,
+  label,
+  onError,
+  onOpen,
+}: RecipeImageHandlers & {
+  className?: string;
+  failedImageIds: ReadonlySet<string>;
+  images: readonly RecipeDetailImage[];
+  label: string;
+}) => (
+  <section aria-label={label}>
+    <ul className={cn("flex snap-x gap-2 overflow-x-auto", className)}>
+      {images.map((image) => {
+        const frameClass = "size-14 rounded-[10px]";
+
+        return (
+          <li className="shrink-0 snap-start" key={image.id}>
+            {failedImageIds.has(image.id) ? (
+              <RecipeImageUnavailable
+                className={frameClass}
+                isCompact
+                label={`${image.alt}を読み込めませんでした`}
+              />
+            ) : (
+              <RecipeImageZoomButton
+                alt={image.alt}
+                className={cn(frameClass, "bg-brand-paper-muted")}
+                onOpen={() => onOpen(image.id)}
+              >
+                <img
+                  alt={image.alt}
+                  className="block size-full object-cover"
+                  height={image.height}
+                  src={image.src}
+                  width={image.width}
+                  onError={() => onError(image.id)}
+                  {...deferredImageProps}
+                />
+              </RecipeImageZoomButton>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  </section>
 );
