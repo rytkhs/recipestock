@@ -64,7 +64,6 @@ import {
   type RecipeDetailImage,
   RecipeHero,
   RecipeImageStrip,
-  RecipeSingleImage,
 } from "../features/recipes/recipe-detail-image";
 import { RecipeNote, RecipeSource } from "../features/recipes/recipe-detail-section";
 import { RecipeIngredients } from "../features/recipes/recipe-ingredients";
@@ -390,19 +389,6 @@ const RecipeDetailView = ({
 
   const renderStepImages = (stepIndex: number) => {
     const stepImages = images.steps[stepIndex] ?? [];
-    const onlyImage = stepImages.length === 1 ? stepImages[0] : undefined;
-
-    if (onlyImage) {
-      return (
-        <RecipeSingleImage
-          image={onlyImage}
-          isFailed={failedImageIds.has(onlyImage.id)}
-          sizeClassName="max-w-[min(100%,calc(22rem*var(--image-ratio)))]"
-          onError={markImageFailed}
-          onOpen={openLightbox}
-        />
-      );
-    }
 
     return stepImages.length > 0 ? (
       <RecipeImageStrip

@@ -147,52 +147,7 @@ export const RecipeHero = ({
   );
 };
 
-// 1枚の画像は縦横比のまま出す。高さの上限は、--image-ratio を掛けた幅の上限として呼び出し側が渡す。
-export const RecipeSingleImage = ({
-  image,
-  isFailed,
-  onError,
-  onOpen,
-  sizeClassName,
-}: RecipeImageHandlers & {
-  image: RecipeDetailImage;
-  isFailed: boolean;
-  sizeClassName: string;
-}) => {
-  const ratioStyle = { "--image-ratio": image.width / image.height } as CSSProperties;
-
-  if (isFailed) {
-    return (
-      <RecipeImageUnavailable
-        className={cn("w-full rounded-[12px]", sizeClassName)}
-        label={`${image.alt}を読み込めませんでした`}
-        style={{ ...ratioStyle, aspectRatio: aspectRatioOf(image) }}
-      />
-    );
-  }
-
-  return (
-    <RecipeImageZoomButton
-      alt={image.alt}
-      className={cn("w-full rounded-[12px] bg-brand-paper-muted", sizeClassName)}
-      style={ratioStyle}
-      onOpen={() => onOpen(image.id)}
-    >
-      <img
-        alt={image.alt}
-        className="block h-auto w-full"
-        height={image.height}
-        src={image.src}
-        style={{ aspectRatio: aspectRatioOf(image) }}
-        width={image.width}
-        onError={() => onError(image.id)}
-        {...deferredImageProps}
-      />
-    </RecipeImageZoomButton>
-  );
-};
-
-// 複数の画像は高さをそろえた横の帯にする。縦横比は保つので、切らずに並ぶ。
+// 画像は枚数によらず高さをそろえた横の帯にする。縦横比は保つので、切らずに並ぶ。じっくり見るのは拡大表示に任せる。
 export const RecipeImageStrip = ({
   className,
   failedImageIds,
