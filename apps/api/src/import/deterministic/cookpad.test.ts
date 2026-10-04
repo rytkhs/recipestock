@@ -59,9 +59,8 @@ describe("cookpadImportAdapter", () => {
     PRINT_URL,
     `https://www.cookpad.com/jp/recipes/${RECIPE_ID}`,
   ])("%s を通常ページとprintページの取得へ正規化する", (normalizedUrl) => {
-    const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
-    expect(cookpadImportAdapter.match({ normalizedUrl, host })).toBe(true);
-    expect(cookpadImportAdapter.resolveFetchRequests({ normalizedUrl, host })).toEqual([
+    expect(cookpadImportAdapter.match({ normalizedUrl })).toBe(true);
+    expect(cookpadImportAdapter.resolveFetchRequests({ normalizedUrl })).toEqual([
       { id: "print", url: PRINT_URL },
       { id: "recipe", url: RECIPE_URL },
     ]);
@@ -73,12 +72,7 @@ describe("cookpadImportAdapter", () => {
       "https://cookpad.com/jp/search/tomato",
       `https://example.com/jp/recipes/${RECIPE_ID}`,
     ]) {
-      expect(
-        cookpadImportAdapter.match({
-          normalizedUrl,
-          host: new URL(normalizedUrl).hostname.replace(/^www\./, ""),
-        }),
-      ).toBe(false);
+      expect(cookpadImportAdapter.match({ normalizedUrl })).toBe(false);
     }
   });
 
@@ -133,13 +127,12 @@ describe("cookpadImportAdapter", () => {
             url: cookpadStepImageUrl(imageId, 320, 256, 80),
           })),
         })),
-        note: "水気をしっかり取ります。",
+        note: "コツ・ポイント\n水気をしっかり取ります。",
       },
       source: {
         sourceUrl: RECIPE_URL,
         sourceName: "クックパッド",
       },
-      warnings: [],
     });
 
     expect(new Set(fetchedUrls)).toEqual(new Set([PRINT_URL, RECIPE_URL]));
@@ -165,8 +158,20 @@ describe("cookpadImportAdapter", () => {
 
     expect(result.recipeDraftContent.steps[0].text).toBe("じゃがいもを切る。\n水にさらす。");
     expect(result.recipeDraftContent.note).toBe(
-      "水気をしっかり取ります。\n油は少なめで大丈夫です。",
+      "コツ・ポイント\n水気をしっかり取ります。\n油は少なめで大丈夫です。",
     );
+  });
+
+  it("文字参照をページに表示される文字に戻し、文中の全角スペースは残す", async () => {
+    const stepTexts = ["じゃがいもを切る。　&lt;薄切り&gt;にする。", ...STEP_TEXTS.slice(1)];
+
+    const result = await importCookpad({
+      printHtml: createCookpadPrintHtml({ title: "S&amp;Bの揚げポテト", stepTexts }),
+      recipeHtml: createCookpadRecipeHtml({ stepTexts }),
+    });
+
+    expect(result.recipeDraftContent.title).toBe("S&Bの揚げポテト");
+    expect(result.recipeDraftContent.steps[0].text).toBe("じゃがいもを切る。　<薄切り>にする。");
   });
 
   it("同解像度ならq80を優先し、同一手順内の重複URLを除去する", async () => {

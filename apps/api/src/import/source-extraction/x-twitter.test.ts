@@ -125,7 +125,6 @@ describe("X/Twitter source extraction adapter", () => {
         sourceUrl: CANONICAL_URL,
         sourceName: "X",
       },
-      warnings: [],
     });
   });
 

@@ -16,10 +16,8 @@ describe("kurashiruImportAdapter", () => {
     `http://kurashiru.com/recipes/${RECIPE_ID}`,
     `https://www.kurashiru.com/recipes/${RECIPE_ID.toUpperCase()}?utm_source=share#steps`,
   ])("%s をcanonical recipe URLの1ページ取得へ正規化する", (normalizedUrl) => {
-    const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
-
-    expect(kurashiruImportAdapter.match({ normalizedUrl, host })).toBe(true);
-    expect(kurashiruImportAdapter.resolveFetchRequests({ normalizedUrl, host })).toEqual([
+    expect(kurashiruImportAdapter.match({ normalizedUrl })).toBe(true);
+    expect(kurashiruImportAdapter.resolveFetchRequests({ normalizedUrl })).toEqual([
       { id: "recipe", url: RECIPE_URL },
     ]);
   });
@@ -33,12 +31,7 @@ describe("kurashiruImportAdapter", () => {
       `https://search.kurashiru.com/recipes/${RECIPE_ID}`,
       `https://www.kurashiru.com.evil.example/recipes/${RECIPE_ID}`,
     ]) {
-      expect(
-        kurashiruImportAdapter.match({
-          normalizedUrl,
-          host: new URL(normalizedUrl).hostname.replace(/^www\./, ""),
-        }),
-      ).toBe(false);
+      expect(kurashiruImportAdapter.match({ normalizedUrl })).toBe(false);
     }
   });
 
@@ -47,12 +40,7 @@ describe("kurashiruImportAdapter", () => {
     `https://user:password@www.kurashiru.com/recipes/${RECIPE_ID}`,
     `https://www.kurashiru.com:8443/recipes/${RECIPE_ID}`,
   ])("userinfoまたは非標準portを含むURL %sにはmatchしない", (normalizedUrl) => {
-    expect(
-      kurashiruImportAdapter.match({
-        normalizedUrl,
-        host: new URL(normalizedUrl).hostname.replace(/^www\./, ""),
-      }),
-    ).toBe(false);
+    expect(kurashiruImportAdapter.match({ normalizedUrl })).toBe(false);
   });
 
   it("SSR状態からRecipeDraftContentへ変換する", async () => {
@@ -79,6 +67,10 @@ describe("kurashiruImportAdapter", () => {
             ],
           },
           {
+            label: "つなぎ",
+            ingredients: [],
+          },
+          {
             ingredients: [{ name: "サラダ油", amount: "適量" }],
           },
           {
@@ -88,7 +80,7 @@ describe("kurashiruImportAdapter", () => {
         ],
         steps: [
           {
-            text: "卵を溶きほぐします。\n調味料を加えます。\n\nポイント: 白身を切るように混ぜます。",
+            text: "卵を溶きほぐします。\n調味料を加えます。\n\nポイント\n白身を切るように混ぜます。",
             images: [],
           },
           {
@@ -101,14 +93,13 @@ describe("kurashiruImportAdapter", () => {
           "半熟の状態で巻いてください。",
           "",
           "材料のポイント",
-          "- 卵: Mサイズを使用しています。",
+          "卵: Mサイズを使用しています。",
         ].join("\n"),
       },
       source: {
         sourceUrl: RECIPE_URL,
         sourceName: "クラシル",
       },
-      warnings: [],
     });
   });
 
@@ -118,7 +109,6 @@ describe("kurashiruImportAdapter", () => {
   ])("$nameでもSSR状態から取り込む", async ({ html }) => {
     await expect(importKurashiru({ html })).resolves.toMatchObject({
       recipeDraftContent: { title: "お弁当の定番 卵焼き" },
-      warnings: [],
     });
   });
 
@@ -198,21 +188,20 @@ describe("kurashiruImportAdapter", () => {
       name: "手順がない",
       html: createKurashiruHtml({ attributeOverrides: { instructions: [] } }),
     },
-    {
-      name: "非公開",
-      html: createKurashiruHtml({
-        attributeOverrides: { "publish-status": "draft" },
-      }),
-    },
-    {
-      name: "未知content-type",
-      html: createKurashiruHtml({
-        attributeOverrides: { "content-type": "premium" },
-      }),
-    },
   ])("$nameの場合は失敗する", async ({ html }) => {
     await expect(importKurashiru({ html })).rejects.toMatchObject({
       code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it.each([
+    { name: "非公開", attributeOverrides: { "publish-status": "draft" } },
+    { name: "通常のレシピ以外のcontent-type", attributeOverrides: { "content-type": "premium" } },
+  ])("$nameのレシピは対応しないページとして失敗する", async ({ attributeOverrides }) => {
+    await expect(
+      importKurashiru({ html: createKurashiruHtml({ attributeOverrides }) }),
+    ).rejects.toMatchObject({
+      code: "unsupported_page",
     } satisfies Partial<RecipeImportError>);
   });
 });

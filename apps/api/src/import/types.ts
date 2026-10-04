@@ -25,7 +25,6 @@ export class RecipeImportError extends Error {
 export type RecipeImportResult = {
   recipeDraftContent: RecipeDraftContent;
   source: RecipeSourceDraft;
-  warnings: string[];
 };
 
 export type FetchedImportPage = {

@@ -142,7 +142,6 @@ describe("Instagram source extraction adapter", () => {
         sourceUrl: CANONICAL_URL,
         sourceName: "Instagram",
       },
-      warnings: [],
     });
     expect(result.input.markdownContent).not.toContain("https://cdn.example.com/cover.jpg");
     expect(result.input.markdownContent).toContain("mizuki_31cafe");

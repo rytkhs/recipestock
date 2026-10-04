@@ -38,7 +38,6 @@ type RecipeImportConverterResult = {
   imagePlacement?: RecipeImportImagePlacement;
   titleFallbackCandidates?: string[];
   source: RecipeSourceDraft;
-  warnings: string[];
 } & RecipeImportUrlAINormalizeRequest;
 
 type ResolvedTitleRecipeImportAIDraftContent = RecipeImportAIDraftContent & {
@@ -242,7 +241,6 @@ const convertFetchedHtmlPage = async (
       sourceUrl: normalizedFinalUrl,
       sourceName,
     },
-    warnings: [],
   };
 };
 
@@ -336,20 +334,19 @@ export const importRecipeFromUrl = async ({
     logger,
   });
 
-  let imageResult: { draft: RecipeDraftContent; warnings: string[] };
+  let recipeDraftContent: RecipeDraftContent;
 
   try {
-    imageResult = resolveDraftImageUrls(
-      {
-        ...draft,
-        title: resolveImportDraftTitle(draft.title, resolvedConversion),
-      },
-      resolvedConversion.imageCandidates,
+    recipeDraftContent = applyDeterministicImagePlacement(
+      resolveDraftImageUrls(
+        {
+          ...draft,
+          title: resolveImportDraftTitle(draft.title, resolvedConversion),
+        },
+        resolvedConversion.imageCandidates,
+      ),
+      resolvedConversion.imagePlacement,
     );
-    imageResult = {
-      draft: applyDeterministicImagePlacement(imageResult.draft, resolvedConversion.imagePlacement),
-      warnings: imageResult.warnings,
-    };
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new RecipeImportError("ai_schema_invalid", "AI response schema was invalid.");
@@ -359,9 +356,8 @@ export const importRecipeFromUrl = async ({
   }
 
   return {
-    recipeDraftContent: imageResult.draft,
+    recipeDraftContent,
     source: resolvedConversion.source,
-    warnings: resolvedConversion.warnings.concat(imageResult.warnings),
   };
 };
 
@@ -478,43 +474,36 @@ const resolveImportDraftTitle = (
   return fallbackTitle;
 };
 
+/**
+ * AIが返した画像URLのうち、取り込み元の候補にあったものだけを使う。候補にないURLは捨てる。
+ */
 const resolveDraftImageUrls = (
   draft: ResolvedTitleRecipeImportAIDraftContent,
   candidates: RecipeImportImageCandidate[],
-): { draft: RecipeDraftContent; warnings: string[] } => {
+): RecipeDraftContent => {
   const candidateUrls = new Set(candidates.map((candidate) => candidate.url));
-  const warnings: string[] = [];
-  const resolveImage = (imageUrl: RecipeImportAIImageUrl | undefined) => {
-    if (!imageUrl) return undefined;
+  const resolveImage = (imageUrl: RecipeImportAIImageUrl | undefined) =>
+    imageUrl && candidateUrls.has(imageUrl)
+      ? {
+          type: "externalImageUrl" as const,
+          url: imageUrl,
+        }
+      : undefined;
 
-    if (candidateUrls.has(imageUrl)) {
-      return {
-        type: "externalImageUrl" as const,
-        url: imageUrl,
-      };
-    }
-
-    warnings.push(`AI returned unknown image URL: ${imageUrl}`);
-    return undefined;
-  };
-
-  return {
-    draft: trimRecipeDraftContent({
-      title: draft.title,
-      yieldText: draft.yieldText,
-      coverImage: resolveImage(draft.coverImageUrl),
-      referenceImages: [],
-      ingredientGroups: draft.ingredientGroups,
-      steps: draft.steps.map((step) => ({
-        text: step.text,
-        images: step.imageUrls
-          .map(resolveImage)
-          .filter((image): image is NonNullable<typeof image> => Boolean(image)),
-      })),
-      note: draft.note,
-    }),
-    warnings,
-  };
+  return trimRecipeDraftContent({
+    title: draft.title,
+    yieldText: draft.yieldText,
+    coverImage: resolveImage(draft.coverImageUrl),
+    referenceImages: [],
+    ingredientGroups: draft.ingredientGroups,
+    steps: draft.steps.map((step) => ({
+      text: step.text,
+      images: step.imageUrls
+        .map(resolveImage)
+        .filter((image): image is NonNullable<typeof image> => Boolean(image)),
+    })),
+    note: draft.note,
+  });
 };
 
 const applyDeterministicImagePlacement = (

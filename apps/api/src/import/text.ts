@@ -2,10 +2,33 @@
 // タグが表す区切りは空白や改行として現れ方が揃わないため、空白を全て落として比べる。
 export const normalizeTextForComparison = (value: string) => value.replace(/\s+/g, "");
 
+// 全角スペースは作者が書いた文字なので、文中のものは残す。
+export const normalizeSingleLineText = (value: string) => value.replace(/[^\S　]+/g, " ").trim();
+
 export const normalizeMultilineText = (value: string) =>
   value
     .replace(/\r\n?/g, "\n")
-    .replace(/[^\S\n]+/g, " ")
+    .replace(/[^\S\n　]+/g, " ")
     .replace(/ ?\n ?/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: " ",
+  quot: '"',
+};
+
+export const decodeHtmlEntities = (value: string) =>
+  value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, body: string) => {
+    if (!body.startsWith("#")) return NAMED_HTML_ENTITIES[body] ?? entity;
+
+    const codePoint =
+      body[1] === "x" || body[1] === "X"
+        ? Number.parseInt(body.slice(2), 16)
+        : Number.parseInt(body.slice(1), 10);
+    return codePoint > 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : entity;
+  });
