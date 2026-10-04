@@ -171,7 +171,7 @@ const StepRow = ({
       </span>
       <textarea
         aria-label={stepLabel}
-        className={cn(draftInlineFieldClass, "field-sizing-content min-h-11 leading-7")}
+        className={cn(draftInlineFieldClass, "field-sizing-content leading-7")}
         maxLength={MAX_RECIPE_STEP_TEXT_LENGTH}
         name={field.name}
         placeholder="手順を入力"

@@ -98,7 +98,7 @@ export const ReferenceImagesSection = ({
             disabled={isUploading}
             frameClassName="size-14"
             hint="元の投稿やレシピの画像を残せます"
-            label="レシピ画像を追加"
+            label="レシピ画像に写真を追加"
             title="レシピ画像"
             onClick={openPicker}
           />
