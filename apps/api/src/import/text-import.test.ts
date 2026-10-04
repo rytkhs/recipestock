@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { type AiUsageConsumptionRepository } from "../../usage";
+import { type AiUsageConsumptionRepository } from "../usage";
 import { importRecipeFromText } from "./text-import";
 import {
   type RecipeImportAIDraftContent,

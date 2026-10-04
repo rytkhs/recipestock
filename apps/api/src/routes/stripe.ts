@@ -1,10 +1,5 @@
-import { createDb } from "@recipestock/db";
 import { Hono } from "hono";
-import {
-  type BillingRepository,
-  createBillingRepository,
-  type UpsertSubscriptionFromStripeEventParams,
-} from "../billing";
+import { type BillingRepository, type UpsertSubscriptionFromStripeEventParams } from "../billing";
 import { type ApiEnv } from "../context";
 import {
   createStripeBillingClient,
@@ -15,7 +10,7 @@ import {
 } from "../stripe-billing";
 
 type StripeRouteDependencies = {
-  billingRepository?: BillingRepository;
+  billingRepositoryFor: (env: ApiEnv["Bindings"]) => BillingRepository;
   stripeBillingClient?: StripeBillingClient;
 };
 
@@ -95,7 +90,7 @@ export const processStripeWebhookEvent = async ({
 };
 
 export const createStripeRoutes = ({
-  billingRepository,
+  billingRepositoryFor,
   stripeBillingClient,
 }: StripeRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
@@ -107,7 +102,7 @@ export const createStripeRoutes = ({
       return invalidWebhookResponse();
     }
 
-    const repository = billingRepository ?? createBillingRepository(createDb(c.env.DATABASE_URL));
+    const repository = billingRepositoryFor(c.env);
     const stripeClient = stripeBillingClient ?? createStripeBillingClient(c.env);
     const payload = await c.req.text();
 

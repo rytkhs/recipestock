@@ -1,10 +1,10 @@
 import { importTextRequestSchema } from "@recipestock/schemas";
-import { type Bindings } from "../../env";
+import { type Bindings } from "../env";
 import {
   type ImportJobSubmissionDependencies,
   type SubmitImportJobResult,
   submitImportJob,
-} from "./import-job-submission";
+} from "./job-submission";
 
 export type SubmitTextImportJobInput = {
   userId: string;

@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  importRecipeFromUrl,
-  type RecipeImportAIProvider,
-  type RecipeImportError,
-} from "../../../import-url";
-import { type AiUsageConsumptionRepository } from "../../../usage";
+import { type AiUsageConsumptionRepository } from "../../usage";
+import { type RecipeImportAIProvider, type RecipeImportError } from "../types";
+import { importRecipeFromUrl } from "../url-import";
 import { kurashiruImportAdapter } from "./kurashiru";
 
 const RECIPE_ID = "ea9e1038-d78a-468b-b08e-7456fc3fd038";

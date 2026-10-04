@@ -1,17 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type Bindings } from "./env";
-import { type RecipeImageService } from "./images";
-import {
-  getImportJobExpiresBefore,
-  type ImportJobRecord,
-  type ImportJobRepository,
-  processImportJob,
-  resolveImportJobTimeoutMs,
-  toImportJobSummary,
-} from "./import-jobs";
-import { type RecipeImportAIProvider, RecipeImportError } from "./import-url";
-import { type RecipeRepository } from "./recipes";
-import { type AiUsageConsumptionRepository } from "./usage";
+import { type Bindings } from "../env";
+import { type RecipeImageService } from "../images";
+import { type RecipeRepository } from "../recipes";
+import { type AiUsageConsumptionRepository } from "../usage";
+import { processImportJob } from "./job-processor";
+import { type ImportJobRecord, type ImportJobRepository } from "./jobs";
+import { type RecipeImportAIProvider, RecipeImportError } from "./types";
 
 const htmlPage = `<!doctype html>
 <html>
@@ -120,35 +114,6 @@ const env = {
   FREE_AI_MONTHLY_LIMIT: "10",
   IMPORT_TIMEOUT_MS: "1000",
 } as Bindings;
-
-describe("Import JobのSource Text preview", () => {
-  const sourceText = "鶏むね肉のレモン煮\n鶏むね肉 300g";
-
-  it("閉じたテキストjobも原文の最初の行をpreviewとして返す", () => {
-    const job = createJob({
-      kind: "text",
-      status: "failed",
-      sourceText,
-      dismissedAt: new Date("2026-06-01T00:01:00.000Z"),
-    });
-    expect(toImportJobSummary(job).textPreview).toBe("鶏むね肉のレモン煮");
-  });
-});
-
-describe("Import job timeout", () => {
-  it("デフォルト期限を10分として計算する", () => {
-    expect(resolveImportJobTimeoutMs({})).toBe(600_000);
-    expect(getImportJobExpiresBefore(new Date("2026-06-01T00:10:00.000Z"), 600_000)).toEqual(
-      new Date("2026-06-01T00:00:00.000Z"),
-    );
-  });
-
-  it("正の整数だけを環境変数から採用する", () => {
-    expect(resolveImportJobTimeoutMs({ IMPORT_JOB_TIMEOUT_MS: "300000" })).toBe(300_000);
-    expect(resolveImportJobTimeoutMs({ IMPORT_JOB_TIMEOUT_MS: "invalid" })).toBe(600_000);
-    expect(resolveImportJobTimeoutMs({ IMPORT_JOB_TIMEOUT_MS: "0" })).toBe(600_000);
-  });
-});
 
 describe("processImportJob", () => {
   it("URL job成功時にRecipeを作成してjobをsucceededにする", async () => {

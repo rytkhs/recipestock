@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { createLogger, createMemoryLogSink } from "../logger";
 import {
   checkImportQueueHealth,
   evaluateImportQueueHealth,
   IMPORT_QUEUE_STALL_MARGIN_MS,
-} from "./import-queue-health";
-import { createLogger, createMemoryLogSink } from "./logger";
+} from "./queue-health";
 
 const jobTimeoutMs = 600_000;
 const now = new Date("2026-06-01T01:00:00.000Z");

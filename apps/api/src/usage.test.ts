@@ -83,7 +83,7 @@ describe("AI usage", () => {
 
   it("消費処理が行を返さなければ上限到達として扱う", async () => {
     const execute = vi.fn(async () => ({ rows: [] }));
-    const repository = createUsageRepository({ execute } as never);
+    const repository = createUsageRepository({ execute } as never, { proPriceId: "price_pro" });
 
     await expect(
       repository.consumeAiUsage({

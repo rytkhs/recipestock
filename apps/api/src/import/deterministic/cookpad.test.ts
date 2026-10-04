@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { importRecipeFromUrl, type RecipeImportError } from "../../../import-url";
-import { type AiUsageConsumptionRepository } from "../../../usage";
+import { type AiUsageConsumptionRepository } from "../../usage";
+import { type RecipeImportError } from "../types";
+import { importRecipeFromUrl } from "../url-import";
 import { cookpadImportAdapter } from "./cookpad";
 
 const RECIPE_ID = "25844291";

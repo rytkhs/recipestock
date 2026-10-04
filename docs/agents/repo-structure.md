@@ -101,27 +101,21 @@ Current internal shape:
 
 ```txt
 apps/api/src/
-  index.ts                Hono app composition plus Worker fetch, queue, and scheduled handlers
+  index.ts                Hono app composition, repository construction for routes, and Worker fetch, queue, and scheduled entry points
   api-error.ts            API error response builders
   context.ts              Hono context types
   env.ts                  Cloudflare binding types and validation
   logger.ts               structured logging
   auth.ts                 Better Auth setup and auth service
   billing.ts              billing repository and plan synchronization
-  completion-notifications.ts Import Job completion Push delivery
   image-dimensions.ts     image dimension detection from uploaded bytes
   images.ts               R2 image service
-  import-completion-notices.ts Import Job completion Push payloads
-  import-jobs.ts          Import Job repository and queue processing
-  import-page-evidence.ts recipe evidence extraction from fetched pages
-  import-queue-health.ts  Import Queue stall detection for the cron
-  import-url.ts           URL import orchestration
   ios-share-notices.ts    iOS Shortcut import result copy and destinations
   me.ts                   current-user repository and response mapping
   monitoring.ts           Sentry options, error reporter, and cron check-ins
   push-subscriptions.ts   Push subscription repository
   recipe-image-keys.ts    R2 recipe image and thumbnail key parsing
-  recipe-images.ts        draft image finalization into R2
+  recipe-images.ts        draft image finalization into R2 and image cleanup around Recipe saves
   recipe-thumbnails.ts    thumbnail URLs and Cloudflare Images responses
   recipes.ts              recipe repository and response mapping
   shortcut-credentials.ts Shortcut credential repository and service
@@ -129,6 +123,29 @@ apps/api/src/
   tags.ts                 tag repository and normalization
   url-safety.ts           outbound fetch URL and hostname checks
   usage.ts                AI usage repository and limits
+  import/                 URL and text import, Import Jobs, and the Import Queue
+    jobs.ts               Import Job repository and status mapping
+    job-processor.ts      Import Job processing from the queue
+    queue.ts              Import Queue and dead letter queue consumers
+    job-submission.ts     Import Job submission shared by url- and text-import-job-submission.ts
+    url-import-job-submission.ts URL Import Job submission
+    text-import-job-submission.ts text Import Job submission
+    queue-health.ts       Import Queue stall detection for the cron
+    url-import.ts         URL import orchestration
+    text-import.ts        text import orchestration
+    page-evidence.ts      recipe evidence extraction from fetched pages
+    policy.ts             import URL and fetched content-type checks
+    ai-normalization.ts   AI normalization with AI usage consumption
+    ai-provider.ts        default AI provider and its timeout
+    prompts.ts            AI system prompts per import profile
+    draft-limits.ts       recipe draft trimming to content limits
+    deadline.ts           Import Job deadline checks and bounded timeouts
+    text.ts               text normalization helpers
+    types.ts              shared import types and RecipeImportError
+    completion-notifications.ts Import Job completion Push delivery
+    completion-notices.ts Import Job completion Push payloads
+    deterministic/        site-specific importers that need no AI
+    source-extraction/    per-platform source extraction (ADR 0005)
   routes/
     auth.ts
     billing.ts
@@ -146,12 +163,9 @@ apps/api/src/
     auth.ts
   lib/
     email/
-    import/
-      deterministic/
-      source-extraction/
 ```
 
-Most repositories, services, and cross-cutting modules currently live directly under `apps/api/src/`. Do not infer unlisted feature directories such as `lib/recipe/` or `lib/billing/`; they do not exist in the current structure.
+Import-related modules live under `apps/api/src/import/`. Other repositories, services, and cross-cutting modules live directly under `apps/api/src/`, with their route handlers in `routes/`. Route handlers do not construct repositories: `createApp` in `index.ts` builds them per environment and passes `xRepositoryFor(env)` to each route. Do not infer unlisted feature directories such as `recipes/` or `lib/billing/`; they do not exist in the current structure.
 
 ## Packages
 

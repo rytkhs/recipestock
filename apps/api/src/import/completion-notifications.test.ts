@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { createLogger, createMemoryLogSink } from "../logger";
+import { type PushDeliveryTarget, type PushSubscriptionRepository } from "../push-subscriptions";
 import { createPushSender, type SendWebPush } from "./completion-notifications";
-import { createLogger, createMemoryLogSink } from "./logger";
-import { type PushDeliveryTarget, type PushSubscriptionRepository } from "./push-subscriptions";
 
 const targets: PushDeliveryTarget[] = [
   {

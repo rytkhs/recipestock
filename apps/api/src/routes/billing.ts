@@ -1,4 +1,3 @@
-import { createDb } from "@recipestock/db";
 import {
   createBillingPortalResponseSchema,
   createCheckoutResponseSchema,
@@ -9,11 +8,7 @@ import {
 import { Hono } from "hono";
 import { alreadySubscribedResponse } from "../api-error";
 import { type AuthService } from "../auth";
-import {
-  type BillingRepository,
-  createBillingRepository,
-  derivePlanFromSubscriptions,
-} from "../billing";
+import { type BillingRepository, derivePlanFromSubscriptions } from "../billing";
 import { type ApiEnv } from "../context";
 import { type Logger } from "../logger";
 import { requireAuth } from "../middleware/auth";
@@ -25,9 +20,9 @@ import {
 
 type BillingRouteDependencies = {
   auth: AuthService;
-  billingRepository?: BillingRepository;
+  billingRepositoryFor: (env: ApiEnv["Bindings"]) => BillingRepository;
   stripeBillingClient?: StripeBillingClient;
-  getCurrentDate?: () => Date;
+  getCurrentDate: () => Date;
 };
 
 const buildUrl = (origin: string, path: string) => new URL(path, origin).toString();
@@ -87,7 +82,7 @@ const ensureStripeCustomerId = async ({
 
 export const createBillingRoutes = ({
   auth,
-  billingRepository,
+  billingRepositoryFor,
   stripeBillingClient,
   getCurrentDate,
 }: BillingRouteDependencies) => {
@@ -100,10 +95,10 @@ export const createBillingRoutes = ({
     .post("/checkout", requireAuth(auth), async (c) => {
       const userEmail = c.get("authSession").user.email;
       const userId = c.get("userId");
-      const repository = billingRepository ?? createBillingRepository(createDb(c.env.DATABASE_URL));
+      const repository = billingRepositoryFor(c.env);
       const stripeClient = stripeBillingClient ?? createStripeBillingClient(c.env);
       const proPriceId = c.env.STRIPE_PRO_PRICE_ID;
-      const now = getCurrentDate?.() ?? new Date();
+      const now = getCurrentDate();
       const appUser = await repository.getOrCreateAppUserBillingState(userId);
       const subscriptions = await repository.listSubscriptionsByUserId(userId);
 
@@ -145,7 +140,7 @@ export const createBillingRoutes = ({
     .post("/portal", requireAuth(auth), async (c) => {
       const userEmail = c.get("authSession").user.email;
       const userId = c.get("userId");
-      const repository = billingRepository ?? createBillingRepository(createDb(c.env.DATABASE_URL));
+      const repository = billingRepositoryFor(c.env);
       const stripeClient = stripeBillingClient ?? createStripeBillingClient(c.env);
       const appUser = await repository.getOrCreateAppUserBillingState(userId);
       const stripeCustomerId = await ensureStripeCustomerId({
@@ -178,11 +173,11 @@ export const createBillingRoutes = ({
     })
     .get("/status", requireAuth(auth), async (c) => {
       const userId = c.get("userId");
-      const repository = billingRepository ?? createBillingRepository(createDb(c.env.DATABASE_URL));
+      const repository = billingRepositoryFor(c.env);
       const status = await repository.getBillingStatus({
         userId,
         proPriceId: c.env.STRIPE_PRO_PRICE_ID,
-        now: getCurrentDate?.() ?? new Date(),
+        now: getCurrentDate(),
       });
 
       return c.json(

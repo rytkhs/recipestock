@@ -1,12 +1,12 @@
 /// <reference path="./html2md4llm.d.ts" />
 
 import html2md4llm from "html2md4llm";
-import { normalizeMultilineText } from "./lib/import/text";
+import { normalizeMultilineText } from "./text";
 import {
   type FetchedImportPage,
   type RecipeImportImageCandidate,
   type RecipeImportStructuredEvidence,
-} from "./lib/import/types";
+} from "./types";
 
 type ExtractedRecipeStructuredInstruction = {
   text: string;

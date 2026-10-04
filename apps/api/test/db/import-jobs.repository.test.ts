@@ -1,5 +1,12 @@
 import { neonConfig } from "@neondatabase/serverless";
-import { aiUsageMonthly, appUsers, createDb, importJobs, recipes } from "@recipestock/db";
+import {
+  aiUsageMonthly,
+  appUsers,
+  createDb,
+  importJobs,
+  recipes,
+  subscriptions,
+} from "@recipestock/db";
 import { PLAN_LIMITS } from "@recipestock/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -7,9 +14,10 @@ import {
   createImportJobRepository,
   type ImportJobAiUsageLimits,
   type ImportJobRepository,
-} from "../../src/import-jobs";
+} from "../../src/import/jobs";
 
 const now = new Date("2026-07-14T00:00:00.000Z");
+const proPriceId = "price_dbtest_pro";
 
 describe("Import Job repository with Neon Postgres", () => {
   let repository: ImportJobRepository;
@@ -26,7 +34,7 @@ describe("Import Job repository with Neon Postgres", () => {
     neonConfig.poolQueryViaFetch = true;
     neonConfig.useSecureWebSocket = false;
     db = createDb(databaseUrl);
-    repository = createImportJobRepository(db);
+    repository = createImportJobRepository(db, { proPriceId });
   });
 
   const aiUsage = { month: "2026-07", freeLimit: 10, proLimit: 300 };
@@ -140,6 +148,7 @@ describe("Import Job repository with Neon Postgres", () => {
   /**
    * 上限に達しているユーザーが共有した瞬間に理由を返すため、判定はキュー処理中ではなく
    * ここで行う。プランごとに返すnoticeが違うので、拒否結果はplanを運ぶ。
+   * 投稿時にplanをsubscriptionsから同期するので、Proはsubscriptionで用意する。
    */
   it.each([
     { plan: "free" as const, used: 10 },
@@ -147,7 +156,18 @@ describe("Import Job repository with Neon Postgres", () => {
   ])("AI月次上限に達した$planのImport Jobは残さない", async ({ plan, used }) => {
     const runId = crypto.randomUUID();
     const userId = `dbtest_ai_limit_${plan}_user_${runId}`;
-    await db.insert(appUsers).values({ userId, plan });
+    await db.insert(appUsers).values({ userId });
+    if (plan === "pro") {
+      await db.insert(subscriptions).values({
+        id: `dbtest_ai_limit_subscription_${runId}`,
+        userId,
+        stripeCustomerId: `cus_dbtest_ai_limit_${runId}`,
+        stripeSubscriptionId: `sub_dbtest_ai_limit_${runId}`,
+        stripePriceId: proPriceId,
+        status: "active",
+        latestEventCreatedAt: now,
+      });
+    }
     await db.insert(aiUsageMonthly).values({ userId, month: aiUsage.month, count: used });
 
     await expect(
@@ -280,7 +300,6 @@ describe("Import Job repository with Neon Postgres", () => {
     const jobId = `dbtest_text_succeeded_job_${runId}`;
     const recipeId = `dbtest_text_succeeded_recipe_${runId}`;
     const expiresBefore = new Date(now.getTime() - 60_000);
-    const completingRepository = createImportJobRepository(db, { proPriceId: "price_dbtest" });
     const content = {
       title: "鶏むね肉のレモン煮",
       referenceImages: [],
@@ -292,7 +311,7 @@ describe("Import Job repository with Neon Postgres", () => {
     await repository.claimQueuedJob({ jobId, recipeId, expiresBefore, now });
 
     await expect(
-      completingRepository.completeJobWithRecipe({
+      repository.completeJobWithRecipe({
         jobId,
         expiresBefore,
         now,
@@ -388,7 +407,6 @@ describe("Import Job repository with Neon Postgres", () => {
     const jobId = `dbtest_cancel_job_${runId}`;
     const recipeId = `dbtest_cancel_recipe_${runId}`;
     const expiresBefore = new Date(now.getTime() - 60_000);
-    const completingRepository = createImportJobRepository(db, { proPriceId: "price_dbtest" });
 
     await createShortcutJob({ id: jobId, userId });
     await repository.claimQueuedJob({ jobId, recipeId, expiresBefore, now });
@@ -399,7 +417,7 @@ describe("Import Job repository with Neon Postgres", () => {
       dismissedAt: now,
     });
     await expect(
-      completingRepository.completeJobWithRecipe({
+      repository.completeJobWithRecipe({
         jobId,
         expiresBefore,
         now,

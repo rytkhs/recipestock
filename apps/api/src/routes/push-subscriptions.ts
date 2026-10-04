@@ -1,4 +1,3 @@
-import { createDb } from "@recipestock/db";
 import {
   getPushSubscriptionsResponseSchema,
   pushSubscriptionRequestSchema,
@@ -12,31 +11,26 @@ import { forbiddenResponse, validationFailedResponse } from "../api-error";
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
 import { requireAuth } from "../middleware/auth";
-import {
-  createPushSubscriptionRepository,
-  type PushSubscriptionRepository,
-} from "../push-subscriptions";
+import { type PushSubscriptionRepository } from "../push-subscriptions";
 
 type PushSubscriptionRouteDependencies = {
   auth: AuthService;
-  pushSubscriptionRepository?: PushSubscriptionRepository;
+  pushSubscriptionRepositoryFor: (env: ApiEnv["Bindings"]) => PushSubscriptionRepository;
   createId?: () => string;
-  getCurrentDate?: () => Date;
+  getCurrentDate: () => Date;
 };
 
 export const createPushSubscriptionRoutes = ({
   auth,
-  pushSubscriptionRepository,
+  pushSubscriptionRepositoryFor,
   createId = ulid,
   getCurrentDate,
 }: PushSubscriptionRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
-  const repositoryFor = (env: ApiEnv["Bindings"]) =>
-    pushSubscriptionRepository ?? createPushSubscriptionRepository(createDb(env.DATABASE_URL));
 
   return routes
     .get("/", requireAuth(auth), async (c) => {
-      const subscriptions = await repositoryFor(c.env).listByUser(c.get("userId"));
+      const subscriptions = await pushSubscriptionRepositoryFor(c.env).listByUser(c.get("userId"));
       return c.json(
         getPushSubscriptionsResponseSchema.parse({
           applicationServerKey: c.env.VAPID_PUBLIC_KEY,
@@ -51,14 +45,14 @@ export const createPushSubscriptionRoutes = ({
         return validationFailedResponse(request.error.flatten());
       }
 
-      const subscription = await repositoryFor(c.env).register({
+      const subscription = await pushSubscriptionRepositoryFor(c.env).register({
         id: createId(),
         userId: c.get("userId"),
         endpoint: request.data.endpoint,
         expirationTime: request.data.expirationTime,
         p256dh: request.data.keys.p256dh,
         auth: request.data.keys.auth,
-        now: getCurrentDate?.() ?? new Date(),
+        now: getCurrentDate(),
       });
       if (!subscription) {
         return forbiddenResponse("Push subscription belongs to another user.");
@@ -73,7 +67,7 @@ export const createPushSubscriptionRoutes = ({
         return validationFailedResponse(request.error.flatten());
       }
 
-      await repositoryFor(c.env).revoke({
+      await pushSubscriptionRepositoryFor(c.env).revoke({
         userId: c.get("userId"),
         endpoint: request.data.endpoint,
       });

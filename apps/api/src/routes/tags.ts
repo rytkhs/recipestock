@@ -1,4 +1,3 @@
-import { createDb } from "@recipestock/db";
 import {
   deleteTagResponseSchema,
   listTagsResponseSchema,
@@ -19,19 +18,24 @@ import {
 import { type AuthService } from "../auth";
 import { type ApiEnv } from "../context";
 import { requireAuth } from "../middleware/auth";
-import { createTagRepository, normalizeRequestedTagName, type TagRepository } from "../tags";
+import { normalizeRequestedTagName, type TagRepository } from "../tags";
 
 type TagRouteDependencies = {
   auth: AuthService;
-  tagRepository?: TagRepository;
+  tagRepositoryFor: (env: ApiEnv["Bindings"]) => TagRepository;
+  getCurrentDate: () => Date;
 };
 
-export const createTagRoutes = ({ auth, tagRepository }: TagRouteDependencies) => {
+export const createTagRoutes = ({
+  auth,
+  tagRepositoryFor,
+  getCurrentDate,
+}: TagRouteDependencies) => {
   const routes = new Hono<ApiEnv>();
 
   return routes
     .get("/", requireAuth(auth), async (c) => {
-      const repository = tagRepository ?? createTagRepository(createDb(c.env.DATABASE_URL));
+      const repository = tagRepositoryFor(c.env);
       const tags = await repository.listTags(c.get("userId"));
 
       return c.json(listTagsResponseSchema.parse({ tags }));
@@ -44,12 +48,12 @@ export const createTagRoutes = ({ auth, tagRepository }: TagRouteDependencies) =
         return validationFailedResponse(request.error.flatten());
       }
 
-      const repository = tagRepository ?? createTagRepository(createDb(c.env.DATABASE_URL));
+      const repository = tagRepositoryFor(c.env);
       // 同じidが二度載るとjoinが増えるので、先に出てきた方だけを残す。
       await repository.reorderTags({
         userId: c.get("userId"),
         tagIds: [...new Set(request.data.tagIds)],
-        now: new Date(),
+        now: getCurrentDate(),
       });
 
       return c.json(reorderTagsResponseSchema.parse({ ok: true }));
@@ -68,12 +72,12 @@ export const createTagRoutes = ({ auth, tagRepository }: TagRouteDependencies) =
         return invalidTagNameResponse("name");
       }
 
-      const repository = tagRepository ?? createTagRepository(createDb(c.env.DATABASE_URL));
+      const repository = tagRepositoryFor(c.env);
       const result = await repository.renameTag({
         userId: c.get("userId"),
         tagId: c.req.param("tagId"),
         name,
-        now: new Date(),
+        now: getCurrentDate(),
       });
 
       if (result.status === "notFound") {
@@ -102,7 +106,7 @@ export const createTagRoutes = ({ auth, tagRepository }: TagRouteDependencies) =
         });
       }
 
-      const repository = tagRepository ?? createTagRepository(createDb(c.env.DATABASE_URL));
+      const repository = tagRepositoryFor(c.env);
       const result = await repository.mergeTag({
         userId: c.get("userId"),
         tagId,
@@ -116,7 +120,7 @@ export const createTagRoutes = ({ auth, tagRepository }: TagRouteDependencies) =
       return c.json(mergeTagResponseSchema.parse({ tag: result.tag }));
     })
     .delete("/:tagId", requireAuth(auth), async (c) => {
-      const repository = tagRepository ?? createTagRepository(createDb(c.env.DATABASE_URL));
+      const repository = tagRepositoryFor(c.env);
       const deleted = await repository.deleteTag(c.get("userId"), c.req.param("tagId"));
 
       if (!deleted) {
