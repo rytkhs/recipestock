@@ -1,7 +1,11 @@
-import { Plus } from "@phosphor-icons/react";
 import { type DraftImageRef } from "@recipestock/schemas";
-import { useId, useRef } from "react";
-import { DraftAddImageButton, DraftImageTile, DraftPendingImageTile } from "./draft-image-tile";
+import { useRef } from "react";
+import {
+  DraftAddFirstImageButton,
+  DraftAddImageButton,
+  DraftImageTile,
+  DraftPendingImageTile,
+} from "./draft-image-tile";
 import {
   type ImagePreviewUrlsByImageId,
   imageInputAccept,
@@ -30,7 +34,6 @@ export const ReferenceImagesSection = ({
   uploadImage,
 }: ReferenceImagesSectionProps) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const emptyHintId = useId();
   const { addFiles, error, images, isUploading, pendingImages, previewUrlFor, removeImage } =
     useDraftImageList({
       control,
@@ -90,27 +93,16 @@ export const ReferenceImagesSection = ({
           )}
         </div>
       ) : isAddDisabled ? null : (
-        <button
-          aria-describedby={emptyHintId}
-          aria-label="レシピ画像を追加"
-          className="group mx-2 flex items-center gap-3 rounded-[12px] p-2 text-left outline-none transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-brand-orange disabled:opacity-50 sm:-mx-2"
-          disabled={isUploading}
-          type="button"
-          onClick={openPicker}
-        >
-          <span
-            aria-hidden="true"
-            className="grid size-14 shrink-0 place-items-center rounded-[10px] border border-brand-line border-dashed text-brand-muted transition-colors group-hover:border-brand-sage group-hover:text-brand-sage-dark"
-          >
-            <Plus size={20} weight="bold" />
-          </span>
-          <span className="min-w-0">
-            <span className="block font-semibold text-brand-ink text-sm">レシピ画像</span>
-            <span className="block text-brand-muted text-sm" id={emptyHintId}>
-              元の投稿やレシピの画像を残せます
-            </span>
-          </span>
-        </button>
+        <div className="px-2 sm:-mx-2 sm:px-0">
+          <DraftAddFirstImageButton
+            disabled={isUploading}
+            frameClassName="size-14"
+            hint="元の投稿やレシピの画像を残せます"
+            label="レシピ画像を追加"
+            title="レシピ画像"
+            onClick={openPicker}
+          />
+        </div>
       )}
 
       {isAddDisabled ? (

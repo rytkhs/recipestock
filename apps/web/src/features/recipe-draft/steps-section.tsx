@@ -9,8 +9,8 @@ import { useController, useFieldArray, useWatch } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import { SectionHeader } from "../../components/section-header";
 import {
+  DraftAddFirstImageButton,
   DraftAddImageButton,
-  DraftAddPhotoButton,
   DraftImageTile,
   DraftPendingImageTile,
 } from "./draft-image-tile";
@@ -116,7 +116,13 @@ const StepImages = ({
       ) : null}
       {images.length === 0 && pendingImages.length === 0 && !isAddDisabled ? (
         <div className="-mx-2 pb-1">
-          <DraftAddPhotoButton label={`${stepLabel}に写真を追加`} onClick={openPicker} />
+          <DraftAddFirstImageButton
+            disabled={isUploading}
+            frameClassName="size-10"
+            label={`${stepLabel}に写真を追加`}
+            title="写真を追加"
+            onClick={openPicker}
+          />
         </div>
       ) : null}
 
@@ -165,7 +171,7 @@ const StepRow = ({
       </span>
       <textarea
         aria-label={stepLabel}
-        className={cn(draftInlineFieldClass, "field-sizing-content min-h-[4.5rem] leading-7")}
+        className={cn(draftInlineFieldClass, "field-sizing-content min-h-11 leading-7")}
         maxLength={MAX_RECIPE_STEP_TEXT_LENGTH}
         name={field.name}
         placeholder="手順を入力"
