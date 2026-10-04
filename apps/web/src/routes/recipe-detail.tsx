@@ -64,7 +64,7 @@ import {
   type RecipeDetailImage,
   RecipeHero,
   RecipeImageStrip,
-  RecipeSingleImage,
+  RecipeImageThumbnails,
 } from "../features/recipes/recipe-detail-image";
 import { RecipeNote, RecipeSource } from "../features/recipes/recipe-detail-section";
 import { RecipeIngredients } from "../features/recipes/recipe-ingredients";
@@ -378,10 +378,12 @@ const RecipeDetailView = ({
   const { content, source } = recipe;
   const hasIngredients = Boolean(content.yieldText) || content.ingredientGroups.length > 0;
   const hasSteps = content.steps.length > 0;
-  // レシピ画像が表紙と同じ画像だけなら、表紙を拡大すれば見られるので段を出さない。
+  // レシピ画像が表紙と同じ画像だけなら、表紙を拡大すれば見られるので出さない。
   const hasReferenceImagesBesidesCover = images.references.some(
     (image) => image.id !== images.cover?.id,
   );
+  // 材料も手順もない画像だけの投稿では、画像が本文になるので見出しの付いた段にする。
+  const isImageOnly = !hasIngredients && !hasSteps;
   const sourceHost = readSourceHost(source.sourceUrl);
   const sourceName = source.sourceName || sourceHost;
   const createdAtLabel = formatRecipeCreatedAt(recipe.createdAt);
@@ -390,19 +392,6 @@ const RecipeDetailView = ({
 
   const renderStepImages = (stepIndex: number) => {
     const stepImages = images.steps[stepIndex] ?? [];
-    const onlyImage = stepImages.length === 1 ? stepImages[0] : undefined;
-
-    if (onlyImage) {
-      return (
-        <RecipeSingleImage
-          image={onlyImage}
-          isFailed={failedImageIds.has(onlyImage.id)}
-          sizeClassName="max-w-[min(100%,calc(22rem*var(--image-ratio)))]"
-          onError={markImageFailed}
-          onOpen={openLightbox}
-        />
-      );
-    }
 
     return stepImages.length > 0 ? (
       <RecipeImageStrip
@@ -455,14 +444,27 @@ const RecipeDetailView = ({
       </ScreenTopBarFrame>
 
       <header className="sm:pt-2 md:grid md:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] md:items-center md:gap-12 md:pt-4">
-        <RecipeHero
-          cover={images.cover}
-          isCoverFailed={images.cover ? failedImageIds.has(images.cover.id) : false}
-          recipeId={recipe.id}
-          title={recipe.title}
-          onError={markImageFailed}
-          onOpen={openLightbox}
-        />
+        <div className="min-w-0">
+          <RecipeHero
+            cover={images.cover}
+            isCoverFailed={images.cover ? failedImageIds.has(images.cover.id) : false}
+            recipeId={recipe.id}
+            title={recipe.title}
+            onError={markImageFailed}
+            onOpen={openLightbox}
+          />
+          {/* SNSの投稿では、表紙の続きのスライドに分量や手順が書かれていることが多い。材料より先に続きがあると分かるようにする。 */}
+          {hasReferenceImagesBesidesCover && !isImageOnly ? (
+            <RecipeImageThumbnails
+              className="scroll-px-4 px-4 pt-3 sm:scroll-px-0 sm:px-0"
+              failedImageIds={failedImageIds}
+              images={images.references}
+              label="レシピ画像"
+              onError={markImageFailed}
+              onOpen={openLightbox}
+            />
+          ) : null}
+        </div>
         <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
           <h1
             className="break-words font-bold text-[1.625rem] text-brand-ink leading-[1.35] sm:text-3xl"
@@ -520,11 +522,10 @@ const RecipeDetailView = ({
               steps={content.steps}
             />
           ) : null}
-          {content.note ? <RecipeNote note={content.note} /> : null}
-          {hasReferenceImagesBesidesCover ? (
+          {hasReferenceImagesBesidesCover && isImageOnly ? (
             <section aria-labelledby={referenceHeadingId}>
               <SectionHeader
-                action={hasIngredients || hasSteps ? undefined : keepScreenOn}
+                action={keepScreenOn}
                 id={referenceHeadingId}
                 meta={`${images.references.length}枚`}
                 title="レシピ画像"
@@ -538,6 +539,7 @@ const RecipeDetailView = ({
               />
             </section>
           ) : null}
+          {content.note ? <RecipeNote note={content.note} /> : null}
           {sourceName ? (
             <RecipeSource host={sourceHost} name={sourceName} url={source.sourceUrl ?? null} />
           ) : null}

@@ -1,5 +1,5 @@
 import { ImageBroken, ImageSquare, Plus, X } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
@@ -105,24 +105,50 @@ export const DraftAddImageButton = ({
   </button>
 );
 
-// 画像がまだないときは、枠を置かずに文字の導線だけにする。
-export const DraftAddPhotoButton = ({
+// 画像がまだないときは、画像の列ができる場所に点線の枠を1つ置き、欄の名前を添える。
+export const DraftAddFirstImageButton = ({
   disabled = false,
+  frameClassName,
+  hint,
   label,
+  title,
   onClick,
 }: {
   disabled?: boolean;
+  frameClassName: string;
+  hint?: string;
   label: string;
+  title: string;
   onClick: () => void;
-}) => (
-  <button
-    aria-label={label}
-    className="inline-flex h-9 items-center gap-1.5 rounded-full px-2 text-brand-muted text-sm outline-none transition-colors hover:bg-brand-paper-muted hover:text-brand-walnut focus-visible:outline-2 focus-visible:outline-brand-orange disabled:opacity-50"
-    disabled={disabled}
-    type="button"
-    onClick={onClick}
-  >
-    <ImageSquare aria-hidden="true" size={16} weight="bold" />
-    写真を追加
-  </button>
-);
+}) => {
+  const hintId = useId();
+
+  return (
+    <button
+      aria-describedby={hint ? hintId : undefined}
+      aria-label={label}
+      className="group flex items-center gap-3 rounded-[12px] p-2 text-left outline-none transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-brand-orange disabled:opacity-50"
+      disabled={disabled}
+      type="button"
+      onClick={onClick}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "grid shrink-0 place-items-center rounded-[10px] border border-brand-line border-dashed text-brand-muted transition-colors group-hover:border-brand-sage group-hover:text-brand-sage-dark",
+          frameClassName,
+        )}
+      >
+        <Plus size={20} weight="bold" />
+      </span>
+      <span className="min-w-0">
+        <span className="block font-semibold text-brand-ink text-sm">{title}</span>
+        {hint ? (
+          <span className="block text-brand-muted text-sm" id={hintId}>
+            {hint}
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+};

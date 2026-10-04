@@ -67,10 +67,12 @@ const ImportJobIcon = ({ job }: { job: RecentImportJob }) => {
       {job.status === "running" ? (
         <svg
           aria-hidden="true"
-          className="absolute -inset-1 size-12 animate-spin text-brand-orange [animation-duration:1.1s] motion-reduce:animate-none"
+          className="absolute -inset-1 size-12 text-brand-orange"
           viewBox="0 0 48 48"
         >
+          {/* svg ごと回すと外接矩形が広がり、一覧の最後の行ではスクロールバーが出たり消えたりする */}
           <circle
+            className="origin-center animate-spin [animation-duration:1.1s] motion-reduce:animate-none"
             cx="24"
             cy="24"
             fill="none"

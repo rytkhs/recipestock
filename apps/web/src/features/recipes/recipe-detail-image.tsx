@@ -53,28 +53,34 @@ const RecipeImageZoomButton = ({
   </button>
 );
 
+// 文字の入らない小さな枠では、アイコンだけにする。
 const RecipeImageUnavailable = ({
   className,
+  isCompact = false,
   label,
   style,
 }: {
   className: string;
+  isCompact?: boolean;
   label: string;
   style?: CSSProperties;
 }) => (
   <span
     aria-label={label}
     className={cn(
-      "flex flex-col items-center justify-center gap-1.5 bg-brand-paper-muted px-3 text-center text-brand-muted",
+      "flex flex-col items-center justify-center gap-1.5 bg-brand-paper-muted text-center text-brand-muted",
+      !isCompact && "px-3",
       className,
     )}
     role="img"
     style={style}
   >
-    <ImageBroken aria-hidden="true" size={22} weight="bold" />
-    <span aria-hidden="true" className="text-balance text-xs">
-      画像を表示できません
-    </span>
+    <ImageBroken aria-hidden="true" size={isCompact ? 18 : 22} weight="bold" />
+    {isCompact ? null : (
+      <span aria-hidden="true" className="text-balance text-xs">
+        画像を表示できません
+      </span>
+    )}
   </span>
 );
 
@@ -147,52 +153,7 @@ export const RecipeHero = ({
   );
 };
 
-// 1枚の画像は縦横比のまま出す。高さの上限は、--image-ratio を掛けた幅の上限として呼び出し側が渡す。
-export const RecipeSingleImage = ({
-  image,
-  isFailed,
-  onError,
-  onOpen,
-  sizeClassName,
-}: RecipeImageHandlers & {
-  image: RecipeDetailImage;
-  isFailed: boolean;
-  sizeClassName: string;
-}) => {
-  const ratioStyle = { "--image-ratio": image.width / image.height } as CSSProperties;
-
-  if (isFailed) {
-    return (
-      <RecipeImageUnavailable
-        className={cn("w-full rounded-[12px]", sizeClassName)}
-        label={`${image.alt}を読み込めませんでした`}
-        style={{ ...ratioStyle, aspectRatio: aspectRatioOf(image) }}
-      />
-    );
-  }
-
-  return (
-    <RecipeImageZoomButton
-      alt={image.alt}
-      className={cn("w-full rounded-[12px] bg-brand-paper-muted", sizeClassName)}
-      style={ratioStyle}
-      onOpen={() => onOpen(image.id)}
-    >
-      <img
-        alt={image.alt}
-        className="block h-auto w-full"
-        height={image.height}
-        src={image.src}
-        style={{ aspectRatio: aspectRatioOf(image) }}
-        width={image.width}
-        onError={() => onError(image.id)}
-        {...deferredImageProps}
-      />
-    </RecipeImageZoomButton>
-  );
-};
-
-// 複数の画像は高さをそろえた横の帯にする。縦横比は保つので、切らずに並ぶ。
+// 画像は枚数によらず高さをそろえた横の帯にする。縦横比は保つので、切らずに並ぶ。じっくり見るのは拡大表示に任せる。
 export const RecipeImageStrip = ({
   className,
   failedImageIds,
@@ -237,4 +198,56 @@ export const RecipeImageStrip = ({
       );
     })}
   </div>
+);
+
+// 表紙の下に置く小さな見本の列。材料を押し下げずに、表紙のほかに何枚あるか・何が写っているかを見せる。
+// 押すとその画像の位置からライトボックスで開く。
+export const RecipeImageThumbnails = ({
+  className,
+  failedImageIds,
+  images,
+  label,
+  onError,
+  onOpen,
+}: RecipeImageHandlers & {
+  className?: string;
+  failedImageIds: ReadonlySet<string>;
+  images: readonly RecipeDetailImage[];
+  label: string;
+}) => (
+  <section aria-label={label}>
+    <ul className={cn("flex snap-x gap-2 overflow-x-auto", className)}>
+      {images.map((image) => {
+        const frameClass = "size-14 rounded-[10px]";
+
+        return (
+          <li className="shrink-0 snap-start" key={image.id}>
+            {failedImageIds.has(image.id) ? (
+              <RecipeImageUnavailable
+                className={frameClass}
+                isCompact
+                label={`${image.alt}を読み込めませんでした`}
+              />
+            ) : (
+              <RecipeImageZoomButton
+                alt={image.alt}
+                className={cn(frameClass, "bg-brand-paper-muted")}
+                onOpen={() => onOpen(image.id)}
+              >
+                <img
+                  alt={image.alt}
+                  className="block size-full object-cover"
+                  height={image.height}
+                  src={image.src}
+                  width={image.width}
+                  onError={() => onError(image.id)}
+                  {...deferredImageProps}
+                />
+              </RecipeImageZoomButton>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  </section>
 );

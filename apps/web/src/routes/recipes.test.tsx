@@ -1423,7 +1423,12 @@ describe("RecipesRoute", () => {
     expect(coverImage).toHaveAttribute("width", "1200");
     expect(coverImage).toHaveAttribute("height", "800");
     expect(screen.getByRole("button", { name: "Tomato pastaを拡大" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "レシピ画像" })).toBeInTheDocument();
+    // 材料も手順もあるレシピでは、レシピ画像は表紙の下の列にして材料より前に出す。
+    const referenceImages = screen.getByRole("region", { name: "レシピ画像" });
+    expect(
+      referenceImages.compareDocumentPosition(screen.getByRole("region", { name: "材料" })),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.queryByRole("heading", { name: "レシピ画像" })).not.toBeInTheDocument();
     const firstReferenceImage = screen.getByAltText("レシピ画像1");
     expect(firstReferenceImage).toHaveAttribute("src", "https://images.example/source-1.webp");
     expect(screen.getByAltText("レシピ画像2")).toHaveAttribute(
@@ -2041,6 +2046,7 @@ describe("RecipesRoute", () => {
 
     await expect(screen.findByLabelText("レシピ名")).resolves.toBeInTheDocument();
     expect(getReferenceImageInput()).toBeDisabled();
+    expect(screen.getByText("レシピ画像は上限に達しました")).toBeInTheDocument();
     expect(screen.getAllByText("上限に達しました").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("手順1の画像")).toBeDisabled();
     expect(screen.getByLabelText("手順2の画像")).not.toBeDisabled();
@@ -2179,7 +2185,8 @@ describe("RecipesRoute", () => {
     expect(screen.getByLabelText("表紙の写真")).not.toBeDisabled();
     expect(getReferenceImageInput()).toBeDisabled();
     expect(screen.getByLabelText("手順1の画像")).toBeDisabled();
-    expect(screen.getAllByText("上限に達しました").length).toBeGreaterThan(1);
+    expect(screen.getByText("レシピ画像は上限に達しました")).toBeInTheDocument();
+    expect(screen.getAllByText("上限に達しました").length).toBeGreaterThan(0);
   });
 
   it("更新成功後の詳細再取得に失敗しても更新失敗として扱わない", async () => {
