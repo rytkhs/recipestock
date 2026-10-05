@@ -1,5 +1,5 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
-import { normalizeTextForComparison } from "../text";
+import { decodeHtmlEntities, normalizeTextForComparison } from "../text";
 import { type FetchedImportPage, RecipeImportError } from "../types";
 import {
   getHtmlAttribute,
@@ -466,7 +466,8 @@ const assertCookpadExtractionsMatch = (
     const printFirstImageId = getCookpadStepImageId(printStep.imageUrls[0] ?? null);
     if (
       !recipeStep?.id ||
-      normalizeTextForComparison(printStep.text) !== normalizeTextForComparison(recipeStep.text) ||
+      normalizeTextForComparison(decodeHtmlEntities(printStep.text)) !==
+        normalizeTextForComparison(decodeHtmlEntities(recipeStep.text)) ||
       (printFirstImageId &&
         getCookpadStepImageId(recipeStep.imageUrls[0] ?? null) !== printFirstImageId)
     ) {

@@ -166,12 +166,47 @@ describe("cookpadImportAdapter", () => {
     const stepTexts = ["じゃがいもを切る。　&lt;薄切り&gt;にする。", ...STEP_TEXTS.slice(1)];
 
     const result = await importCookpad({
-      printHtml: createCookpadPrintHtml({ title: "S&amp;Bの揚げポテト", stepTexts }),
-      recipeHtml: createCookpadRecipeHtml({ stepTexts }),
+      printHtml: createCookpadPrintHtml({
+        title: "S&amp;Bの揚げポテト",
+        stepTexts,
+        ingredients: `
+          <li class="justified-quantity-and-name not-headline">
+            <span>S&amp;Bカレー粉</span><bdi>大さじ1</bdi>
+          </li>
+        `,
+        note: `
+          <div class="mb-rg">
+            <div>コツ・ポイント</div>
+            <div><p>足す方がいいかもしれません&gt;&lt;</p></div>
+          </div>
+        `,
+      }),
+      recipeHtml: createCookpadRecipeHtml({ stepTexts, coverImageQuery: "?v=1&amp;fit=crop" }),
     });
 
-    expect(result.recipeDraftContent.title).toBe("S&Bの揚げポテト");
+    expect(result.recipeDraftContent).toMatchObject({
+      title: "S&Bの揚げポテト",
+      coverImage: {
+        type: "externalImageUrl",
+        url: `${cookpadCoverImageUrl(1360, 1562, 80)}?v=1&fit=crop`,
+      },
+      ingredientGroups: [{ ingredients: [{ name: "S&Bカレー粉", amount: "大さじ1" }] }],
+      note: "コツ・ポイント\n足す方がいいかもしれません><",
+    });
     expect(result.recipeDraftContent.steps[0].text).toBe("じゃがいもを切る。　<薄切り>にする。");
+  });
+
+  it("printページと通常ページで文字参照の書き方が違っても、同じ手順として照合する", async () => {
+    const result = await importCookpad({
+      printHtml: createCookpadPrintHtml({
+        stepTexts: ["じゃがいもをkid&#39;s用に切る。", ...STEP_TEXTS.slice(1)],
+      }),
+      recipeHtml: createCookpadRecipeHtml({
+        stepTexts: ["じゃがいもをkid&#x27;s用に切る。", ...STEP_TEXTS.slice(1)],
+      }),
+    });
+
+    expect(result.recipeDraftContent.steps[0].text).toBe("じゃがいもをkid's用に切る。");
   });
 
   it("同解像度ならq80を優先し、同一手順内の重複URLを除去する", async () => {
@@ -333,6 +368,20 @@ const createCookpadPrintHtml = ({
   imageIdsByStep = STEP_IMAGE_IDS,
   pictureStepImages = false,
   servings = '<span class="mise-icon-text">2人前</span>',
+  ingredients = `
+    <li class="justified-quantity-and-name not-headline">
+      <span>じゃがいも</span><bdi>1個</bdi>
+    </li>
+    <li class="justified-quantity-and-name not-headline">
+      <span>△塩</span><bdi>少々</bdi>
+    </li>
+    <li class="justified-quantity-and-name headline">
+      <span>■仕上げ</span><bdi></bdi>
+    </li>
+    <li class="justified-quantity-and-name not-headline">
+      <span>◎黒胡椒</span><bdi>少々</bdi>
+    </li>
+  `,
   note = `
     <div class="mb-rg">
       <div>コツ・ポイント</div>
@@ -345,6 +394,7 @@ const createCookpadPrintHtml = ({
   imageIdsByStep?: string[][];
   pictureStepImages?: boolean;
   servings?: string;
+  ingredients?: string;
   note?: string;
 } = {}) => `
   <html>
@@ -355,20 +405,7 @@ const createCookpadPrintHtml = ({
           <div>
             <span>材料</span>
             ${servings}
-            <ol dir="auto">
-              <li class="justified-quantity-and-name not-headline">
-                <span>じゃがいも</span><bdi>1個</bdi>
-              </li>
-              <li class="justified-quantity-and-name not-headline">
-                <span>△塩</span><bdi>少々</bdi>
-              </li>
-              <li class="justified-quantity-and-name headline">
-                <span>■仕上げ</span><bdi></bdi>
-              </li>
-              <li class="justified-quantity-and-name not-headline">
-                <span>◎黒胡椒</span><bdi>少々</bdi>
-              </li>
-            </ol>
+            <ol dir="auto">${ingredients}</ol>
           </div>
           <div>
             ${note}
@@ -475,12 +512,14 @@ const createCookpadRecipeHtml = ({
   stepTexts = STEP_TEXTS,
   imageIdsByStep = STEP_IMAGE_IDS,
   coverImage = true,
+  coverImageQuery = "",
   stepImageQualityCandidates = [50, 80],
 }: {
   title?: string;
   stepTexts?: string[];
   imageIdsByStep?: string[][];
   coverImage?: boolean;
+  coverImageQuery?: string;
   stepImageQualityCandidates?: number[];
 } = {}) => `
   <html>
@@ -491,10 +530,10 @@ const createCookpadRecipeHtml = ({
             <div class="tofu_image">
               <picture>
                 <source type="image/jpeg" srcset="
-                  ${cookpadCoverImageUrl(680, 781, 80)} 1x,
-                  ${cookpadCoverImageUrl(1360, 1562, 80)} 2x
+                  ${cookpadCoverImageUrl(680, 781, 80)}${coverImageQuery} 1x,
+                  ${cookpadCoverImageUrl(1360, 1562, 80)}${coverImageQuery} 2x
                 ">
-                <img src="${cookpadCoverImageUrl(680, 781, 80)}">
+                <img src="${cookpadCoverImageUrl(680, 781, 80)}${coverImageQuery}">
               </picture>
             </div>
           `
