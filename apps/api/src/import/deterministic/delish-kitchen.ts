@@ -89,7 +89,6 @@ const createDelishKitchenRecipeUrl = (recipeId: string) =>
   `https://${DELISH_KITCHEN_HOST}/recipes/${recipeId}`;
 
 export const delishKitchenImportAdapter: DeterministicImportAdapter = {
-  id: "delish-kitchen",
   sourceName: "デリッシュキッチン",
 
   match({ normalizedUrl }: DeterministicImportMatchInput) {

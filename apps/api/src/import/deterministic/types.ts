@@ -46,7 +46,6 @@ export type DeterministicImportResult = {
 };
 
 export type DeterministicImportAdapter = {
-  id: string;
   /** 取り込んだRecipeの出典名。 */
   sourceName: string;
   match(input: DeterministicImportMatchInput): boolean;

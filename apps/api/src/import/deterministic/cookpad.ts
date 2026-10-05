@@ -76,7 +76,6 @@ const createCookpadUrl = (recipeId: string, print: boolean) =>
   `https://${COOKPAD_HOST}/jp/recipes/${recipeId}${print ? "/print" : ""}`;
 
 export const cookpadImportAdapter: DeterministicImportAdapter = {
-  id: "cookpad",
   sourceName: "クックパッド",
 
   match({ normalizedUrl }: DeterministicImportMatchInput) {

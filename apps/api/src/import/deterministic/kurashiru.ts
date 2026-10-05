@@ -31,7 +31,6 @@ const createKurashiruRecipeUrl = (recipeId: string) =>
   `https://www.${KURASHIRU_HOST}/recipes/${recipeId}`;
 
 export const kurashiruImportAdapter: DeterministicImportAdapter = {
-  id: "kurashiru",
   sourceName: "クラシル",
 
   match({ normalizedUrl }: DeterministicImportMatchInput) {

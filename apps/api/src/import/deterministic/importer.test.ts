@@ -302,7 +302,6 @@ describe("createDeterministicImporter", () => {
 const createAdapter = (
   overrides: Partial<DeterministicImportAdapter> = {},
 ): DeterministicImportAdapter => ({
-  id: "example",
   sourceName: "Example",
   match: () => true,
   resolveFetchRequests: ({ normalizedUrl }) => [{ id: "recipe", url: normalizedUrl }],
