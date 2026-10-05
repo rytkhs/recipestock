@@ -7,6 +7,8 @@ import { kurashiruImportAdapter } from "./kurashiru";
 const RECIPE_ID = "ea9e1038-d78a-468b-b08e-7456fc3fd038";
 const RECIPE_URL = `https://www.kurashiru.com/recipes/${RECIPE_ID}`;
 const COVER_IMAGE_URL = `https://video.kurashiru.com/production/videos/${RECIPE_ID}/compressed_thumbnail_square_large.jpg?123`;
+const STEP_IMAGE_URL =
+  "https://video.kurashiru.com/production/video_clips/90c91417-aec4-435d-bdc6-b7a8e77b0c41/compressed_large_thumbnail_square_file_name_original.jpg?123";
 
 describe("kurashiruImportAdapter", () => {
   it.each([
@@ -85,7 +87,7 @@ describe("kurashiruImportAdapter", () => {
           },
           {
             text: "卵焼き器で焼きます。",
-            images: [],
+            images: [{ type: "externalImageUrl", url: STEP_IMAGE_URL }],
           },
         ],
         note: [
@@ -323,11 +325,13 @@ const createKurashiruHtml = ({
         id: 101,
         body: "卵を溶きほぐします。\r\n調味料を加えます。",
         "sort-order": 1,
+        "thumbnail-square-large-url": null,
       },
       {
         id: 102,
         body: "卵焼き器で焼きます。",
         "sort-order": 2,
+        "thumbnail-square-large-url": STEP_IMAGE_URL,
       },
     ],
     points: [

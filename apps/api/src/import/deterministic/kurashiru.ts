@@ -94,7 +94,11 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
     const { ingredientGroups, ingredientNamesById } = buildIngredientGroups(
       asArray(attributes.ingredients),
     );
-    const steps = buildSteps(asArray(attributes.instructions), asArray(attributes.points));
+    const steps = buildSteps(
+      asArray(attributes.instructions),
+      asArray(attributes.points),
+      page.finalUrl,
+    );
     if (
       !title ||
       ingredientGroups.every((group) => group.ingredients.length === 0) ||
@@ -368,7 +372,11 @@ const buildIngredientGroups = (items: unknown[]) => {
   return { ingredientGroups: groups, ingredientNamesById };
 };
 
-const buildSteps = (instructions: unknown[], points: unknown[]): DeterministicDraftStep[] => {
+const buildSteps = (
+  instructions: unknown[],
+  points: unknown[],
+  baseUrl: string,
+): DeterministicDraftStep[] => {
   const pointsByInstructionId = new Map<string, string[]>();
   for (const item of points) {
     const point = asRecord(item);
@@ -389,11 +397,13 @@ const buildSteps = (instructions: unknown[], points: unknown[]): DeterministicDr
         ? []
         : (pointsByInstructionId.get(String(instruction.id)) ?? []);
     if (!text && stepPoints.length === 0) return [];
+    // ページは手順ごとに動画のクリップを置き、再生前はこの静止画を手順の画像として見せる。
+    const imageUrl = resolveHttpUrl(instruction["thumbnail-square-large-url"], baseUrl);
     return [
       {
         ...(text ? { text } : {}),
         supplements: [{ heading: POINT_LABEL, body: stepPoints.join("\n") }],
-        imageUrls: [],
+        imageUrls: imageUrl ? [imageUrl] : [],
       },
     ];
   });
