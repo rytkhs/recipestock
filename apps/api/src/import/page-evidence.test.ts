@@ -117,7 +117,12 @@ describe("Recipe page evidence", () => {
             <p>Mix <strong>flour</strong> and <a href="/glossary/water">water</a>.</p>
             <table>
               <tr><th>材料</th><th>分量</th></tr>
-              <tr><td>砂糖</td><td><p>大さじ1</p></td></tr>
+              <tr>
+                <td>砂糖</td>
+                <td>
+                  <p>大さじ1</p>
+                </td>
+              </tr>
             </table>
           </article>
         </body>

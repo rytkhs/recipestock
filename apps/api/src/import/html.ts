@@ -213,6 +213,10 @@ const collapseTextNode = (value: string) => {
     .replace(/[\t\f ]+/g, " ");
 };
 
+// 行の端では、ブロックの改行と、整形の空白だけのテキストが消える。最後の組み立ての行頭と、
+// 端で行を変えない要素（liの子要素・表のセル・dt・dd）の両端で、同じこの判定を使う。
+const isLineEdgePart = (part: string | number) => typeof part === "number" || /^ *$/.test(part);
+
 const countLeadingNewlines = (value: string) => {
   let count = 0;
   while (value[count] === "\n") count += 1;
@@ -241,8 +245,8 @@ export const renderHtmlText = (root: HtmlParentNode, options: RenderHtmlTextOpti
   const appendInline = (render: () => void) => {
     const start = parts.length;
     render();
-    while (parts.length > start && typeof parts[start] === "number") parts.splice(start, 1);
-    while (parts.length > start && typeof parts.at(-1) === "number") parts.pop();
+    while (parts.length > start && isLineEdgePart(parts[start])) parts.splice(start, 1);
+    while (parts.length > start && isLineEdgePart(parts[parts.length - 1])) parts.pop();
   };
 
   const visitChildren = (node: HtmlParentNode) => {
@@ -375,8 +379,8 @@ export const renderHtmlText = (root: HtmlParentNode, options: RenderHtmlTextOpti
       continue;
     }
     if (!part) continue;
-    // ブロックの間や改行のあとの空白だけのテキストは、行の端で消える。
-    if ((pendingLineBreaks > 0 || trailingNewlines > 0) && /^ +$/.test(part)) continue;
+    // ブロックの間や改行のあとは行の頭になる。
+    if ((pendingLineBreaks > 0 || trailingNewlines > 0) && isLineEdgePart(part)) continue;
 
     if (chunks.length > 0 && pendingLineBreaks > 0) {
       const missing = pendingLineBreaks - trailingNewlines - countLeadingNewlines(part);
