@@ -117,14 +117,13 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
 
     const ingredientGroups = buildIngredientGroups(printExtraction.ingredientRows);
     const title = normalizeHtmlText(printExtraction.title);
-    const steps = printExtraction.steps.map((step, index) => {
+    const steps = printExtraction.steps.flatMap((step, index) => {
       const text = normalizeHtmlMultilineText(step.text);
-      return {
-        ...(text ? { text } : {}),
-        imageUrls: recipeExtraction.isPremium
-          ? step.imageUrls
-          : recipeExtraction.steps[index].imageUrls,
-      };
+      const imageUrls = recipeExtraction.isPremium
+        ? step.imageUrls
+        : recipeExtraction.steps[index].imageUrls;
+      if (!text && imageUrls.length === 0) return [];
+      return [{ ...(text ? { text } : {}), imageUrls }];
     });
 
     if (

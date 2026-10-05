@@ -355,6 +355,10 @@ describe("delishKitchenImportAdapter", () => {
       name: "HTML手順がない",
       options: { stepTexts: [] },
     },
+    {
+      name: "HTML手順に本文もポイントも画像もない",
+      options: { stepTexts: ["", ""], points: [], stepImages: false },
+    },
   ])("$nameの場合は失敗する", async ({ options }) => {
     await expect(importDelishKitchen(options)).rejects.toMatchObject({
       code: "extraction_failed",

@@ -310,6 +310,20 @@ describe("cookpadImportAdapter", () => {
     } satisfies Partial<RecipeImportError>);
   });
 
+  it("本文も画像もない手順しかない場合は失敗する", async () => {
+    const stepTexts = STEP_TEXTS.map(() => "");
+    const imageIdsByStep = STEP_TEXTS.map(() => []);
+
+    await expect(
+      importCookpad({
+        printHtml: createCookpadPrintHtml({ stepTexts, imageIdsByStep }),
+        recipeHtml: createCookpadRecipeHtml({ stepTexts, imageIdsByStep }),
+      }),
+    ).rejects.toMatchObject({
+      code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
   it("片方が非HTMLの場合はAI fallbackしない", async () => {
     const aiNormalize = vi.fn();
     const consumeAiUsage = vi.fn();

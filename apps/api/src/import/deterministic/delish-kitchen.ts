@@ -133,36 +133,39 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
 
     const title = normalizeHtmlText([extraction.lead, extraction.title].join(" "));
     const ingredientGroups = buildIngredientGroups(extraction.ingredientRows);
+    const steps = extraction.steps.flatMap((step, index) => {
+      const text = normalizeHtmlMultilineText(step.text);
+      const points = step.points.map(normalizeHtmlMultilineText).filter(Boolean);
+      const structuredStep = structuredRecipe?.steps[index];
+      const imageUrls =
+        structuredStep &&
+        normalizeTextForComparison(decodeHtmlEntities(step.text)) ===
+          normalizeTextForComparison(structuredStep.text)
+          ? structuredStep.imageUrls
+          : [];
+      if (!text && points.length === 0 && imageUrls.length === 0) return [];
+      return [
+        {
+          ...(text ? { text } : {}),
+          supplements: [{ heading: POINT_LABEL, body: points.join("\n") }],
+          imageUrls,
+        },
+      ];
+    });
     // 制限付きレシピは、ページに材料は出ても手順が出ないことがある。読める材料だけで取り込み、
     // 手順がないことをnoteの先頭で伝える。
-    const isPartialImport = extraction.isRestricted && extraction.steps.length === 0;
+    const isPartialImport = extraction.isRestricted && steps.length === 0;
 
     if (
       !title ||
       ingredientGroups.every((group) => group.ingredients.length === 0) ||
-      (!isPartialImport && extraction.steps.length === 0)
+      (!isPartialImport && steps.length === 0)
     ) {
       throw new RecipeImportError(
         "extraction_failed",
         "Delish Kitchen recipe structure could not be extracted.",
       );
     }
-
-    const steps = extraction.steps.map((step, index) => {
-      const text = normalizeHtmlMultilineText(step.text);
-      const points = step.points.map(normalizeHtmlMultilineText).filter(Boolean);
-      const structuredStep = structuredRecipe?.steps[index];
-      return {
-        ...(text ? { text } : {}),
-        supplements: [{ heading: POINT_LABEL, body: points.join("\n") }],
-        imageUrls:
-          structuredStep &&
-          normalizeTextForComparison(decodeHtmlEntities(step.text)) ===
-            normalizeTextForComparison(structuredStep.text)
-            ? structuredStep.imageUrls
-            : [],
-      };
-    });
     const coverImageUrl = structuredRecipe?.imageUrls[0];
     const attentionItems = extraction.attentionItems
       .map(normalizeHtmlMultilineText)
