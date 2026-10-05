@@ -233,7 +233,7 @@ const extractRecipeHtmlStructuredEvidence = (
   };
   visit(document, undefined, undefined);
 
-  return dedupeRecipeStructuredEvidence(recipes);
+  return recipes;
 };
 
 const isMicrodataRecipeScope = (element: HtmlElement) =>
@@ -390,7 +390,6 @@ const extractRecipeJsonLdEvidence = (
   baseUrl: string,
 ): ExtractedRecipeStructuredEvidence[] => {
   const recipes: ExtractedRecipeStructuredEvidence[] = [];
-  const seen = new Set<string>();
 
   for (const source of collectJsonLdSources(document)) {
     let value: unknown;
@@ -401,12 +400,7 @@ const extractRecipeJsonLdEvidence = (
     }
 
     for (const node of collectRecipeJsonLdNodes(value)) {
-      const recipe = normalizeRecipeJsonLdNode(node, baseUrl);
-      const key = JSON.stringify(recipe);
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-      recipes.push(recipe);
+      recipes.push(normalizeRecipeJsonLdNode(node, baseUrl));
     }
   }
 
