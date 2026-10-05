@@ -53,7 +53,7 @@ adapterは`types.ts`の`DeterministicImportAdapter`を実装し、`index.ts`に�
 
 - HTMLの文字参照（`&amp;`など）は文字に戻す。
 - `<br>`や段落の区切りは改行にする。
-- HTMLの整形で入った空白や改行は整える。文中の全角スペースは作者が書いた文字なので残す。
+- HTMLの整形で入った空白や改行は整える。文中の全角スペースは作者が書いた文字なので残し、行の両端のものは落とす。
 
 HTMLから読んだ本文は`page.ts`の`normalizeHtmlText`か`normalizeHtmlMultilineText`で、属性値は`getHtmlAttribute`で読む。文字参照の戻し方と空白の整え方はこれらが行う。
 

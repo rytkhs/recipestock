@@ -2,7 +2,7 @@
 // タグが表す区切りは空白や改行として現れ方が揃わないため、空白を全て落として比べる。
 export const normalizeTextForComparison = (value: string) => value.replace(/\s+/g, "");
 
-// 全角スペースは作者が書いた文字なので、文中のものは残す。
+// 全角スペースは作者が書いた文字なので文中のものは残し、行の両端のものは落とす。
 export const normalizeSingleLineText = (value: string) =>
   value.replace(/[^\S\u3000]+/g, " ").trim();
 
@@ -10,7 +10,7 @@ export const normalizeMultilineText = (value: string) =>
   value
     .replace(/\r\n?/g, "\n")
     .replace(/[^\S\n\u3000]+/g, " ")
-    .replace(/ ?\n ?/g, "\n")
+    .replace(/[ \u3000]*\n[ \u3000]*/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 

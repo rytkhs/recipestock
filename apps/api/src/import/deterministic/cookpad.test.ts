@@ -162,8 +162,11 @@ describe("cookpadImportAdapter", () => {
     );
   });
 
-  it("文字参照をページに表示される文字に戻し、文中の全角スペースは残す", async () => {
-    const stepTexts = ["じゃがいもを切る。　&lt;薄切り&gt;にする。", ...STEP_TEXTS.slice(1)];
+  it("文字参照をページに表示される文字に戻し、文中の全角スペースだけを残す", async () => {
+    const stepTexts = [
+      "じゃがいもを切る。　&lt;薄切り&gt;にする。<br>　水にさらす。",
+      ...STEP_TEXTS.slice(1),
+    ];
 
     const result = await importCookpad({
       printHtml: createCookpadPrintHtml({
@@ -193,7 +196,9 @@ describe("cookpadImportAdapter", () => {
       ingredientGroups: [{ ingredients: [{ name: "S&Bカレー粉", amount: "大さじ1" }] }],
       note: "コツ・ポイント\n足す方がいいかもしれません><",
     });
-    expect(result.recipeDraftContent.steps[0].text).toBe("じゃがいもを切る。　<薄切り>にする。");
+    expect(result.recipeDraftContent.steps[0].text).toBe(
+      "じゃがいもを切る。　<薄切り>にする。\n水にさらす。",
+    );
   });
 
   it("printページと通常ページで文字参照の書き方が違っても、同じ手順として照合する", async () => {
