@@ -100,11 +100,30 @@ describe("Recipe page evidence", () => {
     expect(evidence.markdownContent).toMatch(/- 鶏もも肉 300g\n- 玉ねぎ 1個/);
     expect(evidence.markdownContent).toMatch(/醤油 大さじ2\nみりん 大さじ1/);
     expect(evidence.markdownContent).toMatch(/砂糖 小さじ1\n塩 少々/);
-    expect(evidence.markdownContent).toContain("Mix **flour** and water");
+    expect(evidence.markdownContent).toContain("Mix flour and water");
     expect(evidence.markdownContent).toMatch(
       /Step 1\n!\[Step 1\]\(<https:\/\/example\.com\/step1\.jpg>\)/,
     );
-    expect(evidence.markdownContent).not.toMatch(/[]/);
+  });
+
+  it("AI入力のMarkdownにリンク先と強調の記法を入れず、表はセルを区切って行ごとに書く", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <article>
+            <p>Mix <strong>flour</strong> and <a href="/glossary/water">water</a>.</p>
+            <table>
+              <tr><th>材料</th><th>分量</th></tr>
+              <tr><td>砂糖</td><td><p>大さじ1</p></td></tr>
+            </table>
+          </article>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.markdownContent).toContain("Mix flour and water.");
+    expect(evidence.markdownContent).not.toContain("/glossary/water");
+    expect(evidence.markdownContent).toMatch(/材料 \| 分量\n砂糖 \| 大さじ1/);
   });
 
   it("JSON-LD Recipeをstructured evidenceとして抽出する", async () => {
@@ -367,7 +386,7 @@ describe("Recipe page evidence", () => {
         `<details><summary>Prep</summary>Slice.</details><dialog open>Serve.</dialog>` +
         `<center>Rest.</center>` +
         `</div>` +
-        `<div itemprop="recipeIngredient"><select><option>Salt</option><option>Pepper</option></select></div>` +
+        `<div itemprop="recipeIngredient"><fieldset><legend>Salt</legend>1 tsp</fieldset></div>` +
         `</div></body></html>`,
     );
 
@@ -376,13 +395,13 @@ describe("Recipe page evidence", () => {
       name: "Stew",
       yieldText: undefined,
       imageUrls: [],
-      rawIngredients: ["Salt\n\nPepper"],
-      rawInstructions: ["Prep\nSlice.\n\nServe.\n\nRest."],
+      rawIngredients: ["Salt\n1 tsp"],
+      rawInstructions: ["Prep\nSlice.\nServe.\nRest."],
       structuredInstructions: [],
     });
   });
 
-  it("Microdataにvoid要素があっても取り込みが落ちない", async () => {
+  it("Microdataの表のセルと水平線を区切りとして扱う", async () => {
     const evidence = await extractRecipeHtml(
       `<html><body><div itemscope itemtype="https://schema.org/Recipe">` +
         `<h1 itemprop="name">Soup</h1>` +
@@ -397,13 +416,13 @@ describe("Recipe page evidence", () => {
       name: "Soup",
       yieldText: undefined,
       imageUrls: [],
-      rawIngredients: ["Salt\n\n1"],
+      rawIngredients: ["Salt | 1"],
       rawInstructions: ["Boil.\nServe."],
       structuredInstructions: [],
     });
   });
 
-  it("MicrodataでHTMLソースの折り返しを区切りとして扱わない", async () => {
+  it("文字にはさまれた改行は残し、要素の前後の改行は畳んで、Markdownと構造化証拠で揃える", async () => {
     const evidence = await extractRecipeHtml(`
       <html>
         <body>
@@ -423,15 +442,18 @@ describe("Recipe page evidence", () => {
       </html>
     `);
 
+    // CSSのpre-wrapで改行を出すページがあるので、テキスト中の改行は区切りとして残す。
     expect(evidence.recipeStructuredEvidence).toContainEqual({
       format: "microdata",
       name: "Batter",
       yieldText: undefined,
       imageUrls: [],
-      rawIngredients: ["plain flour, sifted"],
-      rawInstructions: ["Chop the onion.\n\nFry it."],
+      rawIngredients: ["plain flour,\nsifted"],
+      rawInstructions: ["Chop the\nonion.\n\nFry it."],
       structuredInstructions: [],
     });
+    expect(evidence.markdownContent).toContain("Chop the\nonion.\n\nFry it.");
+    expect(evidence.markdownContent).toContain("- plain flour,\nsifted");
   });
 
   it("Microdataのインライン要素の境界には区切りを足さない", async () => {
@@ -455,6 +477,183 @@ describe("Recipe page evidence", () => {
       rawInstructions: [],
       structuredInstructions: [],
     });
+  });
+
+  it("本文・タイトル・属性値の文字参照を、前後の空白に関係なく1回だけ戻す", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <head>
+          <title>Cr&egrave;me br&ucirc;l&eacute;e &#8211; Site</title>
+          <meta property="og:title" content="A &amp;lt;b&amp;gt; B">
+        </head>
+        <body>
+          <p>
+            I&#8217;m &amp;lt;tag&amp;gt; 180&deg;
+          </p>
+          <img src="/a.jpg?resize=640%2C427&#038;quality=89&#038;ssl=1" alt="Deb&apos;s &reg;">
+        </body>
+      </html>
+    `);
+
+    expect(evidence.title).toBe("Crème brûlée – Site");
+    expect(evidence.meta["og:title"]).toBe("A &lt;b&gt; B");
+    expect(evidence.markdownContent).toContain("I’m &lt;tag&gt; 180°");
+    expect(evidence.imageCandidates).toContainEqual({
+      id: "img_001",
+      url: "https://example.com/a.jpg?resize=640%2C427&quality=89&ssl=1",
+      alt: "Deb's ®",
+      position: 0,
+    });
+  });
+
+  it("構造化証拠の文字参照を1回だけ戻し、JSON-LDの文字列に&quot;があっても読める", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">
+            {
+              "@type": "Recipe",
+              "name": "12&quot; Pizza &amp;lt;b&amp;gt;",
+              "recipeYield": "2&nbsp;servings",
+              "recipeIngredient": ["Sugar &frac12; cup"]
+            }
+          </script>
+        </head>
+        <body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">A &amp;lt;b&amp;gt; B</h1>
+            <ul>
+              <li itemprop="recipeIngredient">
+                Sugar &#189; cup
+              </li>
+            </ul>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toEqual([
+      expect.objectContaining({
+        format: "jsonLd",
+        name: '12" Pizza &lt;b&gt;',
+        yieldText: "2 servings",
+        rawIngredients: ["Sugar ½ cup"],
+      }),
+      expect.objectContaining({
+        format: "microdata",
+        name: "A &lt;b&gt; B",
+        rawIngredients: ["Sugar ½ cup"],
+      }),
+    ]);
+  });
+
+  it("仕様の外にある数値参照で落ちず、U+FFFDに置き換える", async () => {
+    const evidence = await extractRecipeHtml(
+      "<html><body><p>A&#0;B &#99999999; &#xD800; &#150;</p></body></html>",
+    );
+
+    expect(evidence.markdownContent).toBe("A\uFFFDB \uFFFD \uFFFD –");
+  });
+
+  it("JSON-LDの文字列に入ったHTMLを、ページの本文と同じ区切りでテキストにする", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">
+            {
+              "@type": "Recipe",
+              "name": "Renkon",
+              "recipeIngredient": ["<b>Salt</b> 1 tsp", "温度 &lt; 180℃", "200g < 300g"],
+              "recipeInstructions": [
+                "<p>玉ねぎを切る</p><p>炒める</p>",
+                {
+                  "@type": "HowToStep",
+                  "text": "れんこんは<a href=\\"/wordlist/輪切り\\">輪切り</a>にする。<br>水にさらす。"
+                }
+              ]
+            }
+          </script>
+        </head>
+        <body><main><p>Enough visible recipe content for extraction.</p></main></body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual(
+      expect.objectContaining({
+        format: "jsonLd",
+        rawIngredients: ["Salt 1 tsp", "温度 < 180℃", "200g < 300g"],
+        rawInstructions: ["玉ねぎを切る\n\n炒める", "れんこんは輪切りにする。\n水にさらす。"],
+      }),
+    );
+  });
+
+  it("表示されない要素の中身を、構造化証拠にもMarkdownにも入れない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Boiled egg</h1>
+            <div itemprop="recipeInstructions">Boil.
+              <script>var track = {a:1};</script>
+              <style>.step{color:red}</style>
+              <template><p>hidden draft</p></template>
+              <noscript>Enable JavaScript</noscript>
+              <span style="display:none">SALE 50% OFF</span>
+              <span hidden>coupon</span>
+              <select><option>Print size</option></select>
+            Serve.</div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual(
+      expect.objectContaining({ format: "microdata", rawInstructions: ["Boil. Serve."] }),
+    );
+    expect(evidence.markdownContent).toBe("# Boiled egg\n\nBoil. Serve.");
+  });
+
+  it("ページタイトルにSVGの<title>を混ぜない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <head><title>simple chicken tacos &#8211; smitten kitchen</title></head>
+        <body><svg><title>arrow</title></svg><p>Enough visible recipe content.</p></body>
+      </html>
+    `);
+
+    expect(evidence.title).toBe("simple chicken tacos – smitten kitchen");
+    expect(evidence.markdownContent).not.toContain("arrow");
+  });
+
+  it("spanなどの中に置かれた見出しは、インラインに見せているとみなして行を変えない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <h2>材料</h2>
+          <div class="mate"><span><a href="/food/1"><h2 class="dispin">カニ缶</h2></a>(ズワイガニ) <span class="amount">100g</span></span></div>
+          <div class="mate"><span><a href="/food/2"><h2 class="dispin">卵</h2></a> <span class="amount">2個</span></span></div>
+          <div>＜調味料1＞</div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.markdownContent).toBe(
+      "## 材料\n\nカニ缶(ズワイガニ) 100g\n卵 2個\n＜調味料1＞",
+    );
+  });
+
+  it("http(s)以外の画像URLは候補にしない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <p>Enough visible recipe content.</p>
+          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="placeholder">
+        </body>
+      </html>
+    `);
+
+    expect(evidence.imageCandidates).toEqual([]);
+    expect(evidence.markdownContent).not.toContain("data:");
   });
 });
 

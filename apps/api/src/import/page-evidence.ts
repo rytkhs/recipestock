@@ -1,7 +1,15 @@
-/// <reference path="./html2md4llm.d.ts" />
-
-import html2md4llm from "html2md4llm";
-import { normalizeMultilineText } from "./text";
+import {
+  forEachHtmlElement,
+  getHtmlAttribute,
+  getHtmlTextContent,
+  type HtmlDocument,
+  type HtmlElement,
+  isHtmlElement,
+  parseHtmlDocument,
+  renderHtmlFragmentText,
+  renderHtmlText,
+} from "./html";
+import { decodeHtmlAttribute, normalizeSingleLineText } from "./text";
 import {
   type FetchedImportPage,
   type RecipeImportImageCandidate,
@@ -31,70 +39,51 @@ export type RecipePageEvidence = {
   imageCandidates: RecipeImportImageCandidate[];
 };
 
-// html2md4llm はテキストノードを trim するため、素の改行や空白では要素境界で区切りが消える。
-// 区切りを非空白のマーカーとして埋め込み、normalizeMarkdownContent で復元する。
-const LINE_BREAK_MARKER = "";
-const SPACE_MARKER = "";
+const MAX_MARKDOWN_CONTENT_LENGTH = 24_000;
+const MAX_JSON_LD_DOCUMENTS = 5;
+const MAX_HTML_STRUCTURED_RECIPES = 20;
 
+/**
+ * ページを1回だけパースし、markdown・構造化証拠・タイトル・画像候補を同じ木から作る。
+ * テキストはどれも`renderHtmlText`の同じ規則で作るので、経路ごとに文字や区切りがずれない。
+ */
 export const extractRecipePageEvidence = async (
   page: FetchedImportPage,
   baseUrl: string,
 ): Promise<RecipePageEvidence> => {
+  const document = parseHtmlDocument(await readImportPageHtml(page));
   const imageRegistry = new ImportImageRegistry(baseUrl);
-  const extraction = await extractHtmlImportData(page, baseUrl, imageRegistry);
-  const markdownContent = normalizeMarkdownContent(extraction.markdownContent);
-  const extractedRecipeStructuredEvidence = dedupeRecipeStructuredEvidence([
-    ...extractRecipeJsonLdEvidence(extraction.jsonLd, baseUrl),
-    ...extraction.recipeStructuredEvidence,
+  const meta = extractMeta(document, imageRegistry);
+  const markdownContent = renderHtmlText(document, {
+    format: "markdown",
+    renderImage: (element) => {
+      const alt = getHtmlAttribute(element, "alt");
+      const candidate = imageRegistry.getOrCreate(
+        getHtmlAttribute(element, "src") ?? getHtmlAttribute(element, "data-src"),
+        alt,
+      );
+      return candidate ? formatMarkdownImage(candidate.url, alt) : undefined;
+    },
+  }).slice(0, MAX_MARKDOWN_CONTENT_LENGTH);
+  const recipeStructuredEvidence = dedupeRecipeStructuredEvidence([
+    ...extractRecipeJsonLdEvidence(document, baseUrl),
+    ...extractRecipeHtmlStructuredEvidence(document, baseUrl),
   ]);
 
   return {
-    title: normalizeReadableText(extraction.title),
-    meta: extraction.meta,
+    title: extractDocumentTitle(document),
+    meta,
     markdownContent,
     recipeStructuredEvidence: buildImportStructuredEvidence(
-      extractedRecipeStructuredEvidence,
+      recipeStructuredEvidence,
       imageRegistry,
     ),
     imageCandidates: imageRegistry.candidates,
   };
 };
 
-type HtmlRewriterElement = Parameters<
-  NonNullable<HTMLRewriterElementContentHandlers["element"]>
->[0];
-
-type HtmlElementEndTagRegistrar = (element: HtmlRewriterElement, callback: () => void) => void;
-
-type RecipeStructuredEvidenceBuilder = {
-  format: ExtractedRecipeStructuredEvidence["format"];
-  name?: string;
-  yieldText?: string;
-  imageUrls: string[];
-  rawIngredients: string[];
-  rawInstructions: string[];
-  structuredInstructions: ExtractedRecipeStructuredInstruction[];
-};
-
-type RecipeStructuredProperty = keyof Pick<
-  ExtractedRecipeStructuredEvidence,
-  "name" | "yieldText" | "imageUrls" | "rawIngredients" | "rawInstructions"
->;
-
-type RecipeStructuredTextCapture = {
-  builder: RecipeStructuredEvidenceBuilder;
-  properties: RecipeStructuredProperty[];
-  text: string;
-};
-
-type HtmlImportExtraction = {
-  title: string;
-  meta: Record<string, string | undefined>;
-  h1: string[];
-  markdownContent: string;
-  jsonLd: string[];
-  recipeStructuredEvidence: ExtractedRecipeStructuredEvidence[];
-};
+const readImportPageHtml = async (page: FetchedImportPage) =>
+  typeof page.body === "string" ? page.body : page.body.clone().text();
 
 class ImportImageRegistry {
   readonly #baseUrl: string;
@@ -110,14 +99,9 @@ class ImportImageRegistry {
   }
 
   getOrCreate(rawUrl: string | undefined, alt?: string): RecipeImportImageCandidate | undefined {
-    if (!rawUrl) return undefined;
-
-    let url: string;
-    try {
-      url = new URL(decodeHtml(rawUrl), this.#baseUrl).toString();
-    } catch {
-      return undefined;
-    }
+    // 下書きの外部画像はhttp(s)しか受け付けないので、それ以外のURLは候補にしない。
+    const url = resolveHttpUrl(rawUrl, this.#baseUrl);
+    if (!url) return undefined;
 
     const existingCandidate = this.#candidatesByUrl.get(url);
     if (existingCandidate) return existingCandidate;
@@ -138,389 +122,125 @@ class ImportImageRegistry {
   }
 }
 
-const extractHtmlImportData = async (
-  page: FetchedImportPage,
-  baseUrl: string,
-  imageRegistry: ImportImageRegistry,
-): Promise<HtmlImportExtraction> => {
-  const extraction: HtmlImportExtraction = {
-    title: "",
-    meta: {},
-    h1: [],
-    markdownContent: "",
-    jsonLd: [],
-    recipeStructuredEvidence: [],
-  };
-  let ignoredTextDepth = 0;
-  let jsonLdText: string | null = null;
-  const h1TextBuffers: { text: string }[] = [];
-  const endTagCallbacks = new WeakMap<HtmlRewriterElement, Array<() => void>>();
+const resolveHttpUrl = (rawUrl: string | undefined, baseUrl: string | undefined) => {
+  if (!rawUrl) return undefined;
 
-  extraction.recipeStructuredEvidence = await extractRecipeHtmlStructuredEvidence(page, baseUrl);
-  const onHtmlElementEnd: HtmlElementEndTagRegistrar = (element, callback) => {
-    const callbacks = endTagCallbacks.get(element);
-    if (callbacks) {
-      callbacks.push(callback);
-      return;
-    }
-
-    const elementCallbacks = [callback];
-    endTagCallbacks.set(element, elementCallbacks);
-    element.onEndTag(() => {
-      for (let index = elementCallbacks.length - 1; index >= 0; index -= 1) {
-        elementCallbacks[index]?.();
-      }
-    });
-  };
-  const ignoreElementText = {
-    element(element: HtmlRewriterElement) {
-      ignoredTextDepth += 1;
-      onHtmlElementEnd(element, () => {
-        ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
-      });
-    },
-  };
-  const h1Handler = {
-    element(element: HtmlRewriterElement) {
-      if (ignoredTextDepth > 0) return;
-
-      const buffer = { text: "" };
-      h1TextBuffers.push(buffer);
-      onHtmlElementEnd(element, () => {
-        const normalized = normalizeReadableText(buffer.text);
-        if (normalized) {
-          extraction.h1.push(normalized);
-        }
-
-        const bufferIndex = h1TextBuffers.lastIndexOf(buffer);
-        if (bufferIndex >= 0) {
-          h1TextBuffers.splice(bufferIndex, 1);
-        }
-      });
-    },
-    text(text: Parameters<NonNullable<HTMLRewriterElementContentHandlers["text"]>>[0]) {
-      if (ignoredTextDepth > 0) return;
-
-      const buffer = h1TextBuffers.at(-1);
-      if (buffer) {
-        buffer.text += text.text;
-      }
-    },
-  };
-
-  const htmlWithImageMarkers = await new HTMLRewriter()
-    .on("title", {
-      text(text) {
-        extraction.title += text.text;
-      },
-    })
-    .on("meta", {
-      element(element) {
-        const key = normalizeMetaKey(
-          element.getAttribute("property") ?? element.getAttribute("name"),
-        );
-        const content = element.getAttribute("content");
-        if (!key || !content || extraction.meta[key]) return;
-
-        extraction.meta[key] = normalizeReadableText(content);
-        if (key === "og:image" || key === "twitter:image") {
-          imageRegistry.getOrCreate(content);
-        }
-      },
-    })
-    .on("h1", h1Handler)
-    .on("script", {
-      element(element) {
-        ignoredTextDepth += 1;
-        const type = element.getAttribute("type")?.toLowerCase().replace(/\s+/g, "");
-        jsonLdText = type === "application/ld+json" && extraction.jsonLd.length < 5 ? "" : null;
-        if (type !== "application/ld+json" || extraction.jsonLd.length >= 5) {
-          onHtmlElementEnd(element, () => {
-            ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
-          });
-          return;
-        }
-
-        onHtmlElementEnd(element, () => {
-          ignoredTextDepth = Math.max(0, ignoredTextDepth - 1);
-          const normalizedJsonLd = normalizeReadableText(jsonLdText ?? "");
-          if (normalizedJsonLd && extraction.jsonLd.length < 5) {
-            extraction.jsonLd.push(normalizedJsonLd);
-          }
-          jsonLdText = null;
-        });
-      },
-      text(text) {
-        if (jsonLdText === null) return;
-        jsonLdText += text.text;
-      },
-    })
-    .on("style", ignoreElementText)
-    .on("noscript", ignoreElementText)
-    .on("svg", ignoreElementText)
-    .on("img", {
-      element(element) {
-        const rawUrl = element.getAttribute("src") ?? element.getAttribute("data-src") ?? undefined;
-        const alt = element.getAttribute("alt") ?? undefined;
-        const candidate = imageRegistry.getOrCreate(rawUrl, alt);
-        element.replace(candidate ? formatMarkdownImage(candidate.url, alt) : "", {
-          html: false,
-        });
-      },
-    })
-    .on("br", {
-      element(element) {
-        element.replace(LINE_BREAK_MARKER, { html: false });
-      },
-    })
-    .on("dt", {
-      element(element) {
-        element.before(LINE_BREAK_MARKER, { html: false });
-      },
-    })
-    .on("dd", {
-      element(element) {
-        element.before(SPACE_MARKER, { html: false });
-      },
-    })
-    .on("li > *", {
-      element(element) {
-        element.before(SPACE_MARKER, { html: false });
-      },
-    })
-    .on("*", {
-      text(text) {
-        if (ignoredTextDepth > 0 || text.removed) return;
-
-        const chunk = text.text;
-        if (!chunk.trim() || !/^\s|\s$/.test(chunk)) return;
-
-        text.replace(chunk.replace(/^\s+/, SPACE_MARKER).replace(/\s+$/, SPACE_MARKER), {
-          html: false,
-        });
-      },
-    })
-    .transform(importPageBodyToResponse(page))
-    .text();
-
-  extraction.markdownContent = html2md4llm(htmlWithImageMarkers, {
-    strategy: "article",
-    outputFormat: "markdown",
-  });
-
-  return {
-    ...extraction,
-    jsonLd: extraction.jsonLd.filter(Boolean).slice(0, 5),
-    recipeStructuredEvidence: dedupeRecipeStructuredEvidence(
-      extraction.recipeStructuredEvidence,
-    ).slice(0, 20),
-  };
-};
-
-// microdata / RDFa の値は HTML 断片から起こすため、タグが表す区切りを自分で補う。
-// 素の改行を使うと元テキストの折り返しと区別できず偽の区切りになるので、markdown 側と同じく
-// 非空白のマーカーを注入し、空白を畳んだあとで改行に戻す。
-// 区切りを生むのは WHATWG HTML Rendering の UA スタイルシートでブロック表示になる要素と
-// <br> だけ。inline-block の marquee は含めない。col / colgroup はテキストボックスを作らず、
-// col は void なので onEndTag が投げる。html / body / frameset は捕捉が跨がないため除く。
-// 未知の要素とカスタム要素はブラウザ既定が display: inline なので、ここでも境界にしない。
-const TEXT_BOUNDARY_TAG_NAMES = new Set([
-  "address",
-  "article",
-  "aside",
-  "blockquote",
-  "br",
-  "caption",
-  "center",
-  "dd",
-  "details",
-  "dialog",
-  "dir",
-  "div",
-  "dl",
-  "dt",
-  "fieldset",
-  "figcaption",
-  "figure",
-  "footer",
-  "form",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "header",
-  "hgroup",
-  "hr",
-  "legend",
-  "li",
-  "listing",
-  "main",
-  "menu",
-  "nav",
-  "ol",
-  "optgroup",
-  "option",
-  "p",
-  "plaintext",
-  "pre",
-  "search",
-  "section",
-  "summary",
-  "table",
-  "tbody",
-  "td",
-  "tfoot",
-  "th",
-  "thead",
-  "tr",
-  "ul",
-  "xmp",
-]);
-
-// onEndTag は void 要素に登録すると例外を投げ、取り込み全体が落ちる。境界集合に何を足しても
-// 落ちないよう、HTML の void 要素を網羅して弾く。
-const VOID_TAG_NAMES = new Set([
-  "area",
-  "base",
-  "br",
-  "col",
-  "embed",
-  "hr",
-  "img",
-  "input",
-  "link",
-  "meta",
-  "param",
-  "source",
-  "track",
-  "wbr",
-]);
-
-const appendStructuredTextBoundary = (
-  element: HtmlRewriterElement,
-  structuredTextCaptures: RecipeStructuredTextCapture[],
-  onHtmlElementEnd: HtmlElementEndTagRegistrar,
-) => {
-  if (structuredTextCaptures.length === 0) return;
-
-  const tagName = element.tagName.toLowerCase();
-  if (!TEXT_BOUNDARY_TAG_NAMES.has(tagName)) return;
-
-  for (const capture of structuredTextCaptures) {
-    capture.text += LINE_BREAK_MARKER;
+  try {
+    const url = new URL(rawUrl, baseUrl || undefined);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
+  } catch {
+    return undefined;
   }
-
-  if (VOID_TAG_NAMES.has(tagName)) return;
-
-  onHtmlElementEnd(element, () => {
-    for (const capture of structuredTextCaptures) {
-      capture.text += LINE_BREAK_MARKER;
-    }
-  });
 };
 
-const extractRecipeHtmlStructuredEvidence = async (
-  page: FetchedImportPage,
-  baseUrl: string,
-): Promise<ExtractedRecipeStructuredEvidence[]> => {
-  const recipes: ExtractedRecipeStructuredEvidence[] = [];
-  const microdataRecipeStack: RecipeStructuredEvidenceBuilder[] = [];
-  const rdfaRecipeStack: RecipeStructuredEvidenceBuilder[] = [];
-  const structuredTextCaptures: RecipeStructuredTextCapture[] = [];
-  const endTagCallbacks = new WeakMap<HtmlRewriterElement, Array<() => void>>();
+// ブラウザのdocument.titleと同じく、最初のHTMLのtitleだけを使う。SVGのtitleは名前空間が違うので入らない。
+const extractDocumentTitle = (document: HtmlDocument) => {
+  let title: HtmlElement | undefined;
+  forEachHtmlElement(document, (element) => {
+    if (!title && element.tagName === "title") title = element;
+  });
 
-  const onHtmlElementEnd: HtmlElementEndTagRegistrar = (element, callback) => {
-    const callbacks = endTagCallbacks.get(element);
-    if (callbacks) {
-      callbacks.push(callback);
-      return;
+  return title ? normalizeSingleLineText(getHtmlTextContent(title)) : "";
+};
+
+const META_KEYS = new Set([
+  "description",
+  "og:title",
+  "og:description",
+  "og:site_name",
+  "og:image",
+  "twitter:title",
+  "twitter:description",
+  "twitter:image",
+]);
+
+const extractMeta = (document: HtmlDocument, imageRegistry: ImportImageRegistry) => {
+  const meta: Record<string, string | undefined> = {};
+
+  forEachHtmlElement(document, (element) => {
+    if (element.tagName !== "meta") return;
+
+    const key = (getHtmlAttribute(element, "property") ?? getHtmlAttribute(element, "name"))
+      ?.toLowerCase()
+      .trim();
+    const content = normalizeSingleLineText(getHtmlAttribute(element, "content") ?? "");
+    if (!key || !META_KEYS.has(key) || !content || meta[key]) return;
+
+    meta[key] = content;
+    if (key === "og:image" || key === "twitter:image") {
+      imageRegistry.getOrCreate(content);
     }
+  });
 
-    const elementCallbacks = [callback];
-    endTagCallbacks.set(element, elementCallbacks);
-    element.onEndTag(() => {
-      for (let index = elementCallbacks.length - 1; index >= 0; index -= 1) {
-        elementCallbacks[index]?.();
-      }
-    });
-  };
-  const appendStructuredEvidence = (builder: RecipeStructuredEvidenceBuilder) => {
+  return meta;
+};
+
+const normalizeImageAlt = (value: string) => normalizeSingleLineText(value).slice(0, 120);
+
+const formatMarkdownImage = (url: string, alt?: string) => {
+  const normalizedAlt = alt ? normalizeImageAlt(alt) : "";
+  return `![${escapeMarkdownImageAlt(normalizedAlt)}](<${url}>)`;
+};
+
+const escapeMarkdownImageAlt = (value: string) =>
+  value.replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
+
+// ---- microdata / RDFa ----
+
+type RecipeStructuredProperty = keyof Pick<
+  ExtractedRecipeStructuredEvidence,
+  "name" | "yieldText" | "imageUrls" | "rawIngredients" | "rawInstructions"
+>;
+
+const extractRecipeHtmlStructuredEvidence = (
+  document: HtmlDocument,
+  baseUrl: string,
+): ExtractedRecipeStructuredEvidence[] => {
+  const recipes: ExtractedRecipeStructuredEvidence[] = [];
+  const appendStructuredEvidence = (builder: ExtractedRecipeStructuredEvidence) => {
     const evidence = normalizeRecipeStructuredEvidence(builder);
-    if (!evidence || recipes.length >= 20) return;
+    if (!evidence || recipes.length >= MAX_HTML_STRUCTURED_RECIPES) return;
 
     recipes.push(evidence);
   };
 
-  await new HTMLRewriter()
-    .on("*", {
-      element(element) {
-        appendStructuredTextBoundary(element, structuredTextCaptures, onHtmlElementEnd);
+  const visit = (
+    parent: HtmlDocument | HtmlElement,
+    microdataRecipe: ExtractedRecipeStructuredEvidence | undefined,
+    rdfaRecipe: ExtractedRecipeStructuredEvidence | undefined,
+  ) => {
+    for (const element of parent.childNodes) {
+      if (!isHtmlElement(element)) continue;
 
-        const microdataRecipe = createMicrodataRecipeBuilder(element);
-        if (microdataRecipe) {
-          microdataRecipeStack.push(microdataRecipe);
-          onHtmlElementEnd(element, () => {
-            removeStackEntry(microdataRecipeStack, microdataRecipe);
-            appendStructuredEvidence(microdataRecipe);
-          });
-        }
+      const ownMicrodataRecipe = isMicrodataRecipeScope(element)
+        ? createRecipeStructuredEvidenceBuilder("microdata")
+        : undefined;
+      const ownRdfaRecipe = hasSchemaRecipeType(getHtmlAttribute(element, "typeof"))
+        ? createRecipeStructuredEvidenceBuilder("rdfa")
+        : undefined;
+      const currentMicrodataRecipe = ownMicrodataRecipe ?? microdataRecipe;
+      const currentRdfaRecipe = ownRdfaRecipe ?? rdfaRecipe;
 
-        const rdfaRecipe = createRdfaRecipeBuilder(element);
-        if (rdfaRecipe) {
-          rdfaRecipeStack.push(rdfaRecipe);
-          onHtmlElementEnd(element, () => {
-            removeStackEntry(rdfaRecipeStack, rdfaRecipe);
-            appendStructuredEvidence(rdfaRecipe);
-          });
-        }
+      captureRecipeStructuredProperties(element, currentMicrodataRecipe, "itemprop", baseUrl);
+      captureRecipeStructuredProperties(element, currentRdfaRecipe, "property", baseUrl);
+      visit(element, currentMicrodataRecipe, currentRdfaRecipe);
 
-        captureMicrodataRecipeProperties(element, microdataRecipeStack.at(-1), {
-          baseUrl,
-          structuredTextCaptures,
-          onHtmlElementEnd,
-        });
-        captureRdfaRecipeProperties(element, rdfaRecipeStack.at(-1), {
-          baseUrl,
-          structuredTextCaptures,
-          onHtmlElementEnd,
-        });
-      },
-    })
-    .onDocument({
-      text(text) {
-        for (const capture of structuredTextCaptures) {
-          capture.text += text.text;
-        }
-      },
-    })
-    .transform(importPageBodyToResponse(page))
-    .text();
+      if (ownMicrodataRecipe) appendStructuredEvidence(ownMicrodataRecipe);
+      if (ownRdfaRecipe) appendStructuredEvidence(ownRdfaRecipe);
+    }
+  };
+  visit(document, undefined, undefined);
 
-  return dedupeRecipeStructuredEvidence(recipes).slice(0, 20);
+  return dedupeRecipeStructuredEvidence(recipes);
 };
 
-const createMicrodataRecipeBuilder = (
-  element: HtmlRewriterElement,
-): RecipeStructuredEvidenceBuilder | undefined => {
-  if (!element.hasAttribute("itemscope")) return undefined;
-  if (!hasSchemaRecipeType(element.getAttribute("itemtype"))) return undefined;
-
-  return createRecipeStructuredEvidenceBuilder("microdata");
-};
-
-const createRdfaRecipeBuilder = (
-  element: HtmlRewriterElement,
-): RecipeStructuredEvidenceBuilder | undefined => {
-  if (!hasSchemaRecipeType(element.getAttribute("typeof"))) return undefined;
-
-  return createRecipeStructuredEvidenceBuilder("rdfa");
-};
+const isMicrodataRecipeScope = (element: HtmlElement) =>
+  getHtmlAttribute(element, "itemscope") !== undefined &&
+  hasSchemaRecipeType(getHtmlAttribute(element, "itemtype"));
 
 const createRecipeStructuredEvidenceBuilder = (
   format: ExtractedRecipeStructuredEvidence["format"],
-): RecipeStructuredEvidenceBuilder => ({
+): ExtractedRecipeStructuredEvidence => ({
   format,
   imageUrls: [],
   rawIngredients: [],
@@ -528,108 +248,40 @@ const createRecipeStructuredEvidenceBuilder = (
   structuredInstructions: [],
 });
 
-const removeStackEntry = <T>(stack: T[], entry: T) => {
-  const index = stack.lastIndexOf(entry);
-  if (index >= 0) {
-    stack.splice(index, 1);
-  }
-};
-
-const captureMicrodataRecipeProperties = (
-  element: HtmlRewriterElement,
-  builder: RecipeStructuredEvidenceBuilder | undefined,
-  {
-    baseUrl,
-    structuredTextCaptures,
-    onHtmlElementEnd,
-  }: {
-    baseUrl: string;
-    structuredTextCaptures: RecipeStructuredTextCapture[];
-    onHtmlElementEnd: HtmlElementEndTagRegistrar;
-  },
+const captureRecipeStructuredProperties = (
+  element: HtmlElement,
+  builder: ExtractedRecipeStructuredEvidence | undefined,
+  attributeName: "itemprop" | "property",
+  baseUrl: string,
 ) => {
   if (!builder) return;
 
-  const properties = normalizeRecipeStructuredProperties(element.getAttribute("itemprop"));
+  const properties = normalizeRecipeStructuredProperties(getHtmlAttribute(element, attributeName));
   if (properties.length === 0) return;
 
-  const value = extractStructuredElementValue(element);
-  if (value) {
-    appendRecipeStructuredValue(builder, properties, value, baseUrl);
+  const attributeValue = extractStructuredElementValue(element);
+  if (attributeValue) {
+    appendRecipeStructuredValue(builder, properties, attributeValue, baseUrl);
     return;
   }
 
-  startRecipeStructuredTextCapture(element, builder, properties, structuredTextCaptures, {
-    onHtmlElementEnd,
-  });
-};
-
-const captureRdfaRecipeProperties = (
-  element: HtmlRewriterElement,
-  builder: RecipeStructuredEvidenceBuilder | undefined,
-  {
-    baseUrl,
-    structuredTextCaptures,
-    onHtmlElementEnd,
-  }: {
-    baseUrl: string;
-    structuredTextCaptures: RecipeStructuredTextCapture[];
-    onHtmlElementEnd: HtmlElementEndTagRegistrar;
-  },
-) => {
-  if (!builder) return;
-
-  const properties = normalizeRecipeStructuredProperties(element.getAttribute("property"));
-  if (properties.length === 0) return;
-
-  const value = extractStructuredElementValue(element);
-  if (value) {
-    appendRecipeStructuredValue(builder, properties, value, baseUrl);
-    return;
+  const text = renderHtmlText(element, { format: "plain" });
+  if (text) {
+    appendRecipeStructuredValue(builder, properties, text, "");
   }
-
-  startRecipeStructuredTextCapture(element, builder, properties, structuredTextCaptures, {
-    onHtmlElementEnd,
-  });
 };
 
-const startRecipeStructuredTextCapture = (
-  element: HtmlRewriterElement,
-  builder: RecipeStructuredEvidenceBuilder,
-  properties: RecipeStructuredProperty[],
-  structuredTextCaptures: RecipeStructuredTextCapture[],
-  { onHtmlElementEnd }: { onHtmlElementEnd: HtmlElementEndTagRegistrar },
-) => {
-  const capture: RecipeStructuredTextCapture = { builder, properties, text: "" };
-  structuredTextCaptures.push(capture);
-  onHtmlElementEnd(element, () => {
-    const normalizedText = normalizeReadableMultilineText(capture.text);
-    if (normalizedText) {
-      appendRecipeStructuredValue(builder, properties, normalizedText, "");
-    }
-
-    const captureIndex = structuredTextCaptures.lastIndexOf(capture);
-    if (captureIndex >= 0) {
-      structuredTextCaptures.splice(captureIndex, 1);
-    }
-  });
-};
-
-const extractStructuredElementValue = (element: HtmlRewriterElement) =>
-  firstReadableAttribute(element, ["content", "src", "href", "data", "value", "datetime"]);
-
-const firstReadableAttribute = (element: HtmlRewriterElement, attributes: string[]) => {
-  for (const attribute of attributes) {
-    const value = element.getAttribute(attribute);
-    const normalized = value ? normalizeReadableText(value) : "";
-    if (normalized) return normalized;
+const extractStructuredElementValue = (element: HtmlElement) => {
+  for (const attribute of ["content", "src", "href", "data", "value", "datetime"]) {
+    const value = normalizeSingleLineText(getHtmlAttribute(element, attribute) ?? "");
+    if (value) return value;
   }
 
   return undefined;
 };
 
 const appendRecipeStructuredValue = (
-  builder: RecipeStructuredEvidenceBuilder,
+  builder: ExtractedRecipeStructuredEvidence,
   properties: RecipeStructuredProperty[],
   value: string,
   baseUrl: string,
@@ -640,7 +292,7 @@ const appendRecipeStructuredValue = (
     } else if (property === "yieldText") {
       builder.yieldText ??= value;
     } else if (property === "imageUrls") {
-      const imageUrl = resolveStructuredImageUrl(value, baseUrl);
+      const imageUrl = resolveHttpUrl(value, baseUrl);
       if (imageUrl) builder.imageUrls.push(imageUrl);
     } else if (property === "rawIngredients") {
       builder.rawIngredients.push(value);
@@ -651,19 +303,17 @@ const appendRecipeStructuredValue = (
 };
 
 const normalizeRecipeStructuredEvidence = (
-  builder: RecipeStructuredEvidenceBuilder,
+  builder: ExtractedRecipeStructuredEvidence,
 ): ExtractedRecipeStructuredEvidence | undefined => {
   const evidence = {
     format: builder.format,
-    name: builder.name ? normalizeReadableText(builder.name) : undefined,
-    yieldText: builder.yieldText ? normalizeReadableText(builder.yieldText) : undefined,
-    imageUrls: dedupeStrings(builder.imageUrls.map(normalizeReadableText).filter(Boolean)),
-    rawIngredients: dedupeStrings(
-      builder.rawIngredients.map(normalizeMultilineText).filter(Boolean),
-    ),
-    rawInstructions: dedupeStrings(
-      builder.rawInstructions.map(normalizeMultilineText).filter(Boolean),
-    ),
+    name: builder.name ? normalizeSingleLineText(builder.name) || undefined : undefined,
+    yieldText: builder.yieldText
+      ? normalizeSingleLineText(builder.yieldText) || undefined
+      : undefined,
+    imageUrls: dedupeStrings(builder.imageUrls),
+    rawIngredients: dedupeStrings(builder.rawIngredients.filter(Boolean)),
+    rawInstructions: dedupeStrings(builder.rawInstructions.filter(Boolean)),
     structuredInstructions: builder.structuredInstructions,
   } satisfies ExtractedRecipeStructuredEvidence;
 
@@ -681,7 +331,9 @@ const normalizeRecipeStructuredEvidence = (
   return evidence;
 };
 
-const normalizeRecipeStructuredProperties = (value: string | null): RecipeStructuredProperty[] => {
+const normalizeRecipeStructuredProperties = (
+  value: string | undefined,
+): RecipeStructuredProperty[] => {
   const properties: RecipeStructuredProperty[] = [];
 
   for (const token of splitHtmlTokens(value)) {
@@ -707,7 +359,7 @@ const normalizeRecipeStructuredProperty = (value: string): RecipeStructuredPrope
   return undefined;
 };
 
-const hasSchemaRecipeType = (value: string | null) =>
+const hasSchemaRecipeType = (value: string | undefined) =>
   splitHtmlTokens(value).some((token) => normalizeSchemaTerm(token) === "recipe");
 
 const normalizeSchemaTerm = (value: string) => {
@@ -727,102 +379,56 @@ const normalizeSchemaTerm = (value: string) => {
   return lower;
 };
 
-const splitHtmlTokens = (value: string | null) => (value ? value.trim().split(/\s+/) : []);
+const splitHtmlTokens = (value: string | undefined) => (value ? value.trim().split(/\s+/) : []);
 
-const resolveStructuredImageUrl = (rawUrl: string, baseUrl: string) => {
-  try {
-    return new URL(decodeHtml(rawUrl), baseUrl || undefined).toString();
-  } catch {
-    return undefined;
-  }
-};
-
-const importPageBodyToResponse = (page: FetchedImportPage) => {
-  if (typeof page.body !== "string") {
-    return page.body.clone();
-  }
-
-  return new Response(page.body, {
-    headers: page.contentType ? { "content-type": page.contentType } : undefined,
-  });
-};
-
-const normalizeMetaKey = (key: string | null) => {
-  if (!key) return undefined;
-
-  const normalizedKey = key.toLowerCase();
-  if (
-    normalizedKey === "description" ||
-    normalizedKey === "og:title" ||
-    normalizedKey === "og:description" ||
-    normalizedKey === "og:site_name" ||
-    normalizedKey === "og:image" ||
-    normalizedKey === "twitter:title" ||
-    normalizedKey === "twitter:description" ||
-    normalizedKey === "twitter:image"
-  ) {
-    return normalizedKey;
-  }
-
-  return undefined;
-};
-
-const normalizeReadableText = (value: string) =>
-  decodeHtml(value).replace(/\s+/g, " ").trim().slice(0, 24_000);
-
-// 捕捉したテキストの仕上げ。ここだけがマーカーを知る。
-const normalizeReadableMultilineText = (value: string) =>
-  decodeHtml(value)
-    .replace(/\s+/g, " ")
-    .replaceAll(LINE_BREAK_MARKER, "\n")
-    .replace(/ ?\n ?/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .slice(0, 24_000);
-
-const normalizeImageAlt = (value: string) => normalizeReadableText(value).slice(0, 120);
-
-const formatMarkdownImage = (url: string, alt?: string) => {
-  const normalizedAlt = alt ? normalizeImageAlt(alt) : "";
-  return `${LINE_BREAK_MARKER}![${escapeMarkdownImageAlt(normalizedAlt)}](<${url}>)${LINE_BREAK_MARKER}`;
-};
-
-const escapeMarkdownImageAlt = (value: string) =>
-  value.replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
-
-const normalizeMarkdownContent = (value: string) =>
-  value
-    .replace(/\r\n?/g, "\n")
-    .replaceAll(LINE_BREAK_MARKER, "\n")
-    .replaceAll(SPACE_MARKER, " ")
-    .replace(/[^\S\n]+/g, " ")
-    .replace(/[^\S\n]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .slice(0, 24_000);
+// ---- JSON-LD ----
 
 const extractRecipeJsonLdEvidence = (
-  documents: string[],
+  document: HtmlDocument,
   baseUrl: string,
 ): ExtractedRecipeStructuredEvidence[] => {
   const recipes: ExtractedRecipeStructuredEvidence[] = [];
   const seen = new Set<string>();
 
-  for (const document of documents) {
+  for (const source of collectJsonLdSources(document)) {
+    let value: unknown;
     try {
-      for (const node of collectRecipeJsonLdNodes(JSON.parse(document))) {
-        const recipe = normalizeRecipeJsonLdNode(node, baseUrl);
-        const key = JSON.stringify(recipe);
-        if (seen.has(key)) continue;
+      value = parseJsonLd(source);
+    } catch {
+      continue;
+    }
 
-        seen.add(key);
-        recipes.push(recipe);
-      }
-    } catch {}
+    for (const node of collectRecipeJsonLdNodes(value)) {
+      const recipe = normalizeRecipeJsonLdNode(node, baseUrl);
+      const key = JSON.stringify(recipe);
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      recipes.push(recipe);
+    }
   }
 
   return recipes;
 };
+
+// scriptの中身は文字参照を戻さない生のテキストなので、そのままJSONとして読む。
+const collectJsonLdSources = (document: HtmlDocument) => {
+  const sources: string[] = [];
+
+  forEachHtmlElement(document, (element) => {
+    if (element.tagName !== "script" || sources.length >= MAX_JSON_LD_DOCUMENTS) return;
+
+    const type = getHtmlAttribute(element, "type")?.toLowerCase().replace(/\s+/g, "");
+    const source = getHtmlTextContent(element).trim();
+    if (type === "application/ld+json" && source) sources.push(source);
+  });
+
+  return sources;
+};
+
+// 文字列の中に生の改行を入れるページがある（ミツカン）。文字列の外では改行やタブはJSONの空白と同じなので、
+// 空白にしてから読む。
+const parseJsonLd = (source: string): unknown => JSON.parse(source.replace(/[\t\n\r]+/g, " "));
 
 const collectRecipeJsonLdNodes = (value: unknown): Record<string, unknown>[] => {
   const recipes: Record<string, unknown>[] = [];
@@ -859,10 +465,10 @@ const normalizeRecipeJsonLdNode = (
 
   return {
     format: "jsonLd",
-    name: firstReadableText(record.name),
-    yieldText: firstReadableText(record.recipeYield),
+    name: firstJsonLdLine(record.name),
+    yieldText: firstJsonLdLine(record.recipeYield),
     imageUrls: extractJsonLdImageUrls(record.image, baseUrl),
-    rawIngredients: extractReadableTexts(record.recipeIngredient),
+    rawIngredients: extractJsonLdTexts(record.recipeIngredient),
     rawInstructions: structuredInstructions.map((instruction) => instruction.text),
     structuredInstructions,
   };
@@ -874,7 +480,11 @@ const isJsonLdRecipeNode = (record: Record<string, unknown>): boolean => {
   return typeValues.some((entry) => typeof entry === "string" && entry.toLowerCase() === "recipe");
 };
 
-const extractReadableTexts = (value: unknown): string[] => {
+// JSON-LDの文字列に、HTMLのタグや文字参照をそのまま書くページがある（Nadiaの手順のリンクなど）。
+// HTMLの断片として読み、ページの本文と同じ規則でテキストにする。
+const toJsonLdText = (value: string) => renderHtmlFragmentText(value);
+
+const collectJsonLdStrings = (value: unknown): string[] => {
   const texts: string[] = [];
   const visit = (node: unknown) => {
     if (typeof node === "string" || typeof node === "number") {
@@ -900,10 +510,16 @@ const extractReadableTexts = (value: unknown): string[] => {
   };
 
   visit(value);
-  return dedupeStrings(texts.map(normalizeReadableText).filter(Boolean));
+  return texts;
 };
 
-const firstReadableText = (value: unknown) => extractReadableTexts(value)[0];
+const extractJsonLdTexts = (value: unknown) =>
+  dedupeStrings(collectJsonLdStrings(value).map(toJsonLdText).filter(Boolean));
+
+const firstJsonLdLine = (value: unknown) =>
+  collectJsonLdStrings(value)
+    .map((text) => normalizeSingleLineText(toJsonLdText(text)))
+    .find(Boolean);
 
 const extractJsonLdStructuredInstructions = (
   value: unknown,
@@ -912,7 +528,7 @@ const extractJsonLdStructuredInstructions = (
   const instructions: ExtractedRecipeStructuredInstruction[] = [];
   const visit = (node: unknown) => {
     if (typeof node === "string") {
-      const text = normalizeReadableText(node);
+      const text = toJsonLdText(node);
       if (text) {
         instructions.push({ text, imageUrls: [] });
       }
@@ -935,7 +551,7 @@ const extractJsonLdStructuredInstructions = (
           : undefined;
 
     if (text) {
-      const normalizedText = normalizeReadableText(text);
+      const normalizedText = toJsonLdText(text);
       if (normalizedText) {
         instructions.push({
           text: normalizedText,
@@ -956,17 +572,12 @@ const dedupeStructuredInstructions = (
   instructions: ExtractedRecipeStructuredInstruction[],
 ): ExtractedRecipeStructuredInstruction[] => {
   const byText = new Map<string, Set<string>>();
-  const orderedTexts: string[] = [];
 
   for (const instruction of instructions) {
-    const text = normalizeReadableText(instruction.text);
-    if (!text) continue;
-
-    let imageUrls = byText.get(text);
+    let imageUrls = byText.get(instruction.text);
     if (!imageUrls) {
       imageUrls = new Set<string>();
-      byText.set(text, imageUrls);
-      orderedTexts.push(text);
+      byText.set(instruction.text, imageUrls);
     }
 
     for (const imageUrl of instruction.imageUrls) {
@@ -974,10 +585,7 @@ const dedupeStructuredInstructions = (
     }
   }
 
-  return orderedTexts.map((text) => ({
-    text,
-    imageUrls: [...(byText.get(text) ?? [])],
-  }));
+  return [...byText].map(([text, imageUrls]) => ({ text, imageUrls: [...imageUrls] }));
 };
 
 const isJsonLdHowToStepNode = (record: Record<string, unknown>): boolean => {
@@ -1009,16 +617,13 @@ const extractJsonLdImageUrls = (value: unknown, baseUrl: string): string[] => {
   };
 
   visit(value);
+  // URLに`&amp;`のような文字参照を書くページがあるので、属性値と同じ規則で戻す。
   return dedupeStrings(
-    urls.flatMap((rawUrl) => {
-      try {
-        return new URL(decodeHtml(rawUrl), baseUrl).toString();
-      } catch {
-        return [];
-      }
-    }),
+    urls.flatMap((rawUrl) => resolveHttpUrl(decodeHtmlAttribute(rawUrl), baseUrl) ?? []),
   );
 };
+
+// ---- 共通 ----
 
 const buildImportStructuredEvidence = (
   recipes: ExtractedRecipeStructuredEvidence[],
@@ -1049,7 +654,8 @@ const buildImportStructuredEvidence = (
 const buildStructuredInstructionImageAlt = (
   recipe: ExtractedRecipeStructuredEvidence,
   instruction: ExtractedRecipeStructuredInstruction,
-) => normalizeReadableText([recipe.name, instruction.text].filter(Boolean).join(" ")).slice(0, 160);
+) =>
+  normalizeSingleLineText([recipe.name, instruction.text].filter(Boolean).join(" ")).slice(0, 160);
 
 const dedupeRecipeStructuredEvidence = (
   recipes: ExtractedRecipeStructuredEvidence[],
@@ -1075,25 +681,4 @@ const dedupeRecipeStructuredEvidence = (
   return deduped;
 };
 
-const dedupeStrings = (values: string[]) => {
-  const seen = new Set<string>();
-  const deduped: string[] = [];
-
-  for (const value of values) {
-    if (seen.has(value)) continue;
-
-    seen.add(value);
-    deduped.push(value);
-  }
-
-  return deduped;
-};
-
-const decodeHtml = (value: string) =>
-  value
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+const dedupeStrings = (values: string[]) => [...new Set(values)];

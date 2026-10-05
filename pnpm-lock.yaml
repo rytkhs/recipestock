@@ -50,15 +50,18 @@ importers:
       drizzle-orm:
         specifier: ^0.45.1
         version: 0.45.2(@cloudflare/workers-types@4.20260524.1)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(kysely@0.28.17)
+      entities:
+        specifier: ^8.0.0
+        version: 8.0.0
       hono:
         specifier: ^4.10.7
         version: 4.12.22
-      html2md4llm:
-        specifier: ^1.2.0
-        version: 1.2.0
       ipaddr.js:
         specifier: ^2.4.0
         version: 2.4.0
+      parse5:
+        specifier: ^8.0.1
+        version: 8.0.1
       stripe:
         specifier: ^20.0.0
         version: 20.4.1(@types/node@22.19.19)
@@ -3920,11 +3923,6 @@ packages:
   html-encoding-sniffer@6.0.0:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
-
-  html2md4llm@1.2.0:
-    resolution: {integrity: sha512-+nAq3AK65Ep6ngoY+QjNSUyBSh8C996cqTZozGZuCaZ8T5aD9LS4c2tnoe/IigMIS0utQML4bfmygd7iqhl5Pg==}
-    engines: {node: '>=18.0.0'}
-    hasBin: true
 
   http-errors@2.0.1:
     resolution: {integrity: sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==}
@@ -9003,8 +9001,6 @@ snapshots:
       '@exodus/bytes': 1.15.1(@noble/hashes@2.2.0)
     transitivePeerDependencies:
       - '@noble/hashes'
-
-  html2md4llm@1.2.0: {}
 
   http-errors@2.0.1:
     dependencies:
