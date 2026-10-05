@@ -13,18 +13,19 @@ export const normalizeMultilineText = (value: string) =>
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-const NAMED_HTML_ENTITIES: Record<string, string> = {
-  amp: "&",
-  apos: "'",
-  gt: ">",
-  lt: "<",
-  nbsp: " ",
-  quot: '"',
-};
+// 名前付きの文字参照は、ここにある6種類だけを戻す。すべてを仕様どおりに戻す方法は #177 で決める。
+const NAMED_HTML_ENTITIES = new Map([
+  ["amp", "&"],
+  ["apos", "'"],
+  ["gt", ">"],
+  ["lt", "<"],
+  ["nbsp", " "],
+  ["quot", '"'],
+]);
 
 export const decodeHtmlEntities = (value: string) =>
   value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, body: string) => {
-    if (!body.startsWith("#")) return NAMED_HTML_ENTITIES[body] ?? entity;
+    if (!body.startsWith("#")) return NAMED_HTML_ENTITIES.get(body) ?? entity;
 
     const codePoint =
       body[1] === "x" || body[1] === "X"
