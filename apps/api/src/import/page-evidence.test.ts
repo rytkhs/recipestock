@@ -486,7 +486,7 @@ describe("Recipe page evidence", () => {
     expect(evidence.markdownContent).toContain("- plain flour,\nsifted");
   });
 
-  it("Microdataのインライン要素の境界には区切りを足さない", async () => {
+  it("liの外では、Microdataのインライン要素の境界に区切りを足さない", async () => {
     const evidence = await extractRecipeHtml(`
       <html>
         <body>
