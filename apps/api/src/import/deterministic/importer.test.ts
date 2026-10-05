@@ -162,7 +162,7 @@ describe("createDeterministicImporter", () => {
       createAdapter({
         async convert() {
           return {
-            recipe: {
+            draftContent: {
               title: "Tomato soup",
               coverImageUrl: createImageUrl("cover"),
               ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
@@ -230,7 +230,7 @@ describe("createDeterministicImporter", () => {
       createAdapter({
         async convert() {
           return {
-            recipe: {
+            draftContent: {
               title: "",
               ingredientGroups: [],
               steps: [],
@@ -257,7 +257,7 @@ describe("createDeterministicImporter", () => {
       createAdapter({
         async convert() {
           return {
-            recipe: {
+            draftContent: {
               title: "Tomato soup",
               coverImageUrl: createImageUrl("cover"),
               ingredientGroups: [],
@@ -319,7 +319,7 @@ const createPage = (url: string) => ({
 });
 
 const createResult = (): DeterministicImportResult => ({
-  recipe: {
+  draftContent: {
     title: "Tomato soup",
     ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
     steps: [{ text: "Cook.", imageUrls: [] }],

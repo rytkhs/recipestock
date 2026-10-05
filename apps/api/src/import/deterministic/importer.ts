@@ -4,9 +4,9 @@ import { trimRecipeDraftContent } from "../draft-limits";
 import { assertFetchedPageIsHtml, assertImportUrlAllowed } from "../policy";
 import { RecipeImportError, type RecipeImportFetcher, type RecipeImportResult } from "../types";
 import {
+  type DeterministicDraftContent,
   type DeterministicFetchRequest,
   type DeterministicImportAdapter,
-  type DeterministicRecipe,
   type DeterministicTextSection,
 } from "./types";
 
@@ -33,11 +33,11 @@ export const createDeterministicImporter = (
 
     const requests = adapter.resolveFetchRequests(matchInput);
     const pages = await fetchPages(requests, fetcher, fetchOptions);
-    const { recipe, sourceUrl } = await adapter.convert({ normalizedUrl, pages });
+    const { draftContent, sourceUrl } = await adapter.convert({ normalizedUrl, pages });
 
     try {
       return {
-        recipeDraftContent: trimRecipeDraftContent(toRecipeDraftContent(recipe)),
+        recipeDraftContent: trimRecipeDraftContent(toRecipeDraftContent(draftContent)),
         source: recipeSourceDraftSchema.parse({ sourceUrl, sourceName: adapter.sourceName }),
       };
     } catch (error) {
@@ -55,18 +55,19 @@ export const createDeterministicImporter = (
 
 /**
  * 手順の補足とnoteは、どのサイトでも同じ書式にする。まとまりごとに見出しの行と本文で書き、
- * まとまりの間は空行で区切る。アプリが書く告知は見出しを付けずにnoteの先頭に置く。
+ * まとまりの間は空行で区切る。本文が空のまとまりは書かない。アプリが書く告知は見出しを付けずに
+ * noteの先頭に置く。
  */
-const toRecipeDraftContent = (recipe: DeterministicRecipe): RecipeDraftContent => {
-  const note = joinBlocks([recipe.notice, ...formatSections(recipe.noteSections)]);
+const toRecipeDraftContent = (content: DeterministicDraftContent): RecipeDraftContent => {
+  const note = joinBlocks([content.notice, ...formatSections(content.noteSections)]);
 
   return {
-    title: recipe.title,
-    ...(recipe.yieldText ? { yieldText: recipe.yieldText } : {}),
-    ...(recipe.coverImageUrl ? { coverImage: toExternalImage(recipe.coverImageUrl) } : {}),
+    title: content.title,
+    ...(content.yieldText ? { yieldText: content.yieldText } : {}),
+    ...(content.coverImageUrl ? { coverImage: toExternalImage(content.coverImageUrl) } : {}),
     referenceImages: [],
-    ingredientGroups: recipe.ingredientGroups,
-    steps: recipe.steps.map((step) => {
+    ingredientGroups: content.ingredientGroups,
+    steps: content.steps.map((step) => {
       const text = joinBlocks([step.text, ...formatSections(step.supplements)]);
       return {
         ...(text ? { text } : {}),

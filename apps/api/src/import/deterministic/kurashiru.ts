@@ -10,10 +10,10 @@ import {
   resolveHttpUrl,
 } from "./page";
 import {
+  type DeterministicDraftStep,
   type DeterministicImportAdapter,
   type DeterministicImportContext,
   type DeterministicImportMatchInput,
-  type DeterministicStep,
   type DeterministicTextSection,
 } from "./types";
 
@@ -117,7 +117,7 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
     const yieldText = normalizeText(attributes.servings);
 
     return {
-      recipe: {
+      draftContent: {
         title,
         ...(yieldText ? { yieldText } : {}),
         ...(coverImageUrl ? { coverImageUrl } : {}),
@@ -368,7 +368,7 @@ const buildIngredientGroups = (items: unknown[]) => {
   return { ingredientGroups: groups, ingredientNamesById };
 };
 
-const buildSteps = (instructions: unknown[], points: unknown[]): DeterministicStep[] => {
+const buildSteps = (instructions: unknown[], points: unknown[]): DeterministicDraftStep[] => {
   const pointsByInstructionId = new Map<string, string[]>();
   for (const item of points) {
     const point = asRecord(item);
@@ -392,8 +392,7 @@ const buildSteps = (instructions: unknown[], points: unknown[]): DeterministicSt
     return [
       {
         ...(text ? { text } : {}),
-        supplements:
-          stepPoints.length > 0 ? [{ heading: POINT_LABEL, body: stepPoints.join("\n") }] : [],
+        supplements: [{ heading: POINT_LABEL, body: stepPoints.join("\n") }],
         imageUrls: [],
       },
     ];
@@ -404,11 +403,7 @@ const buildNoteSections = (
   attributes: Record<string, unknown>,
   points: unknown[],
   ingredientNamesById: ReadonlyMap<string, string>,
-) => {
-  const sections: DeterministicTextSection[] = [];
-  const memo = normalizeMultiline(attributes.memo);
-  if (memo) sections.push({ heading: TIPS_HEADING, body: memo });
-
+): DeterministicTextSection[] => {
   const ingredientPoints = points.flatMap((item) => {
     const point = asRecord(item);
     if (point.type !== "ingredients") return [];
@@ -421,11 +416,11 @@ const buildNoteSections = (
         : (ingredientNamesById.get(String(ingredientId)) ?? "材料");
     return [`${ingredientName}: ${stripMarkdownLinks(text)}`];
   });
-  if (ingredientPoints.length > 0) {
-    sections.push({ heading: INGREDIENT_POINTS_HEADING, body: ingredientPoints.join("\n") });
-  }
 
-  return sections;
+  return [
+    { heading: TIPS_HEADING, body: normalizeMultiline(attributes.memo) },
+    { heading: INGREDIENT_POINTS_HEADING, body: ingredientPoints.join("\n") },
+  ];
 };
 
 const findRecipeJsonLd = (

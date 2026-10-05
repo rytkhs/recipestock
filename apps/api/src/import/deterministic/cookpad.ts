@@ -140,10 +140,9 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
     }
 
     const yieldText = normalizeHtmlText(printExtraction.yieldText);
-    const note = normalizeHtmlMultilineText(printExtraction.note);
 
     return {
-      recipe: {
+      draftContent: {
         title,
         ...(yieldText ? { yieldText } : {}),
         ...(recipeExtraction.coverImageUrl
@@ -151,7 +150,9 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
           : {}),
         ingredientGroups,
         steps,
-        noteSections: note ? [{ heading: COOKPAD_NOTE_HEADING, body: note }] : [],
+        noteSections: [
+          { heading: COOKPAD_NOTE_HEADING, body: normalizeHtmlMultilineText(printExtraction.note) },
+        ],
       },
       sourceUrl: createCookpadUrl(recipeId, false),
     };

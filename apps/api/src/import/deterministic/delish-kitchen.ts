@@ -155,7 +155,7 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
       const structuredStep = structuredRecipe?.steps[index];
       return {
         ...(text ? { text } : {}),
-        supplements: points.length > 0 ? [{ heading: POINT_LABEL, body: points.join("\n") }] : [],
+        supplements: [{ heading: POINT_LABEL, body: points.join("\n") }],
         imageUrls:
           structuredStep &&
           normalizeTextForComparison(decodeHtmlEntities(step.text)) ===
@@ -171,17 +171,14 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
     const yieldText = normalizeYieldText(extraction.yieldText);
 
     return {
-      recipe: {
+      draftContent: {
         title,
         ...(yieldText ? { yieldText } : {}),
         ...(coverImageUrl ? { coverImageUrl } : {}),
         ingredientGroups,
         steps,
         ...(isPartialImport ? { notice: RESTRICTED_RECIPE_NOTE } : {}),
-        noteSections:
-          attentionItems.length > 0
-            ? [{ heading: ATTENTION_HEADING, body: attentionItems.join("\n") }]
-            : [],
+        noteSections: [{ heading: ATTENTION_HEADING, body: attentionItems.join("\n") }],
       },
       sourceUrl: canonicalUrl,
     };
