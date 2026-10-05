@@ -238,6 +238,32 @@ describe("Recipe page evidence", () => {
     ).toEqual([{ name: "Long soup", rawInstructions: [instruction] }]);
   });
 
+  it("JSON.parseが受け付けない空白を含むJSON-LDも、文字列の中身を変えずに読む", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">
+            {\u00a0"@type": "Recipe",\u3000"name": "肉じゃが\u3000大盛り",
+              "recipeIngredient": ["じゃがいも\f3個"],
+              "recipeInstructions": ["煮る。
+            火を止める。"]
+            }
+          </script>
+        </head>
+        <body><main><p>Enough visible recipe content for extraction.</p></main></body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toEqual([
+      expect.objectContaining({
+        format: "jsonLd",
+        name: "肉じゃが\u3000大盛り",
+        rawIngredients: ["じゃがいも 3個"],
+        rawInstructions: ["煮る。 火を止める。"],
+      }),
+    ]);
+  });
+
   it("JSON-LD Recipeのsection/list配下の手順画像をstructured evidenceとして抽出する", async () => {
     const evidence = await extractRecipeHtml(`
       <html>

@@ -428,9 +428,15 @@ const collectJsonLdSources = (document: HtmlDocument) => {
   return sources;
 };
 
-// 文字列の中に生の改行を入れるページがある（ミツカン）。文字列の外では改行やタブはJSONの空白と同じなので、
-// 空白にしてから読む。
-const parseJsonLd = (source: string): unknown => JSON.parse(source.replace(/[\t\n\r]+/g, " "));
+// JSON.parseが受け付けない空白を書くページがある（ミツカンは文字列の中に生の改行を入れる）。
+// 構文は変えずに空白だけを緩める。文字列の外の空白はJSONの空白にし、文字列の中の制御文字は空白にしてから読む。
+// 文字列の中の全角スペースやNBSPは作者が書いた文字なので変えない。
+const parseJsonLd = (source: string): unknown =>
+  JSON.parse(
+    source.replace(/"(?:[^"\\]|\\[\s\S])*"|\s+/g, (match) =>
+      match.startsWith('"') ? match.replace(/\p{Cc}/gu, " ") : " ",
+    ),
+  );
 
 const collectRecipeJsonLdNodes = (value: unknown): Record<string, unknown>[] => {
   const recipes: Record<string, unknown>[] = [];
