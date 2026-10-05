@@ -55,9 +55,11 @@ adapterは`types.ts`の`DeterministicImportAdapter`を実装し、`index.ts`に�
 - `<br>`や段落の区切りは改行にする。
 - HTMLの整形で入った空白や改行は整える。文中の全角スペースは作者が書いた文字なので残す。
 
+HTMLから読んだ本文は`page.ts`の`normalizeHtmlText`か`normalizeHtmlMultilineText`で、属性値は`getHtmlAttribute`で読む。文字参照の戻し方と空白の整え方はこれらが行う。
+
 ## 画像のURL
 
-http(s)の絶対URLにする。相対URLはページのURLを基準に解決し、それ以外のURLは捨てる。
+http(s)の絶対URLにする。相対URLはページのURLを基準に解決し、それ以外のURLは捨てる。`page.ts`の`resolveHttpUrl`がこの扱いを行う。
 
 ## 出典と、同じレシピであることの確認
 
