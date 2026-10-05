@@ -214,6 +214,30 @@ describe("Recipe page evidence", () => {
     ]);
   });
 
+  it("1件目のレシピは、それだけで長さの上限を超えても残す", async () => {
+    const instruction = "Stir the sauce. ".repeat(1000).trim();
+    const recipes = ["Long soup", "Short soup"].map((name) => ({
+      "@type": "Recipe",
+      name,
+      recipeInstructions: [name === "Long soup" ? instruction : "Stir."],
+    }));
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">${JSON.stringify({ "@graph": recipes })}</script>
+        </head>
+        <body><main><p>Enough visible recipe content for extraction.</p></main></body>
+      </html>
+    `);
+
+    expect(
+      evidence.recipeStructuredEvidence.map(({ name, rawInstructions }) => ({
+        name,
+        rawInstructions,
+      })),
+    ).toEqual([{ name: "Long soup", rawInstructions: [instruction] }]);
+  });
+
   it("JSON-LD Recipeのsection/list配下の手順画像をstructured evidenceとして抽出する", async () => {
     const evidence = await extractRecipeHtml(`
       <html>

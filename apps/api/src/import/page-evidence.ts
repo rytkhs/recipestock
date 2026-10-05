@@ -40,7 +40,8 @@ export type RecipePageEvidence = {
 };
 
 const MAX_MARKDOWN_CONTENT_LENGTH = 24_000;
-// 構造化証拠はそのままプロンプトに入る。1件のレシピは実ページで1万字に届かないので、数件分を上限にする。
+// 構造化証拠はそのままプロンプトに入る。Recipeノードを多く持つページで膨らまないよう、合計の長さに上限を置く。
+// 実ページで測った1件の最大は8,914字。
 const MAX_STRUCTURED_EVIDENCE_LENGTH = 24_000;
 const MAX_JSON_LD_DOCUMENTS = 5;
 
@@ -632,14 +633,14 @@ const extractJsonLdImageUrls = (value: unknown, baseUrl: string): string[] => {
 // ---- 共通 ----
 
 // 材料や手順の一部だけを残すと誤った証拠になるので、レシピの途中では切らない。
-// 上限を超えたレシピから後ろを落とす。
+// 上限を超えたレシピから後ろを落とす。1件目まで落とすと構造化証拠がなくなるので、1件目は長さにかかわらず残す。
 const takeRecipesWithinLength = (recipes: ExtractedRecipeStructuredEvidence[]) => {
   const kept: ExtractedRecipeStructuredEvidence[] = [];
   let length = 0;
 
   for (const recipe of recipes) {
     length += JSON.stringify(recipe).length;
-    if (length > MAX_STRUCTURED_EVIDENCE_LENGTH) break;
+    if (kept.length > 0 && length > MAX_STRUCTURED_EVIDENCE_LENGTH) break;
 
     kept.push(recipe);
   }
