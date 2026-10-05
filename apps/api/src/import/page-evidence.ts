@@ -481,9 +481,14 @@ const isJsonLdRecipeNode = (record: Record<string, unknown>): boolean => {
   return typeValues.some((entry) => typeof entry === "string" && entry.toLowerCase() === "recipe");
 };
 
-// JSON-LDの文字列に、HTMLのタグや文字参照をそのまま書くページがある（Nadiaの手順のリンクなど）。
-// HTMLの断片として読み、ページの本文と同じ規則でテキストにする。
-const toJsonLdText = (value: string) => renderHtmlFragmentText(value);
+// JSON-LDの文字列は本来テキストだが、HTMLのタグや文字参照をそのまま書くページがある（Nadiaの手順のリンクなど）。
+// テキストをHTMLとして読むと文字が消える（グループの印の`<A>`、`x<y`の後ろ）ので、HTMLとして読むのは、
+// 終了タグか<br>があって作り手がHTMLを書いたと分かる文字列だけにする。それ以外の`<`は文字として残す。
+// どちらもページの本文と同じ規則でテキストにする。
+const JSON_LD_HTML_PATTERN = /<\/[a-z]|<br\b/i;
+
+const toJsonLdText = (value: string) =>
+  renderHtmlFragmentText(JSON_LD_HTML_PATTERN.test(value) ? value : value.replaceAll("<", "&lt;"));
 
 const collectJsonLdStrings = (value: unknown): string[] => {
   const texts: string[] = [];
