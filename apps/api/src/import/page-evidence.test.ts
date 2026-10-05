@@ -179,6 +179,33 @@ describe("Recipe page evidence", () => {
     ]);
   });
 
+  it("構造化証拠は長さの上限を超えたレシピから後ろを落とし、レシピの途中では切らない", async () => {
+    const instruction = "Stir the sauce. ".repeat(300).trim();
+    const recipes = ["Soup A", "Soup B", "Soup C"].map((name) => ({
+      "@type": "Recipe",
+      name,
+      recipeInstructions: [instruction],
+    }));
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">${JSON.stringify({ "@graph": recipes })}</script>
+        </head>
+        <body><main><p>Enough visible recipe content for extraction.</p></main></body>
+      </html>
+    `);
+
+    expect(
+      evidence.recipeStructuredEvidence.map(({ name, rawInstructions }) => ({
+        name,
+        rawInstructions,
+      })),
+    ).toEqual([
+      { name: "Soup A", rawInstructions: [instruction] },
+      { name: "Soup B", rawInstructions: [instruction] },
+    ]);
+  });
+
   it("JSON-LD Recipeのsection/list配下の手順画像をstructured evidenceとして抽出する", async () => {
     const evidence = await extractRecipeHtml(`
       <html>

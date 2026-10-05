@@ -40,8 +40,9 @@ export type RecipePageEvidence = {
 };
 
 const MAX_MARKDOWN_CONTENT_LENGTH = 24_000;
+// 構造化証拠はそのままプロンプトに入る。1件のレシピは実ページで1万字に届かないので、数件分を上限にする。
+const MAX_STRUCTURED_EVIDENCE_LENGTH = 24_000;
 const MAX_JSON_LD_DOCUMENTS = 5;
-const MAX_HTML_STRUCTURED_RECIPES = 20;
 
 /**
  * ページを1回だけパースし、markdown・構造化証拠・タイトル・画像候補を同じ木から作る。
@@ -65,10 +66,12 @@ export const extractRecipePageEvidence = async (
       return candidate ? formatMarkdownImage(candidate.url, alt) : undefined;
     },
   }).slice(0, MAX_MARKDOWN_CONTENT_LENGTH);
-  const recipeStructuredEvidence = dedupeRecipeStructuredEvidence([
-    ...extractRecipeJsonLdEvidence(document, baseUrl),
-    ...extractRecipeHtmlStructuredEvidence(document, baseUrl),
-  ]);
+  const recipeStructuredEvidence = takeRecipesWithinLength(
+    dedupeRecipeStructuredEvidence([
+      ...extractRecipeJsonLdEvidence(document, baseUrl),
+      ...extractRecipeHtmlStructuredEvidence(document, baseUrl),
+    ]),
+  );
 
   return {
     title: extractDocumentTitle(document),
@@ -199,9 +202,7 @@ const extractRecipeHtmlStructuredEvidence = (
   const recipes: ExtractedRecipeStructuredEvidence[] = [];
   const appendStructuredEvidence = (builder: ExtractedRecipeStructuredEvidence) => {
     const evidence = normalizeRecipeStructuredEvidence(builder);
-    if (!evidence || recipes.length >= MAX_HTML_STRUCTURED_RECIPES) return;
-
-    recipes.push(evidence);
+    if (evidence) recipes.push(evidence);
   };
 
   const visit = (
@@ -624,6 +625,22 @@ const extractJsonLdImageUrls = (value: unknown, baseUrl: string): string[] => {
 };
 
 // ---- 共通 ----
+
+// 材料や手順の一部だけを残すと誤った証拠になるので、レシピの途中では切らない。
+// 上限を超えたレシピから後ろを落とす。
+const takeRecipesWithinLength = (recipes: ExtractedRecipeStructuredEvidence[]) => {
+  const kept: ExtractedRecipeStructuredEvidence[] = [];
+  let length = 0;
+
+  for (const recipe of recipes) {
+    length += JSON.stringify(recipe).length;
+    if (length > MAX_STRUCTURED_EVIDENCE_LENGTH) break;
+
+    kept.push(recipe);
+  }
+
+  return kept;
+};
 
 const buildImportStructuredEvidence = (
   recipes: ExtractedRecipeStructuredEvidence[],
