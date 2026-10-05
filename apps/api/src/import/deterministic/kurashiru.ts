@@ -79,10 +79,16 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
 
     const data = findKurashiruRecipeData(extraction.environmentDocuments, recipeId);
     const attributes = asRecord(data.attributes);
-    if (
-      normalizeText(attributes["publish-status"]) !== "published" ||
-      normalizeText(attributes["content-type"]) !== "normal"
-    ) {
+    const publishStatus = normalizeText(attributes["publish-status"]);
+    const contentType = normalizeText(attributes["content-type"]);
+    // 値が読めないのは対応しないページだからではなく、SSRデータの形が変わったとき。
+    if (!publishStatus || !contentType) {
+      throw new RecipeImportError(
+        "extraction_failed",
+        "Kurashiru recipe status could not be extracted.",
+      );
+    }
+    if (publishStatus !== "published" || contentType !== "normal") {
       throw new RecipeImportError(
         "unsupported_page",
         "Kurashiru recipe is not a published normal recipe.",
@@ -395,9 +401,9 @@ const buildSteps = (
       instruction.id === null || instruction.id === undefined
         ? []
         : (pointsByInstructionId.get(String(instruction.id)) ?? []);
-    if (!text && stepPoints.length === 0) return [];
     // ページは手順ごとに動画のクリップを置き、再生前はこの静止画を手順の画像として見せる。
     const imageUrl = resolveHttpUrl(instruction["thumbnail-square-large-url"], baseUrl);
+    if (!text && stepPoints.length === 0 && !imageUrl) return [];
     return [
       {
         ...(text ? { text } : {}),

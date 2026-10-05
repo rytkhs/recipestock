@@ -105,6 +105,27 @@ describe("kurashiruImportAdapter", () => {
     });
   });
 
+  it("本文がなくても、ポイントか画像のある手順は残す", async () => {
+    const result = await importKurashiru({
+      html: createKurashiruHtml({
+        attributeOverrides: {
+          instructions: [
+            { id: 101, body: "", "thumbnail-square-large-url": null },
+            { id: 102, body: "", "thumbnail-square-large-url": STEP_IMAGE_URL },
+            { id: 103, body: "", "thumbnail-square-large-url": null },
+            { id: 104, body: "卵焼き器で焼きます。", "thumbnail-square-large-url": null },
+          ],
+        },
+      }),
+    });
+
+    expect(result.recipeDraftContent.steps).toEqual([
+      { text: "ポイント\n白身を切るように混ぜます。", images: [] },
+      { images: [{ type: "externalImageUrl", url: STEP_IMAGE_URL }] },
+      { text: "卵焼き器で焼きます。", images: [] },
+    ]);
+  });
+
   it.each([
     { name: "JSON-LDがない", html: createKurashiruHtml({ includeJsonLd: false }) },
     { name: "JSON-LDが不正", html: createKurashiruHtml({ jsonLdDocument: "{" }) },
@@ -189,6 +210,14 @@ describe("kurashiruImportAdapter", () => {
     {
       name: "手順がない",
       html: createKurashiruHtml({ attributeOverrides: { instructions: [] } }),
+    },
+    {
+      name: "公開状態がない",
+      html: createKurashiruHtml({ attributeOverrides: { "publish-status": undefined } }),
+    },
+    {
+      name: "レシピの種類がない",
+      html: createKurashiruHtml({ attributeOverrides: { "content-type": undefined } }),
     },
   ])("$nameの場合は失敗する", async ({ html }) => {
     await expect(importKurashiru({ html })).rejects.toMatchObject({
