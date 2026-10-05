@@ -1,3 +1,4 @@
+import { decodeHtmlAttribute, decodeHtmlText } from "../text";
 import { type FetchedImportPage, RecipeImportError } from "../types";
 import { hasUsableSocialEvidence } from "./social-evidence";
 import {
@@ -216,7 +217,7 @@ const extractMeta = (html: string): Record<string, string | undefined> => {
     const content = getHtmlAttribute(tag, "content");
     if (!key || !content || meta[key]) continue;
 
-    meta[key] = decodeHtml(content);
+    meta[key] = decodeHtmlAttribute(content);
   }
 
   return meta;
@@ -250,7 +251,8 @@ const extractXTwitterNoteTweetText = (html: string) => {
   for (const match of html.matchAll(noteTweetPattern)) {
     const textStart = (match.index ?? 0) + match[0].length;
     const text = readJavaScriptStringContent(html, textStart);
-    if (text) candidates.push(text);
+    // 文字参照は値を取り出したところで1回だけ戻す。metaの値はextractMetaで戻している。
+    if (text) candidates.push(decodeHtmlText(text));
   }
 
   candidates.sort((left, right) => right.length - left.length);
@@ -333,7 +335,7 @@ const readJavaScriptUnicodeEscape = (value: string, startIndex: number) => {
 };
 
 const extractXTwitterMedia = (html: string): XTwitterMedia[] => {
-  const normalizedHtml = decodeHtml(html)
+  const normalizedHtml = decodeHtmlAttribute(html)
     .replace(/\\\//g, "/")
     .replace(/\\u002F/gi, "/")
     .replace(/\\u003F/gi, "?")
@@ -429,7 +431,7 @@ const getXTwitterPathVariant = (mediaPath: string) => {
 const normalizePostText = (value: string | undefined) => {
   if (!value) return "";
 
-  return decodeHtml(value)
+  return value
     .replace(/\r\n?/g, "\n")
     .replace(/\u00a0/g, " ")
     .split("\n")
@@ -445,27 +447,8 @@ const isGenericXTwitterDescription = (value: string) => {
   return normalized === "see what people are saying on x.";
 };
 
-const decodeHtml = (value: string) =>
-  value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|#39);/gi, (_entity, body: string) => {
-    const normalized = body.toLowerCase();
-    if (normalized === "amp") return "&";
-    if (normalized === "lt") return "<";
-    if (normalized === "gt") return ">";
-    if (normalized === "quot") return '"';
-    if (normalized === "apos" || normalized === "#39") return "'";
-    if (normalized.startsWith("#x")) {
-      return String.fromCodePoint(Number.parseInt(normalized.slice(2), 16));
-    }
-
-    if (normalized.startsWith("#")) {
-      return String.fromCodePoint(Number.parseInt(normalized.slice(1), 10));
-    }
-
-    return _entity;
-  });
-
 const isPrivateOrUnavailableHtml = (html: string) => {
-  const text = decodeHtml(html).toLowerCase();
+  const text = decodeHtmlText(html).toLowerCase();
 
   return (
     text.includes("this post is unavailable") ||

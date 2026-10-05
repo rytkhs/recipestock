@@ -22,28 +22,3 @@ export const normalizeMultilineText = (value: string) =>
 export const decodeHtmlText = (value: string) => decodeHTML(value);
 
 export const decodeHtmlAttribute = (value: string) => decodeHTMLAttribute(value);
-
-// 名前付きの文字参照は、ここにある6種類だけを戻す。すべてを仕様どおりに戻す方法は #177 で決める。
-const NAMED_HTML_ENTITIES = new Map([
-  ["amp", "&"],
-  ["apos", "'"],
-  ["gt", ">"],
-  ["lt", "<"],
-  ["nbsp", " "],
-  ["quot", '"'],
-]);
-
-// NULとサロゲートはjsonbに保存できないので、数値参照のまま残す。
-const isStorableCodePoint = (codePoint: number) =>
-  codePoint > 0 && codePoint <= 0x10ffff && (codePoint < 0xd800 || codePoint > 0xdfff);
-
-export const decodeHtmlEntities = (value: string) =>
-  value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, body: string) => {
-    if (!body.startsWith("#")) return NAMED_HTML_ENTITIES.get(body) ?? entity;
-
-    const codePoint =
-      body[1] === "x" || body[1] === "X"
-        ? Number.parseInt(body.slice(2), 16)
-        : Number.parseInt(body.slice(1), 10);
-    return isStorableCodePoint(codePoint) ? String.fromCodePoint(codePoint) : entity;
-  });

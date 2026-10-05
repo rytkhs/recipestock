@@ -1,5 +1,5 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
-import { decodeHtmlEntities, normalizeTextForComparison } from "../text";
+import { decodeHtmlText, normalizeTextForComparison } from "../text";
 import { type FetchedImportPage, RecipeImportError } from "../types";
 import {
   collectJsonLdRecipeNodes,
@@ -139,7 +139,7 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
       const structuredStep = structuredRecipe?.steps[index];
       const imageUrls =
         structuredStep &&
-        normalizeTextForComparison(decodeHtmlEntities(step.text)) ===
+        normalizeTextForComparison(decodeHtmlText(step.text)) ===
           normalizeTextForComparison(structuredStep.text)
           ? structuredStep.imageUrls
           : [];
