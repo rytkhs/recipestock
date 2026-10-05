@@ -375,8 +375,8 @@ export const renderHtmlText = (root: HtmlParentNode, options: RenderHtmlTextOpti
       continue;
     }
     if (!part) continue;
-    // ブロックの間の空白だけのテキストは、行の端で消える。
-    if (pendingLineBreaks > 0 && /^ +$/.test(part)) continue;
+    // ブロックの間や改行のあとの空白だけのテキストは、行の端で消える。
+    if ((pendingLineBreaks > 0 || trailingNewlines > 0) && /^ +$/.test(part)) continue;
 
     if (chunks.length > 0 && pendingLineBreaks > 0) {
       const missing = pendingLineBreaks - trailingNewlines - countLeadingNewlines(part);

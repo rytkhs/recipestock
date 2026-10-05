@@ -83,7 +83,9 @@ describe("Recipe page evidence", () => {
               <li><span>鶏もも肉</span><span>300g</span></li>
               <li><span>玉ねぎ</span><span>1個</span></li>
             </ul>
-            <div>醤油 大さじ2<br>みりん 大さじ1</div>
+            <div>醤油 大さじ2<br>みりん 大さじ1<br>
+            </div>
+            <div>酒 大さじ1</div>
             <dl>
               <dt>砂糖</dt>
               <dd>小さじ1</dd>
@@ -98,7 +100,8 @@ describe("Recipe page evidence", () => {
     `);
 
     expect(evidence.markdownContent).toMatch(/- 鶏もも肉 300g\n- 玉ねぎ 1個/);
-    expect(evidence.markdownContent).toMatch(/醤油 大さじ2\nみりん 大さじ1/);
+    // 末尾の<br>のあとの整形の改行で、次のブロックとの間に空行を増やさない。
+    expect(evidence.markdownContent).toMatch(/醤油 大さじ2\nみりん 大さじ1\n酒 大さじ1/);
     expect(evidence.markdownContent).toMatch(/砂糖 小さじ1\n塩 少々/);
     expect(evidence.markdownContent).toContain("Mix flour and water");
     expect(evidence.markdownContent).toMatch(
