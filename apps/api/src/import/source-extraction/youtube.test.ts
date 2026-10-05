@@ -82,7 +82,6 @@ describe("YouTube source extraction adapter", () => {
         sourceUrl: CANONICAL_URL,
         sourceName: "YouTube",
       },
-      warnings: [],
     });
     expect(result.input.markdownContent).toContain("鶏むねキャベツ鍋");
     expect(result.input.markdownContent).toContain("Recipe Channel");

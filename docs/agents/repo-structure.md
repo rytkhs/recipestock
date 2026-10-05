@@ -144,7 +144,7 @@ apps/api/src/
     types.ts              shared import types and RecipeImportError
     completion-notifications.ts Import Job completion Push delivery
     completion-notices.ts Import Job completion Push payloads
-    deterministic/        site-specific importers that need no AI
+    deterministic/        site-specific importers that need no AI (rules in its README.md)
     source-extraction/    per-platform source extraction (ADR 0005)
   routes/
     auth.ts

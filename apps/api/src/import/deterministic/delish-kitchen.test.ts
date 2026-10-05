@@ -3,6 +3,7 @@ import { type AiUsageConsumptionRepository } from "../../usage";
 import { type RecipeImportError } from "../types";
 import { importRecipeFromUrl } from "../url-import";
 import { delishKitchenImportAdapter } from "./delish-kitchen";
+import { createDeterministicImporter } from "./importer";
 
 const RECIPE_ID = "176147753863217510";
 const RECIPE_URL = `https://delishkitchen.tv/recipes/${RECIPE_ID}`;
@@ -17,10 +18,8 @@ describe("delishKitchenImportAdapter", () => {
     `https://www.delishkitchen.tv/recipes/${RECIPE_ID}/`,
     `https://delishkitchen.tv/recipes/${RECIPE_ID}?utm_source=share#step-video-1`,
   ])("%s をcanonical recipe URLの1ページ取得へ正規化する", (normalizedUrl) => {
-    const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
-
-    expect(delishKitchenImportAdapter.match({ normalizedUrl, host })).toBe(true);
-    expect(delishKitchenImportAdapter.resolveFetchRequests({ normalizedUrl, host })).toEqual([
+    expect(delishKitchenImportAdapter.match({ normalizedUrl })).toBe(true);
+    expect(delishKitchenImportAdapter.resolveFetchRequests({ normalizedUrl })).toEqual([
       { id: "recipe", url: RECIPE_URL },
     ]);
   });
@@ -31,10 +30,9 @@ describe("delishKitchenImportAdapter", () => {
     "123456789012345678901234567890",
   ])("数字の桁数に依存せずrecipe ID %sにmatchする", (recipeId) => {
     const normalizedUrl = `https://delishkitchen.tv/recipes/${recipeId}`;
-    const host = new URL(normalizedUrl).hostname;
 
-    expect(delishKitchenImportAdapter.match({ normalizedUrl, host })).toBe(true);
-    expect(delishKitchenImportAdapter.resolveFetchRequests({ normalizedUrl, host })).toEqual([
+    expect(delishKitchenImportAdapter.match({ normalizedUrl })).toBe(true);
+    expect(delishKitchenImportAdapter.resolveFetchRequests({ normalizedUrl })).toEqual([
       {
         id: "recipe",
         url: `https://delishkitchen.tv/recipes/${recipeId}`,
@@ -52,12 +50,7 @@ describe("delishKitchenImportAdapter", () => {
       "https://delishkitchen.tv/recipes/recipe-name",
       `${RECIPE_URL}/print`,
     ]) {
-      expect(
-        delishKitchenImportAdapter.match({
-          normalizedUrl,
-          host: new URL(normalizedUrl).hostname.replace(/^www\./, ""),
-        }),
-      ).toBe(false);
+      expect(delishKitchenImportAdapter.match({ normalizedUrl })).toBe(false);
     }
   });
 
@@ -66,12 +59,7 @@ describe("delishKitchenImportAdapter", () => {
     `https://user:password@delishkitchen.tv/recipes/${RECIPE_ID}`,
     `https://delishkitchen.tv:8443/recipes/${RECIPE_ID}`,
   ])("userinfoまたは非標準portを含むURL %sにはmatchしない", (normalizedUrl) => {
-    expect(
-      delishKitchenImportAdapter.match({
-        normalizedUrl,
-        host: new URL(normalizedUrl).hostname,
-      }),
-    ).toBe(false);
+    expect(delishKitchenImportAdapter.match({ normalizedUrl })).toBe(false);
   });
 
   it("表示本文とRecipe JSON-LDを合成してRecipeDraftContentへ変換する", async () => {
@@ -100,7 +88,7 @@ describe("delishKitchenImportAdapter", () => {
         ],
         steps: [
           {
-            text: "玉ねぎを切る。\n\nポイント: 加熱する直前に切りましょう。",
+            text: "玉ねぎを切る。\n\nポイント\n加熱する直前に切りましょう。",
             images: [
               {
                 type: "externalImageUrl",
@@ -113,13 +101,12 @@ describe("delishKitchenImportAdapter", () => {
             images: [],
           },
         ],
-        note: "注意事項:\n調理中は火元を離れないでください。\n高温になったら火を止めます。",
+        note: "注意事項\n調理中は火元を離れないでください。\n高温になったら火を止めます。",
       },
       source: {
         sourceUrl: RECIPE_URL,
         sourceName: "デリッシュキッチン",
       },
-      warnings: [],
     });
   });
 
@@ -132,10 +119,10 @@ describe("delishKitchenImportAdapter", () => {
     });
 
     expect(result.recipeDraftContent.steps[0]).toEqual({
-      text: "玉ねぎを切る。\n薄切りにする。\n\nポイント: 加熱する直前に切りましょう。\n繊維に沿って切ります。",
+      text: "玉ねぎを切る。\n薄切りにする。\n\nポイント\n加熱する直前に切りましょう。\n繊維に沿って切ります。",
       images: [{ type: "externalImageUrl", url: STEP_IMAGE_URL }],
     });
-    expect(result.recipeDraftContent.note).toBe("注意事項:\n調理中は\n火元を離れないでください。");
+    expect(result.recipeDraftContent.note).toBe("注意事項\n調理中は\n火元を離れないでください。");
   });
 
   it("SEO向けJSON-LD名と表示タイトルが異なっても成功する", async () => {
@@ -159,7 +146,7 @@ describe("delishKitchenImportAdapter", () => {
       htmlYieldText: "",
     });
 
-    expect(result.recipeDraftContent).not.toHaveProperty("yieldText");
+    expect(result.recipeDraftContent.yieldText).toBeUndefined();
   });
 
   it("画像、ポイント、注意事項がなくても成功する", async () => {
@@ -171,11 +158,34 @@ describe("delishKitchenImportAdapter", () => {
     });
 
     expect(result.recipeDraftContent).not.toHaveProperty("coverImage");
-    expect(result.recipeDraftContent).not.toHaveProperty("note");
+    expect(result.recipeDraftContent.note).toBeUndefined();
     expect(result.recipeDraftContent.steps).toEqual([
       { text: "玉ねぎを切る。", images: [] },
       { text: "鍋で煮る。", images: [] },
     ]);
+  });
+
+  it("材料のない見出しもページのとおり残す", async () => {
+    const result = await importDelishKitchen({
+      ingredients: [...DEFAULT_INGREDIENTS, { group: "トッピング" }],
+    });
+
+    expect(result.recipeDraftContent.ingredientGroups.at(-1)).toEqual({
+      label: "トッピング",
+      ingredients: [],
+    });
+  });
+
+  it("本文の文字参照を戻してからJSON-LDの手順と照合する", async () => {
+    const result = await importDelishKitchen({
+      stepTexts: ["玉ねぎ&amp;にんじんを切る。", "鍋で煮る。"],
+      jsonLdStepTexts: ["玉ねぎ&にんじんを切る。", "鍋で煮る。"],
+    });
+
+    expect(result.recipeDraftContent.steps[0]).toEqual({
+      text: "玉ねぎ&にんじんを切る。\n\nポイント\n加熱する直前に切りましょう。",
+      images: [{ type: "externalImageUrl", url: STEP_IMAGE_URL }],
+    });
   });
 
   it("制限付きで手順が取得できない場合は材料だけを部分取り込みする", async () => {
@@ -210,7 +220,7 @@ describe("delishKitchenImportAdapter", () => {
         note: [
           "デリッシュキッチンの制限付きレシピのため、手順は取り込まれていません。",
           "",
-          "注意事項:",
+          "注意事項",
           "調理中は火元を離れないでください。",
           "高温になったら火を止めます。",
         ].join("\n"),
@@ -219,7 +229,6 @@ describe("delishKitchenImportAdapter", () => {
         sourceUrl: RECIPE_URL,
         sourceName: "デリッシュキッチン",
       },
-      warnings: [],
     });
   });
 
@@ -228,7 +237,7 @@ describe("delishKitchenImportAdapter", () => {
 
     expect(result.recipeDraftContent.steps).toHaveLength(2);
     expect(result.recipeDraftContent.note).toBe(
-      "注意事項:\n調理中は火元を離れないでください。\n高温になったら火を止めます。",
+      "注意事項\n調理中は火元を離れないでください。\n高温になったら火を止めます。",
     );
   });
 
@@ -318,7 +327,7 @@ describe("delishKitchenImportAdapter", () => {
 
     expect(result.recipeDraftContent.steps).toEqual([
       {
-        text: "玉ねぎを切る。\n\nポイント: 加熱する直前に切りましょう。",
+        text: "玉ねぎを切る。\n\nポイント\n加熱する直前に切りましょう。",
         images: [],
       },
       {
@@ -345,6 +354,10 @@ describe("delishKitchenImportAdapter", () => {
     {
       name: "HTML手順がない",
       options: { stepTexts: [] },
+    },
+    {
+      name: "HTML手順に本文もポイントも画像もない",
+      options: { stepTexts: ["", ""], points: [], stepImages: false },
     },
   ])("$nameの場合は失敗する", async ({ options }) => {
     await expect(importDelishKitchen(options)).rejects.toMatchObject({
@@ -417,16 +430,17 @@ const DEFAULT_JSON_LD_INGREDIENTS = [
 ];
 const DEFAULT_STEP_TEXTS = ["玉ねぎを切る。", "鍋で煮る。"];
 
-const importDelishKitchen = (options: FixtureOptions = {}) =>
-  delishKitchenImportAdapter.convert({
+const importDelishKitchen = async (options: FixtureOptions = {}) => {
+  const result = await createDeterministicImporter([delishKitchenImportAdapter]).tryImport({
     normalizedUrl: RECIPE_URL,
-    pages: new Map([
-      [
-        "recipe",
-        createFetchedPage(options.finalUrl ?? RECIPE_URL, createDelishKitchenHtml(options)),
-      ],
-    ]),
+    fetcher: async () =>
+      createFetchedPage(options.finalUrl ?? RECIPE_URL, createDelishKitchenHtml(options)),
+    fetchOptions: { timeoutMs: 1000, maxBytes: 1_000_000 },
   });
+  if (!result) throw new Error("Delish Kitchen adapter did not match the recipe URL.");
+
+  return result;
+};
 
 const createFetchedPage = (url: string, body: string) => ({
   finalUrl: url,

@@ -136,7 +136,6 @@ export const xTwitterSourceExtractionAdapter: SourceExtractionAdapter = {
         sourceUrl: source.canonicalUrl,
         sourceName: X_SOURCE_NAME,
       },
-      warnings: [],
     };
   },
 };

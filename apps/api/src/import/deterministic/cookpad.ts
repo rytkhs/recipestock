@@ -1,6 +1,15 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
-import { normalizeMultilineText, normalizeTextForComparison } from "../text";
+import { decodeHtmlEntities, normalizeTextForComparison } from "../text";
 import { type FetchedImportPage, RecipeImportError } from "../types";
+import {
+  getHtmlAttribute,
+  type HtmlRewriterElement,
+  importPageBodyToResponse,
+  normalizeHtmlMultilineText,
+  normalizeHtmlText,
+  removeCapture,
+  resolveHttpUrl,
+} from "./page";
 import {
   type DeterministicImportAdapter,
   type DeterministicImportContext,
@@ -11,6 +20,8 @@ const COOKPAD_HOST = "cookpad.com";
 const COOKPAD_RECIPE_PATH = /^\/jp\/recipes\/(\d+)(?:\/print)?\/?$/;
 const COOKPAD_PRINT_PAGE_ID = "print";
 const COOKPAD_RECIPE_PAGE_ID = "recipe";
+// printページのコツ・ポイント欄の見出し。
+const COOKPAD_NOTE_HEADING = "コツ・ポイント";
 
 type IngredientCapture = {
   isHeadline: boolean;
@@ -55,10 +66,6 @@ type CookpadRecipeExtraction = {
   steps: RecipeStepCapture[];
 };
 
-type HtmlRewriterElement = Parameters<
-  NonNullable<HTMLRewriterElementContentHandlers["element"]>
->[0];
-
 const getCookpadRecipeId = (normalizedUrl: string) => {
   const url = new URL(normalizedUrl);
   if (url.hostname.replace(/^www\./, "") !== COOKPAD_HOST) return null;
@@ -69,7 +76,7 @@ const createCookpadUrl = (recipeId: string, print: boolean) =>
   `https://${COOKPAD_HOST}/jp/recipes/${recipeId}${print ? "/print" : ""}`;
 
 export const cookpadImportAdapter: DeterministicImportAdapter = {
-  id: "cookpad",
+  sourceName: "クックパッド",
 
   match({ normalizedUrl }: DeterministicImportMatchInput) {
     return getCookpadRecipeId(normalizedUrl) !== null;
@@ -109,17 +116,15 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
     assertCookpadExtractionsMatch(printExtraction, recipeExtraction);
 
     const ingredientGroups = buildIngredientGroups(printExtraction.ingredientRows);
-    const title = normalizeText(printExtraction.title);
-    const steps = printExtraction.steps.map((step, index) => ({
-      ...(normalizeMultilineText(step.text) ? { text: normalizeMultilineText(step.text) } : {}),
-      images: (recipeExtraction.isPremium
+    const title = normalizeHtmlText(printExtraction.title);
+    const steps = printExtraction.steps.flatMap((step, index) => {
+      const text = normalizeHtmlMultilineText(step.text);
+      const imageUrls = recipeExtraction.isPremium
         ? step.imageUrls
-        : recipeExtraction.steps[index].imageUrls
-      ).map((url) => ({
-        type: "externalImageUrl" as const,
-        url,
-      })),
-    }));
+        : recipeExtraction.steps[index].imageUrls;
+      if (!text && imageUrls.length === 0) return [];
+      return [{ ...(text ? { text } : {}), imageUrls }];
+    });
 
     if (
       !title ||
@@ -132,34 +137,22 @@ export const cookpadImportAdapter: DeterministicImportAdapter = {
       );
     }
 
-    const recipeDraftContent: RecipeDraftContent = {
-      title,
-      ...(normalizeText(printExtraction.yieldText)
-        ? { yieldText: normalizeText(printExtraction.yieldText) }
-        : {}),
-      ...(recipeExtraction.coverImageUrl
-        ? {
-            coverImage: {
-              type: "externalImageUrl",
-              url: recipeExtraction.coverImageUrl,
-            } as const,
-          }
-        : {}),
-      referenceImages: [],
-      ingredientGroups,
-      steps,
-      ...(normalizeMultilineText(printExtraction.note)
-        ? { note: normalizeMultilineText(printExtraction.note) }
-        : {}),
-    };
+    const yieldText = normalizeHtmlText(printExtraction.yieldText);
 
     return {
-      recipeDraftContent,
-      source: {
-        sourceUrl: createCookpadUrl(recipeId, false),
-        sourceName: "クックパッド",
+      draftContent: {
+        title,
+        ...(yieldText ? { yieldText } : {}),
+        ...(recipeExtraction.coverImageUrl
+          ? { coverImageUrl: recipeExtraction.coverImageUrl }
+          : {}),
+        ingredientGroups,
+        steps,
+        noteSections: [
+          { heading: COOKPAD_NOTE_HEADING, body: normalizeHtmlMultilineText(printExtraction.note) },
+        ],
       },
-      warnings: [],
+      sourceUrl: createCookpadUrl(recipeId, false),
     };
   },
 };
@@ -305,20 +298,20 @@ const extractCookpadPrintRecipe = async (
     })
     .on('#recipe-print ol.grid > li picture source[type="image/jpeg"]', {
       element(element) {
-        addCandidates(stepImageStack.at(-1), element.getAttribute("srcset"));
+        addCandidates(stepImageStack.at(-1), getHtmlAttribute(element, "srcset"));
       },
     })
     .on("#recipe-print ol.grid > li img", {
       element(element) {
         const pictureCapture = stepImageStack.at(-1);
         if (pictureCapture) {
-          addCandidates(pictureCapture, element.getAttribute("src"));
+          addCandidates(pictureCapture, getHtmlAttribute(element, "src"));
           return;
         }
 
         const step = stepStack.at(-1);
         const candidate = createImageCandidate(
-          element.getAttribute("src") ?? "",
+          getHtmlAttribute(element, "src") ?? "",
           fetchedPage.finalUrl,
           imageCandidatePosition++,
         );
@@ -374,7 +367,7 @@ const extractCookpadRecipePage = async (
         titleStack.push("");
         element.onEndTag(() => {
           const title = titleStack.pop() ?? "";
-          if (!extraction.title && normalizeText(title)) extraction.title = title;
+          if (!extraction.title && normalizeHtmlText(title)) extraction.title = title;
         });
       },
       text(text) {
@@ -396,12 +389,12 @@ const extractCookpadRecipePage = async (
     })
     .on('.tofu_image picture source[type="image/jpeg"]', {
       element(element) {
-        addCandidates(coverImageStack.at(-1), element.getAttribute("srcset"));
+        addCandidates(coverImageStack.at(-1), getHtmlAttribute(element, "srcset"));
       },
     })
     .on(".tofu_image picture img", {
       element(element) {
-        addCandidates(coverImageStack.at(-1), element.getAttribute("src"));
+        addCandidates(coverImageStack.at(-1), getHtmlAttribute(element, "src"));
       },
     })
     .on('li[id^="step_"]', {
@@ -440,12 +433,12 @@ const extractCookpadRecipePage = async (
     })
     .on('li[id^="step_"] picture source[type="image/jpeg"]', {
       element(element) {
-        addCandidates(stepImageStack.at(-1), element.getAttribute("srcset"));
+        addCandidates(stepImageStack.at(-1), getHtmlAttribute(element, "srcset"));
       },
     })
     .on('li[id^="step_"] picture img', {
       element(element) {
-        addCandidates(stepImageStack.at(-1), element.getAttribute("src"));
+        addCandidates(stepImageStack.at(-1), getHtmlAttribute(element, "src"));
       },
     })
     .transform(importPageBodyToResponse(fetchedPage))
@@ -472,7 +465,8 @@ const assertCookpadExtractionsMatch = (
     const printFirstImageId = getCookpadStepImageId(printStep.imageUrls[0] ?? null);
     if (
       !recipeStep?.id ||
-      normalizeTextForComparison(printStep.text) !== normalizeTextForComparison(recipeStep.text) ||
+      normalizeTextForComparison(decodeHtmlEntities(printStep.text)) !==
+        normalizeTextForComparison(decodeHtmlEntities(recipeStep.text)) ||
       (printFirstImageId &&
         getCookpadStepImageId(recipeStep.imageUrls[0] ?? null) !== printFirstImageId)
     ) {
@@ -491,7 +485,7 @@ const buildIngredientGroups = (rows: IngredientCapture[]) => {
   };
 
   for (const row of rows) {
-    const name = normalizeText(row.name);
+    const name = normalizeHtmlText(row.name);
     if (row.isHeadline) {
       if (currentGroup.ingredients.length > 0 || currentGroup.label) {
         groups.push(currentGroup);
@@ -506,7 +500,7 @@ const buildIngredientGroups = (rows: IngredientCapture[]) => {
     if (name) {
       currentGroup.ingredients.push({
         name,
-        amount: normalizeText(row.amount),
+        amount: normalizeHtmlText(row.amount),
       });
     }
   }
@@ -529,7 +523,7 @@ const createImageCandidate = (
   baseUrl: string,
   position: number,
 ): ImageCandidate | undefined => {
-  const url = resolveImageUrl(rawUrl, baseUrl);
+  const url = resolveHttpUrl(rawUrl, baseUrl);
   if (!url) return undefined;
 
   const size = /\/(\d+)x(\d+)[^/]*?(?:q(\d+))?\//.exec(new URL(url).pathname);
@@ -566,33 +560,8 @@ const getCookpadStepImageId = (rawUrl: string | null) => {
 
 const normalizeHeadline = (value: string) => value.replace(/^■\s*/, "").trim();
 
-const normalizeText = (value: string) => value.replace(/\s+/g, " ").trim();
-
 const hasClass = (element: HtmlRewriterElement, className: string) =>
   element
     .getAttribute("class")
     ?.split(/\s+/)
     .some((value) => value === className) ?? false;
-
-const resolveImageUrl = (rawUrl: string | null, baseUrl: string) => {
-  if (!rawUrl) return undefined;
-
-  try {
-    return new URL(rawUrl, baseUrl).toString();
-  } catch {
-    return undefined;
-  }
-};
-
-const removeCapture = <T>(stack: T[], capture: T) => {
-  const index = stack.lastIndexOf(capture);
-  if (index >= 0) stack.splice(index, 1);
-};
-
-const importPageBodyToResponse = (page: FetchedImportPage) => {
-  if (typeof page.body !== "string") return page.body.clone();
-
-  return new Response(page.body, {
-    headers: page.contentType ? { "content-type": page.contentType } : undefined,
-  });
-};

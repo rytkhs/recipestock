@@ -131,7 +131,6 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
         sourceUrl: source.canonicalUrl,
         sourceName: INSTAGRAM_SOURCE_NAME,
       },
-      warnings: [],
     };
   },
 };

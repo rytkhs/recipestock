@@ -1,5 +1,4 @@
 import {
-  MAX_RECIPE_REFERENCE_IMAGES,
   MAX_RECIPE_STEP_IMAGES,
   MAX_RECIPE_TOTAL_IMAGES,
   recipeDraftContentSchema,
@@ -7,7 +6,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { type RecipeImportError } from "../types";
 import { createDeterministicImporter } from "./importer";
-import { type DeterministicImportAdapter } from "./types";
+import { type DeterministicImportAdapter, type DeterministicImportResult } from "./types";
 
 const NORMALIZED_URL = "https://www.example.com/recipes/test";
 const FETCH_OPTIONS = { timeoutMs: 1000, maxBytes: 1024 };
@@ -30,10 +29,7 @@ describe("createDeterministicImporter", () => {
       }),
     ).resolves.toBeNull();
 
-    expect(match).toHaveBeenCalledWith({
-      normalizedUrl: NORMALIZED_URL,
-      host: "example.com",
-    });
+    expect(match).toHaveBeenCalledWith({ normalizedUrl: NORMALIZED_URL });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -69,7 +65,18 @@ describe("createDeterministicImporter", () => {
     resolvers.get(NORMALIZED_URL)?.(createPage(NORMALIZED_URL));
     resolvers.get(`${NORMALIZED_URL}/print`)?.(createPage(`${NORMALIZED_URL}/print`));
 
-    await expect(importPromise).resolves.toEqual(createResult());
+    await expect(importPromise).resolves.toEqual({
+      recipeDraftContent: {
+        title: "Tomato soup",
+        referenceImages: [],
+        ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
+        steps: [{ text: "Cook.", images: [] }],
+      },
+      source: {
+        sourceUrl: NORMALIZED_URL,
+        sourceName: "Example",
+      },
+    });
     expect(convert).toHaveBeenCalledTimes(1);
   });
 
@@ -150,22 +157,85 @@ describe("createDeterministicImporter", () => {
     expect(convert).not.toHaveBeenCalled();
   });
 
-  it("不正なRecipeDraftContentをextraction_failedにする", async () => {
+  it("手順の補足とnoteを、見出しの行と本文のまとまりで組み立てる", async () => {
     const importer = createDeterministicImporter([
       createAdapter({
         async convert() {
           return {
-            recipeDraftContent: {
+            draftContent: {
+              title: "Tomato soup",
+              coverImageUrl: createImageUrl("cover"),
+              ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
+              steps: [
+                {
+                  text: "Cut the tomatoes.",
+                  supplements: [
+                    { heading: "ポイント", body: "Use ripe tomatoes.\nRemove the stems." },
+                  ],
+                  imageUrls: [createImageUrl("step-1")],
+                },
+                {
+                  supplements: [{ heading: "ポイント", body: "Simmer gently." }],
+                  imageUrls: [],
+                },
+              ],
+              notice: "手順の一部は取り込まれていません。",
+              noteSections: [
+                { heading: "コツ・ポイント", body: "Season to taste." },
+                { heading: "注意事項", body: "" },
+                { heading: "材料のポイント", body: "Tomato: Any variety works." },
+              ],
+            },
+            sourceUrl: NORMALIZED_URL,
+          };
+        },
+      }),
+    ]);
+
+    const result = await importer.tryImport({
+      normalizedUrl: NORMALIZED_URL,
+      fetcher: async (url) => createPage(url),
+      fetchOptions: FETCH_OPTIONS,
+    });
+
+    expect(result?.recipeDraftContent).toEqual({
+      title: "Tomato soup",
+      coverImage: { type: "externalImageUrl", url: createImageUrl("cover") },
+      referenceImages: [],
+      ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
+      steps: [
+        {
+          text: "Cut the tomatoes.\n\nポイント\nUse ripe tomatoes.\nRemove the stems.",
+          images: [{ type: "externalImageUrl", url: createImageUrl("step-1") }],
+        },
+        {
+          text: "ポイント\nSimmer gently.",
+          images: [],
+        },
+      ],
+      note: [
+        "手順の一部は取り込まれていません。",
+        "",
+        "コツ・ポイント",
+        "Season to taste.",
+        "",
+        "材料のポイント",
+        "Tomato: Any variety works.",
+      ].join("\n"),
+    });
+  });
+
+  it("不正な取り込み結果をextraction_failedにする", async () => {
+    const importer = createDeterministicImporter([
+      createAdapter({
+        async convert() {
+          return {
+            draftContent: {
               title: "",
-              referenceImages: [],
               ingredientGroups: [],
               steps: [],
             },
-            source: {
-              sourceUrl: NORMALIZED_URL,
-              sourceName: "Example",
-            },
-            warnings: [],
+            sourceUrl: NORMALIZED_URL,
           };
         },
       }),
@@ -187,18 +257,13 @@ describe("createDeterministicImporter", () => {
       createAdapter({
         async convert() {
           return {
-            recipeDraftContent: {
+            draftContent: {
               title: "Tomato soup",
-              coverImage: createDraftImage("cover"),
-              referenceImages: createDraftImages(MAX_RECIPE_REFERENCE_IMAGES + 1, "source"),
+              coverImageUrl: createImageUrl("cover"),
               ingredientGroups: [],
-              steps: createStepsWithImages(MAX_RECIPE_TOTAL_IMAGES - MAX_RECIPE_REFERENCE_IMAGES),
+              steps: createStepsWithImages(MAX_RECIPE_TOTAL_IMAGES + MAX_RECIPE_STEP_IMAGES),
             },
-            source: {
-              sourceUrl: NORMALIZED_URL,
-              sourceName: "Example",
-            },
-            warnings: [],
+            sourceUrl: NORMALIZED_URL,
           };
         },
       }),
@@ -237,7 +302,7 @@ describe("createDeterministicImporter", () => {
 const createAdapter = (
   overrides: Partial<DeterministicImportAdapter> = {},
 ): DeterministicImportAdapter => ({
-  id: "example",
+  sourceName: "Example",
   match: () => true,
   resolveFetchRequests: ({ normalizedUrl }) => [{ id: "recipe", url: normalizedUrl }],
   async convert() {
@@ -252,32 +317,23 @@ const createPage = (url: string) => ({
   body: "<html><body>Recipe</body></html>",
 });
 
-const createResult = () => ({
-  recipeDraftContent: {
+const createResult = (): DeterministicImportResult => ({
+  draftContent: {
     title: "Tomato soup",
-    referenceImages: [],
     ingredientGroups: [{ ingredients: [{ name: "Tomato", amount: "1" }] }],
-    steps: [{ text: "Cook.", images: [] }],
+    steps: [{ text: "Cook.", imageUrls: [] }],
   },
-  source: {
-    sourceUrl: NORMALIZED_URL,
-    sourceName: "Example",
-  },
-  warnings: [],
+  sourceUrl: NORMALIZED_URL,
 });
 
-const createDraftImage = (id: string) => ({
-  type: "externalImageUrl" as const,
-  url: `https://images.example/${id}.jpg`,
-});
-
-const createDraftImages = (count: number, prefix: string) =>
-  Array.from({ length: count }, (_, index) => createDraftImage(`${prefix}-${index}`));
+const createImageUrl = (id: string) => `https://images.example/${id}.jpg`;
 
 const createStepsWithImages = (imageCount: number) =>
   Array.from({ length: Math.ceil(imageCount / MAX_RECIPE_STEP_IMAGES) }, (_, stepIndex) => ({
     text: `Step ${stepIndex + 1}`,
-    images: createDraftImages(MAX_RECIPE_STEP_IMAGES + 1, `step-${stepIndex}`),
+    imageUrls: Array.from({ length: MAX_RECIPE_STEP_IMAGES + 1 }, (_, imageIndex) =>
+      createImageUrl(`step-${stepIndex}-${imageIndex}`),
+    ),
   }));
 
 const countDraftImages = (

@@ -157,5 +157,4 @@ const createResult = () => ({
     sourceUrl: "https://www.example.com/watch?v=abc123",
     sourceName: "Example",
   },
-  warnings: [],
 });

@@ -27,7 +27,6 @@ export type SourceExtractionResult = {
   imageCandidates: RecipeImportImageCandidate[];
   imagePlacement?: RecipeImportImagePlacement;
   source: RecipeSourceDraft;
-  warnings: string[];
 };
 
 export type SourceExtractionAdapter = {
@@ -62,7 +61,6 @@ const sourceExtractionResultSchema = z.strictObject({
   imageCandidates: z.array(sourceExtractionImageCandidateSchema),
   imagePlacement: sourceExtractionImagePlacementSchema.optional(),
   source: recipeSourceDraftSchema,
-  warnings: z.array(z.string()),
 });
 
 export const parseSourceExtractionResult = (value: SourceExtractionResult) =>

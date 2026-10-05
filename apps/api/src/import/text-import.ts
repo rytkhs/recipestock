@@ -72,7 +72,6 @@ export const importRecipeFromText = async ({
   return {
     recipeDraftContent,
     source: toTextRecipeSource(sourceUrl),
-    warnings: [],
   };
 };
 
