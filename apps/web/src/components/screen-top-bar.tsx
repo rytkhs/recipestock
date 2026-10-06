@@ -15,7 +15,7 @@ export const ScreenTopBarFrame = ({
   ref?: Ref<HTMLDivElement>;
 }) => (
   <div
-    className="sticky top-0 z-30 bg-brand-cream/95 px-3 py-2.5 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10"
+    className="sticky top-0 z-30 bg-background/95 px-3 py-2.5 backdrop-blur-md sm:-mx-6 sm:top-16 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10"
     ref={ref}
   >
     <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_auto] sm:gap-3">

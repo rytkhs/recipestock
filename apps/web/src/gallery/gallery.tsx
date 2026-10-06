@@ -31,7 +31,7 @@ export const Gallery = () => {
 
   return (
     <div className="min-h-screen bg-brand-paper-muted pt-20">
-      <header className="fixed inset-x-0 top-0 z-40 flex flex-wrap items-center gap-x-6 gap-y-2 border-brand-line border-b bg-brand-cream/95 px-6 py-3 backdrop-blur-md">
+      <header className="fixed inset-x-0 top-0 z-40 flex flex-wrap items-center gap-x-6 gap-y-2 border-brand-line border-b bg-background/95 px-6 py-3 backdrop-blur-md">
         <h1 className="font-bold text-base text-brand-ink">UIギャラリー</h1>
         <label className={controlClass}>
           端末
