@@ -8,7 +8,7 @@
   "categories": ["food", "lifestyle"],
   "start_url": "/recipes",
   "display": "standalone",
-  "background_color": "#FBF3E9",
+  "background_color": "#FFFFFF",
   "theme_color": "#768055",
   "shortcuts": [
     {

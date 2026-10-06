@@ -244,7 +244,7 @@ export const Header = ({
 
   return (
     <header
-      className={`sticky top-0 z-40 border-b border-brand-line bg-brand-cream/95 backdrop-blur-md px-4 sm:px-6 lg:px-10 ${
+      className={`sticky top-0 z-40 border-b border-brand-line bg-background/95 backdrop-blur-md px-4 sm:px-6 lg:px-10 ${
         isAppChrome
           ? "h-14 items-center justify-between gap-4 sm:h-16"
           : "flex-col gap-4 py-3 sm:flex-row sm:items-center sm:justify-between"

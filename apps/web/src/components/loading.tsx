@@ -92,7 +92,7 @@ export const RecipeListSkeleton = () => {
       role="status"
     >
       <span className="sr-only">レシピ一覧を読み込み中</span>
-      <div className="-mx-4 sticky top-0 z-30 flex items-center gap-2 bg-brand-cream/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:gap-3 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
+      <div className="-mx-4 sticky top-0 z-30 flex items-center gap-2 bg-background/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:top-16 sm:gap-3 sm:px-6 sm:py-4 lg:-mx-10 lg:px-10">
         <SkeletonBlock className="h-11 w-full rounded-full" />
         <SkeletonBlock className="hidden h-10 w-20 shrink-0 rounded-full sm:block" />
         <SkeletonBlock className="hidden h-4 w-12 shrink-0 sm:block" />

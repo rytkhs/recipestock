@@ -20,7 +20,6 @@
   --color-brand-orange: var(--brand-orange);
   --color-brand-orange-dark: var(--brand-orange-dark);
   --color-brand-orange-soft: var(--brand-orange-soft);
-  --color-brand-cream: var(--brand-cream);
   --color-brand-paper: var(--brand-paper);
   --color-brand-paper-raised: var(--brand-paper-raised);
   --color-brand-paper-muted: var(--brand-paper-muted);
@@ -132,9 +131,8 @@
   --brand-orange: #e47d25;
   --brand-orange-dark: #9c5f2a;
   --brand-orange-soft: #f4d2ae;
-  --brand-cream: #fdf9f4;
-  --brand-paper: #fffdfa;
-  --brand-paper-raised: #fefbf7;
+  --brand-paper: #ffffff;
+  --brand-paper-raised: #ffffff;
   --brand-paper-muted: #fbf7f2;
   --brand-line: #e1d2be;
   --brand-line-soft: #ede1d2;
@@ -147,7 +145,7 @@
   --plate-4: #e9e1d4;
   --plate-5: #eeded7;
   --brand-on-primary: #ffffff;
-  --background: var(--brand-cream);
+  --background: #ffffff;
   --foreground: var(--brand-ink);
   --card: var(--brand-paper);
   --card-foreground: var(--brand-ink);
