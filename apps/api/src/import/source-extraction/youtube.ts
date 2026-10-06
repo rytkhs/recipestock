@@ -95,7 +95,6 @@ export const youtubeSourceExtractionAdapter: SourceExtractionAdapter = {
         sourceUrl: canonicalUrl,
         sourceName: YOUTUBE_SOURCE_NAME,
       },
-      warnings: [],
     };
   },
 };

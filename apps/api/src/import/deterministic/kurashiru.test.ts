@@ -7,6 +7,8 @@ import { kurashiruImportAdapter } from "./kurashiru";
 const RECIPE_ID = "ea9e1038-d78a-468b-b08e-7456fc3fd038";
 const RECIPE_URL = `https://www.kurashiru.com/recipes/${RECIPE_ID}`;
 const COVER_IMAGE_URL = `https://video.kurashiru.com/production/videos/${RECIPE_ID}/compressed_thumbnail_square_large.jpg?123`;
+const STEP_IMAGE_URL =
+  "https://video.kurashiru.com/production/video_clips/90c91417-aec4-435d-bdc6-b7a8e77b0c41/compressed_large_thumbnail_square_file_name_original.jpg?123";
 
 describe("kurashiruImportAdapter", () => {
   it.each([
@@ -16,10 +18,8 @@ describe("kurashiruImportAdapter", () => {
     `http://kurashiru.com/recipes/${RECIPE_ID}`,
     `https://www.kurashiru.com/recipes/${RECIPE_ID.toUpperCase()}?utm_source=share#steps`,
   ])("%s をcanonical recipe URLの1ページ取得へ正規化する", (normalizedUrl) => {
-    const host = new URL(normalizedUrl).hostname.replace(/^www\./, "");
-
-    expect(kurashiruImportAdapter.match({ normalizedUrl, host })).toBe(true);
-    expect(kurashiruImportAdapter.resolveFetchRequests({ normalizedUrl, host })).toEqual([
+    expect(kurashiruImportAdapter.match({ normalizedUrl })).toBe(true);
+    expect(kurashiruImportAdapter.resolveFetchRequests({ normalizedUrl })).toEqual([
       { id: "recipe", url: RECIPE_URL },
     ]);
   });
@@ -33,12 +33,7 @@ describe("kurashiruImportAdapter", () => {
       `https://search.kurashiru.com/recipes/${RECIPE_ID}`,
       `https://www.kurashiru.com.evil.example/recipes/${RECIPE_ID}`,
     ]) {
-      expect(
-        kurashiruImportAdapter.match({
-          normalizedUrl,
-          host: new URL(normalizedUrl).hostname.replace(/^www\./, ""),
-        }),
-      ).toBe(false);
+      expect(kurashiruImportAdapter.match({ normalizedUrl })).toBe(false);
     }
   });
 
@@ -47,12 +42,7 @@ describe("kurashiruImportAdapter", () => {
     `https://user:password@www.kurashiru.com/recipes/${RECIPE_ID}`,
     `https://www.kurashiru.com:8443/recipes/${RECIPE_ID}`,
   ])("userinfoまたは非標準portを含むURL %sにはmatchしない", (normalizedUrl) => {
-    expect(
-      kurashiruImportAdapter.match({
-        normalizedUrl,
-        host: new URL(normalizedUrl).hostname.replace(/^www\./, ""),
-      }),
-    ).toBe(false);
+    expect(kurashiruImportAdapter.match({ normalizedUrl })).toBe(false);
   });
 
   it("SSR状態からRecipeDraftContentへ変換する", async () => {
@@ -79,6 +69,10 @@ describe("kurashiruImportAdapter", () => {
             ],
           },
           {
+            label: "つなぎ",
+            ingredients: [],
+          },
+          {
             ingredients: [{ name: "サラダ油", amount: "適量" }],
           },
           {
@@ -88,12 +82,12 @@ describe("kurashiruImportAdapter", () => {
         ],
         steps: [
           {
-            text: "卵を溶きほぐします。\n調味料を加えます。\n\nポイント: 白身を切るように混ぜます。",
+            text: "卵を溶きほぐします。\n調味料を加えます。\n\nポイント\n白身を切るように混ぜます。",
             images: [],
           },
           {
             text: "卵焼き器で焼きます。",
-            images: [],
+            images: [{ type: "externalImageUrl", url: STEP_IMAGE_URL }],
           },
         ],
         note: [
@@ -101,15 +95,35 @@ describe("kurashiruImportAdapter", () => {
           "半熟の状態で巻いてください。",
           "",
           "材料のポイント",
-          "- 卵: Mサイズを使用しています。",
+          "卵: Mサイズを使用しています。",
         ].join("\n"),
       },
       source: {
         sourceUrl: RECIPE_URL,
         sourceName: "クラシル",
       },
-      warnings: [],
     });
+  });
+
+  it("本文がなくても、ポイントか画像のある手順は残す", async () => {
+    const result = await importKurashiru({
+      html: createKurashiruHtml({
+        attributeOverrides: {
+          instructions: [
+            { id: 101, body: "", "thumbnail-square-large-url": null },
+            { id: 102, body: "", "thumbnail-square-large-url": STEP_IMAGE_URL },
+            { id: 103, body: "", "thumbnail-square-large-url": null },
+            { id: 104, body: "卵焼き器で焼きます。", "thumbnail-square-large-url": null },
+          ],
+        },
+      }),
+    });
+
+    expect(result.recipeDraftContent.steps).toEqual([
+      { text: "ポイント\n白身を切るように混ぜます。", images: [] },
+      { images: [{ type: "externalImageUrl", url: STEP_IMAGE_URL }] },
+      { text: "卵焼き器で焼きます。", images: [] },
+    ]);
   });
 
   it.each([
@@ -118,7 +132,6 @@ describe("kurashiruImportAdapter", () => {
   ])("$nameでもSSR状態から取り込む", async ({ html }) => {
     await expect(importKurashiru({ html })).resolves.toMatchObject({
       recipeDraftContent: { title: "お弁当の定番 卵焼き" },
-      warnings: [],
     });
   });
 
@@ -199,20 +212,27 @@ describe("kurashiruImportAdapter", () => {
       html: createKurashiruHtml({ attributeOverrides: { instructions: [] } }),
     },
     {
-      name: "非公開",
-      html: createKurashiruHtml({
-        attributeOverrides: { "publish-status": "draft" },
-      }),
+      name: "公開状態がない",
+      html: createKurashiruHtml({ attributeOverrides: { "publish-status": undefined } }),
     },
     {
-      name: "未知content-type",
-      html: createKurashiruHtml({
-        attributeOverrides: { "content-type": "premium" },
-      }),
+      name: "レシピの種類がない",
+      html: createKurashiruHtml({ attributeOverrides: { "content-type": undefined } }),
     },
   ])("$nameの場合は失敗する", async ({ html }) => {
     await expect(importKurashiru({ html })).rejects.toMatchObject({
       code: "extraction_failed",
+    } satisfies Partial<RecipeImportError>);
+  });
+
+  it.each([
+    { name: "非公開", attributeOverrides: { "publish-status": "draft" } },
+    { name: "通常のレシピ以外のcontent-type", attributeOverrides: { "content-type": "premium" } },
+  ])("$nameのレシピは対応しないページとして失敗する", async ({ attributeOverrides }) => {
+    await expect(
+      importKurashiru({ html: createKurashiruHtml({ attributeOverrides }) }),
+    ).rejects.toMatchObject({
+      code: "unsupported_page",
     } satisfies Partial<RecipeImportError>);
   });
 });
@@ -334,11 +354,13 @@ const createKurashiruHtml = ({
         id: 101,
         body: "卵を溶きほぐします。\r\n調味料を加えます。",
         "sort-order": 1,
+        "thumbnail-square-large-url": null,
       },
       {
         id: 102,
         body: "卵焼き器で焼きます。",
         "sort-order": 2,
+        "thumbnail-square-large-url": STEP_IMAGE_URL,
       },
     ],
     points: [

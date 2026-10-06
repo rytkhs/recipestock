@@ -82,7 +82,6 @@ describe("importRecipeFromText", () => {
         ],
       },
       source: { sourceUrl: null, sourceName: null },
-      warnings: [],
     });
     expect(aiProvider.normalize).toHaveBeenCalledWith({
       promptProfile: "text",

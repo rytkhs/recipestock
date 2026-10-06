@@ -286,7 +286,6 @@ describe("URL import flow", () => {
           sourceUrl: "https://example.com/recipes/deterministic",
           sourceName: "Example",
         },
-        warnings: [],
       };
     });
 
@@ -607,7 +606,6 @@ describe("URL import flow", () => {
             sourceUrl: "https://example.com/recipes/host-title",
             sourceName: null,
           },
-          warnings: [],
         };
       },
     };
@@ -787,7 +785,6 @@ describe("URL import flow", () => {
         sourceUrl: "https://www.youtube.com/watch?v=FyLCRXMANAM",
         sourceName: "YouTube",
       },
-      warnings: [],
     });
 
     expect(fetcher).not.toHaveBeenCalled();
@@ -896,7 +893,6 @@ describe("URL import flow", () => {
         sourceUrl: "https://x.com/HG7654321/status/2071084010705727927",
         sourceName: "X",
       },
-      warnings: [],
     });
 
     expect(fetcher).toHaveBeenCalledWith(
@@ -1232,7 +1228,6 @@ describe("URL import flow", () => {
             sourceUrl: "https://www.example.com/recipes/image-limits",
             sourceName: "Example",
           },
-          warnings: [],
         };
       },
     };
@@ -1294,7 +1289,6 @@ describe("URL import flow", () => {
             sourceUrl: "https://www.example.com/recipes/deterministic",
             sourceName: "Example Kitchen",
           },
-          warnings: ["deterministic warning"],
         };
       },
     };
@@ -1321,7 +1315,6 @@ describe("URL import flow", () => {
         sourceUrl: "https://www.example.com/recipes/deterministic",
         sourceName: "Example Kitchen",
       },
-      warnings: ["deterministic warning"],
     });
 
     expect(aiNormalize).not.toHaveBeenCalled();
@@ -1477,7 +1470,6 @@ describe("URL import flow", () => {
           url: "https://example.com/structured.jpg",
         },
       },
-      warnings: [],
     });
   });
 
@@ -1555,11 +1547,10 @@ describe("URL import flow", () => {
           },
         ],
       },
-      warnings: [],
     });
   });
 
-  it("AIが候補外または改変した画像URLを返した場合は画像を破棄してwarningを返す", async () => {
+  it("AIが候補外または改変した画像URLを返した場合は画像を破棄する", async () => {
     const usageRepository = createUsageRepositoryStub();
 
     await expect(
@@ -1606,10 +1597,6 @@ describe("URL import flow", () => {
           },
         ],
       },
-      warnings: [
-        "AI returned unknown image URL: https://example.com/generated.jpg",
-        "AI returned unknown image URL: https://example.com/known.jpg?modified=1",
-      ],
     });
   });
 });

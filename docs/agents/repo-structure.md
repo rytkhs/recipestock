@@ -134,17 +134,18 @@ apps/api/src/
     url-import.ts         URL import orchestration
     text-import.ts        text import orchestration
     page-evidence.ts      recipe evidence extraction from fetched pages
+    html.ts               HTML parsing and the shared text rendering for import evidence (ADR 0011)
     policy.ts             import URL and fetched content-type checks
     ai-normalization.ts   AI normalization with AI usage consumption
     ai-provider.ts        default AI provider and its timeout
     prompts.ts            AI system prompts per import profile
     draft-limits.ts       recipe draft trimming to content limits
     deadline.ts           Import Job deadline checks and bounded timeouts
-    text.ts               text normalization helpers
+    text.ts               text normalization and HTML character reference decoding
     types.ts              shared import types and RecipeImportError
     completion-notifications.ts Import Job completion Push delivery
     completion-notices.ts Import Job completion Push payloads
-    deterministic/        site-specific importers that need no AI
+    deterministic/        site-specific importers that need no AI (rules in its README.md)
     source-extraction/    per-platform source extraction (ADR 0005)
   routes/
     auth.ts

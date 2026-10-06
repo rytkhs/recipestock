@@ -1,13 +1,29 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
+import { normalizeMultilineText, normalizeSingleLineText } from "../text";
 import { type FetchedImportPage, RecipeImportError } from "../types";
 import {
+  collectJsonLdRecipeNodes,
+  getHtmlAttribute,
+  importPageBodyToResponse,
+  isRecord,
+  removeCapture,
+  resolveHttpUrl,
+} from "./page";
+import {
+  type DeterministicDraftStep,
   type DeterministicImportAdapter,
   type DeterministicImportContext,
   type DeterministicImportMatchInput,
+  type DeterministicTextSection,
 } from "./types";
 
 const KURASHIRU_HOST = "kurashiru.com";
 const KURASHIRU_RECIPE_PAGE_ID = "recipe";
+// レシピページのコツ・ポイント欄の見出しと、手順のポイントに付くラベル。
+// 材料のポイントはページに見出しがないので、名前を付ける。
+const TIPS_HEADING = "コツ・ポイント";
+const POINT_LABEL = "ポイント";
+const INGREDIENT_POINTS_HEADING = "材料のポイント";
 const KURASHIRU_RECIPE_PATH =
   /^\/recipes\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/print)?\/?$/i;
 
@@ -15,7 +31,7 @@ const createKurashiruRecipeUrl = (recipeId: string) =>
   `https://www.${KURASHIRU_HOST}/recipes/${recipeId}`;
 
 export const kurashiruImportAdapter: DeterministicImportAdapter = {
-  id: "kurashiru",
+  sourceName: "クラシル",
 
   match({ normalizedUrl }: DeterministicImportMatchInput) {
     return getKurashiruRecipeId(normalizedUrl) !== null;
@@ -63,14 +79,19 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
 
     const data = findKurashiruRecipeData(extraction.environmentDocuments, recipeId);
     const attributes = asRecord(data.attributes);
-    if (
-      data.type !== "videos" ||
-      normalizeText(attributes["publish-status"]) !== "published" ||
-      normalizeText(attributes["content-type"]) !== "normal"
-    ) {
+    const publishStatus = normalizeText(attributes["publish-status"]);
+    const contentType = normalizeText(attributes["content-type"]);
+    // 値が読めないのは対応しないページだからではなく、SSRデータの形が変わったとき。
+    if (!publishStatus || !contentType) {
       throw new RecipeImportError(
         "extraction_failed",
-        "Kurashiru recipe is not a supported published recipe.",
+        "Kurashiru recipe status could not be extracted.",
+      );
+    }
+    if (publishStatus !== "published" || contentType !== "normal") {
+      throw new RecipeImportError(
+        "unsupported_page",
+        "Kurashiru recipe is not a published normal recipe.",
       );
     }
 
@@ -78,8 +99,16 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
     const { ingredientGroups, ingredientNamesById } = buildIngredientGroups(
       asArray(attributes.ingredients),
     );
-    const steps = buildSteps(asArray(attributes.instructions), asArray(attributes.points));
-    if (!title || ingredientGroups.length === 0 || steps.length === 0) {
+    const steps = buildSteps(
+      asArray(attributes.instructions),
+      asArray(attributes.points),
+      page.finalUrl,
+    );
+    if (
+      !title ||
+      ingredientGroups.every((group) => group.ingredients.length === 0) ||
+      steps.length === 0
+    ) {
       throw new RecipeImportError(
         "extraction_failed",
         "Kurashiru recipe structure could not be extracted.",
@@ -95,31 +124,21 @@ export const kurashiruImportAdapter: DeterministicImportAdapter = {
       .map((value) => resolveHttpUrl(value, page.finalUrl))
       .find(Boolean);
     const yieldText = normalizeText(attributes.servings);
-    const note = buildNote(attributes, asArray(attributes.points), ingredientNamesById);
-    const recipeDraftContent: RecipeDraftContent = {
-      title,
-      ...(yieldText ? { yieldText } : {}),
-      ...(coverImageUrl
-        ? {
-            coverImage: {
-              type: "externalImageUrl",
-              url: coverImageUrl,
-            } as const,
-          }
-        : {}),
-      referenceImages: [],
-      ingredientGroups,
-      steps,
-      ...(note ? { note } : {}),
-    };
 
     return {
-      recipeDraftContent,
-      source: {
-        sourceUrl: createKurashiruRecipeUrl(recipeId),
-        sourceName: "クラシル",
+      draftContent: {
+        title,
+        ...(yieldText ? { yieldText } : {}),
+        ...(coverImageUrl ? { coverImageUrl } : {}),
+        ingredientGroups,
+        steps,
+        noteSections: buildNoteSections(
+          attributes,
+          asArray(attributes.points),
+          ingredientNamesById,
+        ),
       },
-      warnings: [],
+      sourceUrl: createKurashiruRecipeUrl(recipeId),
     };
   },
 };
@@ -178,12 +197,12 @@ const extractKurashiruPage = async (page: FetchedImportPage): Promise<KurashiruP
   await new HTMLRewriter()
     .on('link[rel="canonical"]', {
       element(element) {
-        extraction.canonicalUrl = resolveHttpUrl(element.getAttribute("href"), page.finalUrl);
+        extraction.canonicalUrl = resolveHttpUrl(getHtmlAttribute(element, "href"), page.finalUrl);
       },
     })
     .on('meta[property="og:image"]', {
       element(element) {
-        extraction.ogImageUrl = resolveHttpUrl(element.getAttribute("content"), page.finalUrl);
+        extraction.ogImageUrl = resolveHttpUrl(getHtmlAttribute(element, "content"), page.finalUrl);
       },
     })
     .on("script", {
@@ -304,11 +323,18 @@ const isMatchingRecipeData = (data: Record<string, unknown>, recipeId: string) =
 
 const buildIngredientGroups = (items: unknown[]) => {
   const headingById = new Map<string, string>();
+  const groupedHeadingIds = new Set<string>();
   for (const item of items) {
     const row = asRecord(item);
     if (row.type === "heading") {
       const label = normalizeText(row.title);
       if (label) headingById.set(String(row.id), label);
+    } else if (
+      row.type === "ingredients" &&
+      row["group-id"] !== null &&
+      row["group-id"] !== undefined
+    ) {
+      groupedHeadingIds.add(String(row["group-id"]));
     }
   }
 
@@ -316,6 +342,12 @@ const buildIngredientGroups = (items: unknown[]) => {
   const ingredientNamesById = new Map<string, string>();
   for (const item of items) {
     const row = asRecord(item);
+    // ページは材料の一覧に見出しも並べるので、材料のない見出しも残す。
+    if (row.type === "heading") {
+      const label = headingById.get(String(row.id));
+      if (label && !groupedHeadingIds.has(String(row.id))) groups.push({ label, ingredients: [] });
+      continue;
+    }
     if (row.type !== "ingredients") continue;
 
     const groupId = row["group-id"];
@@ -342,13 +374,14 @@ const buildIngredientGroups = (items: unknown[]) => {
     if (row.id !== null && row.id !== undefined) ingredientNamesById.set(String(row.id), name);
   }
 
-  return {
-    ingredientGroups: groups.filter((group) => group.ingredients.length > 0),
-    ingredientNamesById,
-  };
+  return { ingredientGroups: groups, ingredientNamesById };
 };
 
-const buildSteps = (instructions: unknown[], points: unknown[]): RecipeDraftContent["steps"] => {
+const buildSteps = (
+  instructions: unknown[],
+  points: unknown[],
+  baseUrl: string,
+): DeterministicDraftStep[] => {
   const pointsByInstructionId = new Map<string, string[]>();
   for (const item of points) {
     const point = asRecord(item);
@@ -364,29 +397,28 @@ const buildSteps = (instructions: unknown[], points: unknown[]): RecipeDraftCont
   return instructions.flatMap((item) => {
     const instruction = asRecord(item);
     const text = normalizeMultiline(instruction.body);
-    if (!text) return [];
-    const supplements =
+    const stepPoints =
       instruction.id === null || instruction.id === undefined
         ? []
         : (pointsByInstructionId.get(String(instruction.id)) ?? []);
+    // ページは手順ごとに動画のクリップを置き、再生前はこの静止画を手順の画像として見せる。
+    const imageUrl = resolveHttpUrl(instruction["thumbnail-square-large-url"], baseUrl);
+    if (!text && stepPoints.length === 0 && !imageUrl) return [];
     return [
       {
-        text: [text, ...supplements.map((point) => `ポイント: ${point}`)].join("\n\n"),
-        images: [],
+        ...(text ? { text } : {}),
+        supplements: [{ heading: POINT_LABEL, body: stepPoints.join("\n") }],
+        imageUrls: imageUrl ? [imageUrl] : [],
       },
     ];
   });
 };
 
-const buildNote = (
+const buildNoteSections = (
   attributes: Record<string, unknown>,
   points: unknown[],
   ingredientNamesById: ReadonlyMap<string, string>,
-) => {
-  const sections: string[] = [];
-  const memo = normalizeMultiline(attributes.memo);
-  if (memo) sections.push(`コツ・ポイント\n${memo}`);
-
+): DeterministicTextSection[] => {
   const ingredientPoints = points.flatMap((item) => {
     const point = asRecord(item);
     if (point.type !== "ingredients") return [];
@@ -397,13 +429,13 @@ const buildNote = (
       ingredientId === null || ingredientId === undefined
         ? "材料"
         : (ingredientNamesById.get(String(ingredientId)) ?? "材料");
-    return [`- ${ingredientName}: ${stripMarkdownLinks(text)}`];
+    return [`${ingredientName}: ${stripMarkdownLinks(text)}`];
   });
-  if (ingredientPoints.length > 0) {
-    sections.push(`材料のポイント\n${ingredientPoints.join("\n")}`);
-  }
 
-  return sections.join("\n\n");
+  return [
+    { heading: TIPS_HEADING, body: normalizeMultiline(attributes.memo) },
+    { heading: INGREDIENT_POINTS_HEADING, body: ingredientPoints.join("\n") },
+  ];
 };
 
 const findRecipeJsonLd = (
@@ -434,24 +466,6 @@ const findRecipeJsonLd = (
   return undefined;
 };
 
-const collectJsonLdRecipeNodes = (value: unknown): Record<string, unknown>[] => {
-  const recipes: Record<string, unknown>[] = [];
-  const visit = (node: unknown) => {
-    if (Array.isArray(node)) {
-      for (const item of node) visit(item);
-      return;
-    }
-    if (!isRecord(node)) return;
-    const types = Array.isArray(node["@type"]) ? node["@type"] : [node["@type"]];
-    if (types.some((type) => typeof type === "string" && type.toLowerCase() === "recipe")) {
-      recipes.push(node);
-    }
-    for (const child of Object.values(node)) visit(child);
-  };
-  visit(value);
-  return recipes;
-};
-
 const extractFirstImageUrl = (value: unknown, baseUrl: string): string | undefined => {
   if (typeof value === "string") return resolveHttpUrl(value, baseUrl);
   if (Array.isArray(value)) {
@@ -470,46 +484,13 @@ const extractFirstImageUrl = (value: unknown, baseUrl: string): string | undefin
 
 const stripMarkdownLinks = (value: string) => value.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
 
-const normalizeText = (value: unknown) =>
-  typeof value === "string" || typeof value === "number"
-    ? String(value).replace(/\s+/g, " ").trim()
-    : "";
+const toText = (value: unknown) =>
+  typeof value === "string" || typeof value === "number" ? String(value) : "";
 
-const normalizeMultiline = (value: unknown) => {
-  if (typeof value !== "string" && typeof value !== "number") return "";
-  return String(value)
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .map((line) => line.trim())
-    .join("\n")
-    .trim();
-};
+const normalizeText = (value: unknown) => normalizeSingleLineText(toText(value));
 
-const resolveHttpUrl = (rawUrl: unknown, baseUrl: string) => {
-  if (typeof rawUrl !== "string" || !rawUrl) return undefined;
-  try {
-    const url = new URL(rawUrl, baseUrl);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-};
+const normalizeMultiline = (value: unknown) => normalizeMultilineText(toText(value));
 
 const asRecord = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : {});
 
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const removeCapture = <T>(stack: T[], capture: T) => {
-  const index = stack.lastIndexOf(capture);
-  if (index >= 0) stack.splice(index, 1);
-};
-
-const importPageBodyToResponse = (page: FetchedImportPage) => {
-  if (typeof page.body !== "string") return page.body.clone();
-  return new Response(page.body, {
-    headers: page.contentType ? { "content-type": page.contentType } : undefined,
-  });
-};

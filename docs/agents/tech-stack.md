@@ -47,6 +47,7 @@ Browser / PWA
 | Email | Resend Email API（SDKは使わずHTTPを直接呼ぶ） |
 | Billing | Stripe |
 | AI | Vercel AI SDK + workers-ai-provider + Cloudflare Workers AI + Cloudflare AI Gateway |
+| Import HTML parsing | parse5。汎用の取り込みはページを1回パースし、AIに渡す証拠を同じ木から作る（ADR 0011）。HTMLRewriterや正規表現で読んだ値の文字参照は、parse5と同じ`entities`で戻す |
 | PWA | Web App Manifest + Workbox via `vite-plugin-pwa` `injectManifest` |
 | Logs / traces | Cloudflare Workers Logs + Workers Traces。ログは`apps/api/src/logger.ts`の構造化JSON（ADR 0010） |
 | Error tracking / monitors | Sentry。Workerは`@sentry/cloudflare`、webは`@sentry/react`、source mapは`@sentry/vite-plugin`と`@sentry/cli`。Uptime monitorとCrons monitorもSentryに置く（ADR 0010） |

@@ -126,7 +126,6 @@ export const tiktokSourceExtractionAdapter: SourceExtractionAdapter = {
         sourceUrl: projection.canonicalUrl,
         sourceName: TIKTOK_SOURCE_NAME,
       },
-      warnings: [],
     };
   },
 };

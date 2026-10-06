@@ -1,6 +1,16 @@
 import { type RecipeDraftContent } from "@recipestock/schemas";
-import { normalizeMultilineText, normalizeTextForComparison } from "../text";
+import { decodeHtmlText, normalizeTextForComparison } from "../text";
 import { type FetchedImportPage, RecipeImportError } from "../types";
+import {
+  collectJsonLdRecipeNodes,
+  getHtmlAttribute,
+  importPageBodyToResponse,
+  isRecord,
+  normalizeHtmlMultilineText,
+  normalizeHtmlText,
+  removeCapture,
+  resolveHttpUrl,
+} from "./page";
 import {
   type DeterministicImportAdapter,
   type DeterministicImportContext,
@@ -12,6 +22,9 @@ const DELISH_KITCHEN_RECIPE_PATH = /^\/recipes\/([0-9]+)\/?$/;
 const DELISH_KITCHEN_RECIPE_PAGE_ID = "recipe";
 const RESTRICTED_RECIPE_NOTE =
   "デリッシュキッチンの制限付きレシピのため、手順は取り込まれていません。";
+// レシピページで、手順のポイント欄に付くラベルと、注意事項欄の見出し。
+const POINT_LABEL = "ポイント";
+const ATTENTION_HEADING = "注意事項";
 
 type IngredientRow =
   | {
@@ -76,7 +89,7 @@ const createDelishKitchenRecipeUrl = (recipeId: string) =>
   `https://${DELISH_KITCHEN_HOST}/recipes/${recipeId}`;
 
 export const delishKitchenImportAdapter: DeterministicImportAdapter = {
-  id: "delish-kitchen",
+  sourceName: "デリッシュキッチン",
 
   match({ normalizedUrl }: DeterministicImportMatchInput) {
     return getDelishKitchenRecipeId(normalizedUrl) !== null;
@@ -118,69 +131,58 @@ export const delishKitchenImportAdapter: DeterministicImportAdapter = {
       );
     }
 
-    const title = normalizeText([extraction.lead, extraction.title].join(" "));
+    const title = normalizeHtmlText([extraction.lead, extraction.title].join(" "));
     const ingredientGroups = buildIngredientGroups(extraction.ingredientRows);
-    const htmlStepTexts = extraction.steps.map((step) => normalizeText(step.text));
-    const isPartialImport = extraction.isRestricted && htmlStepTexts.length === 0;
+    const steps = extraction.steps.flatMap((step, index) => {
+      const text = normalizeHtmlMultilineText(step.text);
+      const points = step.points.map(normalizeHtmlMultilineText).filter(Boolean);
+      const structuredStep = structuredRecipe?.steps[index];
+      const imageUrls =
+        structuredStep &&
+        normalizeTextForComparison(decodeHtmlText(step.text)) ===
+          normalizeTextForComparison(structuredStep.text)
+          ? structuredStep.imageUrls
+          : [];
+      if (!text && points.length === 0 && imageUrls.length === 0) return [];
+      return [
+        {
+          ...(text ? { text } : {}),
+          supplements: [{ heading: POINT_LABEL, body: points.join("\n") }],
+          imageUrls,
+        },
+      ];
+    });
+    // 制限付きレシピは、ページに材料は出ても手順が出ないことがある。読める材料だけで取り込み、
+    // 手順がないことをnoteの先頭で伝える。
+    const isPartialImport = extraction.isRestricted && steps.length === 0;
 
     if (
       !title ||
-      ingredientGroups.length === 0 ||
-      (!isPartialImport && htmlStepTexts.length === 0)
+      ingredientGroups.every((group) => group.ingredients.length === 0) ||
+      (!isPartialImport && steps.length === 0)
     ) {
       throw new RecipeImportError(
         "extraction_failed",
         "Delish Kitchen recipe structure could not be extracted.",
       );
     }
-
-    const steps = isPartialImport
-      ? []
-      : extraction.steps.map((step, index) => {
-          const text = buildStepText(step);
-          const structuredStep = structuredRecipe?.steps[index];
-          const imageUrls =
-            structuredStep &&
-            normalizeTextForComparison(step.text) ===
-              normalizeTextForComparison(structuredStep.text)
-              ? structuredStep.imageUrls
-              : [];
-          return {
-            ...(text ? { text } : {}),
-            images: imageUrls.map((url) => ({
-              type: "externalImageUrl" as const,
-              url,
-            })),
-          };
-        });
     const coverImageUrl = structuredRecipe?.imageUrls[0];
-    const note = buildRecipeNote(extraction.attentionItems, isPartialImport);
+    const attentionItems = extraction.attentionItems
+      .map(normalizeHtmlMultilineText)
+      .filter(Boolean);
     const yieldText = normalizeYieldText(extraction.yieldText);
 
-    const recipeDraftContent: RecipeDraftContent = {
-      title,
-      ...(yieldText ? { yieldText } : {}),
-      ...(coverImageUrl
-        ? {
-            coverImage: {
-              type: "externalImageUrl",
-              url: coverImageUrl,
-            } as const,
-          }
-        : {}),
-      referenceImages: [],
-      ingredientGroups,
-      steps,
-      ...(note ? { note } : {}),
-    };
-
     return {
-      recipeDraftContent,
-      source: {
-        sourceUrl: canonicalUrl,
-        sourceName: "デリッシュキッチン",
+      draftContent: {
+        title,
+        ...(yieldText ? { yieldText } : {}),
+        ...(coverImageUrl ? { coverImageUrl } : {}),
+        ingredientGroups,
+        steps,
+        ...(isPartialImport ? { notice: RESTRICTED_RECIPE_NOTE } : {}),
+        noteSections: [{ heading: ATTENTION_HEADING, body: attentionItems.join("\n") }],
       },
-      warnings: [],
+      sourceUrl: canonicalUrl,
     };
   },
 };
@@ -223,7 +225,7 @@ const extractDelishKitchenRecipe = async (
   await new HTMLRewriter()
     .on('link[rel="canonical"]', {
       element(element) {
-        extraction.canonicalUrl = resolveHttpUrl(element.getAttribute("href"), page.finalUrl);
+        extraction.canonicalUrl = resolveHttpUrl(getHtmlAttribute(element, "href"), page.finalUrl);
       },
     })
     .on('script[type="application/ld+json"]', {
@@ -386,27 +388,6 @@ const findMatchingJsonLdRecipe = (
   return undefined;
 };
 
-const collectJsonLdRecipeNodes = (value: unknown): Record<string, unknown>[] => {
-  const recipes: Record<string, unknown>[] = [];
-  const visit = (node: unknown) => {
-    if (Array.isArray(node)) {
-      for (const item of node) visit(item);
-      return;
-    }
-    if (!isRecord(node)) return;
-
-    const types = Array.isArray(node["@type"]) ? node["@type"] : [node["@type"]];
-    if (types.some((type) => typeof type === "string" && type.toLowerCase() === "recipe")) {
-      recipes.push(node);
-    }
-
-    for (const child of Object.values(node)) visit(child);
-  };
-
-  visit(value);
-  return recipes;
-};
-
 const normalizeJsonLdRecipe = (
   recipe: Record<string, unknown>,
   baseUrl: string,
@@ -475,7 +456,7 @@ const buildIngredientGroups = (rows: IngredientRow[]): RecipeDraftContent["ingre
   for (const row of rows) {
     if (row.type === "group") {
       if (currentGroup.ingredients.length > 0 || currentGroup.label) groups.push(currentGroup);
-      const label = normalizeText(row.label);
+      const label = normalizeHtmlText(row.label);
       currentGroup = {
         ...(label ? { label } : {}),
         ingredients: [],
@@ -483,33 +464,17 @@ const buildIngredientGroups = (rows: IngredientRow[]): RecipeDraftContent["ingre
       continue;
     }
 
-    const name = normalizeText(row.name);
+    const name = normalizeHtmlText(row.name);
     if (name) {
       currentGroup.ingredients.push({
         name,
-        amount: normalizeText(row.amount),
+        amount: normalizeHtmlText(row.amount),
       });
     }
   }
 
   if (currentGroup.ingredients.length > 0 || currentGroup.label) groups.push(currentGroup);
-  return groups.filter((group) => group.ingredients.length > 0);
-};
-
-const buildStepText = (step: StepCapture) => {
-  const text = normalizeMultilineText(step.text);
-  const points = step.points.map(normalizeMultilineText).filter(Boolean);
-  if (points.length === 0) return text;
-  return `${text}\n\nポイント: ${points.join("\n")}`;
-};
-
-const buildRecipeNote = (items: string[], isPartialImport: boolean) => {
-  const normalizedItems = items.map(normalizeMultilineText).filter(Boolean);
-  const sections = [
-    ...(isPartialImport ? [RESTRICTED_RECIPE_NOTE] : []),
-    ...(normalizedItems.length > 0 ? [`注意事項:\n${normalizedItems.join("\n")}`] : []),
-  ];
-  return sections.join("\n\n");
+  return groups;
 };
 
 const extractTexts = (value: unknown): string[] =>
@@ -521,32 +486,5 @@ const extractTexts = (value: unknown): string[] =>
 
 const firstText = (value: unknown) => extractTexts(Array.isArray(value) ? value : [value])[0] ?? "";
 
-const normalizeText = (value: string) => value.replace(/\s+/g, " ").trim();
-
 const normalizeYieldText = (value: string) =>
-  normalizeText(value).replace(/^【/, "").replace(/】$/, "").trim();
-
-const resolveHttpUrl = (rawUrl: string | null, baseUrl: string) => {
-  if (!rawUrl) return undefined;
-  try {
-    const url = new URL(rawUrl, baseUrl);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const removeCapture = <T>(stack: T[], capture: T) => {
-  const index = stack.lastIndexOf(capture);
-  if (index >= 0) stack.splice(index, 1);
-};
-
-const importPageBodyToResponse = (page: FetchedImportPage) => {
-  if (typeof page.body !== "string") return page.body.clone();
-  return new Response(page.body, {
-    headers: page.contentType ? { "content-type": page.contentType } : undefined,
-  });
-};
+  normalizeHtmlText(value).replace(/^【/, "").replace(/】$/, "").trim();

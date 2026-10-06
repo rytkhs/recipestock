@@ -125,8 +125,22 @@ describe("X/Twitter source extraction adapter", () => {
         sourceUrl: CANONICAL_URL,
         sourceName: "X",
       },
-      warnings: [],
     });
+  });
+
+  it("meta descriptionの文字参照を1回だけ戻す", async () => {
+    const result = await xTwitterSourceExtractionAdapter.extract(
+      createContext({
+        fetchHtml: createFetchHtml(
+          createPage(
+            CANONICAL_URL,
+            createXTwitterHtml({ description: "卵 &amp;lt;2個&amp;gt;&#10;焼く" }),
+          ),
+        ),
+      }),
+    );
+
+    expect(result.input.markdownContent).toBe("卵 &lt;2個&gt;\n焼く");
   });
 
   it("literal newlineを含むmeta descriptionから本文を抽出する", async () => {

@@ -127,7 +127,6 @@ describe("TikTok source extraction adapter", () => {
         sourceUrl: VIDEO_URL,
         sourceName: "TikTok",
       },
-      warnings: [],
     });
     expect(result.input.markdownContent).not.toContain(COVER_URL);
     expect(result.input.markdownContent).toContain(USERNAME);

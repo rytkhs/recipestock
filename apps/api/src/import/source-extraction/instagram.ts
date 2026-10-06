@@ -1,3 +1,4 @@
+import { decodeHtmlAttribute } from "../text";
 import {
   type FetchedImportPage,
   RecipeImportError,
@@ -131,7 +132,6 @@ export const instagramSourceExtractionAdapter: SourceExtractionAdapter = {
         sourceUrl: source.canonicalUrl,
         sourceName: INSTAGRAM_SOURCE_NAME,
       },
-      warnings: [],
     };
   },
 };
@@ -210,7 +210,8 @@ const extractContextJsonPayloads = (html: string) => {
       const raw = match[1] ?? match[2];
       if (!raw) continue;
 
-      const decoded = decodeHtml(raw);
+      // 値はURLを多く含むので、属性値と同じ規則で文字参照を戻す。
+      const decoded = decodeHtmlAttribute(raw);
       const candidates = [decoded, decodeJsonString(decoded)];
       for (const candidate of candidates) {
         const payload = parseJson(candidate);
@@ -350,19 +351,6 @@ const decodeJsonString = (value: string) => {
     return value.replaceAll("\\/", "/");
   }
 };
-
-const decodeHtml = (value: string) =>
-  value
-    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) =>
-      String.fromCodePoint(Number.parseInt(code, 16)),
-    )
-    .replaceAll("&amp;", "&")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&#x27;", "'")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">");
 
 const isPrivateOrLoginRequiredHtml = (html: string) =>
   /login|log in|ログイン|challenge|captcha|checkpoint/i.test(html);
