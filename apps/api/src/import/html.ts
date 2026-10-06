@@ -33,13 +33,10 @@ export const getHtmlTextContent = (node: HtmlNode): string => {
   return node.childNodes.map(getHtmlTextContent).join("");
 };
 
-type HtmlTextFormat = "markdown" | "plain";
-
-type RenderHtmlTextOptions = {
-  /** markdownは見出し・リスト・画像を記法で書く。plainは文字と改行だけにする。 */
-  format: HtmlTextFormat;
-  renderImage?: (element: HtmlElement) => string | undefined;
-};
+/** markdownは見出し・リスト・画像を記法で書く。plainは文字と改行だけにする。 */
+type RenderHtmlTextOptions =
+  | { format: "markdown"; renderImage: (element: HtmlElement) => string | undefined }
+  | { format: "plain" };
 
 // CSSは見えないので、表示はWHATWG RenderingのUAスタイルシートで推す。
 // UAでdisplay: noneの要素、スクリプトが有効なら出ないnoscript、中身が代替コンテンツになる埋め込み、
@@ -291,7 +288,7 @@ export const renderHtmlText = (root: HtmlParentNode, options: RenderHtmlTextOpti
     }
 
     if (tagName === "img") {
-      const image = markdown ? options.renderImage?.(element) : undefined;
+      const image = options.format === "markdown" ? options.renderImage(element) : undefined;
       // 画像は自分の行に置く。liの子要素として端の改行を落とされても残るよう、改行を文字で入れる。
       if (image) parts.push("\n", image, "\n");
       return;

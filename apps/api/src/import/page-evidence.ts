@@ -103,7 +103,7 @@ class ImportImageRegistry {
   }
 
   getOrCreate(rawUrl: string | undefined, alt?: string): RecipeImportImageCandidate | undefined {
-    // 下書きの外部画像はhttp(s)しか受け付けないので、それ以外のURLは候補にしない。
+    // RecipeDraftContentの外部画像はhttp(s)しか受け付けないので、それ以外のURLは候補にしない。
     const url = resolveHttpUrl(rawUrl, this.#baseUrl);
     if (!url) return undefined;
 
@@ -201,8 +201,8 @@ const extractRecipeHtmlStructuredEvidence = (
   baseUrl: string,
 ): ExtractedRecipeStructuredEvidence[] => {
   const recipes: ExtractedRecipeStructuredEvidence[] = [];
-  const appendStructuredEvidence = (builder: ExtractedRecipeStructuredEvidence) => {
-    const evidence = normalizeRecipeStructuredEvidence(builder);
+  const appendStructuredEvidence = (recipe: ExtractedRecipeStructuredEvidence) => {
+    const evidence = normalizeRecipeStructuredEvidence(recipe);
     if (evidence) recipes.push(evidence);
   };
 
@@ -215,10 +215,10 @@ const extractRecipeHtmlStructuredEvidence = (
       if (!isHtmlElement(element)) continue;
 
       const ownMicrodataRecipe = isMicrodataRecipeScope(element)
-        ? createRecipeStructuredEvidenceBuilder("microdata")
+        ? createEmptyRecipeStructuredEvidence("microdata")
         : undefined;
       const ownRdfaRecipe = hasSchemaRecipeType(getHtmlAttribute(element, "typeof"))
-        ? createRecipeStructuredEvidenceBuilder("rdfa")
+        ? createEmptyRecipeStructuredEvidence("rdfa")
         : undefined;
       const currentMicrodataRecipe = ownMicrodataRecipe ?? microdataRecipe;
       const currentRdfaRecipe = ownRdfaRecipe ?? rdfaRecipe;
@@ -240,7 +240,7 @@ const isMicrodataRecipeScope = (element: HtmlElement) =>
   getHtmlAttribute(element, "itemscope") !== undefined &&
   hasSchemaRecipeType(getHtmlAttribute(element, "itemtype"));
 
-const createRecipeStructuredEvidenceBuilder = (
+const createEmptyRecipeStructuredEvidence = (
   format: ExtractedRecipeStructuredEvidence["format"],
 ): ExtractedRecipeStructuredEvidence => ({
   format,
@@ -252,24 +252,24 @@ const createRecipeStructuredEvidenceBuilder = (
 
 const captureRecipeStructuredProperties = (
   element: HtmlElement,
-  builder: ExtractedRecipeStructuredEvidence | undefined,
+  recipe: ExtractedRecipeStructuredEvidence | undefined,
   attributeName: "itemprop" | "property",
   baseUrl: string,
 ) => {
-  if (!builder) return;
+  if (!recipe) return;
 
   const properties = normalizeRecipeStructuredProperties(getHtmlAttribute(element, attributeName));
   if (properties.length === 0) return;
 
   const attributeValue = extractStructuredElementValue(element);
   if (attributeValue) {
-    appendRecipeStructuredValue(builder, properties, attributeValue, baseUrl);
+    appendRecipeStructuredValue(recipe, properties, attributeValue, baseUrl);
     return;
   }
 
   const text = renderHtmlText(element, { format: "plain" });
   if (text) {
-    appendRecipeStructuredValue(builder, properties, text, "");
+    appendRecipeStructuredValue(recipe, properties, text, "");
   }
 };
 
@@ -283,40 +283,40 @@ const extractStructuredElementValue = (element: HtmlElement) => {
 };
 
 const appendRecipeStructuredValue = (
-  builder: ExtractedRecipeStructuredEvidence,
+  recipe: ExtractedRecipeStructuredEvidence,
   properties: RecipeStructuredProperty[],
   value: string,
   baseUrl: string,
 ) => {
   for (const property of properties) {
     if (property === "name") {
-      builder.name ??= value;
+      recipe.name ??= value;
     } else if (property === "yieldText") {
-      builder.yieldText ??= value;
+      recipe.yieldText ??= value;
     } else if (property === "imageUrls") {
       const imageUrl = resolveHttpUrl(value, baseUrl);
-      if (imageUrl) builder.imageUrls.push(imageUrl);
+      if (imageUrl) recipe.imageUrls.push(imageUrl);
     } else if (property === "rawIngredients") {
-      builder.rawIngredients.push(value);
+      recipe.rawIngredients.push(value);
     } else if (property === "rawInstructions") {
-      builder.rawInstructions.push(value);
+      recipe.rawInstructions.push(value);
     }
   }
 };
 
 const normalizeRecipeStructuredEvidence = (
-  builder: ExtractedRecipeStructuredEvidence,
+  recipe: ExtractedRecipeStructuredEvidence,
 ): ExtractedRecipeStructuredEvidence | undefined => {
   const evidence = {
-    format: builder.format,
-    name: builder.name ? normalizeSingleLineText(builder.name) || undefined : undefined,
-    yieldText: builder.yieldText
-      ? normalizeSingleLineText(builder.yieldText) || undefined
+    format: recipe.format,
+    name: recipe.name ? normalizeSingleLineText(recipe.name) || undefined : undefined,
+    yieldText: recipe.yieldText
+      ? normalizeSingleLineText(recipe.yieldText) || undefined
       : undefined,
-    imageUrls: dedupeStrings(builder.imageUrls),
-    rawIngredients: dedupeStrings(builder.rawIngredients.filter(Boolean)),
-    rawInstructions: dedupeStrings(builder.rawInstructions.filter(Boolean)),
-    structuredInstructions: builder.structuredInstructions,
+    imageUrls: dedupeStrings(recipe.imageUrls),
+    rawIngredients: dedupeStrings(recipe.rawIngredients),
+    rawInstructions: dedupeStrings(recipe.rawInstructions),
+    structuredInstructions: recipe.structuredInstructions,
   } satisfies ExtractedRecipeStructuredEvidence;
 
   if (
