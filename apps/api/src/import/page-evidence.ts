@@ -1,3 +1,4 @@
+import { imageContentTypeSchema } from "@recipestock/schemas";
 import {
   forEachHtmlElement,
   getHtmlAttribute,
@@ -60,10 +61,7 @@ export const extractRecipePageEvidence = async (
     format: "markdown",
     renderImage: (element) => {
       const alt = getHtmlAttribute(element, "alt");
-      const candidate = imageRegistry.getOrCreate(
-        getHtmlAttribute(element, "src") ?? getHtmlAttribute(element, "data-src"),
-        alt,
-      );
+      const candidate = imageRegistry.getOrCreate(getImageElementUrl(element, baseUrl), alt);
       return candidate ? formatMarkdownImage(candidate.url, alt) : undefined;
     },
   }).slice(0, MAX_MARKDOWN_CONTENT_LENGTH);
@@ -135,6 +133,81 @@ const resolveHttpUrl = (rawUrl: string | undefined, baseUrl: string | undefined)
   } catch {
     return undefined;
   }
+};
+
+// 遅延読み込みでは本物の画像を`data-src`に置き、`src`にはプレースホルダを入れる。両方あれば`data-src`を使う。
+// `src`も使えなければ、`srcset`と、`picture`の中なら`source`の`srcset`から選ぶ。
+const getImageElementUrl = (image: HtmlElement, baseUrl: string) =>
+  resolveHttpUrl(getHtmlAttribute(image, "data-src"), baseUrl) ??
+  resolveHttpUrl(getHtmlAttribute(image, "src"), baseUrl) ??
+  selectLargestSrcsetUrl(getHtmlAttribute(image, "srcset"), baseUrl) ??
+  getPictureSourceUrl(image, baseUrl);
+
+// ブラウザと同じく、imgより前のsourceだけを文書順に見る。mediaは評価できないので、使える最初のsourceにする。
+const getPictureSourceUrl = (image: HtmlElement, baseUrl: string) => {
+  const picture = image.parentNode;
+  if (!picture || !isHtmlElement(picture) || picture.tagName !== "picture") return undefined;
+
+  for (const child of picture.childNodes) {
+    if (child === image) break;
+    if (!isHtmlElement(child) || child.tagName !== "source") continue;
+    if (!isStorableImageType(getHtmlAttribute(child, "type"))) continue;
+
+    const url = selectLargestSrcsetUrl(getHtmlAttribute(child, "srcset"), baseUrl);
+    if (url) return url;
+  }
+
+  return undefined;
+};
+
+// 外部画像は保存時に取得し直すので、保存できない形式（avifなど）のsourceは選ばない。
+const isStorableImageType = (type: string | undefined) =>
+  type === undefined || imageContentTypeSchema.safeParse(type.trim().toLowerCase()).success;
+
+// 複数のサイズから選べるときは大きいものにする。5MBを超える画像は保存時に捨てられる。
+const selectLargestSrcsetUrl = (srcset: string | undefined, baseUrl: string) => {
+  let selected: { url: string; size: number } | undefined;
+
+  for (const candidate of parseSrcset(srcset ?? "")) {
+    const url = resolveHttpUrl(candidate.url, baseUrl);
+    if (url && (!selected || candidate.size > selected.size)) {
+      selected = { url, size: candidate.size };
+    }
+  }
+
+  return selected?.url;
+};
+
+// HTML仕様の手順でsrcsetを読む。URLはカンマを含みうるので、先にカンマで分けない。
+// 大きさは幅記述子があればその幅、なければ密度記述子にする。記述子がなければ1x。
+const parseSrcset = (srcset: string) => {
+  const candidates: { url: string; size: number }[] = [];
+  const urlPattern = /[\s,]*(\S+)/y;
+
+  for (let match = urlPattern.exec(srcset); match; match = urlPattern.exec(srcset)) {
+    const rawUrl = match[1] ?? "";
+    const url = rawUrl.replace(/,+$/, "");
+    let descriptors = "";
+    // 末尾がカンマのURLは、記述子を持たずにそこで候補が終わる。
+    if (url === rawUrl) {
+      const end = srcset.indexOf(",", urlPattern.lastIndex);
+      descriptors = srcset.slice(urlPattern.lastIndex, end === -1 ? undefined : end);
+      urlPattern.lastIndex = end === -1 ? srcset.length : end + 1;
+    }
+
+    candidates.push({ url, size: parseSrcsetCandidateSize(descriptors) });
+  }
+
+  return candidates;
+};
+
+const parseSrcsetCandidateSize = (descriptors: string) => {
+  for (const descriptor of descriptors.trim().split(/\s+/)) {
+    const size = /^(\d+(?:\.\d+)?)[wx]$/.exec(descriptor)?.[1];
+    if (size) return Number(size);
+  }
+
+  return 1;
 };
 
 // ブラウザのdocument.titleと同じく、最初のHTMLのtitleだけを使う。SVGのtitleは名前空間が違うので入らない。
@@ -261,7 +334,10 @@ const captureRecipeStructuredProperties = (
   const properties = normalizeRecipeStructuredProperties(getHtmlAttribute(element, attributeName));
   if (properties.length === 0) return;
 
-  const attributeValue = extractStructuredElementValue(element);
+  const attributeValue =
+    element.tagName === "img"
+      ? getImageElementUrl(element, baseUrl)
+      : extractStructuredElementValue(element);
   if (attributeValue) {
     appendRecipeStructuredValue(recipe, properties, attributeValue, baseUrl);
     return;

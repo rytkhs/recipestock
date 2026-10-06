@@ -800,6 +800,82 @@ describe("Recipe page evidence", () => {
     expect(evidence.imageCandidates).toEqual([]);
     expect(evidence.markdownContent).not.toContain("data:");
   });
+
+  it("遅延読み込みの画像は、srcのプレースホルダではなくdata-srcの画像を候補にする", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <p>Enough visible recipe content.</p>
+          <img class="lazy" src="/place-hold.gif" data-src="/steps/1.jpg" alt="手順1">
+          <img class="lazy" src="/place-hold.gif" data-src="/steps/2.jpg" alt="手順2">
+        </body>
+      </html>
+    `);
+
+    expect(evidence.imageCandidates.map((candidate) => candidate.url)).toEqual([
+      "https://example.com/steps/1.jpg",
+      "https://example.com/steps/2.jpg",
+    ]);
+    expect(evidence.markdownContent).toContain("![手順1](<https://example.com/steps/1.jpg>)");
+  });
+
+  it("srcが使えない画像は、srcsetからいちばん大きい画像を選び、カンマを含むURLも分けない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <p>Enough visible recipe content.</p>
+          <img
+            src="data:image/gif;base64,R0lGODlhAQABAAAAACw="
+            srcset="https://images.example.com/w_400,c_limit/pasta.jpg 400w, https://images.example.com/w_1200,c_limit/pasta.jpg 1200w, https://images.example.com/w_800,c_limit/pasta.jpg 800w"
+            alt="pasta"
+          >
+        </body>
+      </html>
+    `);
+
+    expect(evidence.imageCandidates.map((candidate) => candidate.url)).toEqual([
+      "https://images.example.com/w_1200,c_limit/pasta.jpg",
+    ]);
+  });
+
+  it("pictureの画像は、保存できない形式のsourceを飛ばし、使えるsourceのsrcsetから選ぶ", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <p>Enough visible recipe content.</p>
+          <picture>
+            <source type="image/avif" srcset="/hero.avif">
+            <source type="image/jpeg" srcset="/hero-1x.jpg 1x, /hero-2x.jpg 2x" media="(min-width: 960px)">
+            <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="hero">
+          </picture>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.imageCandidates.map((candidate) => candidate.url)).toEqual([
+      "https://example.com/hero-2x.jpg",
+    ]);
+  });
+
+  it("Microdataの画像も、srcのプレースホルダではなくdata-srcの画像にする", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Omelette</h1>
+            <img itemprop="image" class="lazy" src="/place-hold.gif" data-src="/omelette.jpg" alt="Omelette">
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual(
+      expect.objectContaining({
+        format: "microdata",
+        imageUrls: ["https://example.com/omelette.jpg"],
+      }),
+    );
+  });
 });
 
 const extractRecipeHtml = (body: string) =>
