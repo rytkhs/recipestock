@@ -1,3 +1,5 @@
+import { decodeHTML, decodeHTMLAttribute } from "entities/decode";
+
 // 同じ内容を別マークアップから取った値どうしを比較するための正規化。
 // タグが表す区切りは空白や改行として現れ方が揃わないため、空白を全て落として比べる。
 export const normalizeTextForComparison = (value: string) => value.replace(/\s+/g, "");
@@ -14,27 +16,9 @@ export const normalizeMultilineText = (value: string) =>
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-// 名前付きの文字参照は、ここにある6種類だけを戻す。すべてを仕様どおりに戻す方法は #177 で決める。
-const NAMED_HTML_ENTITIES = new Map([
-  ["amp", "&"],
-  ["apos", "'"],
-  ["gt", ">"],
-  ["lt", "<"],
-  ["nbsp", " "],
-  ["quot", '"'],
-]);
+// HTMLRewriterや正規表現で読んだ生の値の文字参照を、HTMLの仕様どおりに戻す（parse5と同じデコーダ）。
+// 本文と属性値では規則が違う。属性値では`?a=1&copy=2`の`&copy`を戻さない。
+// NULとサロゲートはU+FFFDになるので、戻した値はjsonbに保存できる。
+export const decodeHtmlText = (value: string) => decodeHTML(value);
 
-// NULとサロゲートはjsonbに保存できないので、数値参照のまま残す。
-const isStorableCodePoint = (codePoint: number) =>
-  codePoint > 0 && codePoint <= 0x10ffff && (codePoint < 0xd800 || codePoint > 0xdfff);
-
-export const decodeHtmlEntities = (value: string) =>
-  value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, body: string) => {
-    if (!body.startsWith("#")) return NAMED_HTML_ENTITIES.get(body) ?? entity;
-
-    const codePoint =
-      body[1] === "x" || body[1] === "X"
-        ? Number.parseInt(body.slice(2), 16)
-        : Number.parseInt(body.slice(1), 10);
-    return isStorableCodePoint(codePoint) ? String.fromCodePoint(codePoint) : entity;
-  });
+export const decodeHtmlAttribute = (value: string) => decodeHTMLAttribute(value);

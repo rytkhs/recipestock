@@ -174,7 +174,7 @@ describe("cookpadImportAdapter", () => {
         stepTexts,
         ingredients: `
           <li class="justified-quantity-and-name not-headline">
-            <span>S&amp;Bカレー粉</span><bdi>大さじ1</bdi>
+            <span>S&amp;Bカレー粉</span><bdi>大さじ1&frac12;</bdi>
           </li>
         `,
         note: `
@@ -193,7 +193,7 @@ describe("cookpadImportAdapter", () => {
         type: "externalImageUrl",
         url: `${cookpadCoverImageUrl(1360, 1562, 80)}?v=1&fit=crop`,
       },
-      ingredientGroups: [{ ingredients: [{ name: "S&Bカレー粉", amount: "大さじ1" }] }],
+      ingredientGroups: [{ ingredients: [{ name: "S&Bカレー粉", amount: "大さじ1½" }] }],
       note: "コツ・ポイント\n足す方がいいかもしれません><",
     });
     expect(result.recipeDraftContent.steps[0].text).toBe(

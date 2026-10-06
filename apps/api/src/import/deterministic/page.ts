@@ -1,4 +1,9 @@
-import { decodeHtmlEntities, normalizeMultilineText, normalizeSingleLineText } from "../text";
+import {
+  decodeHtmlAttribute,
+  decodeHtmlText,
+  normalizeMultilineText,
+  normalizeSingleLineText,
+} from "../text";
 import { type FetchedImportPage } from "../types";
 
 export type HtmlRewriterElement = Parameters<
@@ -6,15 +11,14 @@ export type HtmlRewriterElement = Parameters<
 >[0];
 
 // HTMLRewriterは本文も属性値も文字参照を戻さずに渡すので、ページに表示される文字に戻してから使う。
-export const normalizeHtmlText = (value: string) =>
-  normalizeSingleLineText(decodeHtmlEntities(value));
+export const normalizeHtmlText = (value: string) => normalizeSingleLineText(decodeHtmlText(value));
 
 export const normalizeHtmlMultilineText = (value: string) =>
-  normalizeMultilineText(decodeHtmlEntities(value));
+  normalizeMultilineText(decodeHtmlText(value));
 
 export const getHtmlAttribute = (element: HtmlRewriterElement, name: string) => {
   const value = element.getAttribute(name);
-  return value === null ? null : decodeHtmlEntities(value);
+  return value === null ? null : decodeHtmlAttribute(value);
 };
 
 /**
