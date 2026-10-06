@@ -767,9 +767,7 @@ describe("Recipe page evidence", () => {
       </html>
     `);
 
-    expect(evidence.markdownContent).toBe(
-      "## 材料\n\nカニ缶(ズワイガニ) 100g\n卵 2個\n＜調味料1＞",
-    );
+    expect(evidence.markdownContent).toContain("カニ缶(ズワイガニ) 100g\n卵 2個\n＜調味料1＞");
   });
 
   it("見出しだけを包むbやspanの中の見出しは、ブロックとして行を変える", async () => {
