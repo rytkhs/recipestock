@@ -663,7 +663,7 @@ describe("Recipe page evidence", () => {
     expect(evidence.markdownContent).toBe("A\uFFFDB \uFFFD \uFFFD –");
   });
 
-  it("JSON-LDの文字列は、終了タグか<br>があるときだけHTMLとして、ページの本文と同じ区切りでテキストにする", async () => {
+  it("JSON-LDの文字列は、エスケープされていても終了タグか<br>があるときだけHTMLとして、ページの本文と同じ区切りでテキストにする", async () => {
     const evidence = await extractRecipeHtml(`
       <html>
         <head>
@@ -671,9 +671,10 @@ describe("Recipe page evidence", () => {
             {
               "@type": "Recipe",
               "name": "Renkon",
-              "recipeIngredient": ["<b>Salt</b> 1 tsp", "温度 &lt; 180℃", "200g < 300g", "<A>醤油 大さじ1"],
+              "recipeIngredient": ["<b>Salt</b> 1 tsp", "温度 &lt; 180℃", "200g < 300g", "<A>醤油 大さじ1", "&lt;B&gt;砂糖 大さじ1"],
               "recipeInstructions": [
                 "<p>玉ねぎを切る</p><p>炒める</p>",
+                "&lt;p&gt;塩を振る&lt;/p&gt;&lt;p&gt;焼く&lt;br&gt;返す&lt;/p&gt;",
                 {
                   "@type": "HowToStep",
                   "text": "れんこんは<a href=\\"/wordlist/輪切り\\">輪切り</a>にする。<br>水にさらす。"
@@ -690,9 +691,16 @@ describe("Recipe page evidence", () => {
     expect(evidence.recipeStructuredEvidence).toContainEqual(
       expect.objectContaining({
         format: "jsonLd",
-        rawIngredients: ["Salt 1 tsp", "温度 < 180℃", "200g < 300g", "<A>醤油 大さじ1"],
+        rawIngredients: [
+          "Salt 1 tsp",
+          "温度 < 180℃",
+          "200g < 300g",
+          "<A>醤油 大さじ1",
+          "<B>砂糖 大さじ1",
+        ],
         rawInstructions: [
           "玉ねぎを切る\n\n炒める",
+          "塩を振る\n\n焼く\n返す",
           "れんこんは輪切りにする。\n水にさらす。",
           "<A>を加えて、x<yになるまで煮る。",
         ],
