@@ -632,6 +632,29 @@ describe("Recipe page evidence", () => {
     ]);
   });
 
+  it("HTMLでないJSON-LDの文字列では、文中のURLのパラメータを文字参照として戻さない", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <head>
+          <script type="application/ld+json">
+            {
+              "@type": "Recipe",
+              "name": "Pizza",
+              "recipeInstructions": ["https://example.com/v?id=1&region=jp&notes=2 &amp; 180&deg;"]
+            }
+          </script>
+        </head>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toEqual([
+      expect.objectContaining({
+        format: "jsonLd",
+        rawInstructions: ["https://example.com/v?id=1&region=jp&notes=2 & 180°"],
+      }),
+    ]);
+  });
+
   it("仕様の外にある数値参照で落ちず、U+FFFDに置き換える", async () => {
     const evidence = await extractRecipeHtml(
       "<html><body><p>A&#0;B &#99999999; &#xD800; &#150;</p></body></html>",
