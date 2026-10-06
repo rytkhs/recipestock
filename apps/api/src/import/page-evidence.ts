@@ -484,22 +484,19 @@ const isJsonLdRecipeNode = (record: Record<string, unknown>): boolean => {
 
 // JSON-LDの文字列は本来テキストだが、HTMLのタグや文字参照をそのまま書くページがある（Nadiaの手順のリンクなど）。
 // テキストをHTMLとして読むと文字が消える（グループの印の`<A>`、`x<y`の後ろ）ので、HTMLとして読むのは、
-// 終了タグか<br>があって作り手がHTMLを書いたと分かる文字列だけにする。HTMLを`&lt;p&gt;`のように
-// エスケープして書くページもあるので、文字参照を戻したあとにも同じく判定する。それ以外の`<`は文字として残し、
+// 終了タグか<br>があって作り手がHTMLを書いたと分かる文字列だけにする。`&lt;p&gt;`のようにエスケープしたHTMLは、
+// 戻したタグが文字として残るが、HTMLとしては読まない（残ったタグより、消えた`&lt;A&gt;`の印の方がAIは取り戻せない）。
+// それ以外の`<`は文字として残し、
 // 文字参照は画像のURLと同じ属性値の規則で戻す（文中のURLの`&region=`を`®ion=`にしない）。
 // どちらもページの本文と同じ規則でテキストにする。
 const JSON_LD_HTML_PATTERN = /<\/[a-z]|<br\b/i;
 
-const toJsonLdText = (value: string) => {
-  if (JSON_LD_HTML_PATTERN.test(value)) return renderHtmlFragmentText(value);
-
-  const decoded = decodeHtmlAttribute(value);
-  return renderHtmlFragmentText(
-    JSON_LD_HTML_PATTERN.test(decoded)
-      ? decoded
-      : decoded.replaceAll("&", "&amp;").replaceAll("<", "&lt;"),
+const toJsonLdText = (value: string) =>
+  renderHtmlFragmentText(
+    JSON_LD_HTML_PATTERN.test(value)
+      ? value
+      : decodeHtmlAttribute(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;"),
   );
-};
 
 const collectJsonLdStrings = (value: unknown): string[] => {
   const texts: string[] = [];
