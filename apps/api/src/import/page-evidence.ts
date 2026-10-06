@@ -642,17 +642,22 @@ const extractJsonLdImageUrls = (value: unknown, baseUrl: string): string[] => {
 
 // ---- 共通 ----
 
-// 材料や手順の一部だけを残すと誤った証拠になるので、レシピの途中では切らない。
-// 上限を超えたレシピから後ろを落とす。1件目まで落とすと構造化証拠がなくなるので、1件目は長さにかかわらず残す。
+// 材料や手順の一部だけを残すと誤った証拠になるので、レシピの途中では切らず、上限に収まらないレシピを落とす。
+// 形式ごとの1件目は長さにかかわらず残す。JSON-LDの1件目が長い関連レシピでも、microdataにしかない本体を落とさない。
 const takeRecipesWithinLength = (recipes: ExtractedRecipeStructuredEvidence[]) => {
   const kept: ExtractedRecipeStructuredEvidence[] = [];
+  const keptFormats = new Set<ExtractedRecipeStructuredEvidence["format"]>();
   let length = 0;
 
   for (const recipe of recipes) {
-    length += JSON.stringify(recipe).length;
-    if (kept.length > 0 && length > MAX_STRUCTURED_EVIDENCE_LENGTH) break;
+    const recipeLength = JSON.stringify(recipe).length;
+    if (keptFormats.has(recipe.format) && length + recipeLength > MAX_STRUCTURED_EVIDENCE_LENGTH) {
+      continue;
+    }
 
     kept.push(recipe);
+    keptFormats.add(recipe.format);
+    length += recipeLength;
   }
 
   return kept;

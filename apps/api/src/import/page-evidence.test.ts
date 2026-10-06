@@ -187,7 +187,7 @@ describe("Recipe page evidence", () => {
     ]);
   });
 
-  it("構造化証拠は長さの上限を超えたレシピから後ろを落とし、レシピの途中では切らない", async () => {
+  it("構造化証拠は長さの上限に収まらないレシピを落とし、レシピの途中では切らない", async () => {
     const instruction = "Stir the sauce. ".repeat(300).trim();
     const recipes = ["Soup A", "Soup B", "Soup C"].map((name) => ({
       "@type": "Recipe",
@@ -214,7 +214,7 @@ describe("Recipe page evidence", () => {
     ]);
   });
 
-  it("1件目のレシピは、それだけで長さの上限を超えても残す", async () => {
+  it("形式ごとの1件目のレシピは、それだけで長さの上限を超えても残す", async () => {
     const instruction = "Stir the sauce. ".repeat(1000).trim();
     const recipes = ["Long soup", "Short soup"].map((name) => ({
       "@type": "Recipe",
@@ -226,16 +226,25 @@ describe("Recipe page evidence", () => {
         <head>
           <script type="application/ld+json">${JSON.stringify({ "@graph": recipes })}</script>
         </head>
-        <body><main><p>Enough visible recipe content for extraction.</p></main></body>
+        <body>
+          <main itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Main soup</h1>
+            <p itemprop="recipeInstructions">Boil.</p>
+          </main>
+        </body>
       </html>
     `);
 
     expect(
-      evidence.recipeStructuredEvidence.map(({ name, rawInstructions }) => ({
+      evidence.recipeStructuredEvidence.map(({ format, name, rawInstructions }) => ({
+        format,
         name,
         rawInstructions,
       })),
-    ).toEqual([{ name: "Long soup", rawInstructions: [instruction] }]);
+    ).toEqual([
+      { format: "jsonLd", name: "Long soup", rawInstructions: [instruction] },
+      { format: "microdata", name: "Main soup", rawInstructions: ["Boil."] },
+    ]);
   });
 
   it("JSON.parseが受け付けない空白を含むJSON-LDも、文字列の中身を変えずに読む", async () => {
