@@ -181,14 +181,31 @@ const LIST_ITEM_BLOCK_TAG_NAMES = new Set([...LIST_TAG_NAMES, "dl", "table"]);
 // 整形済みテキストの中では、テキストの端の改行も残す。空白は最後にほかと同じく畳む。
 const PREFORMATTED_TAG_NAMES = new Set(["listing", "plaintext", "pre", "xmp"]);
 
-// HTMLでは見出しをspanなどの中に置けない。置いているページは、CSSでインラインに見せている（E・レシピの材料名）。
-const isHeadingInsidePhrasing = (element: HtmlElement) => {
-  for (let current = element.parentNode; current && isHtmlElement(current); ) {
-    if (PHRASING_TAG_NAMES.has(current.tagName)) return true;
-    if (LINE_BOX_TAG_NAMES.has(current.tagName)) return false;
-    current = current.parentNode;
+// HTMLでは見出しをspanなどの中に置けない。見出しがspanなどの中でほかの文字と並んでいれば、CSSでインラインに
+// 見せている（E・レシピは材料名の<h2>を、分量と同じ<span>に入れている）。見出しだけを包むbやspanは
+// 編集ツールが付ける飾りで、見出しはブロックのまま表示されるので、行を変える。
+const isHeadingShownInline = (heading: HtmlElement) => {
+  let outermostPhrasing: HtmlElement | undefined;
+  for (
+    let current = heading.parentNode;
+    current && isHtmlElement(current) && !LINE_BOX_TAG_NAMES.has(current.tagName);
+    current = current.parentNode
+  ) {
+    if (PHRASING_TAG_NAMES.has(current.tagName)) outermostPhrasing = current;
   }
-  return false;
+
+  return (
+    outermostPhrasing?.childNodes.some((child) => hasRenderedTextOutside(child, heading)) ?? false
+  );
+};
+
+const hasRenderedTextOutside = (node: HtmlNode, excluded: HtmlElement): boolean => {
+  if (node.nodeName === "#text") {
+    return /[^\t\n\f ]/.test((node as DefaultTreeAdapterTypes.TextNode).value);
+  }
+  if (node === excluded || !isHtmlElement(node) || isNotRendered(node)) return false;
+
+  return node.childNodes.some((child) => hasRenderedTextOutside(child, excluded));
 };
 
 const isNotRendered = (element: HtmlElement) =>
@@ -337,7 +354,7 @@ export const renderHtmlText = (root: HtmlParentNode, options: RenderHtmlTextOpti
 
     if (
       !BLOCK_TAG_NAMES.has(tagName) ||
-      (HEADING_TAG_NAMES.has(tagName) && isHeadingInsidePhrasing(element))
+      (HEADING_TAG_NAMES.has(tagName) && isHeadingShownInline(element))
     ) {
       visitChildren(element);
       return;

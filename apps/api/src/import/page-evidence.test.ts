@@ -746,7 +746,7 @@ describe("Recipe page evidence", () => {
     expect(evidence.markdownContent).not.toContain("arrow");
   });
 
-  it("spanなどの中に置かれた見出しは、インラインに見せているとみなして行を変えない", async () => {
+  it("spanなどの中でほかの文字と並ぶ見出しは、インラインに見せているとみなして行を変えない", async () => {
     const evidence = await extractRecipeHtml(`
       <html>
         <body>
@@ -761,6 +761,29 @@ describe("Recipe page evidence", () => {
     expect(evidence.markdownContent).toBe(
       "## 材料\n\nカニ缶(ズワイガニ) 100g\n卵 2個\n＜調味料1＞",
     );
+  });
+
+  it("見出しだけを包むbやspanの中の見出しは、ブロックとして行を変える", async () => {
+    const evidence = await extractRecipeHtml(`
+      <html>
+        <body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Omelette</h1>
+            <div itemprop="recipeIngredient"><span style="color:red"><h3>調味料</h3></span>醤油 大さじ1</div>
+            <div itemprop="recipeInstructions"><b><h3>作り方</h3></b>卵を割る。</div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    expect(evidence.recipeStructuredEvidence).toContainEqual(
+      expect.objectContaining({
+        format: "microdata",
+        rawIngredients: ["調味料\n醤油 大さじ1"],
+        rawInstructions: ["作り方\n卵を割る。"],
+      }),
+    );
+    expect(evidence.markdownContent).toContain("### 作り方\n\n卵を割る。");
   });
 
   it("http(s)以外の画像URLは候補にしない", async () => {
