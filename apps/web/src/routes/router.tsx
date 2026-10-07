@@ -39,6 +39,7 @@ import { type ImportUrlSearch } from "./import";
 import { type ImportTextSearch } from "./import-text";
 
 const LoginScreen = lazyRouteComponent(() => import("./login"), "LoginRoute");
+const ContactRoute = lazyRouteComponent(() => import("./contact"), "ContactRoute");
 const ImportUrlScreen = lazyRouteComponent(() => import("./import"), "ImportUrlRoute");
 const ImportTextScreen = lazyRouteComponent(() => import("./import-text"), "ImportTextRoute");
 const RecipesIndexRoute = lazyRouteComponent(() => import("./recipes-index"), "RecipesIndexRoute");
@@ -371,6 +372,16 @@ const loginRoute = createRoute({
   pendingMs: 0,
 });
 
+// ログインしていなくても開ける。ログイン中でも一覧へ戻さない。
+const contactRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/contact",
+  component: ContactRoute,
+  errorComponent: RouteChunkError,
+  pendingComponent: () => <LoadingStatus />,
+  pendingMs: 0,
+});
+
 const stringSearchParam = (value: unknown) => (typeof value === "string" ? value : undefined);
 
 const importUrlRoute = createRoute({
@@ -486,7 +497,7 @@ const tagsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  publicLayoutRoute.addChildren([indexRoute, loginRoute]),
+  publicLayoutRoute.addChildren([indexRoute, loginRoute, contactRoute]),
   protectedLayoutRoute.addChildren([
     recipesRoute,
     newRecipeRoute,

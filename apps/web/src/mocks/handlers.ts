@@ -1116,6 +1116,15 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       return svgResponse(objectKey);
     }),
 
+    // 問い合わせはSSGformへ直接送る。mockから実際のフォームへ届かないよう、ここで受け付ける。
+    http.post("https://ssgform.com/s/:formId", async () => {
+      if (delayMs > 0) {
+        await delay(delayMs);
+      }
+
+      return new HttpResponse(null, { status: 200 });
+    }),
+
     // どのハンドラにも当たらなかったAPI。素通しするとViteのproxyで実APIに届くので、ここで止める。
     // 必ず末尾に置く。
     http.all("/api/*", ({ request }) => {
