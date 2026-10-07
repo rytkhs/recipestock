@@ -9,7 +9,7 @@
     },
     "@recipestock/web#build": {
       "dependsOn": ["^build"],
-      "env": ["VITE_IOS_SHARE_SHORTCUT_URL"],
+      "env": ["VITE_IOS_SHARE_SHORTCUT_URL", "VITE_CONTACT_FORM_URL"],
       "outputs": ["dist/**"]
     },
     "@recipestock/api#build": {

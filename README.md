@@ -86,6 +86,9 @@ cp apps/api/.dev.vars.example apps/api/.dev.vars
 `VITE_IOS_SHARE_SHORTCUT_URL` には、設定画面から追加する公開済みの iOS Shortcut URL
 を設定してください。この値は Web アプリのビルド時にブラウザ向けコードへ埋め込まれます。
 Shortcut のアクション列と API 契約は `docs/shortcut/ios-share.md` にあります。
+`VITE_CONTACT_FORM_URL` には、お問い合わせ（`/contact`）の送信先にする SSGform のフォーム URL
+（`https://ssgform.com/s/<フォームID>`）を設定してください。この値もビルド時に埋め込まれます。
+本番とは別の開発用フォームを使ってください。
 
 Cloudflare にログインし、開発用 R2 bucket を作成します。
 
@@ -279,6 +282,7 @@ pnpm --filter @recipestock/api exec wrangler deploy --dry-run
 
 - `DATABASE_URL`
 - `VITE_IOS_SHARE_SHORTCUT_URL`（Web ビルド時に公開される iOS Shortcut URL）
+- `VITE_CONTACT_FORM_URL`（Web ビルド時に埋め込むお問い合わせの SSGform フォーム URL）
 - `VITE_SENTRY_DSN`（Web ビルド時に埋め込む Sentry DSN）
 - `SENTRY_DSN`（Worker の Sentry DSN）
 - `BETTER_AUTH_SECRET`
