@@ -26,9 +26,7 @@ export const ShortcutQuestionIllustration = () => (
   <IllustrationFrame label="ショートカットApp">
     <div className={cn(systemPanelClass, "flex flex-col gap-2.5 p-3.5")}>
       <p className="text-center font-bold text-[13px]">ショートカットを設定</p>
-      <p className="text-xs leading-relaxed">
-        KitchenCatでコピーした連携キーを貼り付けてください
-      </p>
+      <p className="text-xs leading-relaxed">KitchenCatでコピーした連携キーを貼り付けてください</p>
       <div className="relative mt-6 h-[34px] rounded-[8px] bg-white shadow-[inset_0_0_0_2px_var(--brand-orange)]">
         <span className="-top-7 absolute left-2.5 rounded-[7px] bg-[#1c1c1e] px-2.5 py-1 text-[11px] text-white">
           ペースト
