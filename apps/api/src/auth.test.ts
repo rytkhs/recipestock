@@ -8,7 +8,7 @@ describe("createAuthEmailCallbacks", () => {
     const send = vi.fn<EmailSender["send"]>(async () => ({ id: "email-1" }));
     const callbacks = createAuthEmailCallbacks({
       emailSender: { send },
-      from: "Recipe Stock <login@example.com>",
+      from: "KitchenCat <login@example.com>",
     });
 
     await callbacks.sendVerificationEmail({
@@ -17,9 +17,9 @@ describe("createAuthEmailCallbacks", () => {
     });
 
     expect(send).toHaveBeenCalledWith({
-      from: "Recipe Stock <login@example.com>",
+      from: "KitchenCat <login@example.com>",
       to: "user@example.com",
-      subject: "【Recipe Stock】メールアドレスの確認",
+      subject: "【KitchenCat】メールアドレスの確認",
       text: expect.stringContaining("https://recipestock.example/verify/token"),
     });
   });
@@ -28,7 +28,7 @@ describe("createAuthEmailCallbacks", () => {
     const send = vi.fn<EmailSender["send"]>(async () => ({ id: "email-1" }));
     const callbacks = createAuthEmailCallbacks({
       emailSender: { send },
-      from: "Recipe Stock <login@example.com>",
+      from: "KitchenCat <login@example.com>",
     });
 
     await callbacks.sendVerificationOTP({
@@ -38,9 +38,9 @@ describe("createAuthEmailCallbacks", () => {
     });
 
     expect(send).toHaveBeenCalledWith({
-      from: "Recipe Stock <login@example.com>",
+      from: "KitchenCat <login@example.com>",
       to: "user@example.com",
-      subject: "【Recipe Stock】パスワード再設定の確認コード",
+      subject: "【KitchenCat】パスワード再設定の確認コード",
       text: expect.stringContaining("123456"),
     });
   });
@@ -49,7 +49,7 @@ describe("createAuthEmailCallbacks", () => {
     const send = vi.fn<EmailSender["send"]>(async () => ({ id: "email-1" }));
     const callbacks = createAuthEmailCallbacks({
       emailSender: { send },
-      from: "Recipe Stock <login@example.com>",
+      from: "KitchenCat <login@example.com>",
     });
 
     await callbacks.sendVerificationOTP({
@@ -59,9 +59,9 @@ describe("createAuthEmailCallbacks", () => {
     });
 
     expect(send).toHaveBeenCalledWith({
-      from: "Recipe Stock <login@example.com>",
+      from: "KitchenCat <login@example.com>",
       to: "user@example.com",
-      subject: "【Recipe Stock】確認コード",
+      subject: "【KitchenCat】確認コード",
       text: expect.stringContaining("123456"),
     });
   });
@@ -74,7 +74,7 @@ describe("createAuthEmailCallbacks", () => {
           throw error;
         }),
       },
-      from: "Recipe Stock <login@example.com>",
+      from: "KitchenCat <login@example.com>",
     });
 
     await expect(

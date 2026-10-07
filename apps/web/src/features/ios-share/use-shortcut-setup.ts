@@ -138,7 +138,7 @@ export const useShortcutSetup = ({
           refetchCredentials();
         },
         (error: unknown) => {
-          // 何も選ばずに閉じたほか、「Recipe Stock」を選んだがショートカットが完了しなかったときも含む。
+          // 何も選ばずに閉じたほか、「KitchenCat」を選んだがショートカットが完了しなかったときも含む。
           // requestを送ったあとで止まっていれば届いているので、待たずに案内を出しつつ、すぐ読み直す。
           if (error instanceof DOMException && error.name === "AbortError") {
             setShareCheck("unconfirmed");

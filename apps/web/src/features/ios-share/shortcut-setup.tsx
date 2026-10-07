@@ -88,7 +88,7 @@ const relinkNotice = (reason: ShortcutRelinkReason, deviceName: IosDeviceName) =
     },
     malformed_request: {
       title: "ショートカットを入れ直してください",
-      body: `この${deviceName}のショートカットが、いまのRecipe Stockと合わなくなっています。キーをコピーし直して、ショートカットを入れ直してください。`,
+      body: `この${deviceName}のショートカットが、いまのKitchenCatと合わなくなっています。キーをコピーし直して、ショートカットを入れ直してください。`,
     },
   })[reason];
 
@@ -298,12 +298,10 @@ const ShareCheckFeedback = ({
       <div className={cn(shareCheckBoxClass, "grid gap-2")} role="status">
         <h4 className="font-bold text-brand-walnut text-sm">まだ確かめられていません</h4>
         <p className="text-brand-walnut text-sm leading-6">
-          共有メニューに「Recipe
-          Stock」がなければ、いちばん下までスクロールしてください。それでもなければ、②でショートカットを追加してください。
+          共有メニューに「KitchenCat」がなければ、いちばん下までスクロールしてください。それでもなければ、②でショートカットを追加してください。
         </p>
         <p className="text-brand-walnut text-sm leading-6">
-          「Recipe Stock」を選んでも変わらないときは、ショートカットAppで「Recipe
-          Stock」を削除してから、キーのコピーからやり直してください。
+          「KitchenCat」を選んでも変わらないときは、ショートカットAppで「KitchenCat」を削除してから、キーのコピーからやり直してください。
         </p>
         <Button className="mt-1 justify-self-start" variant="secondary" onClick={onRestart}>
           最初からやり直す
@@ -324,7 +322,7 @@ const ShareCheckFeedback = ({
 };
 
 /**
- * ③は、この画面をRecipe Stockへ共有して、その場で確かめる。②を開くか続きのキーがあるまでは押せない。
+ * ③は、この画面をKitchenCatへ共有して、その場で確かめる。②を開くか続きのキーがあるまでは押せない。
  * それまでに確かめても、ショートカットがないか、前のキーのままなので意味がない。押す前に共有メニューと接続の確認を図で見せておく。
  */
 const ShareStep = ({ onRestart, setup }: { onRestart: () => void; setup: ShortcutSetupState }) => {
@@ -339,7 +337,7 @@ const ShareStep = ({ onRestart, setup }: { onRestart: () => void; setup: Shortcu
       title="試しに共有する"
     >
       <p className={guideTextClass}>
-        共有メニューが開いたら、いちばん下の「Recipe Stock」を選びます。
+        共有メニューが開いたら、いちばん下の「KitchenCat」を選びます。
       </p>
       <ShareSheetIllustration />
       <p className={guideTextClass}>
@@ -413,8 +411,7 @@ export const ShortcutSetup = ({
       {showsIntro ? (
         <ShareIntro>
           <p className="text-brand-walnut text-sm leading-6">
-            InstagramやYouTube、Safariで見つけたレシピを、アプリを開かずにRecipe
-            Stockへ送れます。設定は1分ほどです。
+            InstagramやYouTube、Safariで見つけたレシピを、アプリを開かずにKitchenCatへ送れます。設定は1分ほどです。
           </p>
           <ShareFlow before="見つける" />
         </ShareIntro>

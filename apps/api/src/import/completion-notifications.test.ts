@@ -31,7 +31,7 @@ const vapid = {
   privateKey: "private-key",
 };
 
-const notice = { title: "レシピの取り込みが完了しました", body: "Recipe Stockで確認できます。" };
+const notice = { title: "レシピの取り込みが完了しました", body: "KitchenCatで確認できます。" };
 
 describe("Push sender", () => {
   it("購読中の全端末へprivacy-safeな完了payloadを送信する", async () => {

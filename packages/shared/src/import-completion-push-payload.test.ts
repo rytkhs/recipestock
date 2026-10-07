@@ -4,7 +4,7 @@ import {
   parseImportCompletionRoute,
 } from "./import-completion-push-payload";
 
-const notice = { title: "レシピの取り込みが完了しました", body: "Recipe Stockで確認できます。" };
+const notice = { title: "レシピの取り込みが完了しました", body: "KitchenCatで確認できます。" };
 
 describe("取り込み完了push payloadの遷移先", () => {
   it("成功payloadからrecipeIdを取り出す", () => {

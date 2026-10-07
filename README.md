@@ -1,6 +1,6 @@
 # Recipe Stock
 
-Recipe Stock は、レシピサイト、YouTube、SNS投稿、などからレシピを取り込み、統一された形式で保存・検索・閲覧するための PWA です。
+Recipe Stock(KitchenCat) は、レシピサイト、YouTube、SNS投稿、などからレシピを取り込み、統一された形式で保存・検索・閲覧するための PWA です。
 
 ## Architecture
 

@@ -4,8 +4,8 @@ import { createResendEmailSender, EmailSendError } from "./resend";
 const params = {
   from: "noreply@example.com",
   to: "user@example.com",
-  subject: "Recipe Stock verification code",
-  text: "Your Recipe Stock code is 123456.",
+  subject: "KitchenCat verification code",
+  text: "Your KitchenCat code is 123456.",
 };
 
 afterEach(() => {

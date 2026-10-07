@@ -246,7 +246,7 @@ const indexRoute = createRoute({
     <RedirectAuthenticated>
       <section className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-10 py-16 text-center">
         <h1 className="text-brand-ink font-extrabold text-4xl sm:text-5xl tracking-tight">
-          Recipe Stock
+          KitchenCat
         </h1>
         <p className="mt-4 mx-auto max-w-xl text-brand-muted text-lg leading-relaxed">
           レシピサイト、YouTube、SNS、書籍、画像からレシピを取り込んで、ひとつの場所で検索・閲覧できるPWA

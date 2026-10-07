@@ -11,11 +11,11 @@ type ImportCompletionOutcome = ImportCompletionPushPayload["outcome"];
 const importCompletionNoticeTemplates: Record<ImportCompletionOutcome, ImportCompletionNotice> = {
   succeeded: {
     title: "レシピの取り込みが完了しました",
-    body: "Recipe Stockで確認できます。",
+    body: "KitchenCatで確認できます。",
   },
   failed: {
     title: "レシピを取り込めませんでした",
-    body: "Recipe Stockを開いて結果を確認してください。",
+    body: "KitchenCatを開いて結果を確認してください。",
   },
 };
 

@@ -1,6 +1,6 @@
-# Recipe Stock
+# KitchenCat
 
-Recipe Stock is a PWA for turning recipes from websites, videos, social posts, and books into one searchable saved format. Image and screenshot imports are out of scope for now.
+KitchenCat (project name: `recipestock`) is a PWA for turning recipes from websites, videos, social posts, and books into one searchable saved format. Image and screenshot imports are out of scope for now.
 
 ## Language
 

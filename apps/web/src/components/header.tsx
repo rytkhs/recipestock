@@ -251,7 +251,7 @@ export const Header = ({
       } ${isMobileVisible ? "flex" : "hidden sm:flex"}`}
     >
       <Link className="font-bold text-lg text-brand-walnut no-underline tracking-tight" to="/">
-        Recipe Stock
+        KitchenCat
       </Link>
       {variant === "private" ? <AppNav /> : null}
       {variant === "public" ? <PublicNav /> : null}
