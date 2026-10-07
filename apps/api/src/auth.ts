@@ -97,13 +97,13 @@ export const createAuthEmailCallbacks = ({
     await emailSender.send({
       from,
       to: user.email,
-      subject: "【Recipe Stock】メールアドレスの確認",
+      subject: "【KitchenCat】メールアドレスの確認",
       text: [
-        "次のリンクを開くと、このメールアドレスをRecipe Stockで使えるようになります。",
+        "次のリンクを開くと、このメールアドレスをKitchenCatで使えるようになります。",
         "",
         url,
         "",
-        `リンクの有効期限は${EMAIL_CHANGE_LINK_EXPIRES_IN_HOURS}時間です。開くまで、Recipe Stockのメールアドレスは変わりません。`,
+        `リンクの有効期限は${EMAIL_CHANGE_LINK_EXPIRES_IN_HOURS}時間です。開くまで、KitchenCatのメールアドレスは変わりません。`,
         "心当たりがない場合は、このメールを破棄してください。",
       ].join("\n"),
     });
@@ -115,13 +115,13 @@ export const createAuthEmailCallbacks = ({
       from,
       to: email,
       subject: isPasswordReset
-        ? "【Recipe Stock】パスワード再設定の確認コード"
-        : "【Recipe Stock】確認コード",
+        ? "【KitchenCat】パスワード再設定の確認コード"
+        : "【KitchenCat】確認コード",
       text: [
         isPasswordReset
           ? `パスワード再設定の確認コードは ${otp} です。`
           : `確認コードは ${otp} です。`,
-        "Recipe Stockの画面に入力してください。",
+        "KitchenCatの画面に入力してください。",
         "",
         isPasswordReset
           ? "心当たりがない場合は、このメールを破棄してください。パスワードは変わりません。"

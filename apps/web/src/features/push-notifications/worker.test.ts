@@ -42,7 +42,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-const notice = { title: "レシピの取り込みが完了しました", body: "Recipe Stockで確認できます。" };
+const notice = { title: "レシピの取り込みが完了しました", body: "KitchenCatで確認できます。" };
 
 describe("Push notification worker", () => {
   it("サーバーが生成したnoticeをそのまま表示し、遷移先だけをdataに残す", async () => {
@@ -103,7 +103,7 @@ describe("Push notification worker", () => {
       await worker.dispatch("push", { data: { json: () => payload } });
 
       expect(worker.showNotification).toHaveBeenCalledWith("レシピの取り込み結果があります", {
-        body: "Recipe Stockを開いて確認してください。",
+        body: "KitchenCatを開いて確認してください。",
         data: { outcome: "failed" },
         icon: "/icons/icon-192.png",
       });
@@ -118,7 +118,7 @@ describe("Push notification worker", () => {
     });
 
     expect(worker.showNotification).toHaveBeenCalledWith("レシピの取り込み結果があります", {
-      body: "Recipe Stockを開いて確認してください。",
+      body: "KitchenCatを開いて確認してください。",
       data: { outcome: "succeeded", recipeId: "recipe_1" },
       icon: "/icons/icon-192.png",
     });

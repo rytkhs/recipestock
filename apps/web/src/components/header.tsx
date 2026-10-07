@@ -31,17 +31,6 @@ import { cn } from "@/lib/utils";
 import { DeviceBadge } from "../features/ios-share/device-badge";
 import { useShortcutSetupOffer } from "../features/ios-share/use-shortcut-setup-offer";
 
-const PublicNav = () => (
-  <nav aria-label="Main navigation" className="flex items-center gap-2">
-    <Link
-      className={cn(buttonVariants({ size: "sm", variant: "secondary" }), "no-underline")}
-      to="/login"
-    >
-      サインアップ / ログイン
-    </Link>
-  </nav>
-);
-
 const addRecipeOptions = [
   { to: "/import/url", icon: LinkIcon, label: "URLから", description: "サイトから取り込む" },
   {
@@ -251,10 +240,9 @@ export const Header = ({
       } ${isMobileVisible ? "flex" : "hidden sm:flex"}`}
     >
       <Link className="font-bold text-lg text-brand-walnut no-underline tracking-tight" to="/">
-        Recipe Stock
+        KitchenCat
       </Link>
       {variant === "private" ? <AppNav /> : null}
-      {variant === "public" ? <PublicNav /> : null}
     </header>
   );
 };

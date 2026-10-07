@@ -51,7 +51,7 @@ export const ShortcutSetupNudge = () => {
       <div className="grid min-w-0 flex-1 gap-1">
         <p className="font-bold text-[15px] text-brand-ink leading-snug">次は、共有ボタンから</p>
         <p className="text-brand-muted text-[13px] leading-[22px]">
-          InstagramやSafariを見ながら、共有 → Recipe Stock
+          InstagramやSafariを見ながら、共有 → KitchenCat
           で保存できます。URLをコピーしなくて済みます。
         </p>
         <div className="mt-2 flex flex-wrap gap-1">

@@ -6,14 +6,14 @@ const chipClass =
   "inline-flex h-8 items-center gap-1.5 rounded-full border border-brand-line-soft bg-brand-paper px-3 font-semibold text-brand-walnut text-sm";
 
 /**
- * 共有から取り込むときに押すものを、押す順に並べる。`Recipe Stock`の札だけ塗り、共有メニューで探すものを示す。
+ * 共有から取り込むときに押すものを、押す順に並べる。`KitchenCat`の札だけ塗り、共有メニューで探すものを示す。
  * 順に押すものなので、読み上げでは1つの文として読ませる。
  */
 export const ShareFlow = ({ after, before }: { after?: string; before?: string }) => {
   const steps = [
     ...(before ? [{ key: "before", label: before }] : []),
     { key: "share", label: "共有" },
-    { key: "app", label: "Recipe Stock" },
+    { key: "app", label: "KitchenCat" },
     ...(after ? [{ key: "after", label: after }] : []),
   ];
 

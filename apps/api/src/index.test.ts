@@ -30,7 +30,7 @@ const requiredStringBindings = {
   DATABASE_URL: "postgresql://example",
   APP_ORIGIN: "https://app.example.com",
   BETTER_AUTH_SECRET: "secret",
-  AUTH_EMAIL_FROM: "Recipe Stock <login@example.com>",
+  AUTH_EMAIL_FROM: "KitchenCat <login@example.com>",
   RESEND_API_KEY: "re_test",
   STRIPE_PRO_PRICE_ID: "price_pro",
   STRIPE_SECRET_KEY: "sk_test",

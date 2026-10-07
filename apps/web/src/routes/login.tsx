@@ -136,7 +136,7 @@ export const LoginRoute = ({
     <section className="flex min-h-[calc(100svh-60px)] items-center justify-center px-4 py-10">
       <div className="min-w-0 w-full max-w-md rounded-[28px] border border-brand-line-soft bg-brand-paper p-6 shadow-pantry sm:p-8">
         <h1 className="text-brand-ink font-bold text-2xl text-center">{modeTitle}</h1>
-        <p className="mt-2 text-brand-muted text-sm text-center">Recipe Stockにようこそ</p>
+        <p className="mt-2 text-brand-muted text-sm text-center">KitchenCatにようこそ</p>
 
         <div className="mt-8 grid min-w-0 gap-4">
           <Button

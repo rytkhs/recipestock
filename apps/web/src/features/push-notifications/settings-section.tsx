@@ -52,7 +52,7 @@ const stateMessage = (state: NotificationState) => {
  * そこではホーム画面に追加すれば通知を使えるので、「対応していません」ではなく追加の仕方を伝える。
  */
 const installToEnableMessage =
-  "通知を受け取るには、Recipe Stockをホーム画面に追加して、そこから開いてください。";
+  "通知を受け取るには、KitchenCatをホーム画面に追加して、そこから開いてください。";
 
 export const PushNotificationSettings = () => {
   const supported = supportsPushNotifications();

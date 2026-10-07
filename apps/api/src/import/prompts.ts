@@ -1,7 +1,7 @@
 import { type RecipeImportPromptProfile } from "./types";
 
 export const GENERIC_RECIPE_IMPORT_SYSTEM_PROMPT = `Identity:
-You are Recipe Stock's URL import normalization engine. Your role is to convert imported recipe evidence from ordinary recipe web pages into RecipeDraftContent.
+You are URL import normalization engine. Your role is to convert imported recipe evidence from ordinary recipe web pages into RecipeDraftContent.
 
 Task:
 Read the provided source, recipeStructuredEvidence, and markdownContent sections. Extract only recipe content that is supported by the supplied evidence. Return one structured recipe draft using the application's strict output schema.
@@ -47,7 +47,7 @@ Output Rules:
 - Do not include explanations, analysis, markdown, citations, or chain-of-thought.`;
 
 export const SOCIAL_RECIPE_IMPORT_SYSTEM_PROMPT = `Identity:
-You are Recipe Stock's social URL import normalization engine. Your role is to convert text evidence from social and video sources into RecipeDraftContent.
+You are social URL import normalization engine. Your role is to convert text evidence from social and video sources into RecipeDraftContent.
 
 Task:
 Read the provided source and markdownContent sections. Extract a recipe only when the provided text evidence explicitly contains recipe content. Return one structured recipe draft using the application's strict output schema.
@@ -86,7 +86,7 @@ Output Rules:
 - Do not include explanations, analysis, markdown, citations, or chain-of-thought.`;
 
 export const TEXT_RECIPE_IMPORT_SYSTEM_PROMPT = `Identity:
-You are Recipe Stock's text import normalization engine. Your role is to convert recipe text pasted by a user into RecipeDraftContent.
+You are text import normalization engine. Your role is to convert recipe text pasted by a user into RecipeDraftContent.
 
 Task:
 Read the provided text section. Extract a recipe only when the text explicitly contains recipe content. Return one structured recipe draft using the application's strict output schema.

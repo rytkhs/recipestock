@@ -375,7 +375,7 @@ describe("共有から取り込む", () => {
 
   it("共有メニューがAbortErrorを返しても、届いていれば連携できたことを伝える", async () => {
     const shortcut = mockShortcutFetch({ credentials: [issuedCredential] });
-    // 「Recipe Stock」を選び、requestを送ったあとでショートカットが止まった。
+    // 「KitchenCat」を選び、requestを送ったあとでショートカットが止まった。
     installDevice({
       share: async () => {
         shortcut.setCredentials([usedCredential(issuedCredential)]);
@@ -595,7 +595,7 @@ describe("共有から取り込む", () => {
 
     await expect(
       screen.findByText(
-        /Androidでは、Recipe Stockをホーム画面に追加すると、共有メニューに出てきます/,
+        /Androidでは、KitchenCatをホーム画面に追加すると、共有メニューに出てきます/,
       ),
     ).resolves.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "キーをコピー" })).not.toBeInTheDocument();

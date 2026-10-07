@@ -41,7 +41,7 @@ export const ShortcutTroubleshooting = ({
     <section aria-labelledby={headingId}>
       <SectionHeader id={headingId} title="うまくいかないとき" />
       <div className="mt-4 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm">
-        <TroubleshootingItem title="共有メニューに「Recipe Stock」が出ない">
+        <TroubleshootingItem title="共有メニューに「KitchenCat」が出ない">
           <p>
             共有メニューをいちばん下までスクロールしてください。InstagramやYouTube、Xでは、アプリの共有画面で「その他」を押すと、
             {deviceName}の共有メニューが開きます。
@@ -52,14 +52,13 @@ export const ShortcutTroubleshooting = ({
         </TroubleshootingItem>
         <TroubleshootingItem title="接続の確認で「許可しない」を選んだ">
           <p>
-            ショートカットAppで「Recipe
-            Stock」を削除してから、キーのコピーからやり直してください。追加し直したショートカットでは、もう一度聞かれます。
+            ショートカットAppで「KitchenCat」を削除してから、キーのコピーからやり直してください。追加し直したショートカットでは、もう一度聞かれます。
           </p>
           {restartButton}
         </TroubleshootingItem>
         <TroubleshootingItem title="キーを貼り忘れた・違うものを貼った">
           <p>
-            ショートカットAppで「Recipe Stock」を削除してから、キーのコピーからやり直してください。
+            ショートカットAppで「KitchenCat」を削除してから、キーのコピーからやり直してください。
           </p>
           {restartButton}
         </TroubleshootingItem>
@@ -68,7 +67,7 @@ export const ShortcutTroubleshooting = ({
             共有しても何も出ないときは、{deviceName}
             の「設定」→「通知」→「ショートカット」で通知を許可してください。
           </p>
-          <p>取り込みが始まっていれば、Recipe Stockを開くと取り込み中と出ます。</p>
+          <p>取り込みが始まっていれば、KitchenCatを開くと取り込み中と出ます。</p>
         </TroubleshootingItem>
       </div>
     </section>

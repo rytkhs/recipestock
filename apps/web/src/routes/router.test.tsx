@@ -18,7 +18,7 @@ describe("AppRouter", () => {
     vi.unstubAllGlobals();
   });
 
-  it("認証確認中は未ログインナビと共通ローディングを出さず保護ルートskeletonを表示する", async () => {
+  it("認証確認中は共通ローディングを出さず保護ルートskeletonを表示する", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (isGetSessionRequest(input)) {
         return new Promise<Response>(() => {});
@@ -29,7 +29,6 @@ describe("AppRouter", () => {
 
     await renderApp("/recipes");
 
-    expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
     expect(screen.queryByRole("status", { name: "読み込み中" })).toBeNull();
     expect(screen.getByText("レシピ一覧を読み込み中")).toBeInTheDocument();
   });
@@ -295,7 +294,6 @@ describe("AppRouter", () => {
       screen.findByRole("heading", { name: "接続を確認できません" }),
     ).resolves.toBeInTheDocument();
     expect(appRouter.state.location.href).toBe(importPath);
-    expect(screen.queryByRole("button", { name: "サインアップ / ログイン" })).toBeNull();
     expect(screen.queryByTestId("add-recipe-fab")).toBeNull();
     expect(screen.queryByRole("link", { name: "設定" })).toBeNull();
     sessionAvailable = true;

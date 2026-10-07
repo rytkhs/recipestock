@@ -85,7 +85,7 @@ const ContactForm = ({ defaultEmail, userId }: { defaultEmail: string; userId?: 
       ) : (
         <>
           <p className="mt-2 text-brand-muted text-sm leading-6">
-            Recipe Stockへのご質問や不具合のご報告を受け付けています。
+            KitchenCatへのご質問や不具合のご報告を受け付けています。
           </p>
           <div className="mt-6 min-w-0 rounded-[20px] border border-brand-line-soft bg-brand-paper p-5 shadow-pantry-sm sm:p-6">
             <form

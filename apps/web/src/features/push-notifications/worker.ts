@@ -9,7 +9,7 @@ import { parseImportCompletionNotice, parseImportCompletionRoute } from "@recipe
  */
 const lastResortNotification = {
   title: "レシピの取り込み結果があります",
-  body: "Recipe Stockを開いて確認してください。",
+  body: "KitchenCatを開いて確認してください。",
 };
 
 const notificationIcon = "/icons/icon-192.png";

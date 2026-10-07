@@ -447,7 +447,7 @@ describe("Settings routes", () => {
 
     await expect(
       screen.findByText(
-        "通知を受け取るには、Recipe Stockをホーム画面に追加して、そこから開いてください。",
+        "通知を受け取るには、KitchenCatをホーム画面に追加して、そこから開いてください。",
       ),
     ).resolves.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "通知を有効にする" })).not.toBeInTheDocument();
