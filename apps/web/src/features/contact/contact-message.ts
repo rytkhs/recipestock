@@ -59,7 +59,7 @@ export const sendContactMessage = async (
     body,
   });
 
-  if (!response.ok) {
+  if (response.status !== 200) {
     throw new Error(`SSGform responded with ${response.status}.`);
   }
 };

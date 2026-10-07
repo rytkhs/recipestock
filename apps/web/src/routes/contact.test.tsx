@@ -79,8 +79,10 @@ describe("ContactRoute", () => {
     expect(findContactFormCall(fetchMock)).toBeUndefined();
   });
 
-  it("SSGformが受け付けなければ、入力を残したまま送れなかったと知らせる", async () => {
-    mockFetch(async () => new Response(null, { status: 403 }));
+  it.each([
+    204, 403,
+  ])("SSGformが%dを返したら、入力を残したまま送れなかったと知らせる", async (status) => {
+    mockFetch(async () => new Response(null, { status }));
     await renderApp("/contact");
 
     await fillContactForm({ email: "guest@example.com" });
@@ -89,6 +91,8 @@ describe("ContactRoute", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "送信できませんでした。時間をおいて再度お試しください。",
     );
+    expect(screen.getByLabelText("種別")).toHaveValue("不具合");
+    expect(screen.getByLabelText("返信先のメールアドレス")).toHaveValue("guest@example.com");
     expect(screen.getByLabelText("内容")).toHaveValue("  取り込みが終わりません  ");
     expect(screen.queryByRole("heading", { name: "送信しました" })).not.toBeInTheDocument();
   });
