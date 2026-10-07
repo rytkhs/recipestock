@@ -45,6 +45,7 @@ Browser / PWA
 | Recipe thumbnails | Cloudflare Images binding (`IMAGES`) で初回取得時に変換し、R2へ保存（ADR 0006） |
 | Auth | Better Auth |
 | Email | Resend Email API（SDKは使わずHTTPを直接呼ぶ） |
+| Contact form | SSGform。`/contact`のフォームからブラウザが直接送り、運営のメールに届く。APIもDBも通さない。スパム対策（許可ホスト、全角文字チェックなど）はSSGform側で設定する |
 | Billing | Stripe |
 | AI | Vercel AI SDK + workers-ai-provider + Cloudflare Workers AI + Cloudflare AI Gateway |
 | Import HTML parsing | parse5。汎用の取り込みはページを1回パースし、AIに渡す証拠を同じ木から作る（ADR 0011）。HTMLRewriterや正規表現で読んだ値の文字参照は、parse5と同じ`entities`で戻す |
