@@ -10,7 +10,6 @@ export const issueShortcutCredentialRequestSchema = z.object({
 export const shortcutCredentialSchema = z.object({
   id: z.string().min(1),
   name: shortcutCredentialNameSchema,
-  tokenSuffix: z.string().min(4).max(12),
   createdAt: z.string().min(1),
   // 一度も使われていないキーはnull。連携の設定が済んだことは`firstUsedAt`が入ったことで分かる。
   firstUsedAt: z.string().min(1).nullable(),

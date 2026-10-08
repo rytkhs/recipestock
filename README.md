@@ -162,7 +162,6 @@ pnpm dev:mock
 | 設定・連携 | `shortcut-linked-keys` | 共有を連携済み(使ったキー2本) |
 | 設定・連携 | `shortcut-first-share` | 共有を連携する(発行の10秒後に最初の共有が届く) |
 | 設定・連携 | `shortcut-setup-resumed` | 共有の設定の途中(発行したキーにまだ共有が届いていない) |
-| 設定・連携 | `shortcut-linked-and-unused-keys` | 共有を連携済み・使われていないキーあり |
 | 設定・連携 | `viewer-error` | プラン・利用状況の取得失敗 |
 | 設定・連携 | `tags-error` | タグの取得失敗 |
 | 設定・連携 | `shortcut-credentials-error` | 連携キーの取得失敗 |

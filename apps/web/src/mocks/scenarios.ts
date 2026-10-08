@@ -714,26 +714,6 @@ export const scenarios: Scenario[] = [
     }),
   },
   {
-    id: "shortcut-linked-and-unused-keys",
-    group: "settings",
-    label: "共有を連携済み・使われていないキーあり",
-    build: () => ({
-      ...baseState(),
-      shortcutCredentials: shortcutCredentialsFixture({
-        credentials: [
-          shortcutCredentialFixture({ lastUsedAt: new Date().toISOString() }),
-          shortcutCredentialFixture({
-            id: "credential_0002",
-            name: "iPad",
-            tokenSuffix: "0002",
-            firstUsedAt: null,
-            lastUsedAt: null,
-          }),
-        ],
-      }),
-    }),
-  },
-  {
     id: "viewer-error",
     group: "settings",
     label: "プラン・利用状況の取得失敗",

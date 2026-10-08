@@ -14,7 +14,7 @@ export const ShortcutSyncNote = () => {
       <SectionHeader id={headingId} title="ほかの端末でも使うには" />
       <p className={guideTextClass}>
         ショートカットは、同じApple
-        IDのiPhone・iPad・MacにiCloudで同期されます。同期を切っていなければ、共有メニューにもう「KitchenCat」が出ています。
+        IDのiPhone・iPad・MacにiCloudで同期されます。同期を切っていなければ、共有メニューにもう「KitchenCatで取り込む」が出ています。
       </p>
       <p className={guideTextClass}>
         出てこないiPhoneやiPadでは、その端末でこのページを開いて、ショートカットを追加してください。

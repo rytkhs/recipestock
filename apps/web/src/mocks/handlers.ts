@@ -1046,7 +1046,6 @@ export const createHandlers = (state: MockState, { delayMs }: { delayMs: number 
       const credential: ShortcutCredential = {
         id: `credential_mock_${nextId++}`,
         name: body.name,
-        tokenSuffix: "a1b2c3",
         createdAt: new Date().toISOString(),
         firstUsedAt: null,
         lastUsedAt: null,

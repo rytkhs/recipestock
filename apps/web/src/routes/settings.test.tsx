@@ -1638,7 +1638,6 @@ describe("Settings routes", () => {
     return {
       id,
       name,
-      tokenSuffix: id.slice(-4),
       createdAt: linkedAt,
       firstUsedAt: linkedAt,
       lastUsedAt: linkedAt,
@@ -1838,9 +1837,11 @@ describe("Settings routes", () => {
     const fetchMock = mockLinkedKeysFetch();
 
     await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "末尾 0001 のキーを解除" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^iPhoneで設定（.+）のキーを解除$/ }),
+    );
     const dialog = await screen.findByRole("alertdialog", {
-      name: "末尾 0001 のキーを解除しますか？",
+      name: "「iPhoneで設定」のキーを解除しますか？",
     });
     await userEvent.click(within(dialog).getByRole("button", { name: "キャンセル" }));
 
@@ -1855,9 +1856,11 @@ describe("Settings routes", () => {
     mockLinkedKeysFetch({ revokeSucceeds: false });
 
     await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "末尾 0001 のキーを解除" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^iPhoneで設定（.+）のキーを解除$/ }),
+    );
     const dialog = await screen.findByRole("alertdialog", {
-      name: "末尾 0001 のキーを解除しますか？",
+      name: "「iPhoneで設定」のキーを解除しますか？",
     });
     await userEvent.click(within(dialog).getByRole("button", { name: "解除" }));
 

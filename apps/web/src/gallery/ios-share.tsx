@@ -15,22 +15,17 @@ import {
   type ShortcutKeyPhase,
   type ShortcutSetupState,
 } from "../features/ios-share/use-shortcut-setup";
-import {
-  linkedShortcutCredentialsFixture,
-  shortcutCredentialFixture,
-  shortcutCredentialsFixture,
-} from "../mocks/fixtures";
+import { linkedShortcutCredentialsFixture, shortcutCredentialFixture } from "../mocks/fixtures";
 import { type IosDeviceName } from "../pwa/platform";
 import { Frame, type FrameSize } from "./frame";
 
 const noop = () => {};
 const asyncNoop = async () => {};
 
-// 発行したまま共有が届いていないキー。設定の続きと、連携の管理の「使われていないキー」に出る。
+// 発行したまま共有が届いていないキー。設定の続きに出る。
 const unusedCredential = shortcutCredentialFixture({
   id: "credential_unused",
   name: "iPhone",
-  tokenSuffix: "c21d",
   createdAt: "2026-06-24T00:00:00.000Z",
   firstUsedAt: null,
   lastUsedAt: null,
@@ -43,7 +38,6 @@ const issuedKey = (
   status: "issued",
   credential: shortcutCredentialFixture({
     id: "credential_issued",
-    tokenSuffix: "7f3a",
     firstUsedAt: null,
     lastUsedAt: null,
   }),
@@ -144,14 +138,6 @@ const setupColumns: SetupStage[][] = [
   [{ label: "もう一度コピーした", key: issuedKey({ isCopiedAgain: true }) }],
   [{ label: "発行したがコピーできなかった", key: issuedKey({ isCopied: false }) }],
   [{ label: "②を開いた", key: issuedKey(), hasOpenedShortcut: true }],
-  [
-    {
-      label: "続きのキーがある・②を開いた",
-      key: noKey,
-      hasOpenedShortcut: true,
-      withResumableKey: true,
-    },
-  ],
 ];
 
 const occursIn = (stage: SetupStage, start: SetupStart) =>
@@ -324,17 +310,6 @@ const OutsideScreens = ({
       <IosShareSettings deviceName={deviceName} />
     </Frame>
     <Frame label="連携の管理" seed={seedCredentials(linkedCredentials)} size={frameSize}>
-      <IosShareSettings deviceName={deviceName} />
-    </Frame>
-    <Frame
-      label="連携の管理（使われていないキーもある）"
-      seed={seedCredentials(
-        shortcutCredentialsFixture({
-          credentials: [unusedCredential, ...linkedCredentials.credentials],
-        }),
-      )}
-      size={frameSize}
-    >
       <IosShareSettings deviceName={deviceName} />
     </Frame>
     <Frame label="連携できました" size={frameSize}>
