@@ -31,7 +31,7 @@ const usedCredential = (credential: ShortcutCredential) => {
 // iPadのSafariは既定でMacと同じUser-Agentを名乗る。
 const iPadDesktopUserAgent =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
-const replaceShortcutGuide = /同じ名前のショートカットがあると聞かれたら、置き換えてください。/;
+const replaceShortcutGuide = /同じ名前があると聞かれたら、置き換えます。/;
 
 class ClipboardItemStub {
   constructor(readonly data: Record<string, Promise<Blob>>) {}
@@ -376,7 +376,7 @@ describe("共有から取り込む", () => {
 
   it("共有メニューがAbortErrorを返しても、届いていれば連携できたことを伝える", async () => {
     const shortcut = mockShortcutFetch({ credentials: [issuedCredential] });
-    // 「KitchenCat」を選び、requestを送ったあとでショートカットが止まった。
+    // 「KitchenCatで取り込む」を選び、requestを送ったあとでショートカットが止まった。
     installDevice({
       share: async () => {
         shortcut.setCredentials([usedCredential(issuedCredential)]);
