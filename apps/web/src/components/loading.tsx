@@ -197,12 +197,12 @@ export const RecipeFormSkeleton = () => (
 
     <div className="sm:pt-2 md:grid md:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] md:items-center md:gap-12 md:pt-4">
       <SkeletonBlock className="aspect-[4/3] w-full rounded-none border-0 sm:rounded-[20px]" />
-      <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
-        <SkeletonBlock className="h-9 w-4/5" />
+      <div className="px-4 pt-4 sm:px-0 sm:pt-6 md:pt-0">
+        <SkeletonBlock className="h-8 w-4/5" />
       </div>
     </div>
 
-    <div className="mt-8 px-4 sm:mt-10 sm:px-0 lg:mt-14 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-x-14">
+    <div className="mt-6 px-4 sm:mt-10 sm:px-0 lg:mt-14 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-x-14">
       <div>
         <SkeletonBlock className="h-7 w-32" />
         <div className="mt-4 grid gap-4">
@@ -218,7 +218,7 @@ export const RecipeFormSkeleton = () => (
           ))}
         </div>
       </div>
-      <div className="mt-10 lg:mt-0">
+      <div className="mt-8 lg:mt-0">
         <SkeletonBlock className="h-7 w-20" />
         <div className="mt-4 grid gap-5">
           {formStepSkeletonKeys.map((key) => (
