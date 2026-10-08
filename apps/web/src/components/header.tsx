@@ -10,6 +10,7 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { BrandMark } from "@/components/brand-mark";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -239,7 +240,11 @@ export const Header = ({
           : "flex-col gap-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       } ${isMobileVisible ? "flex" : "hidden sm:flex"}`}
     >
-      <Link className="font-bold text-lg text-brand-walnut no-underline tracking-tight" to="/">
+      <Link
+        className="flex items-center gap-2 font-bold text-lg text-brand-walnut no-underline tracking-tight"
+        to="/"
+      >
+        <BrandMark className="size-7 shrink-0" />
         KitchenCat
       </Link>
       {variant === "private" ? <AppNav /> : null}

@@ -6,7 +6,7 @@ import { type IosDeviceName } from "../../pwa/platform";
 
 const TroubleshootingItem = ({ children, title }: { children: ReactNode; title: string }) => (
   <details className="group border-brand-line-soft border-t first:border-t-0">
-    <summary className="flex min-h-13 cursor-pointer list-none items-center gap-3 px-4 py-3 font-medium text-base text-brand-ink outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-orange [&::-webkit-details-marker]:hidden">
+    <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-4 py-2.5 font-medium text-[15px] text-brand-ink outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-orange [&::-webkit-details-marker]:hidden">
       <span className="min-w-0 flex-1">{title}</span>
       <CaretDown
         aria-hidden="true"

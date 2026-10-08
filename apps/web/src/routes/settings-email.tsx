@@ -84,7 +84,7 @@ const CurrentEmailSection = ({ children, email }: { children?: ReactNode; email:
   return (
     <section aria-labelledby={headingId}>
       <SectionHeader id={headingId} title="今のメールアドレス" />
-      <p className="mt-4 break-all font-semibold text-brand-ink text-lg">{email}</p>
+      <p className="mt-4 break-all font-semibold text-base text-brand-ink">{email}</p>
       {children}
     </section>
   );

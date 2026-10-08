@@ -181,14 +181,14 @@ export const CoverImageTitleBlock = ({
         {belowCover}
       </div>
 
-      <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
+      <div className="px-4 pt-4 sm:px-0 sm:pt-6 md:pt-0">
         <textarea
           aria-describedby={titleError ? titleErrorId : undefined}
           aria-invalid={titleError ? true : undefined}
           aria-label="レシピ名"
           className={cn(
             draftInlineFieldClass,
-            "field-sizing-content -mx-2 w-[calc(100%+1rem)] py-1 font-bold text-[1.625rem] leading-[1.35] sm:text-3xl",
+            "field-sizing-content -mx-2 w-[calc(100%+1rem)] py-1 font-bold text-[1.375rem] leading-[1.35] sm:text-3xl",
           )}
           enterKeyHint="done"
           maxLength={MAX_RECIPE_TITLE_LENGTH}

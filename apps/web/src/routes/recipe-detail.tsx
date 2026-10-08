@@ -465,9 +465,9 @@ const RecipeDetailView = ({
             />
           ) : null}
         </div>
-        <div className="px-4 pt-5 sm:px-0 sm:pt-6 md:pt-0">
+        <div className="px-4 pt-4 sm:px-0 sm:pt-6 md:pt-0">
           <h1
-            className="break-words font-bold text-[1.625rem] text-brand-ink leading-[1.35] sm:text-3xl"
+            className="break-words font-bold text-[1.375rem] text-brand-ink leading-[1.35] sm:text-3xl"
             ref={titleRef}
           >
             {recipe.title}
@@ -497,7 +497,7 @@ const RecipeDetailView = ({
 
       <div
         className={cn(
-          "mt-8 px-4 sm:mt-10 sm:px-0 lg:mt-14",
+          "mt-6 px-4 sm:mt-10 sm:px-0 lg:mt-14",
           hasIngredients &&
             "lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-x-14",
         )}
@@ -513,7 +513,7 @@ const RecipeDetailView = ({
           </div>
         ) : null}
         <div
-          className={cn("flex flex-col gap-10", hasIngredients ? "mt-10 lg:mt-0" : "lg:max-w-3xl")}
+          className={cn("flex flex-col gap-8", hasIngredients ? "mt-8 lg:mt-0" : "lg:max-w-3xl")}
         >
           {hasSteps ? (
             <RecipeSteps

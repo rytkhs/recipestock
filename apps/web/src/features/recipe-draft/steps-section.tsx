@@ -162,16 +162,16 @@ const StepRow = ({
   const stepLabel = `手順${stepIndex + 1}`;
 
   return (
-    <li className="grid grid-cols-[1.5rem_minmax(0,1fr)_2.5rem] gap-x-1 border-brand-line-soft border-b py-1.5 last:border-b-0">
+    <li className="grid grid-cols-[1.5rem_minmax(0,1fr)_2.5rem] gap-x-1 border-brand-line-soft border-b py-1 last:border-b-0">
       <span
         aria-hidden="true"
-        className="py-2 font-bold text-brand-orange-dark text-lg leading-7 tabular-nums"
+        className="py-1.5 font-bold text-base text-brand-orange-dark leading-6 tabular-nums"
       >
         {stepIndex + 1}
       </span>
       <textarea
         aria-label={stepLabel}
-        className={cn(draftInlineFieldClass, "field-sizing-content leading-7")}
+        className={cn(draftInlineFieldClass, "field-sizing-content")}
         maxLength={MAX_RECIPE_STEP_TEXT_LENGTH}
         name={field.name}
         placeholder="手順を入力"

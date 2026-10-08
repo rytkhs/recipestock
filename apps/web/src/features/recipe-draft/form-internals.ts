@@ -18,9 +18,10 @@ export type ImagePreviewUrlsByImageId = Record<string, string>;
 export const imageInputAccept = "image/jpeg,image/png,image/webp";
 export const imageLimitReachedText = "上限に達しました";
 
-// 入力欄は詳細と同じ位置・大きさで文字を置き、枠は触れたときにだけ出す。
+// 入力欄は詳細と同じ位置・行の高さで文字を置き、枠は触れたときにだけ出す。
+// 文字は詳細より1px大きい16px。iOSは16px未満の入力欄に触れると画面を拡大する。
 export const draftInlineFieldClass =
-  "w-full min-w-0 resize-none rounded-[8px] border border-transparent bg-transparent px-2 py-2 text-base text-brand-ink leading-6 outline-none transition-colors placeholder:text-brand-muted/70 hover:bg-brand-paper-muted/70 focus-visible:border-brand-orange/50 focus-visible:bg-brand-paper focus-visible:ring-3 focus-visible:ring-brand-orange/15 disabled:opacity-50 aria-invalid:border-brand-danger/60";
+  "w-full min-w-0 resize-none rounded-[8px] border border-transparent bg-transparent px-2 py-1.5 text-base text-brand-ink leading-6 outline-none transition-colors placeholder:text-brand-muted/70 hover:bg-brand-paper-muted/70 focus-visible:border-brand-orange/50 focus-visible:bg-brand-paper focus-visible:ring-3 focus-visible:ring-brand-orange/15 disabled:opacity-50 aria-invalid:border-brand-danger/60";
 
 export const draftAddRowButtonClass =
   "inline-flex h-11 items-center gap-1.5 rounded-[10px] px-2 font-semibold text-brand-sage-dark text-sm outline-none transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-brand-orange";

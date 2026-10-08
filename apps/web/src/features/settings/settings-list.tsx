@@ -8,13 +8,13 @@ import { SkeletonBlock } from "../../components/loading";
 const groupListClass =
   "divide-y divide-brand-line-soft overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm";
 
-const rowClass = "flex min-h-13 w-full min-w-0 items-center gap-3 px-4 py-3 text-left";
+const rowClass = "flex min-h-12 w-full min-w-0 items-center gap-3 px-4 py-2.5 text-left";
 
 const pressableRowClass = `${rowClass} no-underline transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-orange disabled:opacity-50`;
 
 const rowIconClass = "shrink-0 text-brand-walnut";
 
-const rowLabelClass = "shrink-0 font-medium text-base text-brand-ink";
+const rowLabelClass = "shrink-0 font-medium text-[15px] text-brand-ink";
 
 const rowValueClass = "ml-auto min-w-0 truncate text-right text-sm";
 
@@ -97,7 +97,7 @@ export const SettingsActionRow = ({
       <span aria-hidden="true" className={rowIconClass}>
         {icon}
       </span>
-      <span className="font-medium text-base text-brand-ink">{label}</span>
+      <span className="font-medium text-[15px] text-brand-ink">{label}</span>
     </button>
   </li>
 );
