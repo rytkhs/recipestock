@@ -8,9 +8,8 @@ import { SectionHeader } from "../../components/section-header";
 import { type IosDeviceName } from "../../pwa/platform";
 import { SettingsNotice } from "../settings/settings-page";
 import { type ShortcutRelinkReason } from "./api";
-import { formatCredentialDay } from "./credential-dates";
 import {
-  ConnectionPermissionIllustration,
+  SendPermissionIllustration,
   ShareSheetIllustration,
   ShortcutQuestionIllustration,
 } from "./setup-illustrations";
@@ -92,13 +91,10 @@ const relinkNotice = (reason: ShortcutRelinkReason, deviceName: IosDeviceName) =
     },
   })[reason];
 
-const shortcutStepText =
-  "ショートカットAppが開きます。キーを聞かれたら貼り付けて、「ショートカットを追加」を押してください。";
-// 開き直したときは、もう追加したかどうか分からない。③を押せるようにしたまま、まだなら追加できるようにしておく。
-const resumedShortcutStepText =
-  "まだ追加していなければ、ショートカットAppで追加してください。キーを聞かれたら貼り付けます。";
-// 同じ名前のショートカットがあると、iOSは置き換えるか追加するかを聞く。追加すると、古いキーのものと2つ並ぶ。
-const replaceShortcutText = "同じ名前のショートカットがあると聞かれたら、置き換えてください。";
+// 追加したあとはショートカットAppに残る。戻らないと、③で送信の確認を見ないまま、初めての共有で聞かれる。
+const shortcutStepText = "キーを貼って追加したら、この画面に戻ります。";
+// 同じ名前のショートカットがあると、iOSはキーを聞いたあとで置き換えるかを聞く。両方とも残すと、古いキーのものと2つ並ぶ。
+const replaceShortcutText = "同じ名前があると聞かれたら、置き換えます。";
 
 const KeyStep = ({
   resumableCredential,
@@ -152,17 +148,13 @@ const KeyStep = ({
     );
   }
 
-  // 発行したあと、この画面を開き直した。平文はもう無いので、貼っていなければ発行し直してもらう。
-  // ほかの端末で発行したキーや何日も前のキーでも、発行した場所と日で気づいてやり直せる。
+  // 発行したあと、この画面を開き直した。平文はもう無く、どのキーを貼ったかは利用者にも分からない。
+  // 覚えている「追加したか」で分け、まだならコピーからやり直してもらう。
   if (resumableCredential) {
-    const issuedDay = formatCredentialDay(resumableCredential.createdAt);
-
     return (
       <SetupStep number={1} status="done" title="キーを発行しました">
         <p className={guideTextClass}>
-          {resumableCredential.name}で{issuedDay ? `${issuedDay}に` : ""}発行した、末尾{" "}
-          {resumableCredential.tokenSuffix}
-          のキーです。このキーをショートカットに貼っていなければ、発行し直してください。
+          ショートカットを追加し終えていれば、③で試してください。まだなら、キーをコピーし直してください。
         </p>
         <Button
           className="justify-self-start"
@@ -170,7 +162,7 @@ const KeyStep = ({
           variant="secondary"
           onClick={() => void setup.issueAndCopyKey()}
         >
-          キーを発行し直す
+          キーをコピーし直す
         </Button>
         {issueError}
       </SetupStep>
@@ -179,9 +171,7 @@ const KeyStep = ({
 
   return (
     <SetupStep number={1} status="active" title="連携キーをコピー">
-      <p className={guideTextClass}>
-        ショートカットからあなたのレシピへ送るためのキーです。次の手順で貼り付けます。
-      </p>
+      <p className={guideTextClass}>②で貼り付けます。</p>
       <Button
         className={primaryActionClass}
         disabled={isIssuing}
@@ -239,18 +229,15 @@ const ShortcutStep = ({
   return (
     <SetupStep number={2} status={isIssued ? "active" : "todo"} title={title}>
       <p className={guideTextClass}>
-        {setup.isResumed ? resumedShortcutStepText : shortcutStepText}
+        {shortcutStepText}
         {mayHaveShortcut ? replaceShortcutText : null}
       </p>
       <ShortcutQuestionIllustration />
-      {/* キーを持たずに追加すると、貼るものがない。キーを発行してコピーを終えるまでは押せなくしておく。 */}
-      {isIssued || setup.isResumed ? (
+      {/* キーを持たずに追加すると、貼るものがない。キーを発行してコピーを終えるまでは押せなくしておく。
+          開き直したときも、クリップボードにキーが残っているかは利用者に分からないので、コピーし直すまで押せない。 */}
+      {isIssued ? (
         <a
-          className={cn(
-            buttonVariants({ variant: isIssued ? "default" : "secondary" }),
-            primaryActionClass,
-            "no-underline",
-          )}
+          className={cn(buttonVariants(), primaryActionClass, "no-underline")}
           href={shortcutUrl}
           rel="noreferrer"
           target="_blank"
@@ -272,7 +259,8 @@ const shareCheckBoxClass =
 
 /**
  * 押したあとに出すもの。「届きませんでした」とは言わない。キーが入っていない・使えないときもrequestは届いていて、
- * 遅れて届けば完了に変わる。見つからないときと、選んでも変わらないときの直し方を1つにまとめて出す。
+ * 遅れて届けば完了に変わる。見つからないときも、選んでも変わらないときも、直し方はキーのコピーからやり直すことに
+ * まとめる。②へは案内しない。開き直した画面では、キーをコピーし直すまで②を押せない。
  */
 const ShareCheckFeedback = ({
   onRestart,
@@ -298,10 +286,7 @@ const ShareCheckFeedback = ({
       <div className={cn(shareCheckBoxClass, "grid gap-2")} role="status">
         <h4 className="font-bold text-brand-walnut text-sm">まだ確かめられていません</h4>
         <p className="text-brand-walnut text-sm leading-6">
-          共有メニューに「KitchenCat」がなければ、いちばん下までスクロールしてください。それでもなければ、②でショートカットを追加してください。
-        </p>
-        <p className="text-brand-walnut text-sm leading-6">
-          「KitchenCat」を選んでも変わらないときは、ショートカットAppで「KitchenCat」を削除してから、キーのコピーからやり直してください。
+          「表示を増やす」を押して、いちばん下まで見てください。なければ、または選んでも変わらないときは、キーのコピーからやり直してください。
         </p>
         <Button className="mt-1 justify-self-start" variant="secondary" onClick={onRestart}>
           最初からやり直す
@@ -323,7 +308,7 @@ const ShareCheckFeedback = ({
 
 /**
  * ③は、この画面をKitchenCatへ共有して、その場で確かめる。②を開くか続きのキーがあるまでは押せない。
- * それまでに確かめても、ショートカットがないか、前のキーのままなので意味がない。押す前に共有メニューと接続の確認を図で見せておく。
+ * それまでに確かめても、ショートカットがないか、前のキーのままなので意味がない。押す前に共有メニューと送信の確認を図で見せておく。
  */
 const ShareStep = ({ onRestart, setup }: { onRestart: () => void; setup: ShortcutSetupState }) => {
   const canOpen =
@@ -337,15 +322,12 @@ const ShareStep = ({ onRestart, setup }: { onRestart: () => void; setup: Shortcu
       title="試しに共有する"
     >
       <p className={guideTextClass}>
-        共有メニューが開いたら、いちばん下の「KitchenCat」を選びます。
+        「表示を増やす」を押して、いちばん下の「KitchenCatで取り込む」を選びます。
       </p>
       <ShareSheetIllustration />
-      <p className={guideTextClass}>
-        初回だけ、接続してよいか聞かれます。
-        <strong className="font-bold text-brand-walnut">「常に許可」</strong>
-        を選んでください。
-      </p>
-      <ConnectionPermissionIllustration host={window.location.host} />
+      {/* 選択肢が2つ（許可）のときと3つ（1度だけ許可・常に許可）のときがあり、出し分けは分かっていない。 */}
+      <p className={guideTextClass}>送信してよいか聞かれたら、「許可」か「常に許可」を選びます。</p>
+      <SendPermissionIllustration host={window.location.host} />
       {/* 押すとすること（共有メニューを開く）を書く。「共有する」だと、人に送るものと読める。 */}
       <Button
         className={primaryActionClass}
@@ -363,7 +345,7 @@ const ShareStep = ({ onRestart, setup }: { onRestart: () => void; setup: Shortcu
 
 /**
  * 連携の設定を、アプリの外で起きることまで含めて順に見せる。ショートカットAppで追加したあと、
- * ここへ戻らずにほかのアプリから共有する人もいるので、③の共有メニューと接続の確認は②を押す前から見せておく。
+ * ここへ戻らずにほかのアプリから共有する人もいるので、③の共有メニューと送信の確認は②を押す前から見せておく。
  * 何を出すかは、始まり方で決まった値（表1）と手順の段階（表2）だけから決める（docs/shortcut/ios-share.md）。
  */
 export const ShortcutSetup = ({
@@ -411,7 +393,7 @@ export const ShortcutSetup = ({
       {showsIntro ? (
         <ShareIntro>
           <p className="text-brand-walnut text-sm leading-6">
-            InstagramやYouTube、Safariで見つけたレシピを、アプリを開かずにKitchenCatへ送れます。設定は1分ほどです。
+            InstagramやYouTube、Safariから送れます。設定は1分ほどです。
           </p>
           <ShareFlow before="見つける" />
         </ShareIntro>

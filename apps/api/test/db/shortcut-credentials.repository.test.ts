@@ -10,6 +10,7 @@ import {
 const now = new Date("2026-07-12T00:00:00.000Z");
 const firstUse = new Date("2026-07-12T00:05:00.000Z");
 const laterUse = new Date("2026-07-13T08:00:00.000Z");
+const afterUnusedLifetime = new Date("2026-07-27T00:00:00.000Z");
 
 describe("Shortcut credential repository with Neon Postgres", () => {
   let repository: ShortcutCredentialRepository;
@@ -35,7 +36,6 @@ describe("Shortcut credential repository with Neon Postgres", () => {
       userId: `dbtest_user_${runId}`,
       name: "DB test credential",
       tokenHash: `dbtest_token_${runId}`,
-      tokenSuffix: runId.slice(-6),
       createdAt: now,
       firstUsedAt: null,
       lastUsedAt: null,
@@ -53,7 +53,7 @@ describe("Shortcut credential repository with Neon Postgres", () => {
       credentialId,
       userId,
     });
-    await expect(repository.listCredentials(userId)).resolves.toEqual([
+    await expect(repository.listCredentials({ userId, now })).resolves.toEqual([
       expect.objectContaining({ id: credentialId }),
     ]);
 
@@ -64,20 +64,20 @@ describe("Shortcut credential repository with Neon Postgres", () => {
         now: new Date(now.getTime() + 1000),
       }),
     ).resolves.toBe(true);
-    await expect(repository.listCredentials(userId)).resolves.toEqual([]);
+    await expect(repository.listCredentials({ userId, now })).resolves.toEqual([]);
   });
 
   it("認証を通すたびに最後に使った時刻を進め、最初に使った時刻は残す", async () => {
     const { userId, tokenHash } = await createCredential();
 
-    await expect(repository.listCredentials(userId)).resolves.toEqual([
+    await expect(repository.listCredentials({ userId, now })).resolves.toEqual([
       expect.objectContaining({ firstUsedAt: null, lastUsedAt: null }),
     ]);
 
     await repository.authenticate({ tokenHash, now: firstUse });
     await repository.authenticate({ tokenHash, now: laterUse });
 
-    await expect(repository.listCredentials(userId)).resolves.toEqual([
+    await expect(repository.listCredentials({ userId, now })).resolves.toEqual([
       expect.objectContaining({ firstUsedAt: firstUse, lastUsedAt: laterUse }),
     ]);
   });
@@ -103,5 +103,25 @@ describe("Shortcut credential repository with Neon Postgres", () => {
         now: laterUse,
       }),
     ).resolves.toEqual({ status: "unknown" });
+  });
+
+  it("使われないまま期限が過ぎたキーは認証も一覧も通さず、使ったキーは期限のあとも通す", async () => {
+    const unused = await createCredential();
+    const used = await createCredential();
+    await repository.authenticate({ tokenHash: used.tokenHash, now: firstUse });
+
+    await expect(
+      repository.authenticate({ tokenHash: unused.tokenHash, now: afterUnusedLifetime }),
+    ).resolves.toEqual({ status: "expired", credentialId: unused.id, userId: unused.userId });
+    await expect(
+      repository.listCredentials({ userId: unused.userId, now: afterUnusedLifetime }),
+    ).resolves.toEqual([]);
+
+    await expect(
+      repository.authenticate({ tokenHash: used.tokenHash, now: afterUnusedLifetime }),
+    ).resolves.toEqual({ status: "active", credentialId: used.id, userId: used.userId });
+    await expect(
+      repository.listCredentials({ userId: used.userId, now: afterUnusedLifetime }),
+    ).resolves.toEqual([expect.objectContaining({ id: used.id })]);
   });
 });

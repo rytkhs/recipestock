@@ -41,25 +41,15 @@ export const ShortcutTroubleshooting = ({
     <section aria-labelledby={headingId}>
       <SectionHeader id={headingId} title="うまくいかないとき" />
       <div className="mt-4 overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm">
-        <TroubleshootingItem title="共有メニューに「KitchenCat」が出ない">
+        <TroubleshootingItem title="「KitchenCatで取り込む」が出ない">
           <p>
-            共有メニューをいちばん下までスクロールしてください。InstagramやYouTube、Xでは、アプリの共有画面で「その他」を押すと、
+            共有メニューの「表示を増やす」を押して、いちばん下まで見てください。Instagramでは「シェア」、YouTubeでは「その他」を押すと、
             {deviceName}の共有メニューが開きます。
           </p>
-          <p>
-            よく使うなら、共有メニューの「アクションを編集」から「よく使う項目」に入れておくと上に出ます。
-          </p>
         </TroubleshootingItem>
-        <TroubleshootingItem title="接続の確認で「許可しない」を選んだ">
-          <p>
-            ショートカットAppで「KitchenCat」を削除してから、キーのコピーからやり直してください。追加し直したショートカットでは、もう一度聞かれます。
-          </p>
-          {restartButton}
-        </TroubleshootingItem>
-        <TroubleshootingItem title="キーを貼り忘れた・違うものを貼った">
-          <p>
-            ショートカットAppで「KitchenCat」を削除してから、キーのコピーからやり直してください。
-          </p>
+        {/* どちらも、ショートカットを置き換えれば直る。置き換えたショートカットでは、送信の確認がもう一度出る。 */}
+        <TroubleshootingItem title="キーを貼り忘れた・許可しなかった">
+          <p>キーのコピーからやり直してください。</p>
           {restartButton}
         </TroubleshootingItem>
         <TroubleshootingItem title="「取り込みを開始しました」が出ない">

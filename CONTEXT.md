@@ -46,7 +46,7 @@ The monthly cap on **Import Jobs** read with AI; imports read without AI do not 
 _Avoid_: Import count, remaining imports, 取り込み回数, AI利用回数
 
 **Shortcut Credential**:
-A bearer key the user pastes into the iOS Shortcut when adding it, so that shared input creates **Import Jobs** in their account. Users see it as 「連携キー」. A **Shortcut Credential** belongs to the Shortcut it was pasted into, not to a device: the Shortcut can sync to the user's other Apple devices with the same key, and reissuing or relinking can leave several keys behind for one device. Its name only records where it was issued. Sharing is set up once any **Shortcut Credential** has been used; one that was issued but never used is a leftover of an unfinished setup, not a linked device.
+A bearer key the user pastes into the iOS Shortcut when adding it, so that shared input creates **Import Jobs** in their account. Users see it as 「連携キー」. A **Shortcut Credential** belongs to the Shortcut it was pasted into, not to a device: the Shortcut can sync to the user's other Apple devices with the same key, and reissuing or relinking can leave several keys behind for one device. Its name only records where it was issued. Sharing is set up once any **Shortcut Credential** has been used; one that was issued but never used is a leftover of an unfinished setup, not a linked device, and stops working 14 days after it was issued.
 _Avoid_: Device, linked device, 連携している端末, token (in user-facing text), 連携トークン
 
 ## Example Dialogue

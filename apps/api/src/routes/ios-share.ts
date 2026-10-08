@@ -27,9 +27,14 @@ type IosShareRouteDependencies = {
 
 /**
  * `missing_credential`と`unusable_credential`の内訳。キーを貼らずに追加した、別のものを貼った、
- * 解除したキーを使い続けている、を見分け、連携の設定のどこで詰まっているかを数える。
+ * 解除したキーを使い続けている、追加したまま期限まで共有しなかった、を見分け、連携の設定のどこで詰まっているかを数える。
  */
-type ShortcutAuthFailure = "missing_token" | "malformed_token" | "unknown_token" | "revoked_token";
+type ShortcutAuthFailure =
+  | "missing_token"
+  | "malformed_token"
+  | "unknown_token"
+  | "revoked_token"
+  | "expired_token";
 
 type ShortcutImportLogFields = {
   authFailure?: ShortcutAuthFailure;
@@ -175,9 +180,9 @@ export const createIosShareRoutes = ({
     }
 
     const identity = await shortcutCredentialsFor(c.env).authenticate({ token });
-    if (identity.status === "revoked") {
+    if (identity.status === "revoked" || identity.status === "expired") {
       return respond("unusable_credential", {
-        authFailure: "revoked_token",
+        authFailure: identity.status === "revoked" ? "revoked_token" : "expired_token",
         credentialId: identity.credentialId,
         userId: identity.userId,
       });

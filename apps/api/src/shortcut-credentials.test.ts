@@ -41,7 +41,6 @@ describe("Shortcut credentials Module", () => {
       credential: {
         id: "credential_1",
         name: "iPhone",
-        tokenSuffix: "aaaa",
         createdAt: issuedAt.toISOString(),
         firstUsedAt: null,
         lastUsedAt: null,
@@ -52,7 +51,6 @@ describe("Shortcut credentials Module", () => {
       expect.objectContaining({
         userId: "user_1",
         name: "iPhone",
-        tokenSuffix: "aaaa",
         tokenHash: "b9829a68e15edfa2b3668c4062b9299d30c6a6c9362e904aa995ec39b65ace07",
       }),
     );
