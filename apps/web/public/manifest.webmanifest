@@ -9,7 +9,7 @@
   "start_url": "/recipes",
   "display": "standalone",
   "background_color": "#FFFFFF",
-  "theme_color": "#768055",
+  "theme_color": "#FFFFFF",
   "shortcuts": [
     {
       "name": "URLから取り込む",
