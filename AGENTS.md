@@ -68,6 +68,24 @@ If code, tests, and documentation disagree and the intended behavior cannot be e
 - Do not hard-code secrets or environment-specific sensitive values.
 - Use `rg` or `rg --files` first for repository searches. If a result is empty or suspiciously narrow, try a meaningful alternate query before concluding that nothing exists.
 
+## UI Design
+
+KitchenCat is a Japanese-language, mobile-first app. Common defaults in English-centric web design run large here:
+
+- CSS font size sets the em box. Latin lowercase fills about half of it, but Japanese glyphs fill nearly all of it, so Japanese at the same pixel size looks noticeably larger and denser. Japanese mobile apps commonly set UI body text around 13–15px.
+- Browser, Tailwind (`text-base`, `leading-7`), shadcn/ui, and Apple and Material Design defaults were set for Latin text and long-form reading. Do not treat them as correct for this app by default.
+- AI-generated UI tends toward oversized type and generous whitespace because that style dominates English web examples and looks clean in a single screenshot. Expect that bias in your own output and check against it.
+
+When designing or changing screens:
+
+- Size type, line height, and spacing for Japanese text at phone width (about 360–430px), not for a desktop preview.
+- Use line heights around 1.4–1.6 for short UI text such as lists, ingredients, and steps. Reserve looser leading for long-form prose.
+- Create hierarchy through contrast between headings and body text, not by making everything large.
+- Judge density for the whole screen, such as how much of the recipe is visible without scrolling, rather than tuning each element in isolation.
+- Verify visual changes with a screenshot at phone width, not only by reading class names. `pnpm --filter @recipestock/web dev:mock` serves the app with mock data; switch scenarios from the mock panel.
+- Reuse the sizes already in the code before adding a new one. Body text in reading content such as ingredients, steps, and settings rows is 15px.
+- Keep form controls (`input`, `textarea`, `select`) at 16px or larger. iOS Safari zooms the page when a smaller control gets focus.
+
 ## Verification and Completion
 
 ### Test Quality

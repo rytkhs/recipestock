@@ -10,7 +10,7 @@ export const RecipeNote = ({ note }: { note: string }) => {
   return (
     <section aria-labelledby={headingId}>
       <SectionHeader id={headingId} title="メモ" />
-      <p className="mt-3 whitespace-pre-wrap break-words text-base text-brand-ink leading-7">
+      <p className="mt-3 whitespace-pre-wrap break-words text-[15px] text-brand-ink leading-6">
         {note}
       </p>
     </section>
@@ -35,7 +35,7 @@ export const RecipeSource = ({
       <SectionHeader id={headingId} title="出典" />
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1">
-          <p className="break-words font-medium text-base text-brand-ink">{name}</p>
+          <p className="break-words font-medium text-[15px] text-brand-ink">{name}</p>
           {host && host !== name ? (
             <p className="truncate text-brand-muted text-sm">{host}</p>
           ) : null}

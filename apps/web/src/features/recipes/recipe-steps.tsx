@@ -26,16 +26,16 @@ export const RecipeSteps = ({
           const images = renderImages(stepIndex);
 
           return (
-            <li className="py-0.5" key={key}>
-              <div className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2 py-3">
-                <span className="font-bold text-brand-orange-dark text-lg leading-7 tabular-nums">
+            <li key={key}>
+              <div className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 py-2">
+                <span className="font-bold text-base text-brand-orange-dark leading-6 tabular-nums">
                   {stepIndex + 1}
                 </span>
-                <span className="whitespace-pre-wrap break-words text-base text-brand-ink leading-7">
+                <span className="whitespace-pre-wrap break-words text-[15px] text-brand-ink leading-6">
                   {step.text ?? ""}
                 </span>
               </div>
-              {images ? <div className="mt-1 mb-3 pl-9">{images}</div> : null}
+              {images ? <div className="mt-1 mb-2 pl-8">{images}</div> : null}
             </li>
           );
         })}

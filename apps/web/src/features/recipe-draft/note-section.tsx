@@ -18,7 +18,7 @@ export const NoteSection = ({ control }: NoteSectionProps) => {
       <SectionHeader id={headingId} title="メモ" />
       <textarea
         aria-labelledby={headingId}
-        className={cn(draftInlineFieldClass, "field-sizing-content mt-2 min-h-24 leading-7")}
+        className={cn(draftInlineFieldClass, "field-sizing-content mt-2 min-h-24")}
         maxLength={MAX_RECIPE_NOTE_LENGTH}
         name={field.name}
         placeholder="コツや、次に作るときに変えたいこと"
