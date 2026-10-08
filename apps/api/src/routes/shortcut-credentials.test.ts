@@ -17,7 +17,6 @@ const createCredentials = (): ShortcutCredentials => ({
     credential: {
       id: "credential_1",
       name,
-      tokenSuffix: "aaaa",
       createdAt: "2026-07-11T00:00:00.000Z",
       firstUsedAt: null,
       lastUsedAt: null,
@@ -28,7 +27,6 @@ const createCredentials = (): ShortcutCredentials => ({
     {
       id: "credential_1",
       name: "iPhone",
-      tokenSuffix: "aaaa",
       createdAt: "2026-07-11T00:00:00.000Z",
       firstUsedAt: "2026-07-11T00:05:00.000Z",
       lastUsedAt: "2026-07-12T08:00:00.000Z",

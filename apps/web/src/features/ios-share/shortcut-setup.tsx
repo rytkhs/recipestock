@@ -8,7 +8,6 @@ import { SectionHeader } from "../../components/section-header";
 import { type IosDeviceName } from "../../pwa/platform";
 import { SettingsNotice } from "../settings/settings-page";
 import { type ShortcutRelinkReason } from "./api";
-import { formatCredentialDay } from "./credential-dates";
 import {
   ConnectionPermissionIllustration,
   ShareSheetIllustration,
@@ -94,11 +93,10 @@ const relinkNotice = (reason: ShortcutRelinkReason, deviceName: IosDeviceName) =
 
 const shortcutStepText =
   "ショートカットAppが開きます。キーを聞かれたら貼り付けて、「ショートカットを追加」を押してください。";
-// 開き直したときは、もう追加したかどうか分からない。③を押せるようにしたまま、まだなら追加できるようにしておく。
-const resumedShortcutStepText =
-  "まだ追加していなければ、ショートカットAppで追加してください。キーを聞かれたら貼り付けます。";
-// 同じ名前のショートカットがあると、iOSは置き換えるか追加するかを聞く。追加すると、古いキーのものと2つ並ぶ。
+// 同じ名前のショートカットがあると、iOSはキーを聞いたあとで置き換えるかを聞く。両方とも残すと、古いキーのものと2つ並ぶ。
 const replaceShortcutText = "同じ名前のショートカットがあると聞かれたら、置き換えてください。";
+// 追加したあとはショートカットAppに残る。戻らないと、③で接続の確認を見ないまま、初めての共有で聞かれる。
+const returnToSetupText = "追加したら、この画面に戻ってください。";
 
 const KeyStep = ({
   resumableCredential,
@@ -152,17 +150,13 @@ const KeyStep = ({
     );
   }
 
-  // 発行したあと、この画面を開き直した。平文はもう無いので、貼っていなければ発行し直してもらう。
-  // ほかの端末で発行したキーや何日も前のキーでも、発行した場所と日で気づいてやり直せる。
+  // 発行したあと、この画面を開き直した。平文はもう無く、どのキーを貼ったかは利用者にも分からない。
+  // 覚えている「追加したか」で分け、まだならコピーからやり直してもらう。
   if (resumableCredential) {
-    const issuedDay = formatCredentialDay(resumableCredential.createdAt);
-
     return (
       <SetupStep number={1} status="done" title="キーを発行しました">
         <p className={guideTextClass}>
-          {resumableCredential.name}で{issuedDay ? `${issuedDay}に` : ""}発行した、末尾{" "}
-          {resumableCredential.tokenSuffix}
-          のキーです。このキーをショートカットに貼っていなければ、発行し直してください。
+          ショートカットを追加し終えていれば、③で試してください。まだなら、キーをコピーし直してください。
         </p>
         <Button
           className="justify-self-start"
@@ -170,7 +164,7 @@ const KeyStep = ({
           variant="secondary"
           onClick={() => void setup.issueAndCopyKey()}
         >
-          キーを発行し直す
+          キーをコピーし直す
         </Button>
         {issueError}
       </SetupStep>
@@ -239,18 +233,16 @@ const ShortcutStep = ({
   return (
     <SetupStep number={2} status={isIssued ? "active" : "todo"} title={title}>
       <p className={guideTextClass}>
-        {setup.isResumed ? resumedShortcutStepText : shortcutStepText}
+        {shortcutStepText}
         {mayHaveShortcut ? replaceShortcutText : null}
+        {returnToSetupText}
       </p>
       <ShortcutQuestionIllustration />
-      {/* キーを持たずに追加すると、貼るものがない。キーを発行してコピーを終えるまでは押せなくしておく。 */}
-      {isIssued || setup.isResumed ? (
+      {/* キーを持たずに追加すると、貼るものがない。キーを発行してコピーを終えるまでは押せなくしておく。
+          開き直したときも、クリップボードにキーが残っているかは利用者に分からないので、コピーし直すまで押せない。 */}
+      {isIssued ? (
         <a
-          className={cn(
-            buttonVariants({ variant: isIssued ? "default" : "secondary" }),
-            primaryActionClass,
-            "no-underline",
-          )}
+          className={cn(buttonVariants(), primaryActionClass, "no-underline")}
           href={shortcutUrl}
           rel="noreferrer"
           target="_blank"
@@ -301,7 +293,7 @@ const ShareCheckFeedback = ({
           共有メニューに「KitchenCat」がなければ、いちばん下までスクロールしてください。それでもなければ、②でショートカットを追加してください。
         </p>
         <p className="text-brand-walnut text-sm leading-6">
-          「KitchenCat」を選んでも変わらないときは、ショートカットAppで「KitchenCat」を削除してから、キーのコピーからやり直してください。
+          「KitchenCat」を選んでも変わらないときは、キーのコピーからやり直してください。
         </p>
         <Button className="mt-1 justify-self-start" variant="secondary" onClick={onRestart}>
           最初からやり直す

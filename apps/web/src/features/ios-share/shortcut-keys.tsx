@@ -1,7 +1,7 @@
 import { Trash, WarningCircle } from "@phosphor-icons/react";
 import { type ShortcutCredential } from "@recipestock/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useId, useState } from "react";
+import { useId, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,50 +24,34 @@ import {
 import { formatCredentialDay, formatCredentialUsedDay } from "./credential-dates";
 
 // 名前は発行した端末でしかない。ショートカットはiCloudで同期されうるので、使っている端末とは限らない。
-const describeUsedKey = (credential: ShortcutCredential) => {
+// 同じ名前のキーは、最後に使った日と発行した日で見分ける。
+const describeKey = (credential: ShortcutCredential) => {
   const usedDay = credential.lastUsedAt ? formatCredentialUsedDay(credential.lastUsedAt) : null;
-
-  return {
-    title: `${credential.name}で設定`,
-    detail: [usedDay ? `最後に使ったのは${usedDay}` : null, `末尾 ${credential.tokenSuffix}`]
-      .filter(Boolean)
-      .join(" · "),
-  };
-};
-
-const describeUnusedKey = (credential: ShortcutCredential) => {
   const issuedDay = formatCredentialDay(credential.createdAt);
 
   return {
-    title: `${credential.name}で発行`,
-    detail: [issuedDay ? `${issuedDay}に発行` : null, `末尾 ${credential.tokenSuffix}`]
+    title: `${credential.name}で設定`,
+    detail: [usedDay ? `最後に使ったのは${usedDay}` : null, issuedDay ? `${issuedDay}に発行` : null]
       .filter(Boolean)
       .join(" · "),
   };
 };
 
-const KeyGroup = ({
-  children,
+const KeyList = ({
   credentials,
-  describe,
   onRevoke,
-  title,
 }: {
-  children?: ReactNode;
   credentials: ShortcutCredential[];
-  describe: (credential: ShortcutCredential) => { title: string; detail: string };
   onRevoke: (credential: ShortcutCredential) => void;
-  title: string;
 }) => {
   const headingId = useId();
 
   return (
     <section aria-labelledby={headingId}>
-      <SectionHeader id={headingId} title={title} />
-      {children}
+      <SectionHeader id={headingId} title="連携キー" />
       <ul aria-labelledby={headingId} className="divide-y divide-brand-line-soft">
         {credentials.map((credential) => {
-          const description = describe(credential);
+          const description = describeKey(credential);
 
           return (
             <li className="flex min-h-14 min-w-0 items-center gap-3 py-2" key={credential.id}>
@@ -76,7 +60,7 @@ const KeyGroup = ({
                 <p className="text-brand-muted text-xs">{description.detail}</p>
               </div>
               <Button
-                aria-label={`末尾 ${credential.tokenSuffix} のキーを解除`}
+                aria-label={`${description.title}（${description.detail}）のキーを解除`}
                 size="icon-lg"
                 variant="ghost"
                 onClick={() => onRevoke(credential)}
@@ -93,7 +77,8 @@ const KeyGroup = ({
 
 /**
  * アカウントの連携キー。どの端末で開いても出し、なくした端末のキーを別の端末から解除できるようにする。
- * 使ったキーと、発行したまま共有が届いていないキーを分ける。後者は設定の途中で残ったもので、端末ではない。
+ * 出すのは使ったキーだけ。発行したまま共有が届いていないキーは設定の途中で残ったもので、利用者が片付けるものではなく、
+ * 期限が過ぎれば使えなくなる。
  */
 export const ShortcutKeys = () => {
   const queryClient = useQueryClient();
@@ -127,14 +112,11 @@ export const ShortcutKeys = () => {
     );
   }
 
-  if (!credentials.data || credentials.data.credentials.length === 0) {
+  const usedKeys = credentials.data?.credentials.filter(isShortcutCredentialUsed) ?? [];
+  if (usedKeys.length === 0) {
     return null;
   }
 
-  const usedKeys = credentials.data.credentials.filter(isShortcutCredentialUsed);
-  const unusedKeys = credentials.data.credentials.filter(
-    (credential) => !isShortcutCredentialUsed(credential),
-  );
   const startRevoke = (credential: ShortcutCredential) => {
     setRevokeError(null);
     setRevokeTarget(credential);
@@ -150,27 +132,7 @@ export const ShortcutKeys = () => {
         </div>
       ) : null}
 
-      {usedKeys.length > 0 ? (
-        <KeyGroup
-          credentials={usedKeys}
-          describe={describeUsedKey}
-          title="連携キー"
-          onRevoke={startRevoke}
-        />
-      ) : null}
-
-      {unusedKeys.length > 0 ? (
-        <KeyGroup
-          credentials={unusedKeys}
-          describe={describeUnusedKey}
-          title="使われていないキー"
-          onRevoke={startRevoke}
-        >
-          <p className="mt-2 text-brand-muted text-xs leading-5">
-            発行したまま、共有が届いていないキーです。設定の途中でなければ解除できます。
-          </p>
-        </KeyGroup>
-      ) : null}
+      <KeyList credentials={usedKeys} onRevoke={startRevoke} />
 
       <AlertDialog
         open={Boolean(revokeTarget)}
@@ -186,7 +148,7 @@ export const ShortcutKeys = () => {
               <WarningCircle weight="fill" />
             </AlertDialogMedia>
             <AlertDialogTitle>
-              {revokeTarget ? `末尾 ${revokeTarget.tokenSuffix} のキーを解除しますか？` : null}
+              {revokeTarget ? `「${describeKey(revokeTarget).title}」のキーを解除しますか？` : null}
             </AlertDialogTitle>
             <AlertDialogDescription>
               このキーを入れたショートカットからは、取り込めなくなります。もう一度使うには、ショートカットを追加し直してください。

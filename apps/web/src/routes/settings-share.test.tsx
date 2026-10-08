@@ -23,7 +23,7 @@ const unusedCredential = (overrides: Partial<ShortcutCredential>) =>
     lastUsedAt: null,
     ...overrides,
   });
-const issuedCredential = unusedCredential({ id: "credential_new", tokenSuffix: "a1B2" });
+const issuedCredential = unusedCredential({ id: "credential_new" });
 const usedCredential = (credential: ShortcutCredential) => {
   const usedAt = new Date().toISOString();
   return { ...credential, firstUsedAt: usedAt, lastUsedAt: usedAt };
@@ -267,7 +267,7 @@ describe("共有から取り込む", () => {
     expect(device.share).toHaveBeenCalledWith({ url: `${window.location.origin}/settings/share` });
   });
 
-  it("発行したキーにまだ共有が届いていなければ、開き直しても③を押せるところから続ける", async () => {
+  it("発行したキーにまだ共有が届いていなければ、開き直すと③を押せるところから続け、②はキーをコピーし直すまで押せない", async () => {
     vi.stubEnv("VITE_IOS_SHARE_SHORTCUT_URL", shortcutUrl);
     installDevice();
     mockShortcutFetch({ credentials: [issuedCredential] });
@@ -277,15 +277,16 @@ describe("共有から取り込む", () => {
     await expect(
       screen.findByRole("heading", { name: /キーを発行しました/ }),
     ).resolves.toBeInTheDocument();
-    expect(screen.getByText(/末尾 a1B2/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "共有メニューを開く" })).toBeEnabled();
-    // もう追加したかどうかは分からないので、まだなら追加できるようにしておく。
-    expect(screen.getByRole("link", { name: "ショートカットを追加" })).toHaveAttribute(
-      "href",
-      shortcutUrl,
-    );
-    expect(screen.getByRole("button", { name: "キーを発行し直す" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "キーをコピー" })).not.toBeInTheDocument();
+    // クリップボードにキーが残っているかは分からないので、追加し直すならコピーからやり直してもらう。
+    expect(screen.getByRole("button", { name: "ショートカットを追加" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "ショートカットを追加" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "キーをコピーし直す" }));
+
+    await expect(
+      screen.findByRole("link", { name: "ショートカットを追加" }),
+    ).resolves.toHaveAttribute("href", shortcutUrl);
   });
 
   it("③を押せる間は、画面が見えたままでも、共有が届いたら連携できたことを伝え、そのあとは読み直さない", async () => {
@@ -413,17 +414,17 @@ describe("共有から取り込む", () => {
 
   it("Safariで発行したキーで連携が済んでも、アプリで待っている画面で連携できたことを伝える", async () => {
     installDevice();
-    const previousCredential = unusedCredential({ id: "credential_old", tokenSuffix: "0ld1" });
+    const previousCredential = unusedCredential({ id: "credential_old" });
     const shortcut = mockShortcutFetch({ credentials: [previousCredential] });
 
     await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "キーを発行し直す" }));
+    await userEvent.click(await screen.findByRole("button", { name: "キーをコピーし直す" }));
     await screen.findByRole("heading", { name: /キーをコピーしました/ });
 
     shortcut.setCredentials([
       previousCredential,
       issuedCredential,
-      usedCredential(unusedCredential({ id: "credential_safari", tokenSuffix: "sfr1" })),
+      usedCredential(unusedCredential({ id: "credential_safari" })),
     ]);
     await returnToApp();
 
@@ -503,7 +504,9 @@ describe("共有から取り込む", () => {
     const shortcut = mockShortcutFetch({ credentials: [linkedCredential] });
 
     await renderApp("/settings/share");
-    await userEvent.click(await screen.findByRole("button", { name: "末尾 0001 のキーを解除" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^iPhoneで設定（.+）のキーを解除$/ }),
+    );
     await userEvent.click(await screen.findByRole("button", { name: "解除" }));
 
     // 解除したキーのショートカットが残っているので、追加するときに聞かれたら置き換えてもらう。
@@ -538,37 +541,30 @@ describe("共有から取り込む", () => {
     await expect(screen.findByRole("list", { name: "連携キー" })).resolves.toBeInTheDocument();
   });
 
-  it("使ったキーと、共有が届いていないキーを分けて並べる", async () => {
+  it("使ったキーだけを並べ、共有が届いていないキーは出さない", async () => {
     installDevice();
     const shortcut = mockShortcutFetch({
       credentials: [
         usedCredential(shortcutCredentialFixture()),
-        usedCredential(
-          unusedCredential({ id: "credential_work", name: "仕事用iPhone", tokenSuffix: "work" }),
-        ),
-        unusedCredential({ id: "credential_0002", name: "iPad", tokenSuffix: "0002" }),
+        usedCredential(unusedCredential({ id: "credential_work", name: "仕事用iPhone" })),
+        unusedCredential({ id: "credential_0002", name: "iPad" }),
       ],
     });
 
     await renderApp("/settings/share");
 
     const usedKeys = await screen.findByRole("list", { name: "連携キー" });
-    expect(within(usedKeys).getAllByRole("listitem")[0]).toHaveTextContent(
-      "iPhoneで設定最後に使ったのは今日 · 末尾 0001",
-    );
-    const unusedKeys = screen.getByRole("list", { name: "使われていないキー" });
-    expect(within(unusedKeys).getByRole("listitem")).toHaveTextContent("iPadで発行");
-    expect(within(unusedKeys).getByRole("listitem")).toHaveTextContent(/に発行 · 末尾 0002$/);
-    await userEvent.click(screen.getByRole("button", { name: "末尾 0001 のキーを解除" }));
+    expect(within(usedKeys).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByText(/^iPad/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^iPhoneで設定（.+）のキーを解除$/ }));
     const dialog = await screen.findByRole("alertdialog", {
-      name: "末尾 0001 のキーを解除しますか？",
+      name: "「iPhoneで設定」のキーを解除しますか？",
     });
     await userEvent.click(within(dialog).getByRole("button", { name: "解除" }));
     await vi.waitFor(() => {
       expect(within(usedKeys).queryByText("iPhoneで設定")).not.toBeInTheDocument();
     });
     expect(within(usedKeys).getByText("仕事用iPhoneで設定")).toBeInTheDocument();
-    expect(within(unusedKeys).getByText("iPadで発行")).toBeInTheDocument();
     expect(shortcut.fetchMock.mock.calls).toContainEqual([
       "/api/shortcut-credentials/credential_0001",
       expect.objectContaining({ method: "DELETE" }),
@@ -614,7 +610,7 @@ describe("共有から取り込む", () => {
       `${window.location.origin}/settings/share`,
     );
     expect(
-      await screen.findByRole("button", { name: "末尾 0001 のキーを解除" }),
+      await screen.findByRole("button", { name: /^iPhoneで設定（.+）のキーを解除$/ }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "キーをコピー" })).not.toBeInTheDocument();
   });

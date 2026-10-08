@@ -403,11 +403,17 @@ describe("iOS Share routes", () => {
     const entries: LogEntry[] = [];
     const sink = { write: (entry: LogEntry) => entries.push(entry) };
     const revokedToken = `rssc_${"r".repeat(25)}`;
+    const expiredToken = `rssc_${"e".repeat(25)}`;
     const credentials = createShortcutCredentialsFake();
-    credentials.authenticate = async ({ token }) =>
-      token === revokedToken
-        ? { status: "revoked", credentialId: "credential_old", userId: "user_1" }
-        : { status: "unknown" };
+    credentials.authenticate = async ({ token }) => {
+      if (token === revokedToken) {
+        return { status: "revoked", credentialId: "credential_old", userId: "user_1" };
+      }
+      if (token === expiredToken) {
+        return { status: "expired", credentialId: "credential_unused", userId: "user_1" };
+      }
+      return { status: "unknown" };
+    };
     const app = createShortcutTestApp({
       auth,
       loggerFactory: (baseFields) => createLogger(baseFields, { sink }),
@@ -430,6 +436,7 @@ describe("iOS Share routes", () => {
       "Bearer https://example.com/recipe",
       `Bearer rssc_${"u".repeat(25)}`,
       `Bearer ${revokedToken}`,
+      `Bearer ${expiredToken}`,
     ]) {
       responses.push(
         await app.request(
@@ -463,6 +470,7 @@ describe("iOS Share routes", () => {
       missingCredential,
       unusableCredential,
       unusableCredential,
+      unusableCredential,
     ]);
     expect(
       entries
@@ -482,6 +490,12 @@ describe("iOS Share routes", () => {
         level: "warn",
         authFailure: "revoked_token",
         credentialId: "credential_old",
+        userId: "user_1",
+      },
+      {
+        level: "warn",
+        authFailure: "expired_token",
+        credentialId: "credential_unused",
         userId: "user_1",
       },
     ]);

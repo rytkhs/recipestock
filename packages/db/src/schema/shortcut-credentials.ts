@@ -7,7 +7,6 @@ export const shortcutCredentials = pgTable(
     userId: text("user_id").notNull(),
     name: text("name").notNull(),
     tokenHash: text("token_hash").notNull(),
-    tokenSuffix: text("token_suffix").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // 認証を通ったrequestの時刻。取り込みを受け付けたかどうかは問わない。
     // 最初の時刻は連携の設定が済んだ時点なので上書きしない。

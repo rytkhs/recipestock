@@ -1,19 +1,24 @@
 import { type DbClient, shortcutCredentials } from "@recipestock/db";
 import { type ShortcutCredential } from "@recipestock/schemas";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { ulid } from "ulid";
 
 const TOKEN_PREFIX = "rssc_";
 const TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 const TOKEN_RANDOM_LENGTH = 25;
-const TOKEN_SUFFIX_LENGTH = 4;
+// 発行したまま使われていないキーの寿命。平文はクリップボードを通るので、使われないまま有効にしておかない。
+// ショートカットを追加しただけで、初めて共有するのは何日も後、という人を弾かない長さにする。
+const UNUSED_CREDENTIAL_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** これより前に発行して、まだ使われていないキーは期限切れ。 */
+const unusedCredentialCutoff = (now: Date) =>
+  new Date(now.getTime() - UNUSED_CREDENTIAL_LIFETIME_MS);
 
 export type ShortcutCredentialRecord = {
   id: string;
   userId: string;
   name: string;
   tokenHash: string;
-  tokenSuffix: string;
   createdAt: Date;
   firstUsedAt: Date | null;
   lastUsedAt: Date | null;
@@ -21,17 +26,19 @@ export type ShortcutCredentialRecord = {
 };
 
 /**
- * 解除済みのキーは認証を通さない。ただ、連携し直しを促した理由を監視で見分けられるよう、
+ * 解除済みのキーと、使われないまま期限が過ぎたキーは認証を通さない。ただ、連携し直しを促した理由を監視で見分けられるよう、
  * 知らないキーとは分けて返す。
  */
 export type ShortcutCredentialAuthentication =
   | { status: "active"; credentialId: string; userId: string }
   | { status: "revoked"; credentialId: string; userId: string }
+  | { status: "expired"; credentialId: string; userId: string }
   | { status: "unknown" };
 
 export type ShortcutCredentialRepository = {
   createCredential(credential: ShortcutCredentialRecord): Promise<ShortcutCredentialRecord>;
-  listCredentials(userId: string): Promise<ShortcutCredentialRecord[]>;
+  /** 解除済みのキーと、期限が過ぎた使われていないキーは返さない。 */
+  listCredentials(params: { userId: string; now: Date }): Promise<ShortcutCredentialRecord[]>;
   revokeCredential(params: { credentialId: string; userId: string; now: Date }): Promise<boolean>;
   /** 認証を通したキーには、使った時刻を同じ書き込みで残す。 */
   authenticate(params: { tokenHash: string; now: Date }): Promise<ShortcutCredentialAuthentication>;
@@ -50,7 +57,6 @@ export type ShortcutCredentials = {
 const mapCredential = (credential: ShortcutCredentialRecord): ShortcutCredential => ({
   id: credential.id,
   name: credential.name,
-  tokenSuffix: credential.tokenSuffix,
   createdAt: credential.createdAt.toISOString(),
   firstUsedAt: credential.firstUsedAt?.toISOString() ?? null,
   lastUsedAt: credential.lastUsedAt?.toISOString() ?? null,
@@ -78,11 +84,20 @@ export const createShortcutCredentialRepository = (db: DbClient): ShortcutCreden
     return row;
   },
 
-  async listCredentials(userId) {
+  async listCredentials({ userId, now }) {
     return db
       .select()
       .from(shortcutCredentials)
-      .where(and(eq(shortcutCredentials.userId, userId), isNull(shortcutCredentials.revokedAt)))
+      .where(
+        and(
+          eq(shortcutCredentials.userId, userId),
+          isNull(shortcutCredentials.revokedAt),
+          or(
+            isNotNull(shortcutCredentials.firstUsedAt),
+            gt(shortcutCredentials.createdAt, unusedCredentialCutoff(now)),
+          ),
+        ),
+      )
       .orderBy(desc(shortcutCredentials.createdAt));
   },
 
@@ -107,7 +122,12 @@ export const createShortcutCredentialRepository = (db: DbClient): ShortcutCreden
    */
   async authenticate({ tokenHash, now }) {
     const nowIso = now.toISOString();
-    const result = await db.execute<{ credentialId: string; userId: string; revoked: boolean }>(sql`
+    const cutoffIso = unusedCredentialCutoff(now).toISOString();
+    const result = await db.execute<{
+      credentialId: string;
+      userId: string;
+      status: "active" | "revoked" | "expired";
+    }>(sql`
       with used_credential as (
         update shortcut_credentials
         set
@@ -115,15 +135,19 @@ export const createShortcutCredentialRepository = (db: DbClient): ShortcutCreden
           last_used_at = ${nowIso}::timestamptz
         where token_hash = ${tokenHash}
           and revoked_at is null
+          and (first_used_at is not null or created_at > ${cutoffIso}::timestamptz)
         returning id, user_id
       )
-      select id as "credentialId", user_id as "userId", false as "revoked"
+      select id as "credentialId", user_id as "userId", 'active' as "status"
       from used_credential
       union all
-      select id, user_id, true
+      select id, user_id, case when revoked_at is not null then 'revoked' else 'expired' end
       from shortcut_credentials
       where token_hash = ${tokenHash}
-        and revoked_at is not null
+        and (
+          revoked_at is not null
+          or (first_used_at is null and created_at <= ${cutoffIso}::timestamptz)
+        )
       limit 1
     `);
     const row = result.rows[0];
@@ -132,11 +156,7 @@ export const createShortcutCredentialRepository = (db: DbClient): ShortcutCreden
       return { status: "unknown" };
     }
 
-    return {
-      status: row.revoked ? "revoked" : "active",
-      credentialId: row.credentialId,
-      userId: row.userId,
-    };
+    return { status: row.status, credentialId: row.credentialId, userId: row.userId };
   },
 });
 
@@ -158,7 +178,6 @@ export const createShortcutCredentials = ({
       userId,
       name,
       tokenHash: await hashShortcutCredentialToken(token),
-      tokenSuffix: token.slice(-TOKEN_SUFFIX_LENGTH),
       createdAt: getCurrentDate(),
       firstUsedAt: null,
       lastUsedAt: null,
@@ -168,7 +187,7 @@ export const createShortcutCredentials = ({
   },
 
   async list(userId) {
-    return (await repository.listCredentials(userId)).map(mapCredential);
+    return (await repository.listCredentials({ userId, now: getCurrentDate() })).map(mapCredential);
   },
 
   revoke({ credentialId, userId }) {

@@ -1,0 +1,1 @@
+ALTER TABLE "shortcut_credentials" DROP COLUMN "token_suffix";

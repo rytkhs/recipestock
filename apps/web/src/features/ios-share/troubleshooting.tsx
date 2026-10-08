@@ -57,9 +57,7 @@ export const ShortcutTroubleshooting = ({
           {restartButton}
         </TroubleshootingItem>
         <TroubleshootingItem title="キーを貼り忘れた・違うものを貼った">
-          <p>
-            ショートカットAppで「KitchenCat」を削除してから、キーのコピーからやり直してください。
-          </p>
+          <p>キーのコピーからやり直してください。</p>
           {restartButton}
         </TroubleshootingItem>
         <TroubleshootingItem title="「取り込みを開始しました」が出ない">
