@@ -61,7 +61,7 @@ const IngredientRow = ({
   const amount = amountField.value ?? "";
 
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_minmax(0,7rem)_2.5rem] items-start gap-x-1 border-brand-line-soft border-b py-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,10rem)_2.5rem]">
+    <li className="grid grid-cols-[minmax(0,1fr)_minmax(0,7rem)_2.5rem] items-start gap-x-1 border-brand-line-soft border-b py-0.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,10rem)_2.5rem]">
       <textarea
         aria-label="材料名"
         className={cn(draftInlineFieldClass, "field-sizing-content")}

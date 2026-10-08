@@ -133,7 +133,7 @@ export const RecipeHero = ({
       className={cn(heroFrameClass, "aspect-(--hero-ratio) md:aspect-(--hero-ratio-md)")}
       style={
         {
-          "--hero-ratio": clampRatio(ratio, 1, 2),
+          "--hero-ratio": clampRatio(ratio, 4 / 3, 2),
           "--hero-ratio-md": clampRatio(ratio, 1, 1.6),
         } as CSSProperties
       }

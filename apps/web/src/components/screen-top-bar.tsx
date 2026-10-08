@@ -5,7 +5,7 @@ export const screenTopBarIconButtonClass =
   "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-brand-line bg-brand-paper-raised text-brand-walnut no-underline transition-colors hover:bg-brand-paper-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-orange aria-expanded:bg-brand-paper-muted disabled:opacity-50 sm:h-11 sm:w-11";
 
 export const screenTopBarTitleClass =
-  "min-w-0 truncate text-center font-bold text-brand-ink text-md leading-tight sm:text-left sm:text-xl";
+  "min-w-0 truncate text-center font-bold text-base text-brand-ink leading-tight sm:text-left sm:text-xl";
 
 export const ScreenTopBarFrame = ({
   children,

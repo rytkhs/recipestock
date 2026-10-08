@@ -34,10 +34,10 @@ export const RecipeIngredients = ({
               group.ingredients,
               (ingredient) => `${ingredient.name}:${ingredient.amount}`,
             ).map(({ item: ingredient, key }) => (
-              <li className="flex items-start gap-3 py-2.5 text-brand-ink" key={key}>
-                <span className="min-w-0 flex-1 text-base leading-6">{ingredient.name}</span>
+              <li className="flex items-start gap-3 py-2 text-brand-ink" key={key}>
+                <span className="min-w-0 flex-1 text-[15px] leading-6">{ingredient.name}</span>
                 {ingredient.amount ? (
-                  <span className="max-w-[45%] shrink-0 text-right font-medium text-base leading-6 tabular-nums">
+                  <span className="max-w-[45%] shrink-0 text-right font-medium text-[15px] leading-6 tabular-nums">
                     {ingredient.amount}
                   </span>
                 ) : null}

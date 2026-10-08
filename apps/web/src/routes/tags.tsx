@@ -221,7 +221,7 @@ export const TagsRoute = () => {
             className="divide-y divide-brand-line-soft overflow-hidden rounded-[16px] border border-brand-line-soft bg-brand-paper shadow-pantry-sm"
           >
             {tags.map((tag, index) => (
-              <li className="px-4 py-2.5" key={tag.id}>
+              <li className="px-4 py-1.5" key={tag.id}>
                 {editingTagId === tag.id ? (
                   <form className="grid gap-1.5" onSubmit={(event) => submitRename(event, tag)}>
                     <div className="flex min-w-0 items-center gap-2">
@@ -260,13 +260,11 @@ export const TagsRoute = () => {
                     ) : null}
                   </form>
                 ) : (
-                  <div className="flex min-h-10 min-w-0 items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-brand-ink text-sm sm:text-base">
-                        {tag.name}
-                      </p>
-                      <p className="text-brand-muted text-xs">{tag.recipeCount}件</p>
-                    </div>
+                  <div className="flex min-h-9 min-w-0 items-center gap-3">
+                    <p className="min-w-0 flex-1 truncate font-medium text-[15px] text-brand-ink">
+                      {tag.name}
+                    </p>
+                    <p className="shrink-0 text-brand-muted text-sm">{tag.recipeCount}件</p>
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         aria-label={`「${tag.name}」の操作メニュー`}

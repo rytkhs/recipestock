@@ -198,9 +198,9 @@ export const RecipeDraftForm = ({
           uploadImage={uploadImage}
         />
 
-        <div className="mt-8 px-4 sm:mt-10 sm:px-0 lg:mt-14 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-x-14">
+        <div className="mt-6 px-4 sm:mt-10 sm:px-0 lg:mt-14 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-x-14">
           <IngredientsSection control={control} />
-          <div className="mt-10 flex flex-col gap-10 lg:mt-0">
+          <div className="mt-8 flex flex-col gap-8 lg:mt-0">
             <StepsSection
               control={control}
               isUploadingImage={isUploadingImage}
